@@ -1,0 +1,39 @@
+# ---- .NET ----
+bin/
+obj/
+*.user
+*.suo
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+
+# ---- Bí mật: KHÔNG BAO GIỜ commit ----
+# appsettings.Development.json đang chứa mật khẩu dev và khoá ký JWT.
+# Với dự án đồ án thì giữ trong repo cho cả nhóm chạy được ngay,
+# nhưng file Production thì tuyệt đối không.
+appsettings.Production.json
+appsettings.*.Production.json
+.env
+.env.*
+*.pfx
+secrets.json
+
+# ---- IDE ----
+.vs/
+.vscode/
+.idea/
+*.swp
+
+# ---- Hệ điều hành ----
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# ---- Tạm ----
+~$*.docx
+~$*.xlsx
+*.tmp
+
+# ---- Tài liệu đề tài: chứa số điện thoại, MSSV, email của nhóm và giảng viên ----
+# Để ngoài lịch sử git — đẩy repo lên GitHub sẽ không lộ dữ liệu cá nhân.
+FA26SE303_CodeSwitchLabel.docx

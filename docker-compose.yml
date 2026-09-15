@@ -1,0 +1,42 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: csl-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: codeswitchlabel
+      POSTGRES_USER: csl
+      POSTGRES_PASSWORD: csl_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      # API chờ tới khi database thật sự nhận kết nối, không chỉ khi container đã chạy.
+      test: ["CMD-SHELL", "pg_isready -U csl -d codeswitchlabel"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    container_name: csl-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: csl_minio
+      MINIO_ROOT_PASSWORD: csl_minio_dev_password
+    ports:
+      - "9000:9000"   # API tương thích S3
+      - "9001:9001"   # giao diện quản trị trên trình duyệt
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres-data:
+  minio-data:

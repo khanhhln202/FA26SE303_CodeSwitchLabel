@@ -1,0 +1,29 @@
+c) Functional Requirements: 4 actors
+Speaker: Tạo dữ liệu tiếng nói
+Reviewer: Kiểm tra và kiểm soát chất lượng bản ghi âm
+Task Manager: Giao task, Target, Deadline và theo dõi tiến độ.
+Admin: Quản trị dữ liệu, người dùng, hệ thống và thống kê
+
+○ Speaker
+•	Review Text: Kiểm tra câu được cung cấp có ý nghĩa, tự nhiên và phù hợp để thu âm; có thể từ chối hoặc chỉnh sửa câu trước khi thu âm. 
+•	Record Speech: Đọc và thu âm câu văn bản; có thể nghe lại và thu âm lại nếu bản ghi chưa phù hợp. 
+•	Contribute Text: Đóng góp các câu văn bản mới phù hợp với yêu cầu của hệ thống. 
+○ Reviewer
+•	Receive Review Task: Nhận task từ Task Manager hoặc Admin, bao gồm danh sách bản ghi, Review Target và deadline. 
+•	Review Recordings: Nghe và kiểm tra các bản ghi theo từng Speaker hoặc theo lựa chọn ngẫu nhiên. 
+•	Duyệt Recordings: Phê duyệt bản ghi đạt yêu cầu hoặc từ chối nếu có ít nhất một lỗi về nội dung, âm thanh hoặc phát âm. 
+•	Record Rejection Reason: Ghi nhận lý do cụ thể đối với mỗi bản ghi bị từ chối. 
+•	Track Review Progress: Theo dõi số lượng đã duyệt, Review Target, tiến độ và thời gian còn lại đến deadline. 
+○ Task Manager
+•	Create Tasks: Tạo task cho Speaker và Reviewer. 
+•	Assign Tasks: Phân bổ task cho từng Speaker và Reviewer. 
+•	Set Target & Deadline: Thiết lập số lượng cần hoàn thành và thời hạn cho từng task. 
+•	Monitor Progress: Theo dõi tiến độ thực hiện của từng Speaker và Reviewer. 
+•	Reassign Tasks: Điều phối hoặc phân bổ lại task khi cần. 
+○ Admin
+•	Manage Text Data: Import, thêm, chỉnh sửa và quản lý kho câu văn bản. 
+•	Manage Users & Roles: Quản lý tài khoản, thông tin và phân quyền cho các actor. 
+•	Manage Recordings & Dataset: Xem, tìm kiếm, lọc, quản lý và download bản ghi âm/dataset. 
+•	View Dashboard & Statistics: Theo dõi tổng số câu, tổng thời lượng ghi âm, số câu Approved,Rejected, số Speaker, Reviewer và tình trạng dữ liệu. 
+•	Monitor Data Quality: Theo dõi các nguyên nhân Reject phổ biến, tỷ lệ duyệt và chất lượng bản ghi của từng Speaker. 
+•	System Configuration: Cấu hình tiêu chí kiểm duyệt, quy định chất lượng và các thiết lập chung của hệ thống.
