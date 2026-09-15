@@ -61,6 +61,9 @@ public static class DatabaseSeeder
             ("admin@codeswitchlabel.local",    "Quản trị hệ thống", RoleName.Admin,       null),
             ("manager@codeswitchlabel.local",  "Điều phối viên",    RoleName.TaskManager, null),
             ("reviewer@codeswitchlabel.local", "Người kiểm duyệt",  RoleName.Reviewer,    null),
+            // Ba Reviewer: luật duyệt cần tới ba người khác nhau — vòng 1, vòng kiểm tra mù, vòng phân xử.
+            ("reviewer2@codeswitchlabel.local", "Người kiểm duyệt số 2", RoleName.Reviewer, null),
+            ("reviewer3@codeswitchlabel.local", "Người kiểm duyệt số 3", RoleName.Reviewer, null),
             ("speaker1@codeswitchlabel.local", "Người đọc số 1",    RoleName.Speaker,     SpeakerRegion.South),
             ("speaker2@codeswitchlabel.local", "Người đọc số 2",    RoleName.Speaker,     SpeakerRegion.North)
         ];
@@ -112,10 +115,8 @@ public static class DatabaseSeeder
                 "Thời lượng tối thiểu của một bản ghi, tính bằng giây"),
             (ConfigKeys.RecordingMaxDurationSec, "30",   ConfigValueType.Int,
                 "Thời lượng tối đa của một bản ghi, tính bằng giây"),
-            (ConfigKeys.ReviewRounds,            "2",    ConfigValueType.Int,
-                "Số vòng duyệt cần có để một bản ghi được chấp nhận"),
             (ConfigKeys.ReviewRandomRatio,       "0.20", ConfigValueType.String,
-                "Tỉ lệ bản ghi được lấy mẫu kiểm tra ngẫu nhiên"),
+                "Tỉ lệ bản ghi được rút ngẫu nhiên để duyệt mù ở vòng 2, từ 0 (tắt) đến 1 (tất cả)"),
             (ConfigKeys.ScriptMinWordCount,      "4",    ConfigValueType.Int,
                 "Số từ tối thiểu của một script"),
             (ConfigKeys.ScriptMaxWordCount,      "40",   ConfigValueType.Int,

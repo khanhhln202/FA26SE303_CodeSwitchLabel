@@ -7,6 +7,7 @@ using CodeSwitchLabel.Repositories.Storage;
 using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Audio;
 using CodeSwitchLabel.Services.Implementations;
+using CodeSwitchLabel.Services.Reviews;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -51,10 +52,12 @@ public static class ServiceRegistration
 
         services.AddSingleton<IObjectStorage, S3ObjectStorage>();
         services.AddSingleton<IAudioProcessor, FfmpegAudioProcessor>();
+        services.AddSingleton<IReviewSampler, RandomReviewSampler>();
 
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IScriptRepository, ScriptRepository>();
         services.AddScoped<IRecordingRepository, RecordingRepository>();
+        services.AddScoped<IReviewRepository, ReviewRepository>();
         services.AddScoped<ISystemConfigRepository, SystemConfigRepository>();
         services.AddScoped<IReasonRepository, ReasonRepository>();
 
@@ -62,6 +65,7 @@ public static class ServiceRegistration
         services.AddScoped<IScriptService, ScriptService>();
         services.AddScoped<IScriptAssignmentService, ScriptAssignmentService>();
         services.AddScoped<IRecordingService, RecordingService>();
+        services.AddScoped<IReviewService, ReviewService>();
         services.AddScoped<ISystemConfigService, SystemConfigService>();
         services.AddScoped<IReasonService, ReasonService>();
 

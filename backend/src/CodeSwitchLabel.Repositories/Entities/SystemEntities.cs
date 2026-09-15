@@ -106,7 +106,6 @@ public static class ConfigKeys
 {
     public const string RecordingMinDurationSec = "recording.min_duration_sec";
     public const string RecordingMaxDurationSec = "recording.max_duration_sec";
-    public const string ReviewRounds            = "review.rounds";
     public const string ReviewRandomRatio       = "review.random_ratio";
     public const string ScriptMinWordCount      = "script.min_word_count";
     public const string ScriptMaxWordCount      = "script.max_word_count";
