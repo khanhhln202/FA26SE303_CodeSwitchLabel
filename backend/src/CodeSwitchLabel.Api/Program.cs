@@ -2,7 +2,9 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json.Serialization;
 using CodeSwitchLabel.Api.Infrastructure;
+using CodeSwitchLabel.Repositories.Storage;
 using CodeSwitchLabel.Services;
+using CodeSwitchLabel.Services.Audio;
 using CodeSwitchLabel.Services.Options;
 using CodeSwitchLabel.Services.Seeding;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -17,12 +19,25 @@ var connectionString = builder.Configuration.GetConnectionString("Postgres")
     ?? throw new InvalidOperationException(
         "Thiếu ConnectionStrings:Postgres. Xem appsettings.Development.json.");
 
+// Mọi mục cấu hình đều kiểm ngay lúc khởi động thay vì đợi request đầu tiên mới nổ:
+// thiếu khoá ký hay thiếu địa chỉ kho lưu trữ thì phải chết lúc chạy `dotnet run`,
+// không phải lúc có người đăng nhập hay nộp bản ghi.
 builder.Services
     .AddOptions<JwtOptions>()
     .Bind(builder.Configuration.GetSection(JwtOptions.SectionName))
     .ValidateDataAnnotations()
-    // Kiểm ngay lúc khởi động thay vì đợi request đầu tiên mới nổ:
-    // thiếu khoá ký thì phải chết lúc chạy `dotnet run`, không phải lúc có người đăng nhập.
+    .ValidateOnStart();
+
+builder.Services
+    .AddOptions<ObjectStorageOptions>()
+    .Bind(builder.Configuration.GetSection(ObjectStorageOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
+builder.Services
+    .AddOptions<AudioOptions>()
+    .Bind(builder.Configuration.GetSection(AudioOptions.SectionName))
+    .ValidateDataAnnotations()
     .ValidateOnStart();
 
 var jwt = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
@@ -61,7 +76,7 @@ builder.Services
     .AddControllers()
     .AddJsonOptions(options =>
     {
-        // Trả enum dưới dạng chuỗi: "Available" dễ hiểu hơn 1 với người đọc API,
+        // Trả enum dưới dạng chuỗi: "Validated" dễ hiểu hơn 1 với người đọc API,
         // và frontend không phải giữ một bảng tra số sang tên.
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
@@ -161,6 +176,18 @@ if (app.Environment.IsDevelopment())
     if (!string.IsNullOrWhiteSpace(seedPassword))
     {
         await DatabaseSeeder.SeedAsync(app.Services, seedPassword);
+    }
+
+    try
+    {
+        await app.Services.GetRequiredService<IObjectStorage>().EnsureBucketAsync();
+    }
+    catch (Exception ex)
+    {
+        // Kho lưu trữ chưa bật thì API vẫn chạy, chỉ riêng phần bản ghi âm không dùng được.
+        // Nhờ vậy ai đang làm module khác không bị buộc phải bật đủ mọi dịch vụ.
+        // Phân biệt với THIẾU CẤU HÌNH ở trên: thiếu cấu hình là lỗi cài đặt, phải dừng ngay.
+        app.Logger.LogWarning(ex, "Không kết nối được kho lưu trữ file — các endpoint bản ghi âm sẽ lỗi.");
     }
 }
 

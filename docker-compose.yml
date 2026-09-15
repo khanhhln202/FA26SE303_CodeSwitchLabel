@@ -19,7 +19,12 @@ services:
       retries: 10
 
   minio:
-    image: minio/minio:latest
+    # Docker Hub đã gỡ image minio/minio (trả 404) và Bitnami đã rút bản của họ,
+    # nên lấy từ kho chính chủ của MinIO trên quay.io.
+    # Ghim đúng phiên bản thay vì dùng latest: kho này cũng có thể bị rút giữa kỳ —
+    # ghim rõ thì cả nhóm luôn kéo về cùng một bản, và biết chính xác phải tìm lại bản nào.
+    # Code không phụ thuộc MinIO: đổi sang server tương thích S3 khác chỉ cần sửa khối này và mục ObjectStorage.
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z.hotfix.7aa24e772
     container_name: csl-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
@@ -28,7 +33,10 @@ services:
       MINIO_ROOT_PASSWORD: csl_minio_dev_password
     ports:
       - "9000:9000"   # API tương thích S3
-      - "9001:9001"   # giao diện quản trị trên trình duyệt
+      # Cổng máy thật là 9090 chứ không phải 9001: Windows giữ riêng cổng 9001 cho tiến trình System
+      # (xem bằng: netsh interface ipv4 show excludedportrange protocol=tcp), nên Docker không mở được.
+      # Bên trong container MinIO vẫn chạy giao diện ở 9001 — chỉ đổi cổng phía máy thật.
+      - "9090:9001"   # giao diện quản trị: http://localhost:9090
     volumes:
       - minio-data:/data
     healthcheck:
