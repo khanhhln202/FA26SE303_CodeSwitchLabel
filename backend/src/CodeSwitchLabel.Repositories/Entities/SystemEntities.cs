@@ -1,113 +1,127 @@
-using System.Text.Json;
 using CodeSwitchLabel.Repositories.Enums;
 
 namespace CodeSwitchLabel.Repositories.Entities;
-
-/// <summary>
-/// Một lần xuất dataset. FilterCriteria giữ lại điều kiện lọc lúc xuất,
-/// nên sau này tái lập đúng bộ dữ liệu đó được — thứ bắt buộc nếu muốn
-/// người khác kiểm chứng lại kết quả nghiên cứu.
-/// </summary>
-public class Dataset
-{
-    public long DatasetId { get; set; }
-
-    public string DatasetName { get; set; } = string.Empty;
-    public string Version { get; set; } = string.Empty;
-    public string? Description { get; set; }
-
-    public JsonDocument? FilterCriteria { get; set; }
-
-    public DatasetStatus Status { get; set; } = DatasetStatus.Draft;
-
-    /// <summary>Ba trường dưới đây chỉ có giá trị sau khi phát hành.</summary>
-    public long? ReleasedById { get; set; }
-    public AppUser? ReleasedBy { get; set; }
-    public DateTimeOffset? ReleasedAt { get; set; }
-    public string? FileKey { get; set; }
-
-    public DatasetFileFormat FileFormat { get; set; } = DatasetFileFormat.Json;
-    public int RowCount { get; set; }
-    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
-
-    public ICollection<DatasetRecording> Recordings { get; set; } = [];
-}
-
-/// <summary>Bản ghi nào nằm trong dataset nào. Chỉ nhận bản ghi đã được duyệt.</summary>
-public class DatasetRecording
-{
-    public long DatasetId { get; set; }
-    public Dataset Dataset { get; set; } = null!;
-
-    public long RecordingId { get; set; }
-    public Recording Recording { get; set; } = null!;
-
-    public DateTimeOffset IncludedAt { get; set; } = DateTimeOffset.UtcNow;
-}
-
-public class Notification
-{
-    public long NotificationId { get; set; }
-
-    public long RecipientId { get; set; }
-    public AppUser Recipient { get; set; } = null!;
-
-    public NotificationType Type { get; set; }
-
-    /// <summary>Nội dung thay đổi theo loại thông báo nên để jsonb, khỏi phải đổi schema mỗi lần thêm loại mới.</summary>
-    public JsonDocument? Payload { get; set; }
-
-    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
-
-    /// <summary>NULL nghĩa là chưa đọc.</summary>
-    public DateTimeOffset? ReadAt { get; set; }
-}
-
-/// <summary>
-/// Nhật ký mọi thay đổi. ERD phân vùng theo tháng để bảng không phình vô hạn —
-/// phần phân vùng viết bằng SQL thô trong migration vì EF Core không sinh được.
-/// </summary>
-public class AuditLog
-{
-    public long AuditId { get; set; }
-
-    /// <summary>Vừa là một phần khoá chính vừa là khoá phân vùng.</summary>
-    public DateTimeOffset ChangedAt { get; set; } = DateTimeOffset.UtcNow;
-
-    /// <summary>NULL nghĩa là hệ thống tự làm, không do người nào.</summary>
-    public long? UserId { get; set; }
-    public AppUser? User { get; set; }
-
-    public string EntityType { get; set; } = string.Empty;
-    public long EntityId { get; set; }
-    public AuditAction Action { get; set; }
-
-    public JsonDocument? OldValue { get; set; }
-    public JsonDocument? NewValue { get; set; }
-}
 
 public class SystemConfig
 {
     public short ConfigId { get; set; }
     public string ConfigKey { get; set; } = string.Empty;
     public string ConfigValue { get; set; } = string.Empty;
-    public ConfigValueType ValueType { get; set; } = ConfigValueType.String;
+    public ConfigValueType ValueType { get; set; }
     public string? Description { get; set; }
 
-    /// <summary>NULL nghĩa là giá trị khởi tạo của hệ thống, chưa ai sửa.</summary>
-    public long? UpdatedById { get; set; }
-    public AppUser? UpdatedBy { get; set; }
+    /// <summary>Null nghĩa là giá trị do hệ thống đặt sẵn, chưa ai sửa.</summary>
+    public long? UpdatedBy { get; set; }
 
-    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset UpdatedAt { get; set; }
 }
 
-/// <summary>Khoá cấu hình dùng trong code — gom một chỗ để khỏi gõ chuỗi rải rác.</summary>
+/// <summary>
+/// Khoá cấu hình. Bảy khoá đầu có sẵn trong docs/codeswitchlabel.sql.
+/// Hai khoá thời lượng là ĐỀ XUẤT của nhóm backend, chưa có trong file chung —
+/// thiếu thì hệ thống dùng giá trị mặc định trong code.
+/// </summary>
 public static class ConfigKeys
 {
+    public const string ReviewRoundsRequired = "review.rounds_required";
+    public const string ReviewDefaultBlind = "review.default_blind";
+    public const string RecordingMaxLeadingSilenceSec = "recording.max_leading_silence_sec";
+    public const string RecordingMaxTrailingSilenceSec = "recording.max_trailing_silence_sec";
+    public const string RecordingAudioFormatDefault = "recording.audio_format_default";
+    public const string RecordingMaxTake = "recording.max_take";
+    public const string ImportMaxScriptsPerBatch = "import.max_scripts_per_batch";
+
     public const string RecordingMinDurationSec = "recording.min_duration_sec";
     public const string RecordingMaxDurationSec = "recording.max_duration_sec";
-    public const string ReviewRandomRatio       = "review.random_ratio";
-    public const string ScriptMinWordCount      = "script.min_word_count";
-    public const string ScriptMaxWordCount      = "script.max_word_count";
-    public const string ScriptMinEnWordCount    = "script.min_en_word_count";
+}
+
+/// <summary>
+/// Nhật ký thao tác. Bảng chia mảnh theo tháng và được trigger fn_audit tự ghi;
+/// backend chỉ cần đặt biến phiên app.user_id cho mỗi transaction.
+/// </summary>
+public class AuditLog
+{
+    public long AuditId { get; set; }
+    public DateTimeOffset ChangedAt { get; set; }
+    public long? UserId { get; set; }
+    public string EntityType { get; set; } = string.Empty;
+    public string EntityId { get; set; } = string.Empty;
+    public AuditAction Action { get; set; }
+    public string? OldValue { get; set; }
+    public string? NewValue { get; set; }
+}
+
+public class Dataset
+{
+    public long DatasetId { get; set; }
+    public string DatasetName { get; set; } = string.Empty;
+    public string Version { get; set; } = string.Empty;
+    public string? Description { get; set; }
+
+    /// <summary>Điều kiện lọc lúc tạo, lưu dạng JSON để chọn lại y hệt về sau.</summary>
+    public string? FilterCriteria { get; set; }
+
+    public DatasetStatus Status { get; set; }
+    public long? ReleasedBy { get; set; }
+    public DateTimeOffset? ReleasedAt { get; set; }
+    public string? FileKey { get; set; }
+    public DatasetFileFormat? FileFormat { get; set; }
+    public int RecordingCount { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public ICollection<DatasetRecording> Recordings { get; set; } = [];
+}
+
+public class DatasetRecording
+{
+    public long DatasetId { get; set; }
+    public string RecordingId { get; set; } = string.Empty;
+    public DateTimeOffset IncludedAt { get; set; }
+
+    public Dataset Dataset { get; set; } = null!;
+    public Recording Recording { get; set; } = null!;
+}
+
+// ---------------------------------------------------------------------------
+// Các view thống kê có sẵn trong lược đồ. Không khoá chính, chỉ đọc.
+// ---------------------------------------------------------------------------
+
+public class DashboardSummary
+{
+    public long TotalScripts { get; set; }
+    public long ValidatedScripts { get; set; }
+    public long PendingScripts { get; set; }
+    public long TotalRecordings { get; set; }
+    public long ApprovedRecordings { get; set; }
+    public long RejectedRecordings { get; set; }
+    public decimal ApprovedDurationSec { get; set; }
+    public long Speakers { get; set; }
+    public long Reviewers { get; set; }
+    public long ReleasedDatasets { get; set; }
+}
+
+public class SpeakerPerformance
+{
+    public long UserId { get; set; }
+    public string FullName { get; set; } = string.Empty;
+    public long Recordings { get; set; }
+    public long Approved { get; set; }
+    public long Rejected { get; set; }
+    public decimal? ApprovalRatePct { get; set; }
+}
+
+public class ReviewerPerformance
+{
+    public long UserId { get; set; }
+    public string FullName { get; set; } = string.Empty;
+    public long ReviewsDone { get; set; }
+    public long Approvals { get; set; }
+    public long Rejections { get; set; }
+}
+
+public class RejectionReasonStat
+{
+    public string ReasonCode { get; set; } = string.Empty;
+    public RejectionCategory Category { get; set; }
+    public long TimesUsed { get; set; }
 }

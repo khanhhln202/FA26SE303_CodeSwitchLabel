@@ -10,42 +10,35 @@ public interface IAuthService
 
 public interface IScriptService
 {
-    Task<PagedResult<ScriptListItemDto>> SearchAsync(
-        ScriptSearchRequest request, CancellationToken ct = default);
+    Task<PagedResult<ScriptListItemDto>> SearchAsync(ScriptSearchRequest request, CancellationToken ct = default);
 
-    Task<ScriptDetailDto> GetAsync(long id, CancellationToken ct = default);
+    Task<ScriptDetailDto> GetAsync(string scriptId, CancellationToken ct = default);
 
-    /// <summary>Admin thêm script — vào thẳng trạng thái Validated.</summary>
-    Task<ScriptDetailDto> CreateAsync(
-        CreateScriptRequest request, long createdById, CancellationToken ct = default);
+    /// <summary>Admin thêm tay một cặp câu — vào thẳng trạng thái đã duyệt.</summary>
+    Task<ScriptDetailDto> CreateAsync(CreateScriptRequest request, long createdById, CancellationToken ct = default);
 
-    /// <summary>Speaker đóng góp script — vào PendingValidation, chờ duyệt.</summary>
-    Task<ScriptDetailDto> ContributeAsync(
-        CreateScriptRequest request, long contributorId, CancellationToken ct = default);
+    /// <summary>Speaker đóng góp một cặp câu — nằm chờ duyệt nội dung.</summary>
+    Task<ScriptDetailDto> ContributeAsync(CreateScriptRequest request, long contributorId, CancellationToken ct = default);
 
-    /// <summary>
-    /// Ghi nhận một lượt duyệt nội dung script và cập nhật trạng thái script theo đó.
-    /// Chấp nhận hoặc sửa thì script thành Validated; từ chối thì thành Rejected.
-    /// </summary>
+    /// <summary>Nhập hàng loạt từ file input_text.json.</summary>
+    Task<ImportResultDto> ImportAsync(
+        Stream jsonFile, string fileName, long importedById, CancellationToken ct = default);
+
+    /// <summary>Duyệt nội dung: chấp nhận, sửa cả cặp, hoặc từ chối kèm lý do.</summary>
     Task<ScriptDetailDto> ReviewAsync(
-        long scriptId, long userId, ReviewScriptRequest request, CancellationToken ct = default);
+        string scriptId, long userId, ReviewScriptRequest request, CancellationToken ct = default);
 }
 
 public interface IScriptAssignmentService
 {
-    /// <summary>
-    /// Script tiếp theo cho Speaker này. Trả null khi hết — trạng thái bình thường,
-    /// không phải lỗi, nên tầng Api đổi thành 204 chứ không phải 404.
-    /// </summary>
+    /// <summary>Cặp câu tiếp theo để thu âm, kèm danh sách biến thể còn thiếu.</summary>
     Task<NextScriptDto?> GetNextAsync(long speakerId, long? taskId, CancellationToken ct = default);
-
-    /// <summary>Speaker bỏ qua script. Ghi lại để không phát lại cho chính người này.</summary>
-    Task SkipAsync(long scriptId, long speakerId, long? taskId, CancellationToken ct = default);
 }
 
 public interface ISystemConfigService
 {
     Task<int> GetIntAsync(string key, int fallback, CancellationToken ct = default);
+    Task<bool> GetBoolAsync(string key, bool fallback, CancellationToken ct = default);
     Task<decimal> GetDecimalAsync(string key, decimal fallback, CancellationToken ct = default);
     Task<IReadOnlyList<SystemConfigDto>> GetAllAsync(CancellationToken ct = default);
     Task UpdateAsync(string key, string value, long updatedById, CancellationToken ct = default);
@@ -53,12 +46,40 @@ public interface ISystemConfigService
 
 public interface IReasonService
 {
-    Task<IReadOnlyList<ReasonDto>> GetRejectionReasonsAsync(
-        bool activeOnly, CancellationToken ct = default);
+    Task<IReadOnlyList<ReasonDto>> GetRejectionReasonsAsync(bool activeOnly, CancellationToken ct = default);
+    Task<IReadOnlyList<ReasonDto>> GetScriptErrorReasonsAsync(bool activeOnly, CancellationToken ct = default);
+}
 
-    Task<IReadOnlyList<ReasonDto>> GetScriptErrorReasonsAsync(
-        bool activeOnly, CancellationToken ct = default);
+/// <summary>Số liệu cho màn hình quản trị, đọc thẳng từ các view của lược đồ.</summary>
+public interface IStatisticsService
+{
+    Task<DashboardDto> GetDashboardAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<SpeakerQualityDto>> GetSpeakerQualityAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<ReviewerQualityDto>> GetReviewerQualityAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<RejectionStatDto>> GetRejectionStatsAsync(CancellationToken ct = default);
 }
 
 public record SystemConfigDto(
     string Key, string Value, string ValueType, string? Description, DateTimeOffset UpdatedAt);
+
+/// <param name="ApprovedDurationSec">Tổng thời lượng các bản đã duyệt đạt, tính bằng giây.</param>
+public record DashboardDto(
+    long TotalScripts,
+    long ValidatedScripts,
+    long PendingScripts,
+    long TotalRecordings,
+    long ApprovedRecordings,
+    long RejectedRecordings,
+    decimal ApprovedDurationSec,
+    double ApprovedDurationHours,
+    long Speakers,
+    long Reviewers,
+    long ReleasedDatasets);
+
+public record SpeakerQualityDto(
+    long UserId, string FullName, long Recordings, long Approved, long Rejected, decimal? ApprovalRatePct);
+
+public record ReviewerQualityDto(
+    long UserId, string FullName, long ReviewsDone, long Approvals, long Rejections);
+
+public record RejectionStatDto(string ReasonCode, string Category, long TimesUsed);

@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using CodeSwitchLabel.Api.Infrastructure;
 using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Dtos;
@@ -7,36 +8,37 @@ using Microsoft.AspNetCore.Mvc;
 namespace CodeSwitchLabel.Api.Controllers;
 
 /// <summary>
-/// Kho script — đoạn văn bản để Speaker đọc.
-/// Trước đây ERD gọi là "sentence", đổi tên theo yêu cầu của giảng viên.
+/// Kho câu. Mỗi mục là một CẶP CÂU: bản chen tiếng Anh (cs) và bản thuần Việt tương đương (ve),
+/// kèm nhãn [vi]/[en] đánh dấu từng đoạn ngôn ngữ.
 /// </summary>
 [ApiController]
 [Route("api/scripts")]
-[Tags("2 · Kho script")]
+[Tags("2 · Kho câu")]
 [Authorize]
 public class ScriptsController(IScriptService scriptService) : ControllerBase
 {
-    /// <summary>Tìm kiếm script, có lọc theo trạng thái và chủ đề, có phân trang.</summary>
+    /// <summary>Tìm kiếm, lọc theo trạng thái và chủ đề, có phân trang.</summary>
+    /// <remarks>Từ khoá tìm trên cả hai câu của cặp.</remarks>
     [HttpGet]
     [ProducesResponseType(typeof(PagedResult<ScriptListItemDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<PagedResult<ScriptListItemDto>>> Search(
         [FromQuery] ScriptSearchRequest request, CancellationToken ct)
         => Ok(await scriptService.SearchAsync(request, ct));
 
-    /// <summary>Chi tiết một script, kèm toàn bộ lịch sử duyệt nội dung.</summary>
-    [HttpGet("{id:long}")]
+    /// <summary>Chi tiết một cặp câu, kèm bản đã bỏ nhãn, alignment và lịch sử duyệt nội dung.</summary>
+    [HttpGet("{id}")]
     [ProducesResponseType(typeof(ScriptDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<ScriptDetailDto>> Get(long id, CancellationToken ct)
+    public async Task<ActionResult<ScriptDetailDto>> Get(string id, CancellationToken ct)
         => Ok(await scriptService.GetAsync(id, ct));
 
-    /// <summary>Admin thêm script mới — vào thẳng trạng thái đã duyệt.</summary>
+    /// <summary>Admin thêm tay một cặp câu — vào thẳng trạng thái đã duyệt.</summary>
     /// <remarks>
-    /// Bỏ trống enWordCount thì hệ thống tự ước lượng số từ tiếng Anh.
+    /// Cả hai câu phải có nhãn ngôn ngữ, ví dụ:
+    /// `[vi]Em nên [en]scan [vi]tài liệu này` và `[vi]Em nên quét tài liệu này`.
     ///
-    /// Ước lượng chỉ là phỏng đoán: nó dựa vào việc từ có mang dấu tiếng Việt hay không,
-    /// nên nhận nhầm những từ tiếng Việt viết không dấu. Người nhập biết rõ hơn thì
-    /// gửi kèm con số của mình để ghi đè.
+    /// Hệ thống đếm số từ tiếng Anh từ nhãn — con số này đi vào **chữ số đầu của mã câu**
+    /// nên phải nằm trong khoảng 1..9. Câu thuần Việt không được có nhãn [en] nào.
     /// </remarks>
     [HttpPost]
     [Authorize(Roles = "Admin")]
@@ -50,24 +52,55 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
         return CreatedAtAction(nameof(Get), new { id = created.ScriptId }, created);
     }
 
-    /// <summary>Duyệt nội dung một script: chấp nhận, sửa, hoặc từ chối.</summary>
+    /// <summary>Nhập hàng loạt từ file input_text.json.</summary>
     /// <remarks>
-    /// Đây là use case "Review Text" của đề tài. Mỗi lượt duyệt được ghi lại thành
-    /// một dòng riêng trong lịch sử, nên duyệt lại nhiều lần vẫn truy được ai làm gì khi nào.
+    /// Nhận cả file một câu lẫn file nhiều câu. Mỗi phần tử gồm `id`, `domain`, `cs_transcript`,
+    /// `vi_equivalent` và `alignment`.
     ///
-    /// Chọn **Edited** thì bắt buộc gửi kèm editedContent.
-    /// Chọn **Rejected** thì bắt buộc gửi kèm errorReasonCode lấy từ danh mục
-    /// tại <c>GET /api/script-error-reasons</c>.
+    /// Mã câu **được sinh lại** theo đúng quy tắc của database: giữ ý nghĩa ba chữ số đầu
+    /// (số từ tiếng Anh, chủ đề, quan hệ Anh–Việt) rồi cấp số thứ tự mới.
     ///
-    /// Lưu ý: script đã có bản ghi âm thì KHÔNG sửa nội dung được nữa — sửa sẽ làm
-    /// transcript của các bản ghi cũ không còn khớp với âm thanh.
+    /// Câu hỏng **không làm hỏng cả file**: phần hợp lệ vẫn được nhập, phần bị loại nằm trong
+    /// `skipped` kèm lý do. Câu nhập vào ở trạng thái **chờ duyệt nội dung**.
     /// </remarks>
-    [HttpPost("{id:long}/review")]
+    [HttpPost("import")]
+    [Authorize(Roles = "Admin")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(20 * 1024 * 1024)]
+    [ProducesResponseType(typeof(ImportResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ActionResult<ImportResultDto>> Import(
+        [FromForm] ImportScriptsForm form, CancellationToken ct)
+    {
+        await using var stream = form.File!.OpenReadStream();
+
+        return Ok(await scriptService.ImportAsync(stream, form.File.FileName, User.GetUserId(), ct));
+    }
+
+    /// <summary>Duyệt nội dung một cặp câu: chấp nhận, sửa, hoặc từ chối.</summary>
+    /// <remarks>
+    /// Đây là use case "Review Text". Mỗi lượt duyệt ghi thành một dòng lịch sử riêng.
+    ///
+    /// - **Edited** — bắt buộc gửi **cả hai** câu đã sửa; lược đồ chỉ cho sửa theo cặp.
+    ///   Số từ tiếng Anh không được đổi vì nó nằm trong mã câu.
+    /// - **Rejected** — bắt buộc `errorReasonCode` lấy từ `GET /api/script-error-reasons`.
+    ///   Câu bị loại thì mọi task đang chờ thu câu đó cũng mất mục ấy.
+    ///
+    /// Cặp câu đã có bản ghi âm thì **không sửa nội dung được nữa**.
+    /// </remarks>
+    [HttpPost("{id}/review")]
     [Authorize(Roles = "Admin,Speaker,Reviewer")]
     [ProducesResponseType(typeof(ScriptDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<ScriptDetailDto>> Review(
-        long id, [FromBody] ReviewScriptRequest request, CancellationToken ct)
+        string id, [FromBody] ReviewScriptRequest request, CancellationToken ct)
         => Ok(await scriptService.ReviewAsync(id, User.GetUserId(), request, ct));
+}
+
+public class ImportScriptsForm
+{
+    [Required(ErrorMessage = "Chưa đính kèm file JSON.")]
+    public IFormFile? File { get; set; }
 }

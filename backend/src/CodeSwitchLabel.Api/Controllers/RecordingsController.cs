@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using CodeSwitchLabel.Api.Infrastructure;
+using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Dtos;
 using Microsoft.AspNetCore.Authorization;
@@ -13,17 +14,19 @@ namespace CodeSwitchLabel.Api.Controllers;
 [Authorize]
 public class RecordingsController(IRecordingService recordingService) : ControllerBase
 {
-    /// <summary>Nộp một bản ghi âm.</summary>
+    /// <summary>Nộp một bản ghi âm cho một biến thể của cặp câu.</summary>
     /// <remarks>
-    /// Gửi nguyên file trình duyệt ghi ra (WebM, OGG, MP4, WAV đều được) — **không chuyển định dạng ở frontend**.
-    /// Backend tự chuyển sang WAV 16 kHz mono, đo thời lượng, kiểm tra tự động, rồi lưu vào kho.
+    /// `sentenceVariant` chọn bạn đang đọc bản nào:
+    /// **CodeSwitching** là câu chen tiếng Anh, **PureVietnamese** là câu thuần Việt.
+    /// Mỗi cặp câu cần đủ cả hai, và phải do cùng một người đọc.
     ///
-    /// **201 Created với qcPassed = false** nghĩa là bản ghi đã được lưu nhưng trượt kiểm tra tự động
-    /// (ví dụ quá ngắn) — nó sẽ không vào hàng đợi của Reviewer. Giao diện nên đọc danh sách
-    /// qcIssues và mời người đọc thu lại.
+    /// Gửi nguyên file trình duyệt ghi ra (WebM, OGG, MP4, WAV đều được) — **không chuyển định dạng
+    /// ở frontend**. Backend tự chuyển sang WAV 16 kHz mono, đo thời lượng, kiểm tra tự động rồi lưu.
     ///
-    /// **409** nghĩa là bạn đã có bản ghi đang chờ duyệt hoặc đã được duyệt cho script này.
-    /// Bản bị từ chối hay trượt kiểm tra thì vẫn thu lại được.
+    /// Mã bản ghi sinh theo mã câu: `r_cs_...` hoặc `r_vi_...`, thu lại lần hai trở đi thêm hậu tố `_t2`.
+    ///
+    /// **201 kèm qcPassed = false** nghĩa là bản ghi đã lưu nhưng trượt kiểm tra tự động, và
+    /// sẽ không vào hàng đợi của Reviewer.
     /// </remarks>
     [HttpPost]
     [Authorize(Roles = "Speaker")]
@@ -42,7 +45,8 @@ public class RecordingsController(IRecordingService recordingService) : Controll
         var result = await recordingService.UploadAsync(
             new UploadRecordingCommand(
                 User.GetUserId(),
-                form.ScriptId!.Value,
+                form.ScriptId!,
+                form.SentenceVariant!.Value,
                 form.TaskId,
                 stream,
                 form.Audio.FileName,
@@ -52,31 +56,30 @@ public class RecordingsController(IRecordingService recordingService) : Controll
         return CreatedAtAction(nameof(Get), new { id = result.Recording.RecordingId }, result);
     }
 
-    /// <summary>Lịch sử bản ghi của chính mình.</summary>
-    [HttpGet("mine")]
-    [Authorize(Roles = "Speaker")]
+    /// <summary>Danh sách bản ghi, có lọc và phân trang.</summary>
+    /// <remarks>Speaker chỉ thấy bản của chính mình; Reviewer, Task Manager và Admin thấy tất cả.</remarks>
+    [HttpGet]
     [ProducesResponseType(typeof(PagedResult<RecordingDto>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<PagedResult<RecordingDto>>> Mine(
+    public async Task<ActionResult<PagedResult<RecordingDto>>> Search(
         [FromQuery] RecordingSearchRequest request, CancellationToken ct)
-        => Ok(await recordingService.GetMineAsync(User.GetUserId(), request, ct));
+        => Ok(await recordingService.SearchAsync(request, OwnerFilter(), ct));
 
     /// <summary>Thông tin một bản ghi.</summary>
-    /// <remarks>Speaker chỉ xem được bản của mình; Reviewer, Task Manager, Admin xem được mọi bản.</remarks>
-    [HttpGet("{id:long}")]
+    [HttpGet("{id}")]
     [ProducesResponseType(typeof(RecordingDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<RecordingDto>> Get(long id, CancellationToken ct)
+    public async Task<ActionResult<RecordingDto>> Get(string id, CancellationToken ct)
         => Ok(await recordingService.GetAsync(id, OwnerFilter(), ct));
 
     /// <summary>Lấy link nghe tạm thời.</summary>
     /// <remarks>
-    /// Link tự hết hạn sau số phút cấu hình. Trình duyệt tải thẳng từ kho lưu trữ,
-    /// API không làm trung gian truyền file. Dùng thẳng làm src của thẻ audio.
+    /// Cột cloud_link trong database là địa chỉ cố định của file và không mở trực tiếp được.
+    /// Endpoint này ký một link có hạn; trình duyệt tải thẳng từ kho lưu trữ, API không truyền file.
     /// </remarks>
-    [HttpGet("{id:long}/audio-url")]
+    [HttpGet("{id}/audio-url")]
     [ProducesResponseType(typeof(AudioUrlDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<AudioUrlDto>> AudioUrl(long id, CancellationToken ct)
+    public async Task<ActionResult<AudioUrlDto>> AudioUrl(string id, CancellationToken ct)
         => Ok(await recordingService.GetAudioUrlAsync(id, OwnerFilter(), ct));
 
     /// <summary>Speaker chỉ được đụng tới bản ghi của mình; các vai khác thì không giới hạn.</summary>
@@ -88,8 +91,13 @@ public class UploadRecordingForm
     [Required(ErrorMessage = "Chưa đính kèm file âm thanh.")]
     public IFormFile? Audio { get; set; }
 
+    /// <summary>Mã cặp câu, ví dụ s_211000001.</summary>
     [Required(ErrorMessage = "Thiếu scriptId.")]
-    public long? ScriptId { get; set; }
+    public string? ScriptId { get; set; }
+
+    /// <summary>CodeSwitching hoặc PureVietnamese.</summary>
+    [Required(ErrorMessage = "Phải chọn đang đọc bản nào: CodeSwitching hay PureVietnamese.")]
+    public SentenceVariant? SentenceVariant { get; set; }
 
     /// <summary>Để trống nếu thu tự do, không thuộc task nào.</summary>
     public long? TaskId { get; set; }

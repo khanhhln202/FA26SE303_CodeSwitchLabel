@@ -7,6 +7,7 @@ using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Audio;
 using CodeSwitchLabel.Services.Common;
 using CodeSwitchLabel.Services.Dtos;
+using CodeSwitchLabel.Services.WorkTasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -15,7 +16,7 @@ namespace CodeSwitchLabel.Services.Implementations;
 internal static class RecordingMapper
 {
     public static RecordingDto ToDto(this Recording r) =>
-        new(r.RecordingId, r.ScriptId, r.SpeakerId, r.TaskId,
+        new(r.RecordingId, r.ScriptId, r.SentenceVariant, r.SpeakerId, r.TaskId,
             r.Status, r.AudioFormat, r.DurationSec, r.RecordedAt);
 }
 
@@ -25,6 +26,7 @@ public class RecordingService(
     IObjectStorage storage,
     IAudioProcessor audio,
     ISystemConfigService config,
+    ITaskProgressTracker taskTracker,
     IOptions<AudioOptions> audioOptions,
     TimeProvider clock,
     ILogger<RecordingService> logger) : IRecordingService
@@ -38,14 +40,17 @@ public class RecordingService(
 
         // Kiểm quyền và trùng lặp TRƯỚC khi đụng tới file — không bắt ffmpeg làm việc
         // cho một request đằng nào cũng bị từ chối.
-        await EnsureCanRecordAsync(command, ct);
+        var taskId = await EnsureCanRecordAsync(command, ct);
 
         var workDir = Path.Combine(Path.GetTempPath(), "csl-audio");
         Directory.CreateDirectory(workDir);
 
         var fileId = Guid.NewGuid().ToString("N");
-        var inputPath = Path.Combine(workDir, fileId + SafeExtension(command.FileName));
-        var wavPath = Path.Combine(workDir, fileId + ".wav");
+
+        // Tên file gốc và file WAV đầu ra PHẢI khác nhau: client gửi sẵn WAV thì cả hai cùng đuôi,
+        // mà ffmpeg từ chối ghi đè chính file đang đọc.
+        var inputPath = Path.Combine(workDir, fileId + "-source" + SafeExtension(command.FileName));
+        var wavPath = Path.Combine(workDir, fileId + "-16k.wav");
 
         try
         {
@@ -58,24 +63,29 @@ public class RecordingService(
             var issues = await RunQualityChecksAsync(probe, ct);
             var now = clock.GetUtcNow();
 
-            // Khoá file dùng GUID chứ không dùng recording_id, vì id chỉ có SAU khi INSERT
-            // mà file thì đẩy lên TRƯỚC. Thứ tự này có chủ ý: sập giữa chừng chỉ để lại
-            // một file mồ côi — người dùng không thấy, dọn được — thay vì một hàng dữ liệu
-            // trỏ tới file không tồn tại.
-            var key = $"recordings/{now:yyyy}/{now:MM}/{fileId}.wav";
+            var take = await NextTakeAsync(command, ct);
+
+            // Mã bản ghi do database sinh: r_cs_/r_vi_ + 9 chữ số của cặp câu, thu lại thì thêm _tN.
+            var recordingId = await recordings.GenerateIdAsync(
+                command.ScriptId, command.SentenceVariant, take, ct);
+
+            // Đặt tên file theo đúng mã bản ghi: nhìn file trong kho là biết của câu nào, lần thu thứ mấy.
+            var key = $"recordings/{now:yyyy}/{now:MM}/{recordingId}.wav";
 
             await storage.UploadAsync(key, wavPath, "audio/wav", ct);
 
             var recording = new Recording
             {
+                RecordingId = recordingId,
+                SentenceVariant = command.SentenceVariant,
                 ScriptId = command.ScriptId,
                 SpeakerId = command.SpeakerId,
-                TaskId = command.TaskId,
-                S3Key = key,
+                TaskId = taskId,
+                CloudLink = storage.GetObjectUrl(key),
                 AudioFormat = "wav",
 
-                // Trượt kiểm tra vẫn lưu cả hàng lẫn file, đúng trạng thái qc_failed có sẵn trong ERD.
-                // Nhờ vậy vẫn đếm được mỗi người trượt bao nhiêu lần.
+                // Trượt kiểm tra vẫn lưu cả hàng lẫn file, đúng trạng thái qc_failed của lược đồ,
+                // nhờ vậy vẫn đếm được mỗi người trượt bao nhiêu lần.
                 Status = issues.Count == 0 ? RecordingStatus.PendingReview : RecordingStatus.QcFailed,
 
                 DurationSec = probe.DurationSec,
@@ -84,8 +94,18 @@ public class RecordingService(
 
             try
             {
+                // Lưu bản ghi và cập nhật tiến độ task trong cùng một transaction.
+                await using var transaction = await recordings.BeginTransactionAsync(ct);
+
                 recordings.Add(recording);
                 await recordings.SaveChangesAsync(ct);
+
+                if (taskId.HasValue)
+                {
+                    await taskTracker.OnRecordingSubmittedAsync(taskId.Value, ct);
+                }
+
+                await transaction.CommitAsync(ct);
             }
             catch
             {
@@ -94,7 +114,7 @@ public class RecordingService(
                 throw;
             }
 
-            return new UploadRecordingResult(recording.ToDto(), issues.Count == 0, issues);
+            return new UploadRecordingResult(recording.ToDto(), issues.Count == 0, issues, take);
         }
         finally
         {
@@ -103,28 +123,39 @@ public class RecordingService(
         }
     }
 
-    public async Task<PagedResult<RecordingDto>> GetMineAsync(
-        long speakerId, RecordingSearchRequest request, CancellationToken ct = default)
+    public async Task<PagedResult<RecordingDto>> SearchAsync(
+        RecordingSearchRequest request, long? ownerOnlyUserId, CancellationToken ct = default)
     {
-        var (items, total) = await recordings.SearchForSpeakerAsync(
-            speakerId, request.Status, request.Page, request.PageSize, ct);
+        // Speaker chỉ thấy bản của chính mình, bất kể họ lọc theo speakerId nào.
+        var speakerId = ownerOnlyUserId ?? request.SpeakerId;
+
+        var (items, total) = await recordings.SearchAsync(
+            speakerId, request.ScriptId, request.Status, request.Page, request.PageSize, ct);
 
         return new PagedResult<RecordingDto>(
             [.. items.Select(r => r.ToDto())], request.Page, request.PageSize, total);
     }
 
     public async Task<RecordingDto> GetAsync(
-        long recordingId, long? ownerOnlyUserId, CancellationToken ct = default) =>
+        string recordingId, long? ownerOnlyUserId, CancellationToken ct = default) =>
         (await LoadAccessibleAsync(recordingId, ownerOnlyUserId, ct)).ToDto();
 
     public async Task<AudioUrlDto> GetAudioUrlAsync(
-        long recordingId, long? ownerOnlyUserId, CancellationToken ct = default)
+        string recordingId, long? ownerOnlyUserId, CancellationToken ct = default)
     {
         var recording = await LoadAccessibleAsync(recordingId, ownerOnlyUserId, ct);
-        var (url, expiresAt) = await storage.GetDownloadUrlAsync(recording.S3Key, ct);
+
+        var key = storage.GetObjectKey(recording.CloudLink)
+                  ?? throw new UnprocessableException(
+                      "external_recording",
+                      $"Bản ghi {recordingId} trỏ tới một kho lưu trữ khác, hệ thống không cấp link nghe được.");
+
+        var (url, expiresAt) = await storage.GetDownloadUrlAsync(key, ct);
 
         return new AudioUrlDto(url, expiresAt);
     }
+
+    // ----------------------------------------------------------------- nội bộ
 
     private void EnsureSizeWithinLimit(long length)
     {
@@ -140,7 +171,8 @@ public class RecordingService(
         }
     }
 
-    private async Task EnsureCanRecordAsync(UploadRecordingCommand command, CancellationToken ct)
+    /// <returns>Task mà bản ghi thuộc về, hoặc null nếu thu ngoài task.</returns>
+    private async Task<long?> EnsureCanRecordAsync(UploadRecordingCommand command, CancellationToken ct)
     {
         var script = await scripts.GetAsync(command.ScriptId, ct)
                      ?? throw NotFoundException.Script(command.ScriptId);
@@ -149,7 +181,18 @@ public class RecordingService(
         {
             throw new ConflictException(
                 "script_not_recordable",
-                $"Script #{script.ScriptId} đang ở trạng thái {script.Status}, chỉ thu âm được script đã duyệt.");
+                $"Cặp câu {script.ScriptId} đang ở trạng thái {script.Status}, chỉ thu âm được câu đã duyệt nội dung.");
+        }
+
+        // Luật cốt lõi của lược đồ: một cặp câu chỉ một người đọc, để hai bản cs và vi
+        // là cùng một giọng, cùng một buổi thu. Database cũng có trigger chặn.
+        var owner = await recordings.GetOwnerSpeakerIdAsync(command.ScriptId, ct);
+
+        if (owner.HasValue && owner.Value != command.SpeakerId)
+        {
+            throw new ConflictException(
+                "script_owned_by_other_speaker",
+                $"Cặp câu {command.ScriptId} đã do người đọc khác thu. Mỗi cặp câu chỉ một người đọc.");
         }
 
         if (command.TaskId.HasValue &&
@@ -157,18 +200,34 @@ public class RecordingService(
         {
             throw new ForbiddenException(
                 "task_not_recordable",
-                $"Task #{command.TaskId} không phải task thu âm đang giao cho bạn, hoặc không chứa script này.");
+                $"Task #{command.TaskId} không phải task thu âm đang giao cho bạn, hoặc không chứa cặp câu này.");
         }
 
-        // Chặn ở tầng Service vì ERD không có ràng buộc duy nhất cho cặp (script, speaker).
-        // GIỚI HẠN ĐÃ BIẾT: hai request gửi đúng cùng một lúc vẫn có thể cùng lọt qua bước này,
-        // vì database không có gì chặn lại. Muốn hết hẳn thì phải thêm ràng buộc vào lược đồ.
-        if (await recordings.HasActiveRecordingAsync(command.ScriptId, command.SpeakerId, ct))
+        if (await recordings.HasActiveRecordingAsync(command.ScriptId, command.SentenceVariant, ct))
         {
             throw new ConflictException(
                 "recording_already_exists",
-                $"Bạn đã có bản ghi đang chờ duyệt hoặc đã được duyệt cho script #{command.ScriptId}.");
+                $"Bạn đã có bản {command.SentenceVariant} đang chờ duyệt hoặc đã được duyệt cho cặp câu {command.ScriptId}.");
         }
+
+        // Không gửi taskId nhưng cặp câu lại đang nằm trong task của chính người này thì tự gắn vào task.
+        return command.TaskId
+               ?? await recordings.FindOwnTaskContainingScriptAsync(command.SpeakerId, command.ScriptId, ct);
+    }
+
+    private async Task<int> NextTakeAsync(UploadRecordingCommand command, CancellationToken ct)
+    {
+        var take = await recordings.CountTakesAsync(command.ScriptId, command.SentenceVariant, ct) + 1;
+        var maxTake = await config.GetIntAsync(ConfigKeys.RecordingMaxTake, 99, ct);
+
+        if (take > maxTake)
+        {
+            throw new ConflictException(
+                "too_many_takes",
+                $"Cặp câu {command.ScriptId} đã thu {take - 1} lần cho biến thể này, vượt mức {maxTake} lần.");
+        }
+
+        return take;
     }
 
     private async Task<AudioProbeResult> ConvertAndMeasureAsync(
@@ -180,9 +239,8 @@ public class RecordingService(
         {
             await audio.ConvertToWavAsync(inputPath, wavPath, ct);
 
-            // Đo trên file WAV SAU khi chuyển, không đo file gốc. Trình duyệt ghi WebM theo kiểu
-            // phát trực tiếp nên phần đầu file thường không ghi thời lượng — ffprobe đọc file gốc
-            // sẽ ra "N/A". File WAV thì luôn ghi đủ thời lượng ngay trong phần đầu.
+            // Đo trên file WAV SAU khi chuyển, không đo file gốc: trình duyệt ghi WebM theo kiểu
+            // phát trực tiếp nên phần đầu file thường không có thời lượng.
             probe = await audio.ProbeAsync(wavPath, ct);
         }
         catch (AudioProcessingException ex)
@@ -199,7 +257,8 @@ public class RecordingService(
         return probe;
     }
 
-    private async Task<IReadOnlyList<QcIssueDto>> RunQualityChecksAsync(AudioProbeResult probe, CancellationToken ct)
+    private async Task<IReadOnlyList<QcIssueDto>> RunQualityChecksAsync(
+        AudioProbeResult probe, CancellationToken ct)
     {
         var min = await config.GetDecimalAsync(ConfigKeys.RecordingMinDurationSec, 1m, ct);
         var max = await config.GetDecimalAsync(ConfigKeys.RecordingMaxDurationSec, 30m, ct);
@@ -222,23 +281,24 @@ public class RecordingService(
         return issues;
     }
 
-    private async Task<Recording> LoadAccessibleAsync(long recordingId, long? ownerOnlyUserId, CancellationToken ct)
+    private async Task<Recording> LoadAccessibleAsync(
+        string recordingId, long? ownerOnlyUserId, CancellationToken ct)
     {
         var recording = await recordings.GetAsync(recordingId, ct);
 
         // Speaker hỏi bản ghi của người khác thì trả 404 như thể không tồn tại, không trả 403 —
-        // trả 403 là vô tình xác nhận rằng id đó có thật.
+        // trả 403 là vô tình xác nhận rằng mã đó có thật.
         if (recording is null || (ownerOnlyUserId.HasValue && recording.SpeakerId != ownerOnlyUserId.Value))
         {
-            throw new NotFoundException("recording_not_found", $"Không tìm thấy bản ghi #{recordingId}.");
+            throw new NotFoundException("recording_not_found", $"Không tìm thấy bản ghi {recordingId}.");
         }
 
         return recording;
     }
 
     /// <summary>
-    /// Chỉ lấy phần đuôi file để ffmpeg đoán định dạng dễ hơn. Tên file do client gửi
-    /// KHÔNG BAO GIỜ được dùng làm đường dẫn — chặn kiểu tấn công ../../ ghi đè file hệ thống.
+    /// Chỉ lấy phần đuôi file để ffmpeg đoán định dạng. Tên file do client gửi KHÔNG BAO GIỜ
+    /// được dùng làm đường dẫn — chặn kiểu tấn công ../../ ghi đè file hệ thống.
     /// </summary>
     private static string SafeExtension(string fileName)
     {

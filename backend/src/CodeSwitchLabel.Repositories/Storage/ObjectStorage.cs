@@ -50,6 +50,15 @@ public interface IObjectStorage
     Task DeleteAsync(string key, CancellationToken ct = default);
 
     /// <summary>
+    /// Địa chỉ cố định của file, đem lưu vào cột cloud_link. Địa chỉ này KHÔNG mở trực tiếp được
+    /// vì bucket không công khai — muốn nghe thì xin link tạm qua GetDownloadUrlAsync.
+    /// </summary>
+    string GetObjectUrl(string key);
+
+    /// <summary>Lấy lại khoá file từ địa chỉ đã lưu. Trả null nếu địa chỉ không thuộc kho này.</summary>
+    string? GetObjectKey(string url);
+
+    /// <summary>
     /// Link tải tạm thời, tự hết hạn. Trình duyệt tải thẳng từ kho lưu trữ —
     /// API không làm trung gian truyền file nên không phải gánh băng thông audio.
     /// </summary>

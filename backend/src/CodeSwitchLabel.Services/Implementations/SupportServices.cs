@@ -4,13 +4,11 @@ using System.Security.Claims;
 using System.Text;
 using CodeSwitchLabel.Repositories.Entities;
 using CodeSwitchLabel.Repositories.Enums;
-using CodeSwitchLabel.Repositories.Persistence;
 using CodeSwitchLabel.Repositories.Repositories;
 using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Common;
 using CodeSwitchLabel.Services.Dtos;
 using CodeSwitchLabel.Services.Options;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
@@ -18,7 +16,7 @@ namespace CodeSwitchLabel.Services.Implementations;
 
 public class AuthService(
     IUserRepository users,
-    IPasswordHasher<AppUser> hasher,
+    IPasswordHasher hasher,
     IOptions<JwtOptions> jwtOptions) : IAuthService
 {
     private readonly JwtOptions _jwt = jwtOptions.Value;
@@ -27,16 +25,9 @@ public class AuthService(
     {
         var user = await users.GetByEmailAsync(request.Email.Trim(), ct);
 
-        // Cố ý trả CÙNG một thông báo cho cả hai ca sai email và sai mật khẩu.
-        // Nói rõ "email không tồn tại" là tiết lộ tài khoản nào có thật trong hệ thống.
-        if (user is null)
-        {
-            throw new BadRequestException("invalid_credentials", "Email hoặc mật khẩu không đúng.");
-        }
-
-        var verify = hasher.VerifyHashedPassword(user, user.PasswordHash, request.Password);
-
-        if (verify == PasswordVerificationResult.Failed)
+        // Cố ý trả CÙNG một thông báo cho cả hai ca sai email và sai mật khẩu:
+        // nói rõ "email không tồn tại" là tiết lộ tài khoản nào có thật trong hệ thống.
+        if (user is null || !hasher.Verify(request.Password, user.PasswordHash))
         {
             throw new BadRequestException("invalid_credentials", "Email hoặc mật khẩu không đúng.");
         }
@@ -71,11 +62,12 @@ public class AuthService(
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new(ClaimTypes.Name, user.FullName),
 
-            // Một vai duy nhất, đúng như ERD. Nhờ vậy [Authorize(Roles = "...")] vẫn chạy bình thường.
+            // Một vai duy nhất, đúng như lược đồ. Nhờ vậy [Authorize(Roles = "...")] chạy bình thường.
             new(ClaimTypes.Role, user.Role.RoleName.ToString())
         };
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwt.Key));
+
         var token = new JwtSecurityToken(
             issuer: _jwt.Issuer,
             audience: _jwt.Audience,
@@ -85,51 +77,6 @@ public class AuthService(
             signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256));
 
         return new JwtSecurityTokenHandler().WriteToken(token);
-    }
-}
-
-public class ScriptAssignmentService(
-    IScriptRepository repository,
-    ISystemConfigService config,
-    TimeProvider clock) : IScriptAssignmentService
-{
-    public async Task<NextScriptDto?> GetNextAsync(
-        long speakerId, long? taskId, CancellationToken ct = default)
-    {
-        var script = await repository.GetNextForSpeakerAsync(speakerId, taskId, ct);
-        if (script is null) return null;
-
-        var guidance = new RecordingGuidanceDto(
-            await config.GetDecimalAsync(ConfigKeys.RecordingMinDurationSec, 1m, ct),
-            await config.GetDecimalAsync(ConfigKeys.RecordingMaxDurationSec, 30m, ct));
-
-        return new NextScriptDto(
-            script.ScriptId, script.Content, script.Domain,
-            script.WordCount, script.EnWordCount, guidance);
-    }
-
-    public async Task SkipAsync(
-        long scriptId, long speakerId, long? taskId, CancellationToken ct = default)
-    {
-        _ = await repository.GetAsync(scriptId, ct) ?? throw NotFoundException.Script(scriptId);
-
-        // Bỏ qua hai lần cùng một script là vô nghĩa. Database cũng chặn bằng
-        // ràng buộc duy nhất, nhưng kiểm ở đây để trả lỗi 409 tử tế thay vì lỗi ràng buộc thô.
-        if (await repository.HasSkippedAsync(scriptId, speakerId, ct))
-        {
-            throw new ConflictException(
-                "already_skipped", $"Bạn đã bỏ qua script #{scriptId} rồi.");
-        }
-
-        repository.AddSkip(new ScriptSkip
-        {
-            ScriptId = scriptId,
-            SpeakerId = speakerId,
-            TaskId = taskId,
-            SkippedAt = clock.GetUtcNow()
-        });
-
-        await repository.SaveChangesAsync(ct);
     }
 }
 
@@ -144,13 +91,28 @@ public class SystemConfigService(ISystemConfigRepository repository) : ISystemCo
             CultureInfo.InvariantCulture, out var value) ? value : fallback;
     }
 
+    public async Task<bool> GetBoolAsync(string key, bool fallback, CancellationToken ct = default)
+    {
+        var config = await repository.GetAsync(key, ct);
+        if (config is null) return fallback;
+
+        var raw = config.ConfigValue.Trim();
+
+        // Lược đồ lưu 'true'/'false', nhưng người sửa tay hay gõ 1/0 nên nhận cả hai.
+        return raw switch
+        {
+            "1" => true,
+            "0" => false,
+            _ => bool.TryParse(raw, out var value) ? value : fallback
+        };
+    }
+
     public async Task<decimal> GetDecimalAsync(string key, decimal fallback, CancellationToken ct = default)
     {
         var config = await repository.GetAsync(key, ct);
         if (config is null) return fallback;
 
-        // InvariantCulture bắt buộc: máy đặt tiếng Việt dùng dấu phẩy làm dấu thập phân,
-        // đọc "0.35" sẽ ra 35 nếu không ghim culture.
+        // InvariantCulture bắt buộc: máy đặt tiếng Việt dùng dấu phẩy làm dấu thập phân.
         return decimal.TryParse(config.ConfigValue, NumberStyles.Float,
             CultureInfo.InvariantCulture, out var value) ? value : fallback;
     }
@@ -191,4 +153,35 @@ public class ReasonService(IReasonRepository repository) : IReasonService
         return [.. items.Select(r => new ReasonDto(
             r.ReasonId, r.ReasonCode, null, r.Description, r.IsActive))];
     }
+}
+
+/// <summary>
+/// Số liệu quản trị. Mọi con số đọc thẳng từ view của lược đồ, không tính lại trong C# —
+/// dashboard và báo cáo SQL vì thế không bao giờ lệch nhau.
+/// </summary>
+public class StatisticsService(IStatisticsRepository repository) : IStatisticsService
+{
+    public async Task<DashboardDto> GetDashboardAsync(CancellationToken ct = default)
+    {
+        var s = await repository.GetDashboardAsync(ct);
+
+        return new DashboardDto(
+            s.TotalScripts, s.ValidatedScripts, s.PendingScripts,
+            s.TotalRecordings, s.ApprovedRecordings, s.RejectedRecordings,
+            s.ApprovedDurationSec,
+            Math.Round((double)s.ApprovedDurationSec / 3600, 2),
+            s.Speakers, s.Reviewers, s.ReleasedDatasets);
+    }
+
+    public async Task<IReadOnlyList<SpeakerQualityDto>> GetSpeakerQualityAsync(CancellationToken ct = default) =>
+        [.. (await repository.GetSpeakerPerformanceAsync(ct)).Select(s => new SpeakerQualityDto(
+            s.UserId, s.FullName, s.Recordings, s.Approved, s.Rejected, s.ApprovalRatePct))];
+
+    public async Task<IReadOnlyList<ReviewerQualityDto>> GetReviewerQualityAsync(CancellationToken ct = default) =>
+        [.. (await repository.GetReviewerPerformanceAsync(ct)).Select(r => new ReviewerQualityDto(
+            r.UserId, r.FullName, r.ReviewsDone, r.Approvals, r.Rejections))];
+
+    public async Task<IReadOnlyList<RejectionStatDto>> GetRejectionStatsAsync(CancellationToken ct = default) =>
+        [.. (await repository.GetRejectionStatsAsync(ct)).Select(r => new RejectionStatDto(
+            r.ReasonCode, r.Category.ToString(), r.TimesUsed))];
 }

@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json.Serialization;
 using CodeSwitchLabel.Api.Infrastructure;
+using CodeSwitchLabel.Repositories.Persistence;
 using CodeSwitchLabel.Repositories.Storage;
 using CodeSwitchLabel.Services;
 using CodeSwitchLabel.Services.Audio;
@@ -94,16 +95,6 @@ builder.Services.AddSwaggerGen(options =>
         Description = """
             Hệ thống thu thập và kiểm soát chất lượng dữ liệu tiếng nói Việt–Anh (code-switching).
             Đồ án tốt nghiệp FA26SE303.
-
-            **Cách dùng trang này**
-
-            1. Gọi `POST /api/auth/login` với một tài khoản demo.
-            2. Chép giá trị `accessToken` trong phản hồi.
-            3. Bấm **Authorize** ở góc trên bên phải, dán token vào.
-            4. Gọi thử các endpoint khác.
-
-            Mọi lỗi trả về theo chuẩn ProblemDetails (RFC 7807), kèm trường `code`
-            bất biến để frontend phân biệt các ca lỗi mà không phụ thuộc câu chữ tiếng Việt.
             """
     });
 
@@ -155,6 +146,15 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// Dự án KHÔNG dùng migration: lược đồ do PostgreSQL chạy từ docs/codeswitchlabel.sql lúc tạo
+// database rỗng. Kiểm ngay lúc khởi động để báo rõ việc phải làm, thay vì để EF ném lỗi khó hiểu
+// ở request đầu tiên.
+using (var scope = app.Services.CreateScope())
+{
+    await DatabaseSeeder.EnsureSchemaAsync(
+        scope.ServiceProvider.GetRequiredService<CodeSwitchLabelDbContext>());
+}
+
 app.UseExceptionHandler();
 
 if (app.Environment.IsDevelopment())
@@ -194,6 +194,9 @@ if (app.Environment.IsDevelopment())
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Sau xác thực: từ đây mọi thay đổi dữ liệu đều được nhật ký ghi kèm người thực hiện.
+app.UseMiddleware<AuditUserMiddleware>();
 
 app.MapControllers();
 

@@ -11,6 +11,10 @@ services:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      # Lược đồ do nhóm chốt là nguồn sự thật duy nhất. PostgreSQL tự chạy file này
+      # đúng một lần, lúc tạo database rỗng. Sửa lược đồ thì sửa file .sql rồi
+      # `docker compose down -v` để dựng lại từ đầu.
+      - ./docs/codeswitchlabel.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     healthcheck:
       # API chờ tới khi database thật sự nhận kết nối, không chỉ khi container đã chạy.
       test: ["CMD-SHELL", "pg_isready -U csl -d codeswitchlabel"]

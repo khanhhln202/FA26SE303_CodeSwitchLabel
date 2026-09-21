@@ -3,7 +3,9 @@
 API thu thập và kiểm soát chất lượng dữ liệu tiếng nói Việt–Anh (code-switching).
 Đồ án tốt nghiệp FA26SE303.
 
-Lược đồ database bám **ERD nhóm chốt ngày 15/09/2026** — 21 bảng.
+**Lược đồ database là `docs/codeswitchlabel.sql` — file nhóm đã chốt.** Dự án **không dùng EF migration**:
+PostgreSQL chạy file đó một lần lúc tạo database, còn EF Core chỉ ánh xạ vào lược đồ có sẵn.
+Sửa lược đồ thì sửa file `.sql` trước, sau đó sửa `CodeSwitchLabelDbContext` cho khớp.
 
 ## Yêu cầu máy
 
@@ -11,14 +13,9 @@ Lược đồ database bám **ERD nhóm chốt ngày 15/09/2026** — 21 bảng.
 |---|---|---|
 | .NET SDK | 9.0 | `dotnet --version` |
 | Docker Desktop | đang chạy | `docker info` |
-| dotnet-ef | **9.x** (không phải 10) | `dotnet ef --version` |
 | ffmpeg | 9.x, nằm trong PATH | `ffmpeg -version` |
 
-`dotnet-ef` bản 10 cần runtime .NET 10, máy chỉ có 9 nên tool sẽ không chạy. Hạ lại:
-
-```bash
-dotnet tool uninstall --global dotnet-ef; dotnet tool install --global dotnet-ef --version 9.0.11
-```
+Không cần `dotnet-ef` nữa vì dự án không còn migration.
 
 Cài ffmpeg xong **phải mở terminal mới** thì PATH mới có hiệu lực:
 
@@ -32,137 +29,159 @@ winget install --id Gyan.FFmpeg -e
 docker compose up -d postgres minio
 ```
 
+Lần đầu, PostgreSQL tự chạy `docs/codeswitchlabel.sql`: 19 bảng, 18 kiểu ENUM, 8 trigger, 6 view,
+2 hàm sinh mã và dữ liệu danh mục.
+
 ```bash
 dotnet run --project backend/src/CodeSwitchLabel.Api
 ```
 
-Lần đầu API tự áp migration, tạo 21 bảng, nạp dữ liệu mồi và tạo bucket `recordings`.
-Mở địa chỉ console in ra là vào thẳng Swagger.
+API chờ tới khi lược đồ sẵn sàng, nạp tài khoản demo cùng vài cặp câu mẫu, rồi tạo bucket `recordings`.
+Mở **http://localhost:5053** là vào thẳng Swagger.
 
 Giao diện quản trị MinIO: **http://localhost:9090** — tài khoản ghi trong `docker-compose.yml`.
 
 > **Vì sao MinIO lấy từ quay.io và giao diện ở cổng 9090?**
 > Docker Hub đã gỡ image `minio/minio` nên lấy từ kho chính chủ trên quay.io, ghim đúng phiên bản.
 > Windows giữ riêng cổng 9001 cho tiến trình System nên Docker không mở được — đổi cổng phía máy thật sang 9090.
-> Code không phụ thuộc MinIO: đổi sang server tương thích S3 khác chỉ cần sửa `docker-compose.yml` và mục `ObjectStorage`.
+
+Xoá sạch dữ liệu và dựng lại lược đồ từ đầu:
+
+```bash
+docker compose down -v; docker compose up -d postgres minio
+```
 
 ## Tài khoản demo
 
-Mật khẩu ở `appsettings.Development.json`, khoá `Seed:DefaultPassword`.
+Mật khẩu ở `appsettings.Development.json`, khoá `Seed:DefaultPassword`. Hash bằng **bcrypt**,
+đúng độ rộng `VARCHAR(60)` của lược đồ.
 
-| Tài khoản | Vai |
+| Tài khoản | Vai | `user_id` khi seed từ đầu |
+|---|---|---|
+| `admin@codeswitchlabel.local` | Admin | 1 |
+| `manager@codeswitchlabel.local` | Task Manager | 2 |
+| `reviewer@codeswitchlabel.local` | Reviewer | 3 |
+| `reviewer2@codeswitchlabel.local` | Reviewer | 4 |
+| `reviewer3@codeswitchlabel.local` | Reviewer | 5 |
+| `speaker1@codeswitchlabel.local` | Speaker | 6 |
+| `speaker2@codeswitchlabel.local` | Speaker | 7 |
+
+Ba Reviewer vì **mỗi bản ghi cần đủ ba lượt duyệt của ba người khác nhau**.
+
+`POST /api/auth/login` → chép `accessToken` → bấm **Authorize** → dán vào. Không cần gõ chữ `Bearer`.
+
+## Mô hình dữ liệu cốt lõi
+
+**Một `script` là một CẶP CÂU**, không phải một câu:
+
+| Cột | Nội dung |
 |---|---|
-| `admin@codeswitchlabel.local` | Admin |
-| `manager@codeswitchlabel.local` | Task Manager |
-| `reviewer@codeswitchlabel.local` | Reviewer |
-| `reviewer2@codeswitchlabel.local` | Reviewer |
-| `reviewer3@codeswitchlabel.local` | Reviewer |
-| `speaker1@codeswitchlabel.local` | Speaker (miền Nam) |
-| `speaker2@codeswitchlabel.local` | Speaker (miền Bắc) |
+| `cs_content` | Câu chen tiếng Anh, **giữ nguyên nhãn**: `[vi]Em nên [en]scan [vi]tài liệu này.` |
+| `ve_content` | Câu thuần Việt tương đương: `[vi]Em nên quét tài liệu này.` |
+| `alignment` | JSON ánh xạ từng từ: `scan → quét`. Cột này nhóm thêm vào lược đồ để dữ liệu của cô không mất sau khi nhập |
 
-Ba Reviewer vì luật duyệt cần tới ba người khác nhau: vòng 1, vòng kiểm tra mù, vòng phân xử.
-
-`POST /api/auth/login` → chép `accessToken` → bấm **Authorize** → dán vào.
-Không cần gõ chữ `Bearer` ở đầu.
-
-## Thử luồng chính
-
-**Script**
-
-1. Đăng nhập `speaker1`, gọi `GET /api/speaker/scripts/next` — nhận một script.
-2. `POST /api/speaker/scripts/{id}/skip` — bỏ qua. Gọi lại bước 1: ra **script khác**.
-
-**Bản ghi âm**
-
-3. `POST /api/recordings` — chọn một file âm thanh bất kỳ, điền `scriptId`.
-   Trả **201** kèm `qcPassed`, trạng thái `PendingReview`, thời lượng đo được.
-4. Nộp lại đúng script đó: **409** — đã có bản đang chờ duyệt.
-5. Nộp một file dưới 1 giây: vẫn **201** nhưng `qcPassed = false`, trạng thái `QcFailed`.
-6. `GET /api/recordings/{id}/audio-url` — lấy link tạm thời, dán vào trình duyệt là nghe được.
-
-**Duyệt — đủ ba vòng**
-
-Mặc định chỉ 20% bản ghi bị rút kiểm tra, nên muốn chắc chắn thấy đủ ba vòng thì tạm cho rút tất cả:
-
-7. Đăng nhập `admin`, `PUT /api/admin/config/review.random_ratio` với `{ "value": "1" }`.
-8. Đăng nhập `reviewer`, `GET /api/reviewer/recordings/next` — nhận bản ở vòng **Primary** (`round = 1`).
-   `POST /api/recordings/{id}/reviews` với `{ "decision": "Approved", "expectedRound": 1 }`
-   → `isFinal = false`, bản vẫn chờ vì đã bị rút mẫu.
-9. Đăng nhập `reviewer2`, gọi `next` — nhận **đúng bản đó** ở vòng **SpotCheck**, `previousReviews` **rỗng**
-   vì là duyệt mù. Từ chối:
-   `{ "decision": "Rejected", "expectedRound": 2, "rejectionReasonCodes": ["AUDIO_NOISE"] }`.
-10. Đăng nhập `reviewer3`, gọi `next` — vòng **Adjudication**, thấy cả hai ý kiến.
-    Quyết định với `expectedRound: 3` → `isFinal = true`.
-11. Đặt lại `review.random_ratio` về `"0.20"`.
-
-## Luồng xử lý một bản ghi
+**Mã câu có nghĩa**, do hàm `fn_generate_script_id` của database sinh:
 
 ```
-POST /api/recordings (file từ trình duyệt, scriptId, taskId?)
-  1. Kiểm quyền và trùng lặp TRƯỚC khi đụng tới file
-  2. Ghi file tạm → ffmpeg chuyển sang WAV 16 kHz mono
-  3. ffprobe đo thời lượng trên file WAV (không đo file gốc — xem bên dưới)
-  4. Kiểm tra tự động: thời lượng nằm trong ngưỡng của system_config
-  5. Đẩy WAV lên kho lưu trữ, khoá file là GUID
-  6. INSERT recording: PendingReview, hoặc QcFailed nếu trượt kiểm tra
-  7. Xoá file tạm
+s_ 2 1 1 000001
+   │ │ │ └──── số thứ tự, tăng dần
+   │ │ └────── quan hệ Anh–Việt: 1 dịch trực tiếp, 2 danh từ riêng
+   │ └──────── chủ đề: 1 IT, 2 giáo dục, 3 đời sống
+   └────────── số từ tiếng Anh trong câu (1..9)
 ```
 
-**Vì sao đo trên WAV chứ không đo file gốc?** Trình duyệt ghi WebM theo kiểu phát trực tiếp,
-không tua lại đầu file để ghi thời lượng. ffprobe đọc thẳng file đó sẽ ra `N/A`.
-Test `FileGhiNhuTrinhDuyet_KhongDoDuocThoiLuongTuFileGoc` khoá cứng điều này.
+Ràng buộc CHECK dưới database bắt hai chữ số đầu phải khớp `en_word_count` và `domain`, nên
+**không thể ghi một mã sai ý nghĩa**, kể cả bằng SQL tay.
 
-**Vì sao đẩy file lên trước rồi mới INSERT?** Sập giữa chừng thì chỉ để lại một file mồ côi —
-người dùng không thấy, dọn được — thay vì một hàng dữ liệu trỏ tới file không tồn tại.
-
-## Luật duyệt nhiều vòng
+**Mỗi cặp câu cần hai bản ghi âm**, mã suy ra từ mã câu:
 
 ```
-Vòng 1 · Primary ─┬─ không bị rút mẫu ────────────────────────► CHỐT theo vòng 1
-                  │
-                  └─ bị rút mẫu (review.random_ratio) ─► vẫn chờ
-                                                          │
-Vòng 2 · SpotCheck — duyệt mù ─┬─ trùng ý vòng 1 ────────► CHỐT
-                               │
-                               └─ lệch ─► vẫn chờ
-                                           │
-Vòng 3 · Adjudication — thấy cả hai ý kiến ─────────────► CHỐT theo vòng 3
+r_cs_211000001      đọc câu chen tiếng Anh
+r_vi_211000001      đọc câu thuần Việt
+r_cs_211000001_t2   thu lại lần hai
 ```
 
-- **Bản ghi chỉ đổi trạng thái đúng một lần, lúc chốt.** Không bao giờ có chuyện đã duyệt đạt,
-  đã vào dataset, rồi mới bị vòng kiểm tra lật lại.
-- **Mỗi vòng một người khác nhau**, và không ai được duyệt bản do chính mình thu.
-- **Vòng kiểm tra là duyệt mù** — người duyệt không thấy gì của vòng 1, kể cả khi gọi API lịch sử,
-  nên số đo độ đồng thuận giữa người duyệt mới có giá trị. Vòng phân xử thì phải thấy cả hai ý kiến.
+**Một cặp câu chỉ một người đọc.** Trigger `trg_recording_single_speaker` chặn người thứ hai,
+để hai bản cs và vi là cùng một giọng, cùng một buổi thu.
+
+## Vòng đời dữ liệu
+
+```
+Admin nhập input_text.json  →  script: pending_validation
+        │
+        │  Speaker/Reviewer duyệt nội dung (Review Text)
+        ▼
+    validated  ──►  Speaker thu 2 bản: cs + vi  ──►  mỗi bản chờ 3 lượt duyệt mù
+        ▲                                                      │
+        │                                                      ▼
+        └──── lý do nhóm "content" ◄──── đa số từ chối ──► rejected
+                                     └── đa số duyệt đạt ──► approved
+                                                               │
+                                          cả cs và vi đạt ──►  cặp câu tính là XONG
+```
+
+## Luật duyệt
+
+- **Ba lượt duyệt độc lập của ba người khác nhau.** `UNIQUE(recording_id, reviewer_id)` chặn một
+  người duyệt hai lần; `UNIQUE(recording_id, review_round)` chặn hai người cùng ghi một vòng.
+- **Mọi lượt đều duyệt mù.** Reviewer không thấy ý kiến người khác, kể cả khi gọi API lịch sử.
+- **Đủ ba lượt thì trigger `trg_review_majority` chốt theo đa số** — ít nhất 2/3 phiếu.
 - **Từ chối bắt buộc ít nhất một lý do**; duyệt đạt thì không được kèm lý do.
-- ERD không có cột đánh dấu "đã bị rút mẫu". Không cần: bản còn chờ mà đã có một lượt duyệt
-  thì chắc chắn đã bị rút — không bị rút thì đã chốt ngay ở vòng 1.
+- **Lý do thuộc nhóm `content`** kéo cả cặp câu về `pending_validation`: lỗi nằm ở văn bản
+  chứ không phải ở giọng đọc. Trigger `trg_rr_content_resets_script` làm việc này.
 
-Toàn bộ luật nằm trong `ReviewStateMachine` — hàm thuần, không đụng database.
-**Sửa luật thì phải sửa `ReviewStateMachineTests` trước.**
+> **Trạng thái bản ghi do DATABASE chốt, không phải code.** `ReviewService` ghi lượt duyệt rồi
+> **đọc lại** trạng thái. Lớp `ReviewRules` trong C# chỉ là bản sao của luật để tầng trên hiển thị
+> và để unit test — không bao giờ được dùng để ghi.
+>
+> Trigger ghim cứng con số 3. Đổi tham số `review.rounds_required` mà không sửa trigger thì hai bên
+> lệch nhau; `ReviewService` ghi log cảnh báo khi phát hiện.
 
-### Hai Reviewer bấm duyệt cùng lúc
-
-Chặn bằng **hai lớp bổ sung cho nhau** — thiếu lớp nào cũng hỏng:
+### Hai người duyệt cùng lúc
 
 | Lớp | Cách làm | Chặn được gì |
 |---|---|---|
-| **Khoá bi quan** | Khoá hàng `recording` bằng `SELECT ... FOR UPDATE` trong transaction | Hai người không bao giờ **ghi cùng lúc** |
-| **Kiểm tra lạc quan** | Client gửi `expectedRound` — vòng mà họ đã thấy lúc nhận bản ghi | Người đến sau không bị **ghi nhầm vòng** |
+| **Khoá bi quan** | `SELECT ... FOR UPDATE` trên hàng `recording` trong transaction | Hai người không ghi **cùng lúc** |
+| **Kiểm tra lạc quan** | Client gửi `expectedRound` — vòng họ thấy lúc nhận bản ghi | Người đến sau không bị **ghi nhầm vòng**, nhận 409 `round_changed` |
+| **Ràng buộc database** | `UNIQUE(recording_id, review_round)` | Lưới chắn cuối, kể cả khi ghi thẳng bằng SQL |
 
-Chỉ có khoá thì chưa đủ: hai người cùng nhận một bản ở vòng 1, người đầu duyệt xong và bản đó bị rút mẫu
-nên vẫn chờ — khoá chỉ bắt người thứ hai đợi, rồi server đếm thấy đã có một lượt và **âm thầm ghi quyết định
-của họ thành vòng 2**, dù lúc nghe họ tưởng mình làm vòng 1. Có `expectedRound` thì người thứ hai nhận
-**409 `round_changed`** và chỉ việc lấy lại bản ghi.
+## Giao việc
 
-### Chặn tự duyệt ở hai tầng
+```
+Draft ─ giao người ─► Open ─ việc đầu tiên ─► InProgress ─ đạt chỉ tiêu ─► Completed
+                                                  ▲                            │
+                                                  └────── nâng chỉ tiêu ───────┘
+```
 
-Tầng Service trả 403 tử tế. Trigger `trg_review_not_self` dưới database là lưới chắn cuối — chặn được cả
-khi ai đó ghi thẳng bằng SQL, hoặc khi một Speaker bị đổi sang vai Reviewer rồi nhận trúng bản ghi cũ
-của chính mình.
+- **Chỉ tiêu task thu âm đếm theo CẶP CÂU.** Một cặp chỉ tính là xong khi **cả hai** bản cs và vi
+  đều được duyệt đạt. Chỉ tiêu task duyệt đếm theo số bản ghi.
+- **Mỗi task đúng một người nhận** — index duy nhất có điều kiện `uq_task_assignment_active`.
+  Giao cho người khác thì lượt cũ chuyển `reassigned`, không bị xoá.
+- **Trạng thái task tự tính lại** từ số liệu thật sau mỗi việc xảy ra; chỉ Huỷ là bấm tay.
+- **Giao việc kiểm tra người nhận có làm được không**: cặp câu người khác đã thu, hay bản ghi do
+  chính người đó thu, đều không tính là mục làm được.
 
-Không dùng CHECK constraint được vì CHECK chỉ nhìn thấy cột của chính hàng đang ghi,
-còn quy tắc này bắt buộc phải nhìn sang bảng `recording`.
+## Nhật ký và thống kê
+
+- `audit_log` chia mảnh theo tháng, do trigger `fn_audit` tự ghi. Backend đặt biến phiên
+  `app.user_id` trước mỗi lần lưu (`AuditUserMiddleware` → `CodeSwitchLabelDbContext`), nên nhật ký
+  biết ai làm gì mà tầng nghiệp vụ không phải viết thêm dòng nào.
+- Bốn view `v_dashboard_summary`, `v_speaker_performance`, `v_reviewer_performance`,
+  `v_rejection_reason_stats` đứng sau nhóm endpoint `/api/admin/statistics/*`.
+  **Không tính lại các con số này trong C#** — số trên màn hình và số trong báo cáo SQL phải là một.
+
+## Thử luồng chính
+
+1. Đăng nhập `admin`, `POST /api/scripts/import`, chọn file JSON theo mẫu `docs/Requirement.txt`.
+   Kết quả trả mã mới dạng `s_211000007`, trạng thái **PendingValidation**.
+2. Đăng nhập `speaker1`, `POST /api/scripts/{id}/review` với `{ "action": "Accepted" }` → **Validated**.
+3. `GET /api/speaker/scripts/next` → cặp câu kèm `remainingVariants` là cả hai biến thể.
+4. `POST /api/recordings` hai lần, `sentenceVariant` lần lượt là `CodeSwitching` và `PureVietnamese`.
+5. Đăng nhập `reviewer`, `reviewer2`, `reviewer3`, mỗi người `POST /api/recordings/{id}/reviews`
+   một lần. Lượt thứ ba trả `isFinal = true` kèm trạng thái do trigger chốt.
+6. Đăng nhập `manager`, tạo task thu âm chỉ tiêu 1, tự lấp mục, giao cho `speaker2`.
+   Khi cặp câu đủ hai bản đạt, task tự chuyển **Completed**.
+7. Đăng nhập `admin`, `GET /api/admin/dashboard` để xem số tổng hợp.
 
 ## Lệnh hay dùng
 
@@ -176,81 +195,56 @@ Máy chưa cài ffmpeg thì bỏ qua nhóm test cần ffmpeg:
 dotnet test backend/CodeSwitchLabel.sln --filter "Category!=RequiresFfmpeg"
 ```
 
-```bash
-dotnet ef migrations add TenMigration --project backend/src/CodeSwitchLabel.Repositories --startup-project backend/src/CodeSwitchLabel.Api --output-dir Persistence/Migrations
-```
-
-Xoá sạch database và file âm thanh để seed lại từ đầu:
+Xem nhật ký thao tác gần nhất:
 
 ```bash
-docker compose down -v; docker compose up -d postgres minio
+docker exec csl-postgres psql -U csl -d codeswitchlabel -c "select changed_at, user_id, entity_type, entity_id, action from audit_log order by changed_at desc limit 10;"
 ```
 
 ## Cấu trúc
 
 ```
+docs/
+└── codeswitchlabel.sql                LƯỢC ĐỒ — nguồn sự thật của database
 backend/
 ├── src/
-│   ├── CodeSwitchLabel.Api/           controller · Swagger · JWT · xử lý lỗi
+│   ├── CodeSwitchLabel.Api/           controller · Swagger · JWT · xử lý lỗi · nhật ký
 │   ├── CodeSwitchLabel.Services/      quy tắc nghiệp vụ · DTO · seed
 │   │   ├── Audio/                     gọi ffmpeg và ffprobe
-│   │   └── Reviews/                   luật duyệt nhiều vòng
-│   └── CodeSwitchLabel.Repositories/  entity · DbContext · migration · truy vấn
-│       └── Storage/                   kho lưu file theo chuẩn S3
+│   │   ├── Reviews/                   bản sao luật duyệt để hiển thị và test
+│   │   └── WorkTasks/                 luật trạng thái và tiến độ task
+│   └── CodeSwitchLabel.Repositories/  entity · DbContext · truy vấn · kho file
 └── tests/
     └── CodeSwitchLabel.Tests/
 ```
 
 Phụ thuộc đi một chiều: **Api → Services → Repositories**.
-Controller không chạm `DbContext`; Repository không chứa quy tắc nghiệp vụ.
 
 ## Quy ước
 
-- **Không sửa migration đã push.** Sai thì tạo migration mới đè lên.
-- **Không xoá cứng `rejection_reason` và `script_error_reason`.** Chỉ tắt `is_active`,
-  nếu không thống kê lịch sử sẽ vỡ.
+- **Không tạo migration.** Lược đồ chỉ sửa trong `docs/codeswitchlabel.sql`.
+- **Không tự đặt `recording.status`.** Trigger chốt theo đa số; code chỉ ghi lượt duyệt rồi đọc lại.
+- **Không gán trạng thái task ở ngoài `TaskStateMachine`**, trừ Huỷ.
+- **Không sửa nội dung cặp câu khi đã có bản ghi âm**, và không đổi số từ tiếng Anh vì nó nằm trong mã câu.
+- **Không xoá cứng `rejection_reason` và `script_error_reason`** — chỉ tắt `is_active`.
 - **Không hard-code ngưỡng.** Mọi con số vào bảng `system_config`.
-- **Không sửa `script.content` khi script đã có bản ghi âm.** Lược đồ không lưu
-  phiên bản cũ nên sửa là transcript vĩnh viễn không khớp âm thanh — tầng Service chặn việc này.
 - **Không đo thời lượng trên file âm thanh gốc.** Chuyển sang WAV trước rồi mới đo.
-- **Không dùng tên file client gửi lên làm đường dẫn.** Chỉ lấy phần đuôi, chặn kiểu tấn công `../../`.
-- **Không truyền file âm thanh qua API.** Người nghe nhận link tạm thời, tải thẳng từ kho lưu trữ.
-- **Không đổi trạng thái bản ghi ở ngoài `ReviewStateMachine`.**
-
-## Về xác thực
-
-ERD dùng bảng `app_user` và `role` của riêng mình, mỗi người đúng **một vai** qua khoá ngoại đơn.
-Cấu trúc đó không khớp ASP.NET Identity (Identity cần quan hệ nhiều-nhiều qua 6 bảng phụ),
-nên dự án **chỉ lấy lớp `PasswordHasher<T>`** của Identity để băm mật khẩu, không dùng phần lưu trữ.
-
-Ghi chú "bcrypt" trong ERD chưa đúng với hiện trạng: `PasswordHasher` băm bằng **PBKDF2**.
-Đổi sang bcrypt thật thì cần thêm thư viện — chưa làm.
+- **Không dùng tên file client gửi lên làm đường dẫn.** Chỉ lấy phần đuôi.
+- **Không truyền file âm thanh qua API.** Người nghe nhận link tạm, tải thẳng từ kho lưu trữ.
 
 ## Chỗ chưa làm
 
-`task`, `dataset`, `notification`, `audit_log` đã có **bảng trong database** nhưng **chưa có endpoint**.
+`dataset`, `dataset_recording` và phần lớn nhóm **Manage Users & Roles** đã có bảng nhưng chưa có endpoint.
 
 Giới hạn đã biết:
 
-- **Chặn nộp bản ghi trùng chỉ nằm ở tầng Service.** ERD không có ràng buộc duy nhất cho cặp
-  `(script_id, speaker_id)`, nên hai request gửi đúng cùng một lúc vẫn có thể cùng lọt.
-  Vá được bằng đúng kỹ thuật khoá hàng mà module Review đang dùng — khoá hàng `script`.
-- **Lý do trượt kiểm tra tự động không được lưu**, chỉ trả trong response — ERD không có chỗ lưu.
-- **`GET /api/reviewer/recordings/next` không giữ chỗ.** Hai Reviewer có thể nhận cùng một bản;
-  người bấm duyệt sau nhận 409 và chỉ việc gọi `next` lại.
-- **Việc rút mẫu là ngẫu nhiên thật**, không tái lập được sau này. Muốn tái lập thì phải lưu hạt giống
-  hoặc đổi sang băm theo `recording_id`.
-- Database tạo trước khi có module Review còn sót tham số `review.rounds` không còn dùng tới —
-  xoá sạch bằng lệnh reset ở trên.
-
-Ba khoảng trống trong ERD, nhóm quyết định **hoãn có chủ ý**:
-
-1. **Không lưu vị trí từ tiếng Anh.** Chỉ có `script.en_word_count` là con số.
-   Hệ quả: không tô màu được phần tiếng Anh, và manifest dataset không xuất được
-   nhãn ngôn ngữ theo từng từ.
-2. **Không có bảng số đo chất lượng audio.** Trạng thái `qc_failed` tồn tại nhưng
-   không chỗ nào lưu đo được gì và trượt vì sao.
-3. **`speaker_profile` không có trường đồng ý** dùng dữ liệu cho nghiên cứu.
-
-Số trong `system_config` là **đề xuất của nhóm, chưa được giảng viên duyệt** —
-mô tả đề tài không đưa ra con số nào.
+- **`review.rounds_required` phải giữ bằng 3**, vì trigger chốt đa số ghim cứng con số này.
+- **Ngưỡng thời lượng bản ghi (1–30 giây) là đề xuất của nhóm backend**, chưa có trong file lược đồ
+  chung và chưa được giảng viên duyệt. Lược đồ có sẵn hai tham số khoảng lặng đầu/cuối nhưng
+  **hệ thống chưa đo được khoảng lặng**.
+- **Reviewer chưa xem được danh sách bản ghi trong task của mình**, mới chỉ lấy lần lượt từng bản.
+- **Không còn tính năng "bỏ qua" câu.** Thấy câu có vấn đề thì dùng Review Text để sửa hoặc từ chối.
+  Một lượt từ chối là câu bị loại với mọi người — chưa có bước xác nhận của Admin.
+- **Lỗi nghiệp vụ bị ghi log hai lần**: middleware của .NET 9 ghi mức Error kèm stack trace trước khi
+  `GlobalExceptionHandler` ghi mức Information.
+- **Bảng tổng hợp theo người nhận gom trong bộ nhớ**; nhiều task đang chạy thì nên chuyển xuống `GROUP BY`.

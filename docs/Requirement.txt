@@ -27,3 +27,27 @@ Admin: Quản trị dữ liệu, người dùng, hệ thống và thống kê
 •	View Dashboard & Statistics: Theo dõi tổng số câu, tổng thời lượng ghi âm, số câu Approved,Rejected, số Speaker, Reviewer và tình trạng dữ liệu. 
 •	Monitor Data Quality: Theo dõi các nguyên nhân Reject phổ biến, tỷ lệ duyệt và chất lượng bản ghi của từng Speaker. 
 •	System Configuration: Cấu hình tiêu chí kiểm duyệt, quy định chất lượng và các thiết lập chung của hệ thống.
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+input text.json: (kí hiệu [vi] [en] là có sẵn trong tài liệu mà admin nhâp vao)
+{
+    "id": "2110000",
+    "domain": "IT/Technology",
+    "cs_transcript": "[vi]Em nên [en]scan [vi]tài liệu này rồi gửi qua [en]email [vi]cho tôi.",
+    "vi_equivalent": "[vi]Em nên quét tài liệu này rồi gửi qua thư điện tử cho tôi.",
+    "alignment": [
+      {
+        "source": "scan",
+        "source_lang": "en",
+        "target": "quét",
+        "target_lang": "vi",
+        "relation": "semantic_equivalent"
+      },
+      {
+        "source": "email",
+        "source_lang": "en",
+        "target": "thư điện tử",
+        "target_lang": "vi",
+        "relation": "semantic_equivalent"
+      }
+    ]
+  }

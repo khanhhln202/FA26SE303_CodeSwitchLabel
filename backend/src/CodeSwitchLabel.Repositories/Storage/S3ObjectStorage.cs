@@ -42,6 +42,31 @@ public sealed class S3ObjectStorage(
         await s3.DeleteObjectAsync(_options.BucketName, key, ct);
     }
 
+    public string GetObjectUrl(string key) => $"{Prefix()}{key}";
+
+    public string? GetObjectKey(string url)
+    {
+        var prefix = Prefix();
+
+        return url.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            ? url[prefix.Length..]
+            : null;
+    }
+
+    /// <summary>
+    /// Phần đầu cố định của mọi địa chỉ file. Kiểu đường dẫn thì bucket nằm sau tên miền,
+    /// kiểu tên miền con thì bucket nằm trong tên miền.
+    /// </summary>
+    private string Prefix()
+    {
+        var service = _options.ServiceUrl.TrimEnd('/');
+
+        if (_options.ForcePathStyle) return $"{service}/{_options.BucketName}/";
+
+        var uri = new Uri(service);
+        return $"{uri.Scheme}://{_options.BucketName}.{uri.Authority}/";
+    }
+
     public async Task<(string Url, DateTimeOffset ExpiresAt)> GetDownloadUrlAsync(
         string key, CancellationToken ct = default)
     {

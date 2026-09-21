@@ -21,11 +21,8 @@ public class NotFoundException(string code, string message) : AppException(code,
 {
     public override int StatusCode => StatusCodes.Status404NotFound;
 
-    public static NotFoundException Script(long id) =>
-        new("script_not_found", $"Không tìm thấy script #{id}.");
-
-    public static NotFoundException ScriptVersion(long id) =>
-        new("script_version_not_found", $"Không tìm thấy phiên bản script #{id}.");
+    public static NotFoundException Script(string id) =>
+        new("script_not_found", $"Không tìm thấy cặp câu {id}.");
 }
 
 /// <summary>400 — yêu cầu không hợp lệ về mặt nghiệp vụ.</summary>
@@ -38,10 +35,6 @@ public class BadRequestException(string code, string message) : AppException(cod
 public class ForbiddenException(string code, string message) : AppException(code, message)
 {
     public override int StatusCode => StatusCodes.Status403Forbidden;
-
-    public static ForbiddenException NoConsent() =>
-        new("consent_required",
-            "Bạn cần đồng ý cho phép dùng bản ghi vào mục đích nghiên cứu trước khi thu âm.");
 }
 
 /// <summary>409 — trạng thái hiện tại không cho phép thao tác này.</summary>
@@ -49,12 +42,8 @@ public class ConflictException(string code, string message) : AppException(code,
 {
     public override int StatusCode => StatusCodes.Status409Conflict;
 
-    public static ConflictException AlreadyHoldingScript(long scriptId) =>
-        new("script_already_claimed",
-            $"Bạn đang giữ script #{scriptId} chưa nộp. Hãy nộp hoặc trả lại trước khi nhận câu mới.");
-
     public static ConflictException DuplicateContent() =>
-        new("duplicate_content", "Nội dung này đã tồn tại trong kho câu.");
+        new("duplicate_content", "Câu này đã tồn tại trong kho.");
 }
 
 /// <summary>422 — dữ liệu đúng định dạng nhưng không đạt quy tắc chất lượng.</summary>

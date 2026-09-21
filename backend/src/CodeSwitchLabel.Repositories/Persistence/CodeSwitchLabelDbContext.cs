@@ -1,25 +1,35 @@
 using CodeSwitchLabel.Repositories.Entities;
+using CodeSwitchLabel.Repositories.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace CodeSwitchLabel.Repositories.Persistence;
 
 /// <summary>
-/// 21 bảng, bám đúng ERD nhóm chốt ngày 15/09/2026.
-/// Không dùng IdentityDbContext: ERD cho mỗi người đúng một vai qua khoá ngoại đơn,
-/// không phải quan hệ nhiều-nhiều qua sáu bảng phụ của ASP.NET Identity.
+/// Ánh xạ vào lược đồ có sẵn ở docs/codeswitchlabel.sql.
+///
+/// DỰ ÁN KHÔNG DÙNG MIGRATION. File .sql của nhóm là nguồn sự thật duy nhất; PostgreSQL chạy nó
+/// một lần lúc tạo database. Lớp này chỉ mô tả lại lược đồ đó cho EF, không tạo ra nó.
+/// Sửa lược đồ thì sửa file .sql trước, rồi sửa lớp này cho khớp.
 /// </summary>
 public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext> options)
     : DbContext(options)
 {
+    /// <summary>
+    /// Người đang thao tác, dùng cho trigger fn_audit. Middleware đặt giá trị này mỗi request.
+    /// Null nghĩa là hệ thống tự chạy, ví dụ lúc seed.
+    /// </summary>
+    public long? AuditUserId { get; set; }
+
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<AppUser> AppUsers => Set<AppUser>();
     public DbSet<SpeakerProfile> SpeakerProfiles => Set<SpeakerProfile>();
+    public DbSet<SystemConfig> SystemConfigs => Set<SystemConfig>();
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
-    public DbSet<Script> Scripts => Set<Script>();
     public DbSet<ImportBatch> ImportBatches => Set<ImportBatch>();
-    public DbSet<ScriptReview> ScriptReviews => Set<ScriptReview>();
+    public DbSet<Script> Scripts => Set<Script>();
     public DbSet<ScriptErrorReason> ScriptErrorReasons => Set<ScriptErrorReason>();
-    public DbSet<ScriptSkip> ScriptSkips => Set<ScriptSkip>();
+    public DbSet<ScriptReview> ScriptReviews => Set<ScriptReview>();
 
     public DbSet<WorkTask> WorkTasks => Set<WorkTask>();
     public DbSet<TaskAssignment> TaskAssignments => Set<TaskAssignment>();
@@ -27,24 +37,311 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
     public DbSet<TaskRecording> TaskRecordings => Set<TaskRecording>();
 
     public DbSet<Recording> Recordings => Set<Recording>();
-    public DbSet<Review> Reviews => Set<Review>();
     public DbSet<RejectionReason> RejectionReasons => Set<RejectionReason>();
+    public DbSet<Review> Reviews => Set<Review>();
     public DbSet<ReviewRejectionReason> ReviewRejectionReasons => Set<ReviewRejectionReason>();
 
     public DbSet<Dataset> Datasets => Set<Dataset>();
     public DbSet<DatasetRecording> DatasetRecordings => Set<DatasetRecording>();
 
-    public DbSet<Notification> Notifications => Set<Notification>();
-    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
-    public DbSet<SystemConfig> SystemConfigs => Set<SystemConfig>();
+    public DbSet<DashboardSummary> DashboardSummary => Set<DashboardSummary>();
+    public DbSet<SpeakerPerformance> SpeakerPerformance => Set<SpeakerPerformance>();
+    public DbSet<ReviewerPerformance> ReviewerPerformance => Set<ReviewerPerformance>();
+    public DbSet<RejectionReasonStat> RejectionReasonStats => Set<RejectionReasonStat>();
 
-    protected override void OnModelCreating(ModelBuilder builder)
+    protected override void OnModelCreating(ModelBuilder b)
     {
-        base.OnModelCreating(builder);
+        DeclarePostgresEnums(b);
+        MapUsers(b);
+        MapScripts(b);
+        MapTasks(b);
+        MapRecordings(b);
+        MapSystem(b);
+        MapViews(b);
 
-        builder.ApplyConfigurationsFromAssembly(typeof(CodeSwitchLabelDbContext).Assembly);
-
-        // Phải chạy CUỐI CÙNG, sau khi mọi bảng và cột đã khai báo xong.
-        builder.ApplySnakeCaseNames();
+        b.ApplySnakeCaseNames();
     }
+
+    /// <summary>
+    /// Ghi đè để trigger fn_audit biết ai đang thao tác: nó đọc biến phiên app.user_id.
+    /// set_config với tham số thứ ba là true nghĩa là chỉ có hiệu lực trong transaction hiện tại,
+    /// nên giá trị không rò sang request khác khi connection quay lại pool.
+    /// </summary>
+    public override async Task<int> SaveChangesAsync(CancellationToken ct = default)
+    {
+        if (AuditUserId is null) return await base.SaveChangesAsync(ct);
+
+        if (Database.CurrentTransaction is not null)
+        {
+            await ApplyAuditUserAsync(ct);
+            return await base.SaveChangesAsync(ct);
+        }
+
+        await using var transaction = await Database.BeginTransactionAsync(ct);
+
+        await ApplyAuditUserAsync(ct);
+        var written = await base.SaveChangesAsync(ct);
+
+        await transaction.CommitAsync(ct);
+        return written;
+    }
+
+    private Task ApplyAuditUserAsync(CancellationToken ct) =>
+        Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('app.user_id', {AuditUserId.ToString()}, true)", ct);
+
+    private static void DeclarePostgresEnums(ModelBuilder b)
+    {
+        // Tên kiểu trong database suy ra từ tên enum theo snake_case, trừ hai chỗ đặt tên khác.
+        b.HasPostgresEnum<UserStatus>();
+        b.HasPostgresEnum<Occupation>();
+        b.HasPostgresEnum<ConfigValueType>();
+        b.HasPostgresEnum<AuditAction>();
+        b.HasPostgresEnum<ScriptStatus>();
+        b.HasPostgresEnum<ScriptDomain>();
+        b.HasPostgresEnum<ScriptReviewAction>();
+        b.HasPostgresEnum<TaskType>();
+        b.HasPostgresEnum<WorkTaskStatus>(name: "task_status");
+        b.HasPostgresEnum<AssignmentStatus>();
+        b.HasPostgresEnum<TaskScriptStatus>();
+        b.HasPostgresEnum<SentenceVariant>();
+        b.HasPostgresEnum<RecordingStatus>();
+        b.HasPostgresEnum<TaskRecordingStatus>();
+        b.HasPostgresEnum<ReviewDecision>();
+        b.HasPostgresEnum<RejectionCategory>();
+        b.HasPostgresEnum<DatasetStatus>();
+        b.HasPostgresEnum<DatasetFileFormat>();
+    }
+
+    private static void MapUsers(ModelBuilder b)
+    {
+        b.Entity<Role>(e =>
+        {
+            e.ToTable("role");
+            e.HasKey(x => x.RoleId);
+
+            // Bảng role lưu vai dưới dạng chuỗi chứ không phải kiểu ENUM.
+            e.Property(x => x.RoleName)
+                .HasMaxLength(32)
+                .HasConversion(v => SnakeCaseNaming.ToSnakeCase(v.ToString()), v => ParseRole(v));
+
+            e.HasIndex(x => x.RoleName).IsUnique();
+        });
+
+        b.Entity<AppUser>(e =>
+        {
+            e.ToTable("app_user");
+            e.HasKey(x => x.UserId);
+            e.Property(x => x.FullName).HasMaxLength(255);
+            e.Property(x => x.Email).HasMaxLength(255);
+            e.Property(x => x.Phone).HasMaxLength(32);
+            e.Property(x => x.PasswordHash).HasMaxLength(60);
+            e.HasIndex(x => x.Email).IsUnique();
+
+            e.HasOne(x => x.Role).WithMany(r => r.Users).HasForeignKey(x => x.RoleId);
+        });
+
+        b.Entity<SpeakerProfile>(e =>
+        {
+            e.ToTable("speaker_profile");
+            e.HasKey(x => x.UserId);
+            e.Property(x => x.Province).HasMaxLength(100);
+            e.Property(x => x.Major).HasMaxLength(100);
+            e.Property(x => x.EnglishLevel).HasPrecision(2, 1);
+
+            e.HasOne(x => x.User).WithOne(u => u.SpeakerProfile)
+                .HasForeignKey<SpeakerProfile>(x => x.UserId);
+        });
+    }
+
+    private static void MapScripts(ModelBuilder b)
+    {
+        b.Entity<ImportBatch>(e =>
+        {
+            e.ToTable("import_batch");
+            e.HasKey(x => x.BatchId);
+            e.HasOne(x => x.Importer).WithMany().HasForeignKey(x => x.ImportedBy);
+        });
+
+        b.Entity<Script>(e =>
+        {
+            e.ToTable("script");
+            e.HasKey(x => x.ScriptId);
+            e.Property(x => x.ScriptId).HasMaxLength(11).ValueGeneratedNever();
+            e.Property(x => x.Alignment).HasColumnType("jsonb");
+
+            e.HasOne(x => x.Creator).WithMany().HasForeignKey(x => x.CreatedBy);
+            e.HasOne(x => x.ImportBatch).WithMany(i => i.Scripts).HasForeignKey(x => x.ImportBatchId);
+        });
+
+        b.Entity<ScriptErrorReason>(e =>
+        {
+            e.ToTable("script_error_reason");
+            e.HasKey(x => x.ReasonId);
+            e.Property(x => x.ReasonCode).HasMaxLength(50);
+            e.HasIndex(x => x.ReasonCode).IsUnique();
+        });
+
+        b.Entity<ScriptReview>(e =>
+        {
+            e.ToTable("script_review");
+            e.HasKey(x => x.ScriptReviewId);
+            e.Property(x => x.ScriptId).HasMaxLength(11);
+
+            e.HasOne(x => x.Script).WithMany(s => s.Reviews).HasForeignKey(x => x.ScriptId);
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId);
+            e.HasOne(x => x.ErrorReason).WithMany().HasForeignKey(x => x.ErrorReasonId);
+        });
+    }
+
+    private static void MapTasks(ModelBuilder b)
+    {
+        b.Entity<WorkTask>(e =>
+        {
+            e.ToTable("task");
+            e.HasKey(x => x.TaskId);
+            e.HasOne(x => x.Creator).WithMany().HasForeignKey(x => x.CreatedBy);
+        });
+
+        b.Entity<TaskAssignment>(e =>
+        {
+            e.ToTable("task_assignment");
+            e.HasKey(x => x.AssignmentId);
+
+            e.HasOne(x => x.Task).WithMany(t => t.Assignments).HasForeignKey(x => x.TaskId);
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId);
+
+            // Một task chỉ có một lượt giao đang hoạt động — index duy nhất có điều kiện của lược đồ.
+            e.HasIndex(x => x.TaskId)
+                .HasDatabaseName("uq_task_assignment_active")
+                .IsUnique()
+                .HasFilter("assignment_status = 'active'");
+        });
+
+        b.Entity<TaskScript>(e =>
+        {
+            e.ToTable("task_script");
+            e.HasKey(x => new { x.TaskId, x.ScriptId });
+            e.Property(x => x.ScriptId).HasMaxLength(11);
+
+            e.HasOne(x => x.Task).WithMany(t => t.TaskScripts).HasForeignKey(x => x.TaskId);
+            e.HasOne(x => x.Script).WithMany(s => s.TaskScripts).HasForeignKey(x => x.ScriptId);
+        });
+
+        b.Entity<TaskRecording>(e =>
+        {
+            e.ToTable("task_recording");
+            e.HasKey(x => new { x.TaskId, x.RecordingId });
+            e.Property(x => x.RecordingId).HasMaxLength(20);
+
+            e.HasOne(x => x.Task).WithMany(t => t.TaskRecordings).HasForeignKey(x => x.TaskId);
+            e.HasOne(x => x.Recording).WithMany(r => r.TaskRecordings).HasForeignKey(x => x.RecordingId);
+        });
+    }
+
+    private static void MapRecordings(ModelBuilder b)
+    {
+        b.Entity<Recording>(e =>
+        {
+            e.ToTable("recording");
+            e.HasKey(x => x.RecordingId);
+            e.Property(x => x.RecordingId).HasMaxLength(20).ValueGeneratedNever();
+            e.Property(x => x.ScriptId).HasMaxLength(11);
+            e.Property(x => x.CloudLink).HasMaxLength(1024);
+            e.Property(x => x.AudioFormat).HasMaxLength(10);
+            e.Property(x => x.DurationSec).HasPrecision(8, 2);
+            e.HasIndex(x => x.CloudLink).IsUnique();
+
+            e.HasOne(x => x.Script).WithMany(s => s.Recordings).HasForeignKey(x => x.ScriptId);
+            e.HasOne(x => x.Speaker).WithMany().HasForeignKey(x => x.SpeakerId);
+            e.HasOne(x => x.Task).WithMany().HasForeignKey(x => x.TaskId);
+        });
+
+        b.Entity<RejectionReason>(e =>
+        {
+            e.ToTable("rejection_reason");
+            e.HasKey(x => x.ReasonId);
+            e.Property(x => x.ReasonCode).HasMaxLength(50);
+            e.HasIndex(x => x.ReasonCode).IsUnique();
+        });
+
+        b.Entity<Review>(e =>
+        {
+            e.ToTable("review");
+            e.HasKey(x => x.ReviewId);
+            e.Property(x => x.RecordingId).HasMaxLength(20);
+
+            e.HasOne(x => x.Recording).WithMany(r => r.Reviews).HasForeignKey(x => x.RecordingId);
+            e.HasOne(x => x.Reviewer).WithMany().HasForeignKey(x => x.ReviewerId);
+            e.HasOne(x => x.Task).WithMany().HasForeignKey(x => x.TaskId);
+
+            // Hai ràng buộc duy nhất của lược đồ: một vòng chỉ một lượt, một người chỉ duyệt một lần.
+            e.HasIndex(x => new { x.RecordingId, x.ReviewRound }).IsUnique();
+            e.HasIndex(x => new { x.RecordingId, x.ReviewerId }).IsUnique();
+        });
+
+        b.Entity<ReviewRejectionReason>(e =>
+        {
+            e.ToTable("review_rejection_reason");
+            e.HasKey(x => new { x.ReviewId, x.ReasonId });
+
+            e.HasOne(x => x.Review).WithMany(r => r.RejectionReasons).HasForeignKey(x => x.ReviewId);
+            e.HasOne(x => x.Reason).WithMany().HasForeignKey(x => x.ReasonId);
+        });
+    }
+
+    private static void MapSystem(ModelBuilder b)
+    {
+        b.Entity<SystemConfig>(e =>
+        {
+            e.ToTable("system_config");
+            e.HasKey(x => x.ConfigId);
+            e.Property(x => x.ConfigKey).HasMaxLength(100);
+            e.HasIndex(x => x.ConfigKey).IsUnique();
+            e.HasOne<AppUser>().WithMany().HasForeignKey(x => x.UpdatedBy);
+        });
+
+        b.Entity<AuditLog>(e =>
+        {
+            e.ToTable("audit_log");
+            e.HasKey(x => new { x.AuditId, x.ChangedAt });
+            e.Property(x => x.EntityType).HasMaxLength(50);
+            e.Property(x => x.EntityId).HasMaxLength(20);
+            e.Property(x => x.OldValue).HasColumnType("jsonb");
+            e.Property(x => x.NewValue).HasColumnType("jsonb");
+        });
+
+        b.Entity<Dataset>(e =>
+        {
+            e.ToTable("dataset");
+            e.HasKey(x => x.DatasetId);
+            e.Property(x => x.DatasetName).HasMaxLength(100);
+            e.Property(x => x.Version).HasMaxLength(32);
+            e.Property(x => x.FileKey).HasMaxLength(255);
+            e.Property(x => x.FilterCriteria).HasColumnType("jsonb");
+            e.HasIndex(x => new { x.DatasetName, x.Version }).IsUnique();
+        });
+
+        b.Entity<DatasetRecording>(e =>
+        {
+            e.ToTable("dataset_recording");
+            e.HasKey(x => new { x.DatasetId, x.RecordingId });
+            e.Property(x => x.RecordingId).HasMaxLength(20);
+
+            e.HasOne(x => x.Dataset).WithMany(d => d.Recordings).HasForeignKey(x => x.DatasetId);
+            e.HasOne(x => x.Recording).WithMany(r => r.DatasetRecordings).HasForeignKey(x => x.RecordingId);
+        });
+    }
+
+    /// <summary>Bốn view thống kê có sẵn trong lược đồ — chỉ đọc, không khoá chính.</summary>
+    private static void MapViews(ModelBuilder b)
+    {
+        b.Entity<DashboardSummary>().HasNoKey().ToView("v_dashboard_summary");
+        b.Entity<SpeakerPerformance>().HasNoKey().ToView("v_speaker_performance");
+        b.Entity<ReviewerPerformance>().HasNoKey().ToView("v_reviewer_performance");
+        b.Entity<RejectionReasonStat>().HasNoKey().ToView("v_rejection_reason_stats");
+    }
+
+    private static RoleName ParseRole(string value) =>
+        Enum.Parse<RoleName>(value.Replace("_", string.Empty), ignoreCase: true);
 }

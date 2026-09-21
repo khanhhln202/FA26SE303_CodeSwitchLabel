@@ -1,7 +1,9 @@
+using System.Text.Json;
 using CodeSwitchLabel.Repositories.Entities;
 using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Repositories.Persistence;
-using Microsoft.AspNetCore.Identity;
+using CodeSwitchLabel.Services.Common;
+using CodeSwitchLabel.Services.Dtos;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -10,7 +12,10 @@ namespace CodeSwitchLabel.Services.Seeding;
 
 /// <summary>
 /// Dữ liệu mồi cho môi trường phát triển.
-/// Mọi bước đều kiểm tra trước khi ghi, nên chạy lại nhiều lần không nhân đôi dữ liệu.
+///
+/// Lược đồ, vai trò, danh mục lý do và tham số hệ thống đã do docs/codeswitchlabel.sql tạo sẵn.
+/// Lớp này chỉ thêm phần KHÔNG nằm trong file đó: tài khoản demo, hai tham số thời lượng,
+/// và vài cặp câu mẫu. Mọi bước đều kiểm tra trước khi ghi nên chạy lại không nhân đôi dữ liệu.
 /// </summary>
 public static class DatabaseSeeder
 {
@@ -21,76 +26,104 @@ public static class DatabaseSeeder
         var sp = scope.ServiceProvider;
 
         var db = sp.GetRequiredService<CodeSwitchLabelDbContext>();
-        var hasher = sp.GetRequiredService<IPasswordHasher<AppUser>>();
+        var hasher = sp.GetRequiredService<IPasswordHasher>();
         var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger(nameof(DatabaseSeeder));
 
-        await db.Database.MigrateAsync(ct);
+        await EnsureSchemaAsync(db, ct);
 
-        await SeedRolesAsync(db, ct);
         var adminId = await SeedUsersAsync(db, hasher, defaultPassword, ct);
-        await SeedSystemConfigAsync(db, ct);
-        await SeedReasonsAsync(db, ct);
+        await SeedExtraConfigAsync(db, ct);
         await SeedScriptsAsync(db, adminId, ct);
 
         logger.LogInformation("Seed dữ liệu phát triển hoàn tất.");
     }
 
-    private static async Task SeedRolesAsync(CodeSwitchLabelDbContext db, CancellationToken ct)
+    /// <summary>
+    /// Dự án không dùng migration: lược đồ do PostgreSQL chạy từ file .sql lúc tạo database.
+    /// Thiếu lược đồ thì báo đúng việc phải làm, thay vì để EF ném lỗi khó hiểu ở request đầu tiên.
+    /// </summary>
+    public static async Task EnsureSchemaAsync(CodeSwitchLabelDbContext db, CancellationToken ct = default)
     {
-        if (await db.Roles.AnyAsync(ct)) return;
+        // Container postgres nhận kết nối TRƯỚC khi chạy xong file lược đồ, nên chờ vài giây:
+        // `docker compose up -d && dotnet run` liền tay vẫn phải chạy được.
+        for (var attempt = 1; attempt <= 30; attempt++)
+        {
+            try
+            {
+                var hasSchema = await db.Database
+                    .SqlQuery<bool>($"""SELECT to_regclass('public.script') IS NOT NULL AS "Value" """)
+                    .SingleAsync(ct);
 
-        db.Roles.AddRange(
-            new Role { RoleName = RoleName.Speaker,     Description = "Thu âm và đóng góp script" },
-            new Role { RoleName = RoleName.Reviewer,    Description = "Nghe và duyệt bản ghi" },
-            new Role { RoleName = RoleName.TaskManager, Description = "Giao task, đặt chỉ tiêu và theo dõi tiến độ" },
-            new Role { RoleName = RoleName.Admin,       Description = "Quản trị dữ liệu, người dùng và cấu hình" });
+                if (hasSchema) return;
+            }
+            catch (Exception) when (attempt < 30)
+            {
+                // Database chưa nhận kết nối — thử lại.
+            }
 
-        await db.SaveChangesAsync(ct);
+            await Task.Delay(TimeSpan.FromSeconds(1), ct);
+        }
+
+        throw new InvalidOperationException(
+            "Database chưa có lược đồ của docs/codeswitchlabel.sql. " +
+            "PostgreSQL chỉ chạy file này khi database còn rỗng — hãy chạy: " +
+            "docker compose down -v && docker compose up -d postgres minio");
     }
 
     private static async Task<long> SeedUsersAsync(
-        CodeSwitchLabelDbContext db, IPasswordHasher<AppUser> hasher,
-        string password, CancellationToken ct)
+        CodeSwitchLabelDbContext db, IPasswordHasher hasher, string password, CancellationToken ct)
     {
         var roles = await db.Roles.ToDictionaryAsync(r => r.RoleName, r => r.RoleId, ct);
 
-        // Hai Speaker chứ không phải một: chỉ có từ hai người mới demo được
-        // chuyện "mỗi script cần nhiều giọng khác nhau".
-        (string Email, string Name, RoleName Role, SpeakerRegion? Region)[] seeds =
+        // Ba Reviewer vì mỗi bản ghi cần đủ ba lượt duyệt độc lập.
+        // Hai Speaker để thấy luật "một cặp câu một người đọc" có hiệu lực.
+        (string Email, string Name, RoleName Role, string? Province, decimal? Ielts, string? Major)[] seeds =
         [
-            ("admin@codeswitchlabel.local",    "Quản trị hệ thống", RoleName.Admin,       null),
-            ("manager@codeswitchlabel.local",  "Điều phối viên",    RoleName.TaskManager, null),
-            ("reviewer@codeswitchlabel.local", "Người kiểm duyệt",  RoleName.Reviewer,    null),
-            // Ba Reviewer: luật duyệt cần tới ba người khác nhau — vòng 1, vòng kiểm tra mù, vòng phân xử.
-            ("reviewer2@codeswitchlabel.local", "Người kiểm duyệt số 2", RoleName.Reviewer, null),
-            ("reviewer3@codeswitchlabel.local", "Người kiểm duyệt số 3", RoleName.Reviewer, null),
-            ("speaker1@codeswitchlabel.local", "Người đọc số 1",    RoleName.Speaker,     SpeakerRegion.South),
-            ("speaker2@codeswitchlabel.local", "Người đọc số 2",    RoleName.Speaker,     SpeakerRegion.North)
+            ("admin@codeswitchlabel.local",     "Quản trị hệ thống",     RoleName.Admin,       null, null, null),
+            ("manager@codeswitchlabel.local",   "Điều phối viên",        RoleName.TaskManager, null, null, null),
+            ("reviewer@codeswitchlabel.local",  "Người kiểm duyệt",      RoleName.Reviewer,    null, null, null),
+            ("reviewer2@codeswitchlabel.local", "Người kiểm duyệt số 2", RoleName.Reviewer,    null, null, null),
+            ("reviewer3@codeswitchlabel.local", "Người kiểm duyệt số 3", RoleName.Reviewer,    null, null, null),
+            ("speaker1@codeswitchlabel.local",  "Người đọc số 1",        RoleName.Speaker,     "TP. Hồ Chí Minh", 6.5m, "IT"),
+            ("speaker2@codeswitchlabel.local",  "Người đọc số 2",        RoleName.Speaker,     "Hà Nội",          7.0m, "Business")
         ];
 
         foreach (var seed in seeds)
         {
-            if (await db.AppUsers.AnyAsync(u => u.Email == seed.Email, ct)) continue;
+            var existing = await db.AppUsers.FirstOrDefaultAsync(u => u.Email == seed.Email, ct);
+
+            if (existing is not null)
+            {
+                // File .sql tạo sẵn một hàng admin với hash giả dài hơn 60 ký tự
+                // ($2a$11$REPLACE_WITH_REAL_BCRYPT_HASH_BEFORE_FIRST_LOGIN). Thay bằng hash thật,
+                // nếu không thì không ai đăng nhập được bằng tài khoản admin.
+                if (!IsRealBcryptHash(existing.PasswordHash))
+                {
+                    existing.PasswordHash = hasher.Hash(password);
+                }
+
+                continue;
+            }
 
             var user = new AppUser
             {
                 RoleId = roles[seed.Role],
                 FullName = seed.Name,
                 Email = seed.Email,
-                Status = UserStatus.Active
+                PasswordHash = hasher.Hash(password),
+                Status = UserStatus.Active,
+                CreatedAt = DateTimeOffset.UtcNow
             };
 
-            user.PasswordHash = hasher.HashPassword(user, password);
-
-            if (seed.Region.HasValue)
+            if (seed.Role == RoleName.Speaker)
             {
                 user.SpeakerProfile = new SpeakerProfile
                 {
-                    BirthYear = seed.Region == SpeakerRegion.South ? 2002 : 2001,
-                    Region = seed.Region,
-                    Province = seed.Region == SpeakerRegion.South ? "TP. Hồ Chí Minh" : "Hà Nội",
-                    EnglishLevel = EnglishLevel.Intermediate,
-                    Occupation = Occupation.Student
+                    BirthYear = 2002,
+                    Province = seed.Province,
+                    EnglishLevel = seed.Ielts,
+                    Occupation = Occupation.Student,
+                    Major = seed.Major
                 };
             }
 
@@ -105,36 +138,35 @@ public static class DatabaseSeeder
             .FirstAsync(ct);
     }
 
-    private static async Task SeedSystemConfigAsync(CodeSwitchLabelDbContext db, CancellationToken ct)
+    /// <summary>Chuỗi bcrypt thật luôn dài đúng 60 ký tự và bắt đầu bằng $2.</summary>
+    private static bool IsRealBcryptHash(string hash) =>
+        hash.Length == 60 && hash.StartsWith("$2", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Hai ngưỡng thời lượng KHÔNG có trong docs/codeswitchlabel.sql — đây là đề xuất của nhóm
+    /// backend, chưa được giảng viên duyệt. Thiếu hai hàng này thì code chạy bằng giá trị mặc định.
+    /// </summary>
+    private static async Task SeedExtraConfigAsync(CodeSwitchLabelDbContext db, CancellationToken ct)
     {
-        // CẢNH BÁO: các con số dưới đây là ĐỀ XUẤT, chưa được giảng viên duyệt.
-        // Mô tả đề tài không đưa ra ngưỡng nào. Đổi được qua API cấu hình.
-        (string Key, string Value, ConfigValueType Type, string Description)[] seeds =
+        (string Key, string Value, string Description)[] seeds =
         [
-            (ConfigKeys.RecordingMinDurationSec, "1",    ConfigValueType.Int,
-                "Thời lượng tối thiểu của một bản ghi, tính bằng giây"),
-            (ConfigKeys.RecordingMaxDurationSec, "30",   ConfigValueType.Int,
-                "Thời lượng tối đa của một bản ghi, tính bằng giây"),
-            (ConfigKeys.ReviewRandomRatio,       "0.20", ConfigValueType.String,
-                "Tỉ lệ bản ghi được rút ngẫu nhiên để duyệt mù ở vòng 2, từ 0 (tắt) đến 1 (tất cả)"),
-            (ConfigKeys.ScriptMinWordCount,      "4",    ConfigValueType.Int,
-                "Số từ tối thiểu của một script"),
-            (ConfigKeys.ScriptMaxWordCount,      "40",   ConfigValueType.Int,
-                "Số từ tối đa của một script"),
-            (ConfigKeys.ScriptMinEnWordCount,    "1",    ConfigValueType.Int,
-                "Số từ tiếng Anh tối thiểu để script được coi là có trộn ngôn ngữ")
+            (ConfigKeys.RecordingMinDurationSec, "1", "Thời lượng tối thiểu của một bản ghi, tính bằng giây"),
+            (ConfigKeys.RecordingMaxDurationSec, "30", "Thời lượng tối đa của một bản ghi, tính bằng giây")
         ];
 
         var existing = await db.SystemConfigs.Select(c => c.ConfigKey).ToListAsync(ct);
 
-        var missing = seeds.Where(s => !existing.Contains(s.Key)).Select(s => new SystemConfig
-        {
-            ConfigKey = s.Key,
-            ConfigValue = s.Value,
-            ValueType = s.Type,
-            Description = s.Description,
-            UpdatedAt = DateTimeOffset.UtcNow
-        }).ToList();
+        var missing = seeds
+            .Where(s => !existing.Contains(s.Key))
+            .Select(s => new SystemConfig
+            {
+                ConfigKey = s.Key,
+                ConfigValue = s.Value,
+                ValueType = ConfigValueType.Int,
+                Description = s.Description,
+                UpdatedAt = DateTimeOffset.UtcNow
+            })
+            .ToList();
 
         if (missing.Count > 0)
         {
@@ -143,72 +175,70 @@ public static class DatabaseSeeder
         }
     }
 
-    private static async Task SeedReasonsAsync(CodeSwitchLabelDbContext db, CancellationToken ct)
-    {
-        if (!await db.RejectionReasons.AnyAsync(ct))
-        {
-            // Ba nhóm đầu lấy đúng từ mô tả đề tài: "content, audio-quality, or pronunciation issue".
-            db.RejectionReasons.AddRange(
-                new RejectionReason { ReasonCode = "CONTENT_MISREAD",       Category = RejectionCategory.Content,       Description = "Đọc sai hoặc thiếu từ so với script" },
-                new RejectionReason { ReasonCode = "CONTENT_EXTRA_WORDS",   Category = RejectionCategory.Content,       Description = "Thêm từ không có trong script" },
-                new RejectionReason { ReasonCode = "AUDIO_NOISE",           Category = RejectionCategory.AudioQuality,  Description = "Nhiễu nền át mất giọng đọc" },
-                new RejectionReason { ReasonCode = "AUDIO_CLIPPING",        Category = RejectionCategory.AudioQuality,  Description = "Âm lượng vào quá lớn làm méo tín hiệu" },
-                new RejectionReason { ReasonCode = "AUDIO_TOO_QUIET",       Category = RejectionCategory.AudioQuality,  Description = "Giọng đọc quá nhỏ so với nền" },
-                new RejectionReason { ReasonCode = "AUDIO_TRUNCATED",       Category = RejectionCategory.AudioQuality,  Description = "Bản ghi thiếu phần đầu hoặc phần cuối" },
-                new RejectionReason { ReasonCode = "PRONUNCIATION_EN",      Category = RejectionCategory.Pronunciation, Description = "Từ tiếng Anh bị đọc Việt hoá hoàn toàn" },
-                new RejectionReason { ReasonCode = "PRONUNCIATION_UNCLEAR", Category = RejectionCategory.Pronunciation, Description = "Nói líu, quá nhanh hoặc khó nghe" },
-                new RejectionReason { ReasonCode = "OTHER",                 Category = RejectionCategory.Other,         Description = "Lý do khác, ghi rõ trong phần nhận xét" });
-        }
-
-        if (!await db.ScriptErrorReasons.AnyAsync(ct))
-        {
-            db.ScriptErrorReasons.AddRange(
-                new ScriptErrorReason { ReasonCode = "NOT_NATURAL",      SortOrder = 1, Description = "Câu không tự nhiên, người Việt không nói như vậy" },
-                new ScriptErrorReason { ReasonCode = "NO_CODE_SWITCH",   SortOrder = 2, Description = "Không có từ tiếng Anh nào" },
-                new ScriptErrorReason { ReasonCode = "GRAMMAR_ERROR",    SortOrder = 3, Description = "Sai ngữ pháp hoặc chính tả" },
-                new ScriptErrorReason { ReasonCode = "TOO_LONG",         SortOrder = 4, Description = "Quá dài để đọc trong một hơi" },
-                new ScriptErrorReason { ReasonCode = "INAPPROPRIATE",    SortOrder = 5, Description = "Nội dung không phù hợp" },
-                new ScriptErrorReason { ReasonCode = "DUPLICATE",        SortOrder = 6, Description = "Trùng với script đã có" });
-        }
-
-        await db.SaveChangesAsync(ct);
-    }
-
-    private static async Task SeedScriptsAsync(
-        CodeSwitchLabelDbContext db, long createdById, CancellationToken ct)
+    private static async Task SeedScriptsAsync(CodeSwitchLabelDbContext db, long adminId, CancellationToken ct)
     {
         if (await db.Scripts.AnyAsync(ct)) return;
 
-        // Câu tiếng Việt chèn tiếng Anh, kiểu nói thật ở công sở và trường học.
-        (string Content, ScriptDomain Domain)[] seeds =
+        // Cặp câu mẫu đúng định dạng input_text.json: câu chen tiếng Anh, câu thuần Việt tương đương,
+        // và ánh xạ từng từ tiếng Anh sang nghĩa tiếng Việt.
+        (string Cs, string Ve, ScriptDomain Domain, (string En, string Vi)[] Pairs)[] seeds =
         [
-            ("Em nhớ upload tài liệu trước deadline nhé",        ScriptDomain.ItTechnology),
-            ("Chiều nay team mình có meeting với khách hàng",     ScriptDomain.ItTechnology),
-            ("Bạn gửi cho mình cái file Excel đó được không",     ScriptDomain.ItTechnology),
-            ("Mình cần review lại cái pull request này",          ScriptDomain.ItTechnology),
-            ("Cái app này bị crash khi mình mở lên",              ScriptDomain.ItTechnology),
-            ("Team mình đang chạy sprint hai tuần một lần",       ScriptDomain.ItTechnology),
-            ("Em vừa book phòng họp cho buổi training tuần sau",  ScriptDomain.Education),
-            ("Thầy cho em xin slide của buổi hôm nay với",        ScriptDomain.Education),
-            ("Nhóm mình phải nộp assignment trước thứ sáu",       ScriptDomain.Education),
-            ("Bữa nay có deadline nên mình phải làm overtime",    ScriptDomain.DailyLife),
-            ("Chị gửi em cái link Google Drive của dự án nhé",    ScriptDomain.DailyLife),
-            ("Bạn nhớ check email trước khi tan làm nha",         ScriptDomain.DailyLife)
+            ("[vi]Em nhớ [en]upload [vi]tài liệu trước [en]deadline [vi]nhé",
+             "[vi]Em nhớ tải tài liệu lên trước hạn chót nhé",
+             ScriptDomain.ItTechnology, [("upload", "tải lên"), ("deadline", "hạn chót")]),
+
+            ("[vi]Chiều nay [en]team [vi]mình có [en]meeting [vi]với khách hàng",
+             "[vi]Chiều nay nhóm mình có cuộc họp với khách hàng",
+             ScriptDomain.ItTechnology, [("team", "nhóm"), ("meeting", "cuộc họp")]),
+
+            ("[vi]Mình cần [en]review [vi]lại phần mã nguồn này",
+             "[vi]Mình cần xem lại phần mã nguồn này",
+             ScriptDomain.ItTechnology, [("review", "xem lại")]),
+
+            ("[vi]Thầy cho em xin [en]slide [vi]của buổi hôm nay với",
+             "[vi]Thầy cho em xin bài giảng của buổi hôm nay với",
+             ScriptDomain.Education, [("slide", "bài giảng")]),
+
+            ("[vi]Nhóm mình phải nộp [en]assignment [vi]trước thứ sáu",
+             "[vi]Nhóm mình phải nộp bài tập trước thứ sáu",
+             ScriptDomain.Education, [("assignment", "bài tập")]),
+
+            ("[vi]Bạn nhớ [en]check [vi]hộp thư trước khi tan làm nha",
+             "[vi]Bạn nhớ kiểm tra hộp thư trước khi tan làm nha",
+             ScriptDomain.DailyLife, [("check", "kiểm tra")])
         ];
 
         var now = DateTimeOffset.UtcNow;
 
-        db.Scripts.AddRange(seeds.Select(s => new Script
+        foreach (var seed in seeds)
         {
-            Content = s.Content,
-            Status = ScriptStatus.Validated,
-            WordCount = ScriptTextNormalizer.CountWords(s.Content),
-            EnWordCount = ScriptTextNormalizer.CountEnglishWords(s.Content),
-            Domain = s.Domain,
-            CreatedById = createdById,
-            CreatedAt = now,
-            UpdatedAt = now
-        }));
+            var enWordCount = CodeSwitchText.CountEnglishWords(seed.Cs);
+
+            var alignment = seed.Pairs
+                .Select(p => new AlignmentItem { Source = p.En, Target = p.Vi })
+                .ToList();
+
+            // Mã do database sinh để ba chữ số đầu luôn khớp ràng buộc CHECK.
+            var scriptId = await db.Database
+                .SqlQuery<string>(
+                    $"""SELECT fn_generate_script_id({enWordCount}, CAST({SnakeCaseNaming.ToSnakeCase(seed.Domain.ToString())} AS script_domain), 1) AS "Value" """)
+                .SingleAsync(ct);
+
+            db.Scripts.Add(new Script
+            {
+                ScriptId = scriptId,
+                CsContent = seed.Cs,
+                VeContent = seed.Ve,
+                Alignment = JsonSerializer.Serialize(alignment),
+                Status = ScriptStatus.Validated,
+                WordCount = CodeSwitchText.CountWords(seed.Cs),
+                EnWordCount = enWordCount,
+                Domain = seed.Domain,
+                CreatedBy = adminId,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        }
 
         await db.SaveChangesAsync(ct);
     }

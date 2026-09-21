@@ -2,72 +2,36 @@ using CodeSwitchLabel.Repositories.Enums;
 
 namespace CodeSwitchLabel.Repositories.Entities;
 
+/// <summary>
+/// Một lần thu. Khoá chính là chuỗi r_cs_ hoặc r_vi_ + 9 chữ số của script, thu lại thì thêm _tN.
+/// Lược đồ chặn: mỗi cặp câu chỉ một người đọc, và mỗi (câu, biến thể) chỉ một bản được duyệt đạt.
+/// </summary>
 public class Recording
 {
-    public long RecordingId { get; set; }
-
-    public long ScriptId { get; set; }
-    public Script Script { get; set; } = null!;
-
+    public string RecordingId { get; set; } = string.Empty;
+    public SentenceVariant SentenceVariant { get; set; }
+    public string ScriptId { get; set; } = string.Empty;
     public long SpeakerId { get; set; }
-    public AppUser Speaker { get; set; } = null!;
 
-    /// <summary>NULL nghĩa là thu tự do, không thuộc task nào.</summary>
+    /// <summary>Null nghĩa là thu tự do, không thuộc task nào.</summary>
     public long? TaskId { get; set; }
-    public WorkTask? Task { get; set; }
 
-    /// <summary>Đường dẫn file trong object storage. Không bao giờ trả thẳng cho client.</summary>
-    public string S3Key { get; set; } = string.Empty;
+    /// <summary>Đường dẫn cố định tới file trong kho lưu trữ. Link nghe tạm được cấp riêng lúc cần.</summary>
+    public string CloudLink { get; set; } = string.Empty;
 
     public string AudioFormat { get; set; } = "wav";
-
-    public RecordingStatus Status { get; set; } = RecordingStatus.PendingReview;
-
+    public RecordingStatus Status { get; set; }
     public decimal DurationSec { get; set; }
-    public DateTimeOffset RecordedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset RecordedAt { get; set; }
 
+    public Script Script { get; set; } = null!;
+    public AppUser Speaker { get; set; } = null!;
+    public WorkTask? Task { get; set; }
     public ICollection<Review> Reviews { get; set; } = [];
     public ICollection<TaskRecording> TaskRecordings { get; set; } = [];
     public ICollection<DatasetRecording> DatasetRecordings { get; set; } = [];
 }
 
-/// <summary>
-/// Một lượt duyệt bản ghi. ReviewRound cho phép nhiều vòng độc lập
-/// trên cùng một bản ghi — chính là "multi-stage review" mô tả đề tài hứa.
-/// </summary>
-public class Review
-{
-    public long ReviewId { get; set; }
-
-    public long RecordingId { get; set; }
-    public Recording Recording { get; set; } = null!;
-
-    /// <summary>
-    /// Không được trùng với người thu bản ghi này — xung đột lợi ích.
-    /// Ép bằng trigger ở tầng database, vì CHECK constraint không nhìn được sang bảng khác.
-    /// </summary>
-    public long ReviewerId { get; set; }
-    public AppUser Reviewer { get; set; } = null!;
-
-    /// <summary>NULL nghĩa là lượt kiểm tra ngẫu nhiên ngoài task.</summary>
-    public long? TaskId { get; set; }
-    public WorkTask? Task { get; set; }
-
-    /// <summary>Vòng duyệt thứ mấy, từ 1 đến 3.</summary>
-    public short ReviewRound { get; set; } = 1;
-
-    public ReviewDecision Decision { get; set; }
-
-    /// <summary>Duyệt mù: người duyệt không thấy kết quả của vòng trước. Giúp đo độ đồng thuận thật.</summary>
-    public bool IsBlind { get; set; }
-
-    public string? Comment { get; set; }
-    public DateTimeOffset ReviewedAt { get; set; } = DateTimeOffset.UtcNow;
-
-    public ICollection<ReviewRejectionReason> RejectionReasons { get; set; } = [];
-}
-
-/// <summary>Danh mục lý do từ chối bản ghi. Admin cấu hình, chỉ ẩn được chứ không xoá cứng.</summary>
 public class RejectionReason
 {
     public short ReasonId { get; set; }
@@ -75,19 +39,38 @@ public class RejectionReason
     public RejectionCategory Category { get; set; }
     public string? Description { get; set; }
     public bool IsActive { get; set; } = true;
-
-    public ICollection<ReviewRejectionReason> Reviews { get; set; } = [];
 }
 
 /// <summary>
-/// Một lượt từ chối có thể nêu NHIỀU lý do cùng lúc — bản ghi vừa ồn vừa đọc sai
-/// là chuyện thường. Giữ được cả hai lý do thì phân tích RQ2 giàu hơn.
+/// Một lượt duyệt độc lập. Lược đồ yêu cầu đủ ba lượt rồi trigger chốt theo đa số,
+/// và chặn: một bản ghi không nhận hai lượt cùng vòng, cũng không nhận cùng một người duyệt hai lần.
 /// </summary>
+public class Review
+{
+    public long ReviewId { get; set; }
+    public string RecordingId { get; set; } = string.Empty;
+    public long ReviewerId { get; set; }
+
+    /// <summary>Null nghĩa là duyệt ngoài task.</summary>
+    public long? TaskId { get; set; }
+
+    public short ReviewRound { get; set; }
+    public ReviewDecision Decision { get; set; }
+    public bool IsBlind { get; set; } = true;
+    public string? Comment { get; set; }
+    public DateTimeOffset ReviewedAt { get; set; }
+
+    public Recording Recording { get; set; } = null!;
+    public AppUser Reviewer { get; set; } = null!;
+    public WorkTask? Task { get; set; }
+    public ICollection<ReviewRejectionReason> RejectionReasons { get; set; } = [];
+}
+
 public class ReviewRejectionReason
 {
     public long ReviewId { get; set; }
-    public Review Review { get; set; } = null!;
-
     public short ReasonId { get; set; }
+
+    public Review Review { get; set; } = null!;
     public RejectionReason Reason { get; set; } = null!;
 }
