@@ -11,9 +11,17 @@ Sửa lược đồ thì sửa file `.sql` trước, sau đó sửa `CodeSwitchL
 
 | Thứ | Phiên bản | Kiểm tra bằng |
 |---|---|---|
-| .NET SDK | 9.0 | `dotnet --version` |
+| .NET SDK | **10.0** | `dotnet --version` |
 | Docker Desktop | đang chạy | `docker info` |
 | ffmpeg | 9.x, nằm trong PATH | `ffmpeg -version` |
+
+Dự án chạy trên **.NET 10 LTS**, được hỗ trợ tới 14/11/2028. .NET 8 và .NET 9 đều hết hỗ trợ ngày
+10/11/2026, trước khi đồ án kết thúc. Máy chỉ có SDK 9 thì build báo lỗi `NETSDK1045` — cài thêm SDK 10,
+cài song song với bản cũ được:
+
+```bash
+winget install --id Microsoft.DotNet.SDK.10 -e
+```
 
 Không cần `dotnet-ef` nữa vì dự án không còn migration.
 
@@ -245,6 +253,4 @@ Giới hạn đã biết:
 - **Reviewer chưa xem được danh sách bản ghi trong task của mình**, mới chỉ lấy lần lượt từng bản.
 - **Không còn tính năng "bỏ qua" câu.** Thấy câu có vấn đề thì dùng Review Text để sửa hoặc từ chối.
   Một lượt từ chối là câu bị loại với mọi người — chưa có bước xác nhận của Admin.
-- **Lỗi nghiệp vụ bị ghi log hai lần**: middleware của .NET 9 ghi mức Error kèm stack trace trước khi
-  `GlobalExceptionHandler` ghi mức Information.
 - **Bảng tổng hợp theo người nhận gom trong bộ nhớ**; nhiều task đang chạy thì nên chuyển xuống `GROUP BY`.

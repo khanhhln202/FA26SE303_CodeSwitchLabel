@@ -10,7 +10,7 @@ using CodeSwitchLabel.Services.Options;
 using CodeSwitchLabel.Services.Seeding;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -109,19 +109,11 @@ builder.Services.AddSwaggerGen(options =>
         Description = "Dán thẳng access token vào ô dưới, KHÔNG cần gõ chữ Bearer ở đầu."
     });
 
-    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    // Từ Swashbuckle 10 (thư viện OpenAPI 2.x), yêu cầu bảo mật trỏ tới định nghĩa ở trên
+    // bằng một đối tượng tham chiếu gắn với tài liệu, nên phải truyền vào dưới dạng hàm.
+    options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
     {
-        {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
-            },
-            Array.Empty<string>()
-        }
+        [new OpenApiSecuritySchemeReference("Bearer", document)] = []
     });
 
     // Kéo chú thích /// trong controller lên trang Swagger.
