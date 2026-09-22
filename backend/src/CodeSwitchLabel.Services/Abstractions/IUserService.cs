@@ -24,7 +24,8 @@ public interface IUserService
 
     Task<ResetPasswordResult> ResetPasswordAsync(long userId, CancellationToken ct = default);
 
-    Task ChangeOwnPasswordAsync(long userId, ChangePasswordRequest request, CancellationToken ct = default);
+    /// <summary>Đổi mật khẩu của chính mình. Mọi token cũ bị từ chối; trả token mới cho máy đang dùng.</summary>
+    Task<LoginResponse> ChangeOwnPasswordAsync(long userId, ChangePasswordRequest request, CancellationToken ct = default);
 
     Task<SpeakerProfileDto> GetOwnSpeakerProfileAsync(long userId, CancellationToken ct = default);
 

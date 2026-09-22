@@ -93,8 +93,11 @@ public class UsersController(IUserService userService) : ControllerBase
     public async Task<ActionResult<UserDetailDto>> Unlock(long id, CancellationToken ct)
         => Ok(await userService.UnlockAsync(id, ct));
 
-    /// <summary>Cấp lại mật khẩu tạm khi người dùng quên mật khẩu.</summary>
-    /// <remarks>Mật khẩu tạm chỉ trả về đúng lần này. Mật khẩu cũ hết tác dụng ngay.</remarks>
+    /// <summary>Cấp lại mật khẩu tạm khi người dùng quên mật khẩu, hoặc khi nghi tài khoản bị lộ.</summary>
+    /// <remarks>
+    /// Mật khẩu tạm chỉ trả về đúng lần này. Mật khẩu cũ hết tác dụng ngay, và **mọi token người đó đang giữ
+    /// bị từ chối** ở request kế tiếp — người đó bị đăng xuất khỏi mọi máy, kể cả máy của người lạ đang cầm token.
+    /// </remarks>
     [HttpPost("{id:long}/reset-password")]
     [ProducesResponseType(typeof(ResetPasswordResult), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -109,16 +112,19 @@ public class UsersController(IUserService userService) : ControllerBase
 [Authorize]
 public class MeController(IUserService userService) : ControllerBase
 {
-    /// <summary>Đổi mật khẩu của chính mình.</summary>
-    /// <remarks>Phải nhập đúng mật khẩu hiện tại. Mật khẩu mới từ 8 ký tự và khác mật khẩu cũ.</remarks>
+    /// <summary>Đổi mật khẩu của chính mình — trả về token mới.</summary>
+    /// <remarks>
+    /// Phải nhập đúng mật khẩu hiện tại. Mật khẩu mới từ 8 ký tự và khác mật khẩu cũ.
+    ///
+    /// Đổi xong, **mọi token cũ bị từ chối**: token trên máy khác, và cả token vừa gửi request này.
+    /// Kết quả có token mới, giống hệt lúc đăng nhập — frontend thay token đang lưu để người dùng ở lại trang.
+    /// </remarks>
     [HttpPut("password")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
-    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request, CancellationToken ct)
-    {
-        await userService.ChangeOwnPasswordAsync(User.GetUserId(), request, ct);
-        return NoContent();
-    }
+    public async Task<ActionResult<LoginResponse>> ChangePassword(
+        [FromBody] ChangePasswordRequest request, CancellationToken ct)
+        => Ok(await userService.ChangeOwnPasswordAsync(User.GetUserId(), request, ct));
 
     /// <summary>Hồ sơ người đọc của chính mình: năm sinh, tỉnh, trình độ tiếng Anh, nghề nghiệp, chuyên ngành.</summary>
     [HttpGet("speaker-profile")]

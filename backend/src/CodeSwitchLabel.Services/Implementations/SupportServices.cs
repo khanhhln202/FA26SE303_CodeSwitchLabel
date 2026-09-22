@@ -1,26 +1,17 @@
 using System.Globalization;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Text;
-using CodeSwitchLabel.Repositories.Entities;
 using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Repositories.Repositories;
 using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Common;
 using CodeSwitchLabel.Services.Dtos;
-using CodeSwitchLabel.Services.Options;
-using Microsoft.Extensions.Options;
-using Microsoft.IdentityModel.Tokens;
 
 namespace CodeSwitchLabel.Services.Implementations;
 
 public class AuthService(
     IUserRepository users,
     IPasswordHasher hasher,
-    IOptions<JwtOptions> jwtOptions) : IAuthService
+    IAccessTokenIssuer tokens) : IAuthService
 {
-    private readonly JwtOptions _jwt = jwtOptions.Value;
-
     public async Task<LoginResponse> LoginAsync(LoginRequest request, CancellationToken ct = default)
     {
         var user = await users.GetByEmailAsync(request.Email.Trim(), ct);
@@ -37,8 +28,7 @@ public class AuthService(
             throw new ForbiddenException("account_disabled", "Tài khoản đã bị vô hiệu hoá.");
         }
 
-        var expiresAt = DateTimeOffset.UtcNow.AddMinutes(_jwt.ExpiryMinutes);
-        return new LoginResponse(BuildToken(user, expiresAt), expiresAt, ToDto(user));
+        return user.ToLoginResponse(tokens.Issue(user));
     }
 
     public async Task<CurrentUserDto> GetCurrentUserAsync(long userId, CancellationToken ct = default)
@@ -46,37 +36,7 @@ public class AuthService(
         var user = await users.GetByIdAsync(userId, ct)
                    ?? throw new NotFoundException("user_not_found", "Không tìm thấy tài khoản.");
 
-        return ToDto(user);
-    }
-
-    private static CurrentUserDto ToDto(AppUser user) =>
-        new(user.UserId, user.Email, user.FullName,
-            user.Role.RoleName.ToString(), user.SpeakerProfile is not null);
-
-    private string BuildToken(AppUser user, DateTimeOffset expiresAt)
-    {
-        var claims = new List<Claim>
-        {
-            new(JwtRegisteredClaimNames.Sub, user.UserId.ToString(CultureInfo.InvariantCulture)),
-            new(JwtRegisteredClaimNames.Email, user.Email),
-            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-            new(ClaimTypes.Name, user.FullName),
-
-            // Một vai duy nhất, đúng như lược đồ. Nhờ vậy [Authorize(Roles = "...")] chạy bình thường.
-            new(ClaimTypes.Role, user.Role.RoleName.ToString())
-        };
-
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwt.Key));
-
-        var token = new JwtSecurityToken(
-            issuer: _jwt.Issuer,
-            audience: _jwt.Audience,
-            claims: claims,
-            notBefore: DateTime.UtcNow,
-            expires: expiresAt.UtcDateTime,
-            signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256));
-
-        return new JwtSecurityTokenHandler().WriteToken(token);
+        return user.ToCurrentUser();
     }
 }
 

@@ -35,6 +35,7 @@ public static class ServiceRegistration
 
         // Lược đồ để password_hash 60 ký tự, đúng bằng độ dài chuỗi bcrypt.
         services.AddSingleton<IPasswordHasher, BcryptPasswordHasher>();
+        services.AddSingleton<IAccessTokenIssuer, JwtAccessTokenIssuer>();
 
         // TimeProvider thay cho DateTimeOffset.UtcNow rải rác: test giả được thời gian.
         services.AddSingleton(TimeProvider.System);

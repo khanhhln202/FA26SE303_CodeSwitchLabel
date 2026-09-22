@@ -5,8 +5,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CodeSwitchLabel.Repositories.Repositories;
 
-/// <summary>Đủ để quyết định một token còn dùng được không: tài khoản còn hoạt động và vai chưa đổi.</summary>
-public record UserAuthState(UserStatus Status, RoleName Role);
+/// <summary>
+/// Đủ để quyết định một token còn dùng được không: tài khoản còn hoạt động, vai chưa đổi, mật khẩu chưa đổi.
+/// </summary>
+public record UserAuthState(UserStatus Status, RoleName Role, string PasswordHash);
 
 /// <summary>Task chưa xong mà người dùng đang là người nhận.</summary>
 public record UserTaskRow(long TaskId, TaskType TaskType, string? Description, WorkTaskStatus Status);
@@ -29,7 +31,7 @@ public interface IUserRepository
 
     Task<bool> EmailExistsAsync(string email, CancellationToken ct = default);
 
-    /// <summary>Gọi ở MỖI request đã đăng nhập, nên chỉ đọc đúng hai cột theo khoá chính.</summary>
+    /// <summary>Gọi ở MỖI request đã đăng nhập, nên chỉ đọc đúng ba cột theo khoá chính.</summary>
     Task<UserAuthState?> GetAuthStateAsync(long userId, CancellationToken ct = default);
 
     Task<int> CountActiveAdminsAsync(CancellationToken ct = default);
@@ -98,7 +100,7 @@ public class UserRepository(CodeSwitchLabelDbContext db) : IUserRepository
     public Task<UserAuthState?> GetAuthStateAsync(long userId, CancellationToken ct = default) =>
         db.AppUsers.AsNoTracking()
             .Where(u => u.UserId == userId)
-            .Select(u => new UserAuthState(u.Status, u.Role.RoleName))
+            .Select(u => new UserAuthState(u.Status, u.Role.RoleName, u.PasswordHash))
             .FirstOrDefaultAsync(ct);
 
     public Task<int> CountActiveAdminsAsync(CancellationToken ct = default) =>

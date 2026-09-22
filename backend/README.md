@@ -198,9 +198,12 @@ Draft ─ giao người ─► Open ─ việc đầu tiên ─► InProgress �
   trả về đúng một lần; database chỉ giữ bản băm. Người dùng tự đổi qua `PUT /api/me/password`.
 - **Email lưu chữ thường**, đăng nhập không phân biệt hoa thường.
 - **Không xoá tài khoản, chỉ khoá** — bản ghi, lượt duyệt và task đều trỏ tới người dùng.
-- **Khoá và đổi vai có hiệu lực ngay.** `AccountStateValidator` đối chiếu token với database ở mỗi request:
-  tài khoản bị khoá, hoặc vai trong token khác vai trong database, là 401. Đánh đổi: thêm một truy vấn theo
-  khoá chính cho mỗi request có token.
+- **Khoá, đổi vai và đổi mật khẩu có hiệu lực ngay.** `AccountStateValidator` đối chiếu token với database ở mỗi
+  request, và trả 401 khi: tài khoản bị khoá; vai trong token khác vai trong database; hoặc **dấu mật khẩu** trong
+  token không khớp mật khẩu hiện tại. Đánh đổi: thêm một truy vấn theo khoá chính cho mỗi request có token.
+- **Dấu mật khẩu** (`PasswordStamp`, claim `pwd_stamp`) là 16 ký tự đầu của SHA-256 tính trên chuỗi bcrypt.
+  Đổi hay cấp lại mật khẩu là bản băm đổi, dấu đổi theo, nên mọi token cấp trước đó bị từ chối — không cần thêm cột
+  hay danh sách token bị thu hồi. Tự đổi mật khẩu thì API trả token mới để máy đang dùng không bị đăng xuất.
 - **Đổi vai bị chặn khi người đó còn task chưa xong** — báo rõ mã task. Khoá thì không chặn, vì khoá là việc khẩn cấp;
   kết quả trả kèm danh sách task cần giao lại.
 - Không tự khoá, không tự đổi vai của mình, và không bao giờ để mất Admin cuối cùng đang hoạt động.
@@ -292,8 +295,6 @@ Giới hạn đã biết:
 - **Không còn tính năng "bỏ qua" câu.** Thấy câu có vấn đề thì dùng Review Text để sửa hoặc từ chối.
   Một lượt từ chối là câu bị loại với mọi người — chưa có bước xác nhận của Admin.
 - **Bảng tổng hợp theo người nhận gom trong bộ nhớ**; nhiều task đang chạy thì nên chuyển xuống `GROUP BY`.
-- **Đổi hay cấp lại mật khẩu chưa thu hồi token đang dùng.** Token cũ vẫn sống tới khi hết hạn
-  (2 tiếng ở production), nên cấp lại mật khẩu chưa đủ để đuổi người lạ đang giữ token — phải khoá thêm.
 - **Chưa bắt đổi mật khẩu tạm** ở lần đăng nhập đầu; lược đồ không có cột đánh dấu mật khẩu tạm.
 - **Số người đọc trên dashboard lệch** vì `v_dashboard_summary` đếm theo số hồ sơ: người đọc đã đổi sang vai khác
   vẫn được đếm (hồ sơ được giữ lại vì gắn với bản ghi cũ). Tài khoản bị khoá cũng được đếm, cả người đọc lẫn người duyệt.

@@ -61,8 +61,9 @@ POST /api/auth/login
 
 - Gửi kèm mọi request: `Authorization: Bearer <accessToken>`.
 - Token hết hạn sau **8 tiếng** khi chạy dev. **Chưa có refresh token**: gặp 401 thì đưa về trang đăng nhập.
-- **401 có thể đến giữa phiên**, không chỉ lúc hết hạn: Admin khoá tài khoản hoặc đổi vai thì token cũ bị từ chối
-  ngay ở request kế tiếp. Xử lý y như hết hạn. Đăng nhập lại sẽ nhận vai mới, hoặc `account_disabled` nếu đang bị khoá.
+- **401 có thể đến giữa phiên**, không chỉ lúc hết hạn: tài khoản bị khoá, bị đổi vai, hoặc mật khẩu vừa được đổi hay
+  cấp lại thì token cũ bị từ chối ngay ở request kế tiếp. Xử lý y như hết hạn. Đăng nhập lại sẽ nhận vai mới,
+  hoặc `account_disabled` nếu đang bị khoá.
 - Email đăng nhập **không phân biệt chữ hoa, chữ thường**.
 - `GET /api/auth/me` trả lại thông tin tài khoản — dùng khi tải lại trang.
 - `role` là một trong bốn chuỗi: **`Speaker`, `Reviewer`, `TaskManager`, `Admin`**. Mỗi người đúng một vai.
@@ -111,7 +112,7 @@ Có **bốn dạng phản hồi lỗi khác nhau**, frontend phải phân biệt
 
 | Trường hợp | Mã HTTP | Body | Xử lý |
 |---|---|---|---|
-| Chưa đăng nhập, token hết hạn, hoặc tài khoản vừa bị khoá hay đổi vai | 401 | **Rỗng**, header `WWW-Authenticate: Bearer` | Về trang đăng nhập |
+| Chưa đăng nhập, token hết hạn, hoặc tài khoản vừa bị khoá, đổi vai, đổi mật khẩu | 401 | **Rỗng**, header `WWW-Authenticate: Bearer` | Về trang đăng nhập |
 | Sai vai — ví dụ Speaker gọi API của Admin | 403 | **Rỗng** | Ẩn chức năng đó theo `role`; nếu vẫn gặp thì báo "không có quyền" |
 | Dữ liệu gửi lên sai định dạng hoặc thiếu trường | 400 | Có `errors`, **không có `code`** | Hiện lỗi cạnh từng ô nhập |
 | Lỗi nghiệp vụ | 400 / 403 / 404 / 409 / 422 | Có **`code`** | Xử lý theo `code`, xem bảng dưới |
@@ -191,9 +192,15 @@ Các mã còn lại: `config_not_found`, `duplicate_content`, `error_reason_inac
 |---|---|
 | Đăng nhập | `POST /api/auth/login` |
 | Tải lại trang, biết mình là ai | `GET /api/auth/me` |
-| Đổi mật khẩu | `PUT /api/me/password` `{ "currentPassword": "…", "newPassword": "…" }` — **204** là xong, không cần đăng nhập lại |
+| Đổi mật khẩu | `PUT /api/me/password` `{ "currentPassword": "…", "newPassword": "…" }` |
 
-Mật khẩu mới từ 8 đến 128 ký tự và phải khác mật khẩu hiện tại.
+Đổi mật khẩu thành công trả **200** với body **giống hệt lúc đăng nhập** (`accessToken`, `expiresAt`, `user`):
+
+- **Thay ngay token đang lưu bằng token mới.** Từ lúc đổi, mọi token cũ đều bị từ chối — kể cả token vừa gửi
+  request đổi mật khẩu. Quên thay là request kế tiếp nhận 401.
+- Các máy khác đang đăng nhập bằng tài khoản đó bị đăng xuất. Đây là chủ ý: đổi mật khẩu vì nghi bị lộ thì
+  người đang giữ token cũng mất quyền.
+- Mật khẩu mới từ 8 đến 128 ký tự và phải khác mật khẩu hiện tại.
 
 ### Speaker
 
@@ -364,6 +371,8 @@ Kết quả nhập file có `imported`, `scriptIds` và `skipped` (kèm lý do t
   bản băm nên đóng hộp thoại là mất. Hiện kèm nút sao chép và nhắc Admin chép lại. Mật khẩu tạm dài 12 ký tự và không có
   các ký tự dễ đọc nhầm như `0`/`O`, `1`/`l`/`I`.
 - Backend **chưa bắt đổi mật khẩu tạm** ở lần đăng nhập đầu. Người dùng tự vào trang đổi mật khẩu.
+- **Cấp lại mật khẩu là người đó bị đăng xuất khỏi mọi máy ngay.** Nghi tài khoản bị lộ thì đây là nút cần bấm:
+  người lạ đang cầm token cũng mất quyền.
 - **Không có xoá tài khoản**, chỉ khoá: bản ghi, lượt duyệt và task đều trỏ tới người dùng.
 - Khoá được cả người đang nhận task. `activeTasks` trong kết quả cho biết task nào cần giao lại — nên gợi ý chuyển sang màn hình giao task.
 - Khoá hay mở khoá lần hai không báo lỗi, nên làm dạng nút bật tắt được.
@@ -455,6 +464,8 @@ Ai đã code theo bản API trước ngày 22/09/2026 thì cần sửa:
 | Mã lý do viết hoa (`AUDIO_NOISE`) | Viết thường theo database (`background_noise`) — lấy từ API |
 | — | Mới: nhập file `POST /api/scripts/import`, và nhóm thống kê `/api/admin/*` |
 | — | Mới: quản lý người dùng `/api/users`, trang cá nhân `/api/me/*`, ô chọn người nhận `GET /api/tasks/assignable-users` |
+| `PUT /api/me/password` trả 204 | Trả **200 kèm token mới** — thay token đang lưu |
+| Token cấp trước bản cập nhật này | Hết hiệu lực — đăng nhập lại một lần |
 
 ## 9. Chưa có — backend đang làm
 

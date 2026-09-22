@@ -16,6 +16,13 @@ internal static class UserMapper
 
     public static SpeakerProfileDto ToDto(this SpeakerProfile? p) =>
         new(p?.BirthYear, p?.Province, p?.EnglishLevel, p?.Occupation, p?.Major);
+
+    /// <remarks>Phải kèm Role và SpeakerProfile.</remarks>
+    public static CurrentUserDto ToCurrentUser(this AppUser u) =>
+        new(u.UserId, u.Email, u.FullName, u.Role.RoleName.ToString(), u.SpeakerProfile is not null);
+
+    public static LoginResponse ToLoginResponse(this AppUser u, IssuedToken token) =>
+        new(token.AccessToken, token.ExpiresAt, u.ToCurrentUser());
 }
 
 /// <summary>
@@ -24,11 +31,13 @@ internal static class UserMapper
 ///   - Không xoá tài khoản, chỉ khoá — bản ghi, lượt duyệt, task đều trỏ tới người dùng.
 ///   - Không bao giờ để hệ thống mất Admin cuối cùng.
 ///   - Đổi vai bị chặn khi người đó còn đang nhận task chưa xong.
-/// Khoá và đổi vai có hiệu lực ngay vì mỗi request đều đối chiếu token với database (xem Program.cs).
+/// Khoá, đổi vai và đổi mật khẩu có hiệu lực ngay vì mỗi request đều đối chiếu token với database
+/// (xem AccountStateValidator).
 /// </summary>
 public class UserService(
     IUserRepository users,
     IPasswordHasher hasher,
+    IAccessTokenIssuer tokens,
     TimeProvider clock) : IUserService
 {
     public async Task<PagedResult<UserListItemDto>> SearchAsync(
@@ -194,13 +203,16 @@ public class UserService(
         var user = await users.GetForUpdateAsync(userId, ct) ?? throw NotFound(userId);
         var password = TemporaryPassword.Generate();
 
+        // Bản băm mới là dấu mật khẩu mới: mọi token người đó đang giữ bị từ chối ngay ở request kế tiếp.
+        // Nhờ vậy cấp lại mật khẩu cũng là cách đuổi người lạ đang cầm token bị lộ.
         user.PasswordHash = hasher.Hash(password);
 
         await users.SaveChangesAsync(ct);
         return new ResetPasswordResult(userId, password);
     }
 
-    public async Task ChangeOwnPasswordAsync(long userId, ChangePasswordRequest request, CancellationToken ct = default)
+    public async Task<LoginResponse> ChangeOwnPasswordAsync(
+        long userId, ChangePasswordRequest request, CancellationToken ct = default)
     {
         var user = await users.GetForUpdateAsync(userId, ct) ?? throw NotFound(userId);
 
@@ -216,6 +228,10 @@ public class UserService(
 
         user.PasswordHash = hasher.Hash(request.NewPassword);
         await users.SaveChangesAsync(ct);
+
+        // Từ đây mọi token cũ đều mang dấu của mật khẩu cũ — kể cả token vừa gửi request này — nên bị từ chối.
+        // Máy khác bị đăng xuất; riêng máy đang dùng nhận token mới để ở lại trang.
+        return user.ToLoginResponse(tokens.Issue(user));
     }
 
     public async Task<SpeakerProfileDto> GetOwnSpeakerProfileAsync(long userId, CancellationToken ct = default)
