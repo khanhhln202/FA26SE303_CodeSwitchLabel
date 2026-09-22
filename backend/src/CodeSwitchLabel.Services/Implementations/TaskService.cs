@@ -333,6 +333,15 @@ public class TaskService(
         return new SpeakerProgressDto(submitted, approved, [.. rows.Select(r => r.ToListItem(now))]);
     }
 
+    public async Task<IReadOnlyList<AssignableUserDto>> GetAssignableUsersAsync(
+        TaskType taskType, CancellationToken ct = default)
+    {
+        var role = taskType == TaskType.Recording ? RoleName.Speaker : RoleName.Reviewer;
+        var rows = await tasks.GetAssignableUsersAsync(role, ct);
+
+        return [.. rows.Select(r => new AssignableUserDto(r.UserId, r.FullName, r.Role, r.ActiveTasks, r.TotalTarget))];
+    }
+
     // ----------------------------------------------------------------- nội bộ
 
     private async Task<List<string>> FilterScriptsAsync(

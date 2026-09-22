@@ -30,6 +30,9 @@ public record TaskRow(
 public record AssigneeSummaryRow(
     long UserId, string FullName, RoleName Role, int ActiveTasks, int TotalTarget, int TotalDone, int OverdueTasks);
 
+/// <summary>Một người giao được việc, kèm khối lượng đang gánh để chia việc cho đều.</summary>
+public record AssignableUserRow(long UserId, string FullName, RoleName Role, int ActiveTasks, int TotalTarget);
+
 public interface ITaskRepository
 {
     Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken ct = default);
@@ -65,6 +68,9 @@ public interface ITaskRepository
 
     Task<AppUser?> GetUserWithRoleAsync(long userId, CancellationToken ct = default);
     Task<bool> IsActiveTaskOfAsync(long taskId, long userId, TaskType type, CancellationToken ct = default);
+
+    /// <summary>Người đang hoạt động có đúng vai, kèm số task và tổng chỉ tiêu đang chạy.</summary>
+    Task<List<AssignableUserRow>> GetAssignableUsersAsync(RoleName role, CancellationToken ct = default);
 
     Task<List<Script>> GetScriptsAsync(string[] ids, CancellationToken ct = default);
     Task<List<Recording>> GetRecordingsWithReviewsAsync(string[] ids, CancellationToken ct = default);
@@ -244,6 +250,26 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
 
     public Task<AppUser?> GetUserWithRoleAsync(long userId, CancellationToken ct = default) =>
         db.AppUsers.AsNoTracking().Include(u => u.Role).FirstOrDefaultAsync(u => u.UserId == userId, ct);
+
+    public Task<List<AssignableUserRow>> GetAssignableUsersAsync(RoleName role, CancellationToken ct = default) =>
+        db.AppUsers.AsNoTracking()
+            .Where(u => u.Status == UserStatus.Active && u.Role.RoleName == role)
+            .OrderBy(u => u.FullName)
+            .Select(u => new AssignableUserRow(
+                u.UserId,
+                u.FullName,
+                u.Role.RoleName,
+                db.TaskAssignments.Count(a =>
+                    a.UserId == u.UserId &&
+                    a.AssignmentStatus == AssignmentStatus.Active &&
+                    (a.Task.Status == WorkTaskStatus.Open || a.Task.Status == WorkTaskStatus.InProgress)),
+                db.TaskAssignments
+                    .Where(a =>
+                        a.UserId == u.UserId &&
+                        a.AssignmentStatus == AssignmentStatus.Active &&
+                        (a.Task.Status == WorkTaskStatus.Open || a.Task.Status == WorkTaskStatus.InProgress))
+                    .Sum(a => (int?)a.Task.TargetQty) ?? 0))
+            .ToListAsync(ct);
 
     public Task<bool> IsActiveTaskOfAsync(
         long taskId, long userId, TaskType type, CancellationToken ct = default) =>

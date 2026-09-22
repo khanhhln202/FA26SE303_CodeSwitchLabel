@@ -192,6 +192,20 @@ Draft ─ giao người ─► Open ─ việc đầu tiên ─► InProgress �
 - **Giao việc kiểm tra người nhận có làm được không**: cặp câu người khác đã thu, hay bản ghi do
   chính người đó thu, đều không tính là mục làm được.
 
+## Tài khoản
+
+- **Chỉ Admin tạo tài khoản.** Mật khẩu tạm 12 ký tự do hệ thống sinh (`TemporaryPassword`, bỏ các ký tự dễ đọc nhầm),
+  trả về đúng một lần; database chỉ giữ bản băm. Người dùng tự đổi qua `PUT /api/me/password`.
+- **Email lưu chữ thường**, đăng nhập không phân biệt hoa thường.
+- **Không xoá tài khoản, chỉ khoá** — bản ghi, lượt duyệt và task đều trỏ tới người dùng.
+- **Khoá và đổi vai có hiệu lực ngay.** `AccountStateValidator` đối chiếu token với database ở mỗi request:
+  tài khoản bị khoá, hoặc vai trong token khác vai trong database, là 401. Đánh đổi: thêm một truy vấn theo
+  khoá chính cho mỗi request có token.
+- **Đổi vai bị chặn khi người đó còn task chưa xong** — báo rõ mã task. Khoá thì không chặn, vì khoá là việc khẩn cấp;
+  kết quả trả kèm danh sách task cần giao lại.
+- Không tự khoá, không tự đổi vai của mình, và không bao giờ để mất Admin cuối cùng đang hoạt động.
+- **Người đọc nào cũng có hồ sơ**, kể cả hồ sơ trống: `v_dashboard_summary` đếm số người đọc bằng số hồ sơ.
+
 ## Nhật ký và thống kê
 
 - `audit_log` chia mảnh theo tháng, do trigger `fn_audit` tự ghi. Backend đặt biến phiên
@@ -262,10 +276,11 @@ Phụ thuộc đi một chiều: **Api → Services → Repositories**.
 - **Không đo thời lượng trên file âm thanh gốc.** Chuyển sang WAV trước rồi mới đo.
 - **Không dùng tên file client gửi lên làm đường dẫn.** Chỉ lấy phần đuôi.
 - **Không truyền file âm thanh qua API.** Người nghe nhận link tạm, tải thẳng từ kho lưu trữ.
+- **Không xoá tài khoản.** Chỉ khoá.
 
 ## Chỗ chưa làm
 
-`dataset`, `dataset_recording` và phần lớn nhóm **Manage Users & Roles** đã có bảng nhưng chưa có endpoint.
+`dataset` và `dataset_recording` đã có bảng nhưng chưa có endpoint.
 
 Giới hạn đã biết:
 
@@ -277,3 +292,8 @@ Giới hạn đã biết:
 - **Không còn tính năng "bỏ qua" câu.** Thấy câu có vấn đề thì dùng Review Text để sửa hoặc từ chối.
   Một lượt từ chối là câu bị loại với mọi người — chưa có bước xác nhận của Admin.
 - **Bảng tổng hợp theo người nhận gom trong bộ nhớ**; nhiều task đang chạy thì nên chuyển xuống `GROUP BY`.
+- **Đổi hay cấp lại mật khẩu chưa thu hồi token đang dùng.** Token cũ vẫn sống tới khi hết hạn
+  (2 tiếng ở production), nên cấp lại mật khẩu chưa đủ để đuổi người lạ đang giữ token — phải khoá thêm.
+- **Chưa bắt đổi mật khẩu tạm** ở lần đăng nhập đầu; lược đồ không có cột đánh dấu mật khẩu tạm.
+- **Số người đọc trên dashboard lệch** vì `v_dashboard_summary` đếm theo số hồ sơ: người đọc đã đổi sang vai khác
+  vẫn được đếm (hồ sơ được giữ lại vì gắn với bản ghi cũ). Tài khoản bị khoá cũng được đếm, cả người đọc lẫn người duyệt.

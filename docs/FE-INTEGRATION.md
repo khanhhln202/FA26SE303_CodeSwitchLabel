@@ -4,7 +4,7 @@ Tài liệu cho đội frontend. **Chi tiết từng endpoint** (tham số, ki�
 Swagger — đó là nguồn chính xác nhất vì sinh thẳng từ code. File này nói những gì Swagger không nói được:
 màn hình nào gọi API nào theo thứ tự nào, cách xử lý đăng nhập, lỗi, thu âm và nghe lại.
 
-> Cập nhật theo commit `bc99bc5` trên nhánh `main`. Backend đổi hợp đồng API thì sửa file này trong cùng Pull Request.
+> Cập nhật ngày 22/09/2026 trên nhánh `main` — đã có API quản lý người dùng. Backend đổi hợp đồng API thì sửa file này trong cùng Pull Request.
 
 ---
 
@@ -61,6 +61,9 @@ POST /api/auth/login
 
 - Gửi kèm mọi request: `Authorization: Bearer <accessToken>`.
 - Token hết hạn sau **8 tiếng** khi chạy dev. **Chưa có refresh token**: gặp 401 thì đưa về trang đăng nhập.
+- **401 có thể đến giữa phiên**, không chỉ lúc hết hạn: Admin khoá tài khoản hoặc đổi vai thì token cũ bị từ chối
+  ngay ở request kế tiếp. Xử lý y như hết hạn. Đăng nhập lại sẽ nhận vai mới, hoặc `account_disabled` nếu đang bị khoá.
+- Email đăng nhập **không phân biệt chữ hoa, chữ thường**.
 - `GET /api/auth/me` trả lại thông tin tài khoản — dùng khi tải lại trang.
 - `role` là một trong bốn chuỗi: **`Speaker`, `Reviewer`, `TaskManager`, `Admin`**. Mỗi người đúng một vai.
 
@@ -108,7 +111,7 @@ Có **bốn dạng phản hồi lỗi khác nhau**, frontend phải phân biệt
 
 | Trường hợp | Mã HTTP | Body | Xử lý |
 |---|---|---|---|
-| Chưa đăng nhập, hoặc token hết hạn | 401 | **Rỗng**, header `WWW-Authenticate: Bearer` | Về trang đăng nhập |
+| Chưa đăng nhập, token hết hạn, hoặc tài khoản vừa bị khoá hay đổi vai | 401 | **Rỗng**, header `WWW-Authenticate: Bearer` | Về trang đăng nhập |
 | Sai vai — ví dụ Speaker gọi API của Admin | 403 | **Rỗng** | Ẩn chức năng đó theo `role`; nếu vẫn gặp thì báo "không có quyền" |
 | Dữ liệu gửi lên sai định dạng hoặc thiếu trường | 400 | Có `errors`, **không có `code`** | Hiện lỗi cạnh từng ô nhập |
 | Lỗi nghiệp vụ | 400 / 403 / 404 / 409 / 422 | Có **`code`** | Xử lý theo `code`, xem bảng dưới |
@@ -141,7 +144,7 @@ Lỗi hệ thống trả 500 với `code: "internal_error"`. Gặp lỗi này th
 
 ### Mã lỗi cần xử lý riêng
 
-Đây là 50 mã hiện có. Mã nào không nằm trong nhóm "cần xử lý riêng" thì cứ hiện `title` là đủ.
+Đây là 58 mã hiện có. Mã nào không nằm trong nhóm "cần xử lý riêng" thì cứ hiện `title` là đủ.
 
 | Mã | HTTP | Khi nào | Frontend nên làm gì |
 |---|---|---|---|
@@ -165,11 +168,16 @@ Lỗi hệ thống trả 500 với `code: "internal_error"`. Gặp lỗi này th
 | `target_exceeds_items` | 422 / 409 | Chỉ tiêu lớn hơn số mục người nhận làm được. **422** khi giao task hoặc sửa chỉ tiêu, **409** khi gỡ mục | Hiện `title` — trong đó có luôn danh sách mục bị vướng |
 | `assignee_role_mismatch` | 422 | Giao task thu âm cho Reviewer, hoặc ngược lại | Lọc người nhận theo loại task |
 | `task_cancelled` / `task_completed` | 409 | Sửa task đã huỷ, hoặc huỷ task đã xong | Ẩn nút theo `status` của task |
+| `email_already_exists` | 409 | Tạo tài khoản bằng email đã có, kể cả khi chỉ khác chữ hoa | Hiện lỗi cạnh ô email |
+| `user_has_active_tasks` | 409 | Đổi vai người còn đang nhận task chưa xong | Hiện `title` — trong đó có mã các task cần giao lại. `activeTasks` ở chi tiết tài khoản cũng có sẵn danh sách này |
+| `cannot_lock_self` / `cannot_change_own_role` | 409 | Admin khoá hoặc đổi vai chính mình | Ẩn hai nút này ở dòng tài khoản của chính mình |
+| `invalid_current_password` | 422 | Đổi mật khẩu mà nhập sai mật khẩu hiện tại | Hiện lỗi cạnh ô mật khẩu hiện tại |
+| `same_password` | 422 | Mật khẩu mới trùng mật khẩu hiện tại | Hiện lỗi cạnh ô mật khẩu mới |
 
 Các mã còn lại: `config_not_found`, `duplicate_content`, `error_reason_inactive`, `error_reason_required`,
 `error_reason_unknown`, `external_recording`, `import_too_large`, `invalid_json`, `invalid_language_tags`,
-`items_source_required`, `already_assigned`, `deadline_in_past`, `en_word_count_out_of_range`,
-`recording_not_found`, `rejection_reason_inactive`, `rejection_reason_unknown`, `script_not_found`,
+`items_source_required`, `already_assigned`, `deadline_in_past`, `en_word_count_out_of_range`, `last_admin`,
+`recording_not_found`, `rejection_reason_inactive`, `rejection_reason_unknown`, `role_unchanged`, `script_not_found`,
 `script_not_recordable`, `script_not_reviewable`, `task_item_not_found`, `task_item_not_removable`,
 `task_not_found`, `unknown_domain`, `user_inactive`, `user_not_found`, `ve_not_pure_vietnamese`.
 
@@ -183,6 +191,9 @@ Các mã còn lại: `config_not_found`, `duplicate_content`, `error_reason_inac
 |---|---|
 | Đăng nhập | `POST /api/auth/login` |
 | Tải lại trang, biết mình là ai | `GET /api/auth/me` |
+| Đổi mật khẩu | `PUT /api/me/password` `{ "currentPassword": "…", "newPassword": "…" }` — **204** là xong, không cần đăng nhập lại |
+
+Mật khẩu mới từ 8 đến 128 ký tự và phải khác mật khẩu hiện tại.
 
 ### Speaker
 
@@ -248,6 +259,18 @@ Câu phải có từ 1 đến 9 từ tiếng Anh, vì con số này nằm trong 
 
 **Tiến độ** — `GET /api/speaker/progress`: tổng bản đã nộp, số bản đạt, và các task thu âm đang giao.
 
+**Hồ sơ người đọc** — `GET /api/me/speaker-profile` và `PUT /api/me/speaker-profile`:
+
+```json
+{ "birthYear": 2003, "province": "Đà Nẵng", "englishLevel": 6.5, "occupation": "Student", "major": "IT" }
+```
+
+- `PUT` **ghi đè cả hồ sơ**: trường nào không gửi là bị xoá trắng. Form phải gửi lại đủ mọi trường, kể cả trường không sửa.
+- `englishLevel` theo thang IELTS, từ 0.0 đến 9.0. `occupation` là enum ở mục 7.
+- Tài khoản Speaker mới tạo đã có sẵn hồ sơ **trống**, nên `hasSpeakerProfile` lúc đăng nhập luôn là `true` với Speaker.
+  Muốn nhắc người đọc điền hồ sơ thì gọi `GET` rồi xem các trường có đang `null` không.
+- Chỉ Speaker gọi được; vai khác nhận **403**.
+
 ### Reviewer
 
 **Duyệt bản ghi**
@@ -301,12 +324,12 @@ Câu phải có từ 1 đến 9 từ tiếng Anh, vì con số này nằm trong 
 | Giao hoặc giao lại | `POST /api/tasks/{id}/assign` `{ "userId": 7 }` |
 | Huỷ | `POST /api/tasks/{id}/cancel` |
 | Tổng hợp theo người nhận | `GET /api/tasks/by-assignee` |
+| Ô chọn người nhận | `GET /api/tasks/assignable-users?taskType=Recording` — chỉ người đang hoạt động và đúng vai, kèm `activeTasks`, `totalTarget` để chia việc cho đều |
 | Tìm câu để thêm vào task | `GET /api/scripts?status=Validated` — thêm tuỳ chọn `domain`, `keyword` |
 | Tìm bản ghi để thêm vào task duyệt | `GET /api/recordings?status=PendingReview` — thêm tuỳ chọn `speakerId` |
 
 - Chỉ tiêu task **thu âm đếm theo cặp câu**: một cặp chỉ xong khi cả hai bản đều đạt. Task **duyệt** đếm theo bản ghi. Trường `progress.unit` cho biết đơn vị để hiển thị.
 - **Trạng thái task tự chạy**, frontend không gửi trạng thái: `Draft` → `Open` (đã giao) → `InProgress` (có việc đầu tiên) → `Completed`. Chỉ có huỷ là bấm tay.
-- ⚠️ **Chưa có API danh sách người dùng** (xem mục 8). Tạm thời ô chọn người nhận phải nhập `userId`.
 
 ### Admin
 
@@ -324,6 +347,28 @@ Câu phải có từ 1 đến 9 từ tiếng Anh, vì con số này nằm trong 
 | Lý do từ chối phổ biến | `GET /api/admin/statistics/rejection-reasons` |
 
 Kết quả nhập file có `imported`, `scriptIds` và `skipped` (kèm lý do từng câu bị loại). Một câu hỏng không làm hỏng cả file.
+
+**Quản lý người dùng**
+
+| Việc | API |
+|---|---|
+| Danh sách | `GET /api/users` — lọc tuỳ chọn: `role`, `status`, `keyword` (họ tên hoặc email), `page`, `pageSize` |
+| Chi tiết | `GET /api/users/{id}` — kèm `speakerProfile` và `activeTasks` (các task chưa xong đang nhận) |
+| Tạo tài khoản | `POST /api/users` `{ "fullName": "…", "email": "…", "phone": "…", "role": "Speaker" }` — `phone` không bắt buộc |
+| Sửa họ tên, số điện thoại | `PATCH /api/users/{id}` — chỉ gửi trường cần đổi; gửi `"phone": ""` để xoá số |
+| Đổi vai | `PUT /api/users/{id}/role` `{ "role": "Reviewer" }` |
+| Khoá, mở khoá | `POST /api/users/{id}/lock`, `POST /api/users/{id}/unlock` |
+| Cấp lại mật khẩu | `POST /api/users/{id}/reset-password` |
+
+- **Mật khẩu tạm chỉ hiện đúng một lần.** Tạo tài khoản và cấp lại mật khẩu đều trả `temporaryPassword`; database chỉ lưu
+  bản băm nên đóng hộp thoại là mất. Hiện kèm nút sao chép và nhắc Admin chép lại. Mật khẩu tạm dài 12 ký tự và không có
+  các ký tự dễ đọc nhầm như `0`/`O`, `1`/`l`/`I`.
+- Backend **chưa bắt đổi mật khẩu tạm** ở lần đăng nhập đầu. Người dùng tự vào trang đổi mật khẩu.
+- **Không có xoá tài khoản**, chỉ khoá: bản ghi, lượt duyệt và task đều trỏ tới người dùng.
+- Khoá được cả người đang nhận task. `activeTasks` trong kết quả cho biết task nào cần giao lại — nên gợi ý chuyển sang màn hình giao task.
+- Khoá hay mở khoá lần hai không báo lỗi, nên làm dạng nút bật tắt được.
+- Đổi vai **bị chặn** khi người đó còn task chưa xong (`user_has_active_tasks`). Đổi sang vai khác thì hồ sơ người đọc được giữ lại.
+- Khoá và đổi vai **có hiệu lực ngay**: người bị khoá hay bị đổi vai sẽ bị đưa về trang đăng nhập ở thao tác kế tiếp.
 
 ---
 
@@ -386,6 +431,9 @@ recorder.onstop = async () => {
 | `AssignmentStatus` | `Active`, `Completed`, `Reassigned`, `Cancelled` |
 | `TaskScriptStatus` | `Pending`, `Completed`, `Rejected` |
 | `TaskRecordingStatus` | `Queued`, `Reviewed`, `Skipped` |
+| `RoleName` | `Speaker`, `Reviewer`, `TaskManager`, `Admin` |
+| `UserStatus` | `Active`, `Inactive` (bị khoá) |
+| `Occupation` | `Student`, `Employed`, `Other` |
 
 Mã lý do từ chối và lý do lỗi câu **luôn lấy từ API** (`/api/rejection-reasons`, `/api/script-error-reasons`),
 không viết cứng trong frontend — Admin ẩn hay thêm lý do thì giao diện tự đúng.
@@ -406,14 +454,12 @@ Ai đã code theo bản API trước ngày 22/09/2026 thì cần sửa:
 | Duyệt: vòng 1 quyết định, có rút mẫu kiểm tra | **Luôn ba lượt duyệt mù**, chốt theo đa số. Không còn trường `kind`, không còn ý kiến vòng trước |
 | Mã lý do viết hoa (`AUDIO_NOISE`) | Viết thường theo database (`background_noise`) — lấy từ API |
 | — | Mới: nhập file `POST /api/scripts/import`, và nhóm thống kê `/api/admin/*` |
+| — | Mới: quản lý người dùng `/api/users`, trang cá nhân `/api/me/*`, ô chọn người nhận `GET /api/tasks/assignable-users` |
 
 ## 9. Chưa có — backend đang làm
 
 | Chức năng | Ảnh hưởng tới màn hình |
 |---|---|
-| Danh sách người dùng theo vai | Ô chọn người nhận khi giao task |
-| Tạo, khoá tài khoản, đổi vai | Màn hình quản lý người dùng của Admin |
-| Hồ sơ người đọc, đổi mật khẩu | Trang cá nhân |
 | Reviewer xem danh sách bản ghi trong task | Hiện đang lấy lần lượt từng bản bằng `next` |
 | Khôi phục câu đã bị loại | Nút khôi phục trong kho câu |
 | Dataset: tạo, phát hành, tải về | Màn hình dataset của Admin |

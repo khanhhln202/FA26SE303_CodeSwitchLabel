@@ -1,3 +1,4 @@
+using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Services.Dtos;
 
 namespace CodeSwitchLabel.Services.Abstractions;
@@ -24,4 +25,7 @@ public interface ITaskService
     Task<IReadOnlyList<AssigneeSummaryDto>> GetAssigneeSummaryAsync(CancellationToken ct = default);
 
     Task<SpeakerProgressDto> GetSpeakerProgressAsync(long speakerId, CancellationToken ct = default);
+
+    /// <summary>Người giao được loại task này, kèm khối lượng đang gánh.</summary>
+    Task<IReadOnlyList<AssignableUserDto>> GetAssignableUsersAsync(TaskType taskType, CancellationToken ct = default);
 }

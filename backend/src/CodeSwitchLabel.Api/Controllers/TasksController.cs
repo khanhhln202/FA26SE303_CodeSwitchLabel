@@ -1,8 +1,10 @@
 using CodeSwitchLabel.Api.Infrastructure;
+using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Dtos;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace CodeSwitchLabel.Api.Controllers;
 
@@ -137,6 +139,20 @@ public class TasksController(ITaskService taskService) : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<TaskDetailDto>> Cancel(long id, CancellationToken ct)
         => Ok(await taskService.CancelAsync(id, ct));
+
+    /// <summary>Những người giao được một loại task, kèm khối lượng đang nhận.</summary>
+    /// <remarks>
+    /// Dùng cho ô chọn người nhận khi giao task. Chỉ trả người **đang hoạt động** và **đúng vai**:
+    /// task thu âm là Speaker, task duyệt là Reviewer. Kèm số task và tổng chỉ tiêu đang chạy để chia việc cho đều —
+    /// mỗi cặp câu chỉ một người đọc, nên chia lệch là dữ liệu lệch.
+    ///
+    /// Chỉ trả tên và vai, không lộ email, số điện thoại hay hồ sơ cá nhân.
+    /// </remarks>
+    [HttpGet("assignable-users")]
+    [ProducesResponseType(typeof(IReadOnlyList<AssignableUserDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<AssignableUserDto>>> AssignableUsers(
+        [FromQuery, BindRequired] TaskType taskType, CancellationToken ct)
+        => Ok(await taskService.GetAssignableUsersAsync(taskType, ct));
 
     /// <summary>Tổng hợp theo từng người đang nhận việc.</summary>
     /// <remarks>

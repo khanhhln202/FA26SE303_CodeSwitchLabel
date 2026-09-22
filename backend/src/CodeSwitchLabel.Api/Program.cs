@@ -69,6 +69,10 @@ builder.Services
             // Mặc định .NET cho lệch 5 phút. Đặt về 0 để token hết hạn đúng lúc hết hạn.
             ClockSkew = TimeSpan.Zero
         };
+
+        // Đối chiếu token với database ở mỗi request: khoá tài khoản hay đổi vai có hiệu lực NGAY,
+        // không phải đợi token hết hạn.
+        options.Events = new JwtBearerEvents { OnTokenValidated = AccountStateValidator.ValidateAsync };
     });
 
 builder.Services.AddAuthorization();

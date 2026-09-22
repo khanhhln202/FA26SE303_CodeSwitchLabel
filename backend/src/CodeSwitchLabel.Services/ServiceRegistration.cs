@@ -71,6 +71,7 @@ public static class ServiceRegistration
         services.AddScoped<IStatisticsRepository, StatisticsRepository>();
 
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IUserService, UserService>();
         services.AddScoped<IScriptService, ScriptService>();
         services.AddScoped<IScriptAssignmentService, ScriptAssignmentService>();
         services.AddScoped<IRecordingService, RecordingService>();

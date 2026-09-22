@@ -5,23 +5,122 @@ using Microsoft.EntityFrameworkCore;
 
 namespace CodeSwitchLabel.Repositories.Repositories;
 
+/// <summary>Đủ để quyết định một token còn dùng được không: tài khoản còn hoạt động và vai chưa đổi.</summary>
+public record UserAuthState(UserStatus Status, RoleName Role);
+
+/// <summary>Task chưa xong mà người dùng đang là người nhận.</summary>
+public record UserTaskRow(long TaskId, TaskType TaskType, string? Description, WorkTaskStatus Status);
+
 public interface IUserRepository
 {
+    /// <summary>So email không phân biệt hoa thường: A@x.com và a@x.com là một người.</summary>
     Task<AppUser?> GetByEmailAsync(string email, CancellationToken ct = default);
+
     Task<AppUser?> GetByIdAsync(long userId, CancellationToken ct = default);
+
+    /// <summary>Có theo dõi thay đổi, kèm vai và hồ sơ người đọc — dùng khi sửa tài khoản.</summary>
+    Task<AppUser?> GetForUpdateAsync(long userId, CancellationToken ct = default);
+
     Task<List<AppUser>> GetByRoleAsync(RoleName role, CancellationToken ct = default);
+
+    Task<(IReadOnlyList<AppUser> Items, int Total)> SearchAsync(
+        RoleName? role, UserStatus? status, string? keyword,
+        int page, int pageSize, CancellationToken ct = default);
+
+    Task<bool> EmailExistsAsync(string email, CancellationToken ct = default);
+
+    /// <summary>Gọi ở MỖI request đã đăng nhập, nên chỉ đọc đúng hai cột theo khoá chính.</summary>
+    Task<UserAuthState?> GetAuthStateAsync(long userId, CancellationToken ct = default);
+
+    Task<int> CountActiveAdminsAsync(CancellationToken ct = default);
+
+    Task<List<UserTaskRow>> GetOpenTasksAsync(long userId, CancellationToken ct = default);
+
+    Task<short> GetRoleIdAsync(RoleName role, CancellationToken ct = default);
+
+    void Add(AppUser user);
+
+    Task<int> SaveChangesAsync(CancellationToken ct = default);
 }
 
 public class UserRepository(CodeSwitchLabelDbContext db) : IUserRepository
 {
-    public Task<AppUser?> GetByEmailAsync(string email, CancellationToken ct = default) =>
-        Load().FirstOrDefaultAsync(u => u.Email == email, ct);
+    public Task<AppUser?> GetByEmailAsync(string email, CancellationToken ct = default)
+    {
+        var normalized = email.Trim().ToLowerInvariant();
+        return Load().FirstOrDefaultAsync(u => u.Email.ToLower() == normalized, ct);
+    }
 
     public Task<AppUser?> GetByIdAsync(long userId, CancellationToken ct = default) =>
         Load().FirstOrDefaultAsync(u => u.UserId == userId, ct);
 
+    public Task<AppUser?> GetForUpdateAsync(long userId, CancellationToken ct = default) =>
+        db.AppUsers
+            .Include(u => u.Role)
+            .Include(u => u.SpeakerProfile)
+            .FirstOrDefaultAsync(u => u.UserId == userId, ct);
+
     public Task<List<AppUser>> GetByRoleAsync(RoleName role, CancellationToken ct = default) =>
         Load().Where(u => u.Role.RoleName == role).OrderBy(u => u.FullName).ToListAsync(ct);
+
+    public async Task<(IReadOnlyList<AppUser> Items, int Total)> SearchAsync(
+        RoleName? role, UserStatus? status, string? keyword,
+        int page, int pageSize, CancellationToken ct = default)
+    {
+        var query = Load();
+
+        if (role.HasValue) query = query.Where(u => u.Role.RoleName == role.Value);
+        if (status.HasValue) query = query.Where(u => u.Status == status.Value);
+
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var needle = $"%{keyword.Trim()}%";
+            query = query.Where(u => EF.Functions.ILike(u.FullName, needle) || EF.Functions.ILike(u.Email, needle));
+        }
+
+        var total = await query.CountAsync(ct);
+
+        var items = await query
+            .OrderBy(u => u.FullName).ThenBy(u => u.UserId)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        return (items, total);
+    }
+
+    public Task<bool> EmailExistsAsync(string email, CancellationToken ct = default)
+    {
+        var normalized = email.Trim().ToLowerInvariant();
+        return db.AppUsers.AsNoTracking().AnyAsync(u => u.Email.ToLower() == normalized, ct);
+    }
+
+    public Task<UserAuthState?> GetAuthStateAsync(long userId, CancellationToken ct = default) =>
+        db.AppUsers.AsNoTracking()
+            .Where(u => u.UserId == userId)
+            .Select(u => new UserAuthState(u.Status, u.Role.RoleName))
+            .FirstOrDefaultAsync(ct);
+
+    public Task<int> CountActiveAdminsAsync(CancellationToken ct = default) =>
+        db.AppUsers.AsNoTracking()
+            .CountAsync(u => u.Status == UserStatus.Active && u.Role.RoleName == RoleName.Admin, ct);
+
+    public Task<List<UserTaskRow>> GetOpenTasksAsync(long userId, CancellationToken ct = default) =>
+        db.TaskAssignments.AsNoTracking()
+            .Where(a => a.UserId == userId && a.AssignmentStatus == AssignmentStatus.Active)
+            .Where(a => a.Task.Status == WorkTaskStatus.Draft ||
+                        a.Task.Status == WorkTaskStatus.Open ||
+                        a.Task.Status == WorkTaskStatus.InProgress)
+            .OrderBy(a => a.TaskId)
+            .Select(a => new UserTaskRow(a.TaskId, a.Task.TaskType, a.Task.Description, a.Task.Status))
+            .ToListAsync(ct);
+
+    public Task<short> GetRoleIdAsync(RoleName role, CancellationToken ct = default) =>
+        db.Roles.AsNoTracking().Where(r => r.RoleName == role).Select(r => r.RoleId).FirstAsync(ct);
+
+    public void Add(AppUser user) => db.AppUsers.Add(user);
+
+    public Task<int> SaveChangesAsync(CancellationToken ct = default) => db.SaveChangesAsync(ct);
 
     private IQueryable<AppUser> Load() =>
         db.AppUsers.AsNoTracking().Include(u => u.Role).Include(u => u.SpeakerProfile);
