@@ -10,9 +10,19 @@ public class ObjectStorageOptions
 {
     public const string SectionName = "ObjectStorage";
 
-    /// <summary>Địa chỉ server S3, ví dụ http://localhost:9000.</summary>
+    /// <summary>Địa chỉ API dùng để nói chuyện với server S3, ví dụ http://localhost:9000.</summary>
     [Required, Url]
     public string ServiceUrl { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Địa chỉ TRÌNH DUYỆT dùng để tải file, nếu khác ServiceUrl. Để trống thì dùng ServiceUrl.
+    ///
+    /// Cần tách khi API chạy trong Docker: API gọi MinIO qua http://minio:9000 trong mạng nội bộ,
+    /// còn trình duyệt chỉ vào được http://localhost:9000. Link nghe tạm có chữ ký gắn với tên máy chủ,
+    /// nên phải ký bằng đúng địa chỉ trình duyệt sẽ mở, không ký một đằng rồi đổi địa chỉ sau.
+    /// </summary>
+    [Url]
+    public string? PublicUrl { get; set; }
 
     [Required]
     public string AccessKey { get; set; } = string.Empty;
@@ -55,7 +65,10 @@ public interface IObjectStorage
     /// </summary>
     string GetObjectUrl(string key);
 
-    /// <summary>Lấy lại khoá file từ địa chỉ đã lưu. Trả null nếu địa chỉ không thuộc kho này.</summary>
+    /// <summary>
+    /// Lấy lại khoá file từ địa chỉ đã lưu. Không phụ thuộc tên máy chủ trong địa chỉ, nên đổi domain
+    /// lúc deploy thì bản ghi cũ vẫn nghe được. Trả null nếu địa chỉ không thuộc bucket này.
+    /// </summary>
     string? GetObjectKey(string url);
 
     /// <summary>

@@ -49,6 +49,32 @@ services:
       timeout: 3s
       retries: 10
 
+  api:
+    # Chỉ bật khi gọi kèm --profile api, nên `docker compose up -d postgres minio` vẫn như cũ
+    # cho người làm backend chạy `dotnet run`. Đội frontend chạy cả hệ thống bằng:
+    #   docker compose --profile api up -d --build
+    profiles: ["api"]
+    build:
+      context: ./backend
+    image: codeswitchlabel-api:dev
+    container_name: csl-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      # Môi trường Development: bật Swagger và nạp tài khoản demo, đúng thứ đội frontend cần.
+      ASPNETCORE_ENVIRONMENT: Development
+      # Trong mạng Docker, database và kho file được gọi bằng tên service, không phải localhost.
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=codeswitchlabel;Username=csl;Password=csl_dev_password"
+      ObjectStorage__ServiceUrl: "http://minio:9000"
+      # Còn trình duyệt chỉ vào được localhost, nên link nghe tạm phải ký bằng địa chỉ này.
+      ObjectStorage__PublicUrl: "http://localhost:9000"
+    ports:
+      - "5053:8080"   # cùng cổng với lúc chạy dotnet run — frontend không phải đổi cấu hình
+
 volumes:
   postgres-data:
   minio-data:

@@ -1,0 +1,11 @@
+# Không gửi vào Docker những thứ chỉ có trên máy dev: file build của Windows làm hỏng bước restore
+# trong Linux, và làm mỗi lần build phải chép thêm hàng trăm MB.
+**/bin/
+**/obj/
+**/.vs/
+**/*.user
+
+# Image chỉ cần mã nguồn API để build.
+tests/
+.github/
+README.md

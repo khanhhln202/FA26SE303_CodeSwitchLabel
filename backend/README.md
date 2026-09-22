@@ -53,6 +53,29 @@ Giao diện quản trị MinIO: **http://localhost:9090** — tài khoản ghi t
 > Docker Hub đã gỡ image `minio/minio` nên lấy từ kho chính chủ trên quay.io, ghim đúng phiên bản.
 > Windows giữ riêng cổng 9001 cho tiến trình System nên Docker không mở được — đổi cổng phía máy thật sang 9090.
 
+### Chạy cả hệ thống bằng Docker — dành cho đội frontend
+
+Máy chỉ cần Docker Desktop, không cần cài .NET hay ffmpeg:
+
+```bash
+docker compose --profile api up -d --build
+```
+
+Lệnh này dựng image API (nền Ubuntu 24.04, cài sẵn ffmpeg), rồi chạy cùng PostgreSQL và MinIO.
+API ở **http://localhost:5053**, đúng cổng như khi chạy `dotnet run`, nên frontend không phải đổi cấu hình.
+Lần build đầu phải tải image nền nên mất vài phút; các lần sau nhanh hơn nhiều.
+
+Có code backend mới thì kéo về rồi chạy lại đúng lệnh trên. Dừng hệ thống:
+
+```bash
+docker compose --profile api down
+```
+
+> **Vì sao có hai địa chỉ kho file?** Trong mạng Docker, API gọi MinIO bằng `http://minio:9000`,
+> nhưng trình duyệt chỉ vào được `http://localhost:9000`. Link nghe tạm có chữ ký gắn với tên máy chủ,
+> nên phải ký bằng đúng địa chỉ trình duyệt sẽ mở. `ObjectStorage:PublicUrl` là địa chỉ đó; để trống
+> thì dùng luôn `ObjectStorage:ServiceUrl`. Khi deploy, đặt nó bằng domain công khai của kho file.
+
 Xoá sạch dữ liệu và dựng lại lược đồ từ đầu:
 
 ```bash
