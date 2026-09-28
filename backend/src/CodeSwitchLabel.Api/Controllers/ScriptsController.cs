@@ -13,7 +13,7 @@ namespace CodeSwitchLabel.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/scripts")]
-[Tags("2 · Kho câu")]
+[Tags(ApiTags.Scripts)]
 [Authorize]
 public class ScriptsController(IScriptService scriptService) : ControllerBase
 {

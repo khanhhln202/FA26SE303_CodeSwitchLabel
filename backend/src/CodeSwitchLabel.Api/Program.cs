@@ -120,6 +120,9 @@ builder.Services.AddSwaggerGen(options =>
         [new OpenApiSecuritySchemeReference("Bearer", document)] = []
     });
 
+    // Nhóm endpoint xếp theo thứ tự khai báo ở ApiTags, không theo thứ tự chữ cái.
+    options.DocumentFilter<ApiTagsDocumentFilter>();
+
     // Kéo chú thích /// trong controller lên trang Swagger.
     var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
     var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
@@ -197,7 +200,7 @@ app.UseMiddleware<AuditUserMiddleware>();
 app.MapControllers();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", utc = DateTimeOffset.UtcNow }))
-   .WithTags("0 · Hệ thống")
+   .WithTags(ApiTags.Health)
    .WithSummary("Kiểm tra API còn sống");
 
 app.Run();

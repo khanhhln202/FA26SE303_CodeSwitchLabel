@@ -10,7 +10,7 @@ namespace CodeSwitchLabel.Api.Controllers;
 
 [ApiController]
 [Route("api/recordings")]
-[Tags("6 · Bản ghi âm")]
+[Tags(ApiTags.Recordings)]
 [Authorize]
 public class RecordingsController(IRecordingService recordingService) : ControllerBase
 {

@@ -9,7 +9,7 @@ namespace CodeSwitchLabel.Api.Controllers;
 
 /// <summary>Danh mục lý do — Reviewer và Speaker đọc để chọn khi từ chối.</summary>
 [ApiController]
-[Tags("4 · Danh mục")]
+[Tags(ApiTags.RejectionReasons)]
 [Authorize]
 public class ReasonsController(IReasonService reasonService) : ControllerBase
 {
@@ -35,7 +35,7 @@ public class ReasonsController(IReasonService reasonService) : ControllerBase
 /// <summary>Tham số hệ thống — đổi được lúc chạy, không phải deploy lại.</summary>
 [ApiController]
 [Route("api/admin/config")]
-[Tags("5 · Cấu hình hệ thống")]
+[Tags(ApiTags.SystemConfiguration)]
 [Authorize(Roles = "Admin")]
 public class SystemConfigController(ISystemConfigService configService) : ControllerBase
 {
@@ -70,7 +70,7 @@ public class SystemConfigController(ISystemConfigService configService) : Contro
 /// </summary>
 [ApiController]
 [Route("api/admin")]
-[Tags("9 · Thống kê")]
+[Tags(ApiTags.Statistics)]
 [Authorize(Roles = "Admin")]
 public class StatisticsController(IStatisticsService statistics) : ControllerBase
 {

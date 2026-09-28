@@ -12,7 +12,7 @@ namespace CodeSwitchLabel.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/users")]
-[Tags("10 · Người dùng")]
+[Tags(ApiTags.Users)]
 [Authorize(Roles = "Admin")]
 public class UsersController(IUserService userService) : ControllerBase
 {
@@ -108,7 +108,7 @@ public class UsersController(IUserService userService) : ControllerBase
 /// <summary>Người dùng tự quản lý tài khoản của mình.</summary>
 [ApiController]
 [Route("api/me")]
-[Tags("1 · Xác thực")]
+[Tags(ApiTags.Account)]
 [Authorize]
 public class MeController(IUserService userService) : ControllerBase
 {

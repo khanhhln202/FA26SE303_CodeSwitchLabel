@@ -23,7 +23,7 @@ namespace CodeSwitchLabel.Api.Controllers;
 /// </remarks>
 [ApiController]
 [Route("api/tasks")]
-[Tags("8 · Giao việc")]
+[Tags(ApiTags.Tasks)]
 [Authorize(Roles = "TaskManager,Admin")]
 public class TasksController(ITaskService taskService) : ControllerBase
 {

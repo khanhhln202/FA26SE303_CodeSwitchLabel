@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace CodeSwitchLabel.Api.Controllers;
 
 [ApiController]
-[Tags("7 · Duyệt bản ghi")]
+[Tags(ApiTags.Reviews)]
 [Authorize]
 public class ReviewsController(IReviewService reviewService) : ControllerBase
 {

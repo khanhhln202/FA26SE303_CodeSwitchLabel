@@ -8,7 +8,7 @@ namespace CodeSwitchLabel.Api.Controllers;
 
 [ApiController]
 [Route("api/auth")]
-[Tags("1 · Xác thực")]
+[Tags(ApiTags.Authentication)]
 public class AuthController(IAuthService authService) : ControllerBase
 {
     /// <summary>Đăng nhập và lấy access token.</summary>

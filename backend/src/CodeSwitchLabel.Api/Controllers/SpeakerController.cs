@@ -9,7 +9,7 @@ namespace CodeSwitchLabel.Api.Controllers;
 /// <summary>Luồng làm việc của Speaker.</summary>
 [ApiController]
 [Route("api/speaker")]
-[Tags("3 · Speaker")]
+[Tags(ApiTags.Speaker)]
 [Authorize(Roles = "Speaker")]
 public class SpeakerController(
     IScriptAssignmentService assignmentService,
