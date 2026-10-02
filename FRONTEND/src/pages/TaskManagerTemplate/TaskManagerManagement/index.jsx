@@ -860,7 +860,7 @@ export default function TaskManagerManagement() {
                     onChange={(e) => setBatchFormData({ ...batchFormData, topic: e.target.value })}
                     className={`w-full px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-lg outline-none font-bold transition-all font-sans focus:bg-white dark:focus:bg-[#1C1D22] focus:border-gray-400 dark:focus:border-gray-500 ${
                       modalMode === "UPDATE"
-                        ? "bg-gray-100 dark:bg-[#18191D] cursor-not-allowed opacity-80"
+                        ? "bg-gray-100 dark:bg-[#18191D] cursor-not-allowed opacity-80 appearance-none"
                         : "bg-gray-50 dark:bg-[#25272E] cursor-pointer"
                     }`}
                   >
@@ -1114,7 +1114,7 @@ export default function TaskManagerManagement() {
               <div>
                 <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">Xác nhận xóa đợt</h3>
                 <p className="text-[11px] mt-1 break-words text-gray-500 dark:text-gray-400">
-                  Bạn có chắc muốn xóa <span className="font-bold text-gray-900 dark:text-gray-200">"{deletingBatch.name}"</span>? Các nhiệm vụ trong đợt này sẽ trở về trạng thái chưa được phân đợt.
+                  Bạn có chắc muốn xóa <span className="font-bold text-gray-900 dark:text-gray-200">"{deletingBatch.name}"</span>? 
                 </p>
               </div>
               <div className="flex gap-2 pt-1">
@@ -1183,7 +1183,7 @@ export default function TaskManagerManagement() {
                 <select
                   disabled
                   value={editTaskFormData.role}
-                  className="w-full px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-[#18191D] text-gray-500 dark:text-gray-400 rounded-lg outline-none font-bold transition-all cursor-not-allowed opacity-80"
+                  className="w-full px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-[#18191D] text-gray-500 dark:text-gray-400 rounded-lg outline-none font-bold transition-all cursor-not-allowed opacity-80 appearance-none"
                 >
                   <option value="Speaker" className="dark:bg-[#1C1D22]">Speaker</option>
                   <option value="Reviewer" className="dark:bg-[#1C1D22]">Reviewer</option>
