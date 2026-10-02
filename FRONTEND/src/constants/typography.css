@@ -1,0 +1,119 @@
+/**
+ * Kiểu chữ tập trung cho toàn bộ app (font, cỡ chữ, độ đậm).
+ * Đổi font / cỡ / độ đậm → chỉ sửa ở ĐÂY, không đặt text-[12.5px] hay font-bold rải rác trong component.
+ *
+ * Cách dùng, ưu tiên theo thứ tự:
+ *   1. Class vai trò (gộp cỡ + độ đậm + chiều cao dòng): type-page-title, type-body, type-label...
+ *   2. Nếu không vai trò nào khớp: token lẻ text-caption / text-meta... + font-regular / font-label / font-emphasis
+ * Font được tải trong index.html (Google Fonts) - đổi font thì sửa cả link ở đó.
+ */
+
+@theme {
+  /* ═══════════════════════════════════════════════════
+     FONT
+     ═══════════════════════════════════════════════════ */
+  --font-sans: 'Be Vietnam Pro', ui-sans-serif, system-ui, sans-serif;   /* chữ chính - thiết kế riêng cho tiếng Việt */
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;                  /* chỉ cho thẻ [vi]/[en], tên file, mã - số dùng tabular-nums */
+
+  /* ═══════════════════════════════════════════════════
+     CỠ CHỮ - 8 bậc, kèm chiều cao dòng
+     ═══════════════════════════════════════════════════ */
+  --text-tag: 10px;                  /* riêng chip VI-EN / VI (không dấu) - chữ có dấu không dùng */
+  --text-tag--line-height: 1;
+  --text-caption: 11px;              /* KHÔNG nhỏ hơn - tiếng Việt có dấu chồng */
+  --text-caption--line-height: 16px;
+  --text-meta: 12px;
+  --text-meta--line-height: 16px;
+  --text-ui: 13px;
+  --text-ui--line-height: 20px;
+  --text-body: 14px;
+  --text-body--line-height: 22px;
+  --text-title: 16px;
+  --text-title--line-height: 24px;
+  --text-headline: 20px;
+  --text-headline--line-height: 28px;
+  --text-stat: 24px;
+  --text-stat--line-height: 30px;
+  --text-display: 28px;
+  --text-display--line-height: 40px;  /* dòng thoáng cho câu đọc to */
+
+  /* ═══════════════════════════════════════════════════
+     ĐỘ ĐẬM - chỉ 3 mức. Nhấn mạnh trong câu dùng MÀU, không tăng độ đậm.
+     ═══════════════════════════════════════════════════ */
+  --font-weight-regular: 400;        /* nội dung, câu văn */
+  --font-weight-label: 500;          /* nhãn, nút, badge */
+  --font-weight-emphasis: 600;       /* tiêu đề, số liệu */
+}
+
+/* ═══════════════════════════════════════════════════
+   CLASS VAI TRÒ - dùng 1 class thay cho cặp cỡ + độ đậm
+   ═══════════════════════════════════════════════════ */
+@utility type-reading {              /* câu cần đọc to: Duyệt văn bản, Ghi âm */
+  font-size: var(--text-display);
+  line-height: var(--text-display--line-height);
+  font-weight: var(--font-weight-label);
+}
+@utility type-reading-sm {           /* câu trong bước Gửi bản ghi, popup */
+  font-size: var(--text-title);
+  line-height: var(--text-title--line-height);
+  font-weight: var(--font-weight-label);
+}
+@utility type-page-title {           /* 1 tiêu đề mỗi trang - đặt ở Header */
+  font-size: var(--text-headline);
+  line-height: var(--text-headline--line-height);
+  font-weight: var(--font-weight-emphasis);
+}
+@utility type-stat {                 /* số trong thẻ thống kê */
+  font-size: var(--text-stat);
+  line-height: var(--text-stat--line-height);
+  font-weight: var(--font-weight-emphasis);
+  font-variant-numeric: tabular-nums;
+}
+@utility type-section {              /* tiêu đề khối, tiêu đề popup */
+  font-size: var(--text-title);
+  line-height: var(--text-title--line-height);
+  font-weight: var(--font-weight-emphasis);
+}
+@utility type-card-title {           /* tên nhiệm vụ, tiêu đề card nhỏ */
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
+  font-weight: var(--font-weight-emphasis);
+}
+@utility type-body {                 /* đoạn mô tả, ô nhập, câu trong bảng */
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
+  font-weight: var(--font-weight-regular);
+}
+@utility type-button {               /* nút chính */
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
+  font-weight: var(--font-weight-label);
+}
+@utility type-ui {                   /* ô bảng, nút phụ, lựa chọn, menu */
+  font-size: var(--text-ui);
+  line-height: var(--text-ui--line-height);
+  font-weight: var(--font-weight-regular);
+}
+@utility type-label {                /* nhãn ô nhập, tiêu đề bảng, bước TaskStepper */
+  font-size: var(--text-meta);
+  line-height: var(--text-meta--line-height);
+  font-weight: var(--font-weight-label);
+}
+@utility type-meta {                 /* mô tả phụ, ngày giờ */
+  font-size: var(--text-meta);
+  line-height: var(--text-meta--line-height);
+  font-weight: var(--font-weight-regular);
+  font-variant-numeric: tabular-nums;
+}
+@utility type-caption {              /* badge, nhãn thẻ thống kê, gợi ý dưới ô nhập */
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  font-weight: var(--font-weight-label);
+}
+
+/* Trình duyệt mặc định in đậm <th> (700) - cho tiêu đề bảng lấy độ đậm từ hàng/khung chứa (type-label = 500) */
+@layer base {
+  th {
+    font-weight: inherit;
+  }
+}
