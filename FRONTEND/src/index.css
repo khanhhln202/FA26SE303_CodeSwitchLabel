@@ -1,0 +1,81 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "./constants/typography.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    /* Thêm dòng khai báo màu brand của bạn vào đây */
+    --color-brand-800: #3730A3;
+    
+    --font-heading: var(--font-sans);
+    --color-sidebar-ring: var(--sidebar-ring);
+    /* ... các biến màu khác giữ nguyên ... */
+}
+
+/* ===== Tuỳ chỉnh Toaster (sonner) - CHỈ 1 bản duy nhất, đừng dán thêm lần nữa ===== */
+
+/* Ép cứng nền/viền/bóng đổ cho toast - không phụ thuộc biến --popover của theme,
+   tránh trường hợp biến đó nhạt hoặc có độ trong suốt khiến toast khó nhìn */
+.cn-toast {
+  background: #ffffff !important;
+  border: 1px solid #E5E2D8 !important;
+  border-left: 4px solid var(--toast-accent, #E5E2D8) !important;
+  box-shadow: 0 8px 24px rgba(16, 17, 20, 0.16) !important;
+  opacity: 1 !important;
+  position: relative;
+  overflow: hidden;
+}
+
+.cn-toast [data-title] {
+  color: #16171C !important;
+}
+
+.cn-toast [data-description] {
+  color: #6E7078 !important;
+}
+
+/* Màu riêng theo từng loại toast - icon và vạch trái đổi theo, dễ phân biệt ngay khi liếc qua */
+.cn-toast[data-type="success"] { --toast-accent: #3FA66B; }
+.cn-toast[data-type="error"]   { --toast-accent: #C63B3B; }
+.cn-toast[data-type="warning"] { --toast-accent: #D9A441; }
+.cn-toast[data-type="info"]    { --toast-accent: #3B82F6; }
+
+.cn-toast [data-icon] {
+  color: var(--toast-accent, #6E7078) !important;
+}
+
+/* Thanh đếm giờ ở đáy mỗi toast - cùng màu với loại toast, phần còn lại dồn về bên phải,
+   viền trái lùi dần sang phải trong 4s (khớp duration mặc định của Sonner) */
+.cn-toast::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  width: 100%;
+  background: #E5E2D8;
+  z-index: 0;
+}
+
+.cn-toast::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  width: 100%;
+  background: var(--toast-accent, #FF4B2E);
+  z-index: 1;
+  animation: cn-toast-progress 4s linear forwards;
+}
+
+@keyframes cn-toast-progress {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
