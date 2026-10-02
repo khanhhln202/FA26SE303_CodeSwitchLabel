@@ -1114,7 +1114,7 @@ export default function TaskManagerManagement() {
               <div>
                 <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">Xác nhận xóa đợt</h3>
                 <p className="text-[11px] mt-1 break-words text-gray-500 dark:text-gray-400">
-                  Bạn có chắc muốn xóa <span className="font-bold text-gray-900 dark:text-gray-200">"{deletingBatch.name}"</span>? Các nhiệm vụ trong đợt này sẽ trở về trạng thái chưa được phân đợt.
+                  Bạn có chắc muốn xóa <span className="font-bold text-gray-900 dark:text-gray-200">"{deletingBatch.name}"</span>? 
                 </p>
               </div>
               <div className="flex gap-2 pt-1">
