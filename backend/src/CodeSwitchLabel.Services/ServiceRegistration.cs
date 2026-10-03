@@ -67,6 +67,8 @@ public static class ServiceRegistration
         services.AddScoped<IRecordingRepository, RecordingRepository>();
         services.AddScoped<IReviewRepository, ReviewRepository>();
         services.AddScoped<ITaskRepository, TaskRepository>();
+        services.AddScoped<ICampaignRepository, CampaignRepository>();
+        services.AddScoped<IUserDomainRepository, UserDomainRepository>();
         services.AddScoped<ISystemConfigRepository, SystemConfigRepository>();
         services.AddScoped<IReasonRepository, ReasonRepository>();
         services.AddScoped<IStatisticsRepository, StatisticsRepository>();
@@ -82,6 +84,7 @@ public static class ServiceRegistration
         // nằm chung transaction với việc nộp bản ghi hay duyệt.
         services.AddScoped<ITaskProgressTracker, TaskProgressTracker>();
         services.AddScoped<ITaskService, TaskService>();
+        services.AddScoped<ICampaignService, CampaignService>();
 
         services.AddScoped<ISystemConfigService, SystemConfigService>();
         services.AddScoped<IReasonService, ReasonService>();
@@ -91,7 +94,7 @@ public static class ServiceRegistration
     }
 
     /// <summary>
-    /// 18 kiểu ENUM của lược đồ: enum trong code ứng với kiểu nào dưới PostgreSQL.
+    /// 20 kiểu ENUM của lược đồ: enum trong code ứng với kiểu nào dưới PostgreSQL.
     /// Thiếu một dòng ở đây là mọi truy vấn chạm tới cột đó đều lỗi lúc chạy,
     /// nên danh sách phải khớp đúng docs/codeswitchlabel.sql.
     /// </summary>
@@ -104,8 +107,10 @@ public static class ServiceRegistration
         (typeof(ScriptStatus), "script_status"),
         (typeof(ScriptDomain), "script_domain"),
         (typeof(ScriptReviewAction), "script_review_action"),
+        (typeof(ScriptWordRelation), "script_word_relation"),
         (typeof(TaskType), "task_type"),
         (typeof(WorkTaskStatus), "task_status"),
+        (typeof(CampaignStatus), "campaign_status"),
         (typeof(AssignmentStatus), "assignment_status"),
         (typeof(TaskScriptStatus), "task_script_status"),
         (typeof(SentenceVariant), "sentence_variant"),

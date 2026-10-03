@@ -88,6 +88,14 @@ public record ChangeRoleRequest
     public RoleName? Role { get; init; }
 }
 
+/// <summary>
+/// Đặt lại toàn bộ chủ đề một Reviewer đủ trình độ duyệt. Gửi danh sách rỗng để thu hết chủ đề.
+/// </summary>
+public record SetDomainsRequest
+{
+    public List<ScriptDomain> Domains { get; init; } = [];
+}
+
 public record ChangePasswordRequest
 {
     [Required(ErrorMessage = "Phải nhập mật khẩu hiện tại.")]

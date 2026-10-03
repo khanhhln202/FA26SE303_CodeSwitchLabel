@@ -141,6 +141,13 @@ public record ReviewScriptRequest
     [StringLength(1000, MinimumLength = 3)]
     public string? EditedVeContent { get; init; }
 
+    /// <summary>
+    /// Ánh xạ lại từ tiếng Anh khi sửa. Bỏ trống thì giữ nguyên alignment cũ; gửi lên thì phải phủ
+    /// đủ số từ tiếng Anh và không được đổi quan hệ Anh–Việt (quan hệ nằm trong mã câu).
+    /// </summary>
+    [JsonPropertyName("editedAlignment")]
+    public List<AlignmentItem>? EditedAlignment { get; init; }
+
     /// <summary>Bắt buộc khi Action = Rejected. Lấy mã từ GET /api/script-error-reasons.</summary>
     [StringLength(50)]
     public string? ErrorReasonCode { get; init; }

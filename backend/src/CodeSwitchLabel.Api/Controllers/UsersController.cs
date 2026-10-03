@@ -1,4 +1,5 @@
 using CodeSwitchLabel.Api.Infrastructure;
+using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Dtos;
 using Microsoft.AspNetCore.Authorization;
@@ -103,6 +104,27 @@ public class UsersController(IUserService userService) : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ResetPasswordResult>> ResetPassword(long id, CancellationToken ct)
         => Ok(await userService.ResetPasswordAsync(id, ct));
+
+    /// <summary>Chủ đề Reviewer này đủ trình độ duyệt nội dung.</summary>
+    /// <remarks>
+    /// Admin không phải ai cũng hiểu mọi chủ đề, nên mỗi Reviewer được phân những chủ đề họ duyệt được.
+    /// Một cặp câu chỉ chuyển sang **đã duyệt** khi có lượt duyệt của người đúng chủ đề.
+    /// </remarks>
+    [HttpGet("{id:long}/domains")]
+    [ProducesResponseType(typeof(IReadOnlyList<ScriptDomain>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyList<ScriptDomain>>> GetDomains(long id, CancellationToken ct)
+        => Ok(await userService.GetDomainsAsync(id, ct));
+
+    /// <summary>Đặt lại toàn bộ chủ đề duyệt của một Reviewer.</summary>
+    /// <remarks>Chủ đề nào không còn trong danh sách gửi lên thì bị gỡ. Chỉ áp dụng cho vai Reviewer.</remarks>
+    [HttpPut("{id:long}/domains")]
+    [ProducesResponseType(typeof(IReadOnlyList<ScriptDomain>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ActionResult<IReadOnlyList<ScriptDomain>>> SetDomains(
+        long id, [FromBody] SetDomainsRequest request, CancellationToken ct)
+        => Ok(await userService.ReplaceDomainsAsync(id, request.Domains, ct));
 }
 
 /// <summary>Người dùng tự quản lý tài khoản của mình.</summary>
@@ -144,4 +166,11 @@ public class MeController(IUserService userService) : ControllerBase
     public async Task<ActionResult<SpeakerProfileDto>> UpdateSpeakerProfile(
         [FromBody] UpdateSpeakerProfileRequest request, CancellationToken ct)
         => Ok(await userService.UpdateOwnSpeakerProfileAsync(User.GetUserId(), request, ct));
+
+    /// <summary>Chủ đề mình đủ trình độ duyệt — để Reviewer biết mình duyệt được câu thuộc chủ đề nào.</summary>
+    [HttpGet("domains")]
+    [Authorize(Roles = "Reviewer")]
+    [ProducesResponseType(typeof(IReadOnlyList<ScriptDomain>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<ScriptDomain>>> GetDomains(CancellationToken ct)
+        => Ok(await userService.GetDomainsAsync(User.GetUserId(), ct));
 }

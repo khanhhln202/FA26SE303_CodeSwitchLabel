@@ -23,14 +23,17 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<AppUser> AppUsers => Set<AppUser>();
     public DbSet<SpeakerProfile> SpeakerProfiles => Set<SpeakerProfile>();
+    public DbSet<UserDomain> UserDomains => Set<UserDomain>();
     public DbSet<SystemConfig> SystemConfigs => Set<SystemConfig>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     public DbSet<ImportBatch> ImportBatches => Set<ImportBatch>();
     public DbSet<Script> Scripts => Set<Script>();
+    public DbSet<ScriptWord> ScriptWords => Set<ScriptWord>();
     public DbSet<ScriptErrorReason> ScriptErrorReasons => Set<ScriptErrorReason>();
     public DbSet<ScriptReview> ScriptReviews => Set<ScriptReview>();
 
+    public DbSet<Campaign> Campaigns => Set<Campaign>();
     public DbSet<WorkTask> WorkTasks => Set<WorkTask>();
     public DbSet<TaskAssignment> TaskAssignments => Set<TaskAssignment>();
     public DbSet<TaskScript> TaskScripts => Set<TaskScript>();
@@ -48,6 +51,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
     public DbSet<SpeakerPerformance> SpeakerPerformance => Set<SpeakerPerformance>();
     public DbSet<ReviewerPerformance> ReviewerPerformance => Set<ReviewerPerformance>();
     public DbSet<RejectionReasonStat> RejectionReasonStats => Set<RejectionReasonStat>();
+    public DbSet<CampaignProgress> CampaignProgress => Set<CampaignProgress>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -100,8 +104,10 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         b.HasPostgresEnum<ScriptStatus>();
         b.HasPostgresEnum<ScriptDomain>();
         b.HasPostgresEnum<ScriptReviewAction>();
+        b.HasPostgresEnum<ScriptWordRelation>();
         b.HasPostgresEnum<TaskType>();
         b.HasPostgresEnum<WorkTaskStatus>(name: "task_status");
+        b.HasPostgresEnum<CampaignStatus>();
         b.HasPostgresEnum<AssignmentStatus>();
         b.HasPostgresEnum<TaskScriptStatus>();
         b.HasPostgresEnum<SentenceVariant>();
@@ -152,6 +158,14 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.HasOne(x => x.User).WithOne(u => u.SpeakerProfile)
                 .HasForeignKey<SpeakerProfile>(x => x.UserId);
         });
+
+        b.Entity<UserDomain>(e =>
+        {
+            e.ToTable("user_domain");
+            e.HasKey(x => new { x.UserId, x.Domain });
+
+            e.HasOne(x => x.User).WithMany(u => u.Domains).HasForeignKey(x => x.UserId);
+        });
     }
 
     private static void MapScripts(ModelBuilder b)
@@ -168,10 +182,20 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.ToTable("script");
             e.HasKey(x => x.ScriptId);
             e.Property(x => x.ScriptId).HasMaxLength(11).ValueGeneratedNever();
-            e.Property(x => x.Alignment).HasColumnType("jsonb");
 
             e.HasOne(x => x.Creator).WithMany().HasForeignKey(x => x.CreatedBy);
             e.HasOne(x => x.ImportBatch).WithMany(i => i.Scripts).HasForeignKey(x => x.ImportBatchId);
+        });
+
+        b.Entity<ScriptWord>(e =>
+        {
+            e.ToTable("script_word");
+            e.HasKey(x => new { x.ScriptId, x.WordPosition });
+            e.Property(x => x.ScriptId).HasMaxLength(11);
+            e.Property(x => x.EnWord).HasMaxLength(100);
+            e.Property(x => x.ViWord).HasMaxLength(100);
+
+            e.HasOne(x => x.Script).WithMany(s => s.Words).HasForeignKey(x => x.ScriptId);
         });
 
         b.Entity<ScriptErrorReason>(e =>
@@ -196,11 +220,23 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
 
     private static void MapTasks(ModelBuilder b)
     {
+        b.Entity<Campaign>(e =>
+        {
+            e.ToTable("campaign");
+            e.HasKey(x => x.CampaignId);
+            e.Property(x => x.CampaignName).HasMaxLength(255);
+            e.Property(x => x.StartDate).HasColumnType("date");
+            e.Property(x => x.EndDate).HasColumnType("date");
+
+            e.HasOne(x => x.Creator).WithMany().HasForeignKey(x => x.CreatedBy);
+        });
+
         b.Entity<WorkTask>(e =>
         {
             e.ToTable("task");
             e.HasKey(x => x.TaskId);
             e.HasOne(x => x.Creator).WithMany().HasForeignKey(x => x.CreatedBy);
+            e.HasOne(x => x.Campaign).WithMany(c => c.Tasks).HasForeignKey(x => x.CampaignId);
         });
 
         b.Entity<TaskAssignment>(e =>
@@ -340,6 +376,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         b.Entity<SpeakerPerformance>().HasNoKey().ToView("v_speaker_performance");
         b.Entity<ReviewerPerformance>().HasNoKey().ToView("v_reviewer_performance");
         b.Entity<RejectionReasonStat>().HasNoKey().ToView("v_rejection_reason_stats");
+        b.Entity<CampaignProgress>().HasNoKey().ToView("v_campaign_progress");
     }
 
     private static RoleName ParseRole(string value) =>

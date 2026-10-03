@@ -29,10 +29,12 @@ public class TasksController(ITaskService taskService) : ControllerBase
 {
     /// <summary>Tạo task mới — ở trạng thái Draft.</summary>
     /// <remarks>
-    /// Hạn hoàn thành gửi kèm múi giờ nào cũng được, ví dụ <c>2026-09-30T17:00:00+07:00</c>;
-    /// backend đổi sang UTC trước khi lưu. Hạn phải nằm trong tương lai.
+    /// Task phải thuộc một chiến dịch đã có; hạn hoàn thành phải nằm trong khoảng ngày của chiến dịch.
+    /// Hạn gửi kèm múi giờ nào cũng được, ví dụ <c>2026-09-30T17:00:00+07:00</c>;
+    /// backend đổi sang UTC trước khi lưu.
     /// </remarks>
     [HttpPost]
+    [Authorize(Roles = "TaskManager")]
     [ProducesResponseType(typeof(TaskDetailDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<TaskDetailDto>> Create(

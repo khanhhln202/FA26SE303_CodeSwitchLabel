@@ -14,6 +14,8 @@ internal static class TaskMapper
 {
     public static TaskListItemDto ToListItem(this TaskRow r, DateTimeOffset now) =>
         new(r.TaskId,
+            r.CampaignId,
+            r.CampaignName,
             r.TaskType,
             r.Description,
             r.Status,
@@ -35,6 +37,7 @@ internal static class TaskMapper
 
 public class TaskService(
     ITaskRepository tasks,
+    ICampaignRepository campaigns,
     ITaskProgressTracker tracker,
     ISystemConfigService config,
     TimeProvider clock) : ITaskService
@@ -44,13 +47,44 @@ public class TaskService(
     {
         var now = clock.GetUtcNow();
 
+        var campaignId = request.CampaignId!.Value;
+
+        var campaign = await campaigns.GetAsync(campaignId, ct)
+            ?? throw new NotFoundException("campaign_not_found", $"Không tìm thấy chiến dịch #{campaignId}.");
+
+        var targetQty = request.TargetQty!.Value;
+        var deadline = ToUtcFuture(request.Deadline!.Value, now);
+
+        // Hạn task phải nằm trong khoảng ngày của chiến dịch (trigger của database cũng chặn).
+        var deadlineDate = DateOnly.FromDateTime(deadline.UtcDateTime);
+
+        if (deadlineDate < campaign.StartDate || deadlineDate > campaign.EndDate)
+        {
+            throw new UnprocessableException(
+                "task_deadline_outside_campaign",
+                $"Hạn {deadlineDate:yyyy-MM-dd} phải nằm trong khoảng ngày của chiến dịch " +
+                $"{campaign.StartDate:yyyy-MM-dd} đến {campaign.EndDate:yyyy-MM-dd}.");
+        }
+
+        // Tổng chỉ tiêu các task không được vượt chỉ tiêu chiến dịch.
+        var allocated = await campaigns.SumAllocatedAsync(campaignId, ct);
+
+        if (allocated + targetQty > campaign.TargetQty)
+        {
+            throw new UnprocessableException(
+                "task_target_exceeds_campaign",
+                $"Chiến dịch #{campaignId} đã chia {allocated}/{campaign.TargetQty} cặp câu; " +
+                $"thêm {targetQty} là vượt chỉ tiêu.");
+        }
+
         var task = new WorkTask
         {
+            CampaignId = campaignId,
             CreatedBy = createdById,
             TaskType = request.TaskType!.Value,
             Description = Clean(request.Description),
-            TargetQty = request.TargetQty!.Value,
-            Deadline = ToUtcFuture(request.Deadline!.Value, now),
+            TargetQty = targetQty,
+            Deadline = deadline,
             Status = WorkTaskStatus.Draft,
             CreatedAt = now
         };

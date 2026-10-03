@@ -34,6 +34,8 @@ public interface IScriptRepository
     void Add(Script script);
     void AddReview(ScriptReview review);
     void AddBatch(ImportBatch batch);
+    void AddWords(IEnumerable<ScriptWord> words);
+    void RemoveWords(IEnumerable<ScriptWord> words);
 
     Task<int> SaveChangesAsync(CancellationToken ct = default);
 }
@@ -57,7 +59,7 @@ public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
             // toán tử ILIKE của PostgreSQL nên không phải hạ chữ thường cả cột.
             query = query.Where(s =>
                 EF.Functions.ILike(s.CsContent, $"%{needle}%") ||
-                EF.Functions.ILike(s.VeContent, $"%{needle}%"));
+                EF.Functions.ILike(s.ViContent, $"%{needle}%"));
         }
 
         var total = await query.CountAsync(ct);
@@ -75,11 +77,12 @@ public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
         db.Scripts.AsNoTracking().FirstOrDefaultAsync(s => s.ScriptId == id, ct);
 
     public Task<Script?> GetForUpdateAsync(string id, CancellationToken ct = default) =>
-        db.Scripts.FirstOrDefaultAsync(s => s.ScriptId == id, ct);
+        db.Scripts.Include(s => s.Words).FirstOrDefaultAsync(s => s.ScriptId == id, ct);
 
     public Task<Script?> GetWithReviewsAsync(string id, CancellationToken ct = default) =>
         db.Scripts
             .AsNoTracking()
+            .Include(s => s.Words.OrderBy(w => w.WordPosition))
             .Include(s => s.Reviews.OrderByDescending(r => r.ReviewedAt))
                 .ThenInclude(r => r.ErrorReason)
             .FirstOrDefaultAsync(s => s.ScriptId == id, ct);
@@ -140,6 +143,8 @@ public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
     public void Add(Script script) => db.Scripts.Add(script);
     public void AddReview(ScriptReview review) => db.ScriptReviews.Add(review);
     public void AddBatch(ImportBatch batch) => db.ImportBatches.Add(batch);
+    public void AddWords(IEnumerable<ScriptWord> words) => db.ScriptWords.AddRange(words);
+    public void RemoveWords(IEnumerable<ScriptWord> words) => db.ScriptWords.RemoveRange(words);
 
     public Task<int> SaveChangesAsync(CancellationToken ct = default) => db.SaveChangesAsync(ct);
 }

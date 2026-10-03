@@ -30,13 +30,7 @@ public class Script
     public string CsContent { get; set; } = string.Empty;
 
     /// <summary>Câu thuần Việt tương đương, cũng giữ nhãn.</summary>
-    public string VeContent { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Ánh xạ từng từ tiếng Anh sang nghĩa tiếng Việt, lưu nguyên khối JSON của file nhập.
-    /// Cột thêm vào lược đồ để dữ liệu này không mất sau khi nhập.
-    /// </summary>
-    public string? Alignment { get; set; }
+    public string ViContent { get; set; } = string.Empty;
 
     public ScriptStatus Status { get; set; }
     public int WordCount { get; set; }
@@ -52,9 +46,34 @@ public class Script
 
     public AppUser Creator { get; set; } = null!;
     public ImportBatch? ImportBatch { get; set; }
+    public ICollection<ScriptWord> Words { get; set; } = [];
     public ICollection<ScriptReview> Reviews { get; set; } = [];
     public ICollection<Recording> Recordings { get; set; } = [];
     public ICollection<TaskScript> TaskScripts { get; set; } = [];
+}
+
+/// <summary>
+/// Một từ tiếng Anh nằm trong script.cs_content, kèm nghĩa tiếng Việt tương ứng và cách chúng
+/// liên hệ với nhau. Đúng một dòng cho mỗi từ tiếng Anh; từ nào không có dòng thì là tiếng Việt.
+/// Số dòng phải khớp script.en_word_count và chữ số 3 của mã script, do trigger defer của
+/// database kiểm tra lúc COMMIT (trg_script_word_consistency).
+/// </summary>
+public class ScriptWord
+{
+    public string ScriptId { get; set; } = string.Empty;
+
+    /// <summary>Vị trí 1-based của từ tiếng Anh trong cs_content.</summary>
+    public short WordPosition { get; set; }
+
+    /// <summary>Từ tiếng Anh đúng như viết trong cs_content.</summary>
+    public string EnWord { get; set; } = string.Empty;
+
+    /// <summary>Nghĩa tiếng Việt tương ứng; bằng en_word khi là danh từ riêng.</summary>
+    public string ViWord { get; set; } = string.Empty;
+
+    public ScriptWordRelation Relation { get; set; } = ScriptWordRelation.SemanticEquivalent;
+
+    public Script Script { get; set; } = null!;
 }
 
 public class ScriptErrorReason
@@ -78,7 +97,7 @@ public class ScriptReview
     public short? ErrorReasonId { get; set; }
     public ScriptReviewAction Action { get; set; }
     public string? EditedCsContent { get; set; }
-    public string? EditedVeContent { get; set; }
+    public string? EditedViContent { get; set; }
     public string? Comment { get; set; }
     public DateTimeOffset ReviewedAt { get; set; }
 

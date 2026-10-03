@@ -23,6 +23,7 @@ secrets.json
 .vscode/
 .idea/
 *.swp
+.vshistory/
 
 # ---- Hệ điều hành ----
 Thumbs.db

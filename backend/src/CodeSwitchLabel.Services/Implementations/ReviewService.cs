@@ -66,7 +66,7 @@ public class ReviewService(
         // Bản cs đọc câu chen tiếng Anh, bản vi đọc câu thuần Việt — đưa đúng câu cần đối chiếu.
         var tagged = recording.SentenceVariant == SentenceVariant.CodeSwitching
             ? recording.Script.CsContent
-            : recording.Script.VeContent;
+            : recording.Script.ViContent;
 
         return new NextReviewDto(
             recording.RecordingId,

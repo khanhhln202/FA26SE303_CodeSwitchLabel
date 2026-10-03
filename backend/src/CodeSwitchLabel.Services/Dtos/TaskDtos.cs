@@ -5,6 +5,11 @@ namespace CodeSwitchLabel.Services.Dtos;
 
 public record CreateTaskRequest
 {
+    /// <summary>Mỗi task phải thuộc một chiến dịch — lược đồ đặt campaign_id là NOT NULL.</summary>
+    [Required(ErrorMessage = "Phải chọn chiến dịch.")]
+    [Range(1, long.MaxValue, ErrorMessage = "Chiến dịch không hợp lệ.")]
+    public long? CampaignId { get; init; }
+
     [Required(ErrorMessage = "Phải chọn loại task: Recording hoặc Review.")]
     public TaskType? TaskType { get; init; }
 
@@ -76,6 +81,8 @@ public record TaskProgressDto(
 
 public record TaskListItemDto(
     long TaskId,
+    long CampaignId,
+    string CampaignName,
     TaskType TaskType,
     string? Description,
     WorkTaskStatus Status,

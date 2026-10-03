@@ -19,6 +19,7 @@ public static class ApiTags
     public const string Recordings = "Recordings";
     public const string Reviews = "Reviews";
     public const string Tasks = "Tasks";
+    public const string Campaigns = "Campaigns";
     public const string Statistics = "Dashboard & Statistics";
     public const string Users = "Users";
 
@@ -35,6 +36,7 @@ public static class ApiTags
         (Recordings, "Nộp bản ghi âm, tra cứu, lấy link nghe"),
         (Reviews, "Ba lượt duyệt mù cho mỗi bản ghi, tiến độ người duyệt"),
         (Tasks, "Tạo task, giao việc, theo dõi tiến độ"),
+        (Campaigns, "Chiến dịch thu thập: đơn vị kế hoạch cha của mọi task"),
         (Statistics, "Số liệu tổng quan và chất lượng dữ liệu"),
         (Users, "Quản lý tài khoản và phân quyền")
     ];

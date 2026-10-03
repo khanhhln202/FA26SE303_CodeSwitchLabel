@@ -119,13 +119,15 @@ public class ReasonService(IReasonRepository repository) : IReasonService
 /// Số liệu quản trị. Mọi con số đọc thẳng từ view của lược đồ, không tính lại trong C# —
 /// dashboard và báo cáo SQL vì thế không bao giờ lệch nhau.
 /// </summary>
-public class StatisticsService(IStatisticsRepository repository) : IStatisticsService
+public class StatisticsService(IStatisticsRepository repository, ICampaignRepository campaigns)
+    : IStatisticsService
 {
     public async Task<DashboardDto> GetDashboardAsync(CancellationToken ct = default)
     {
         var s = await repository.GetDashboardAsync(ct);
 
         return new DashboardDto(
+            s.TotalCampaigns, s.OpenCampaigns, s.ActiveCampaigns,
             s.TotalScripts, s.ValidatedScripts, s.PendingScripts,
             s.TotalRecordings, s.ApprovedRecordings, s.RejectedRecordings,
             s.ApprovedDurationSec,
@@ -144,4 +146,11 @@ public class StatisticsService(IStatisticsRepository repository) : IStatisticsSe
     public async Task<IReadOnlyList<RejectionStatDto>> GetRejectionStatsAsync(CancellationToken ct = default) =>
         [.. (await repository.GetRejectionStatsAsync(ct)).Select(r => new RejectionStatDto(
             r.ReasonCode, r.Category.ToString(), r.TimesUsed))];
+
+    public async Task<IReadOnlyList<CampaignProgressDto>> GetCampaignProgressAsync(
+        CancellationToken ct = default) =>
+        [.. (await campaigns.GetProgressAsync(null, ct)).Select(p => new CampaignProgressDto(
+            p.CampaignId, p.CampaignName, p.CampaignTargetQty, p.StartDate, p.EndDate,
+            p.CampaignStatus, p.AllocatedTaskQty, p.RemainingTaskQty,
+            p.TaskCount, p.CompletedTaskCount))];
 }

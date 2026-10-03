@@ -88,6 +88,9 @@ public class DatasetRecording
 
 public class DashboardSummary
 {
+    public long TotalCampaigns { get; set; }
+    public long OpenCampaigns { get; set; }
+    public long ActiveCampaigns { get; set; }
     public long TotalScripts { get; set; }
     public long ValidatedScripts { get; set; }
     public long PendingScripts { get; set; }
@@ -124,4 +127,22 @@ public class RejectionReasonStat
     public string ReasonCode { get; set; } = string.Empty;
     public RejectionCategory Category { get; set; }
     public long TimesUsed { get; set; }
+}
+
+/// <summary>
+/// Tiến độ một chiến dịch: chỉ tiêu, phần đã chia cho các task, phần còn lại, số task và số task xong.
+/// Đọc thẳng từ view v_campaign_progress.
+/// </summary>
+public class CampaignProgress
+{
+    public long CampaignId { get; set; }
+    public string CampaignName { get; set; } = string.Empty;
+    public int CampaignTargetQty { get; set; }
+    public DateOnly StartDate { get; set; }
+    public DateOnly EndDate { get; set; }
+    public CampaignStatus CampaignStatus { get; set; }
+    public long AllocatedTaskQty { get; set; }
+    public long RemainingTaskQty { get; set; }
+    public long TaskCount { get; set; }
+    public long CompletedTaskCount { get; set; }
 }
