@@ -74,8 +74,8 @@ Gói này cho 100 USD credit trong 12 tháng và **không cần thẻ**, chỉ c
 curl -fsSL https://get.docker.com | sh
 
 # 2. Lấy mã nguồn
-git clone git@github.com:khanhhln202/codeswitchlabel-backend.git
-cd codeswitchlabel-backend
+git clone git@github.com:khanhhln202/FA26SE303_CodeSwitchLabel.git
+cd FA26SE303_CodeSwitchLabel
 
 # 3. Điền cấu hình
 cp deploy/.env.example deploy/.env
