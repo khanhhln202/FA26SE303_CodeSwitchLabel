@@ -9,14 +9,16 @@ BEGIN;
 -- ============================================================
 -- 1. ENUM TYPES
 -- ============================================================
-CREATE TYPE user_status           AS ENUM ('active','inactive');
+CREATE TYPE user_status           AS ENUM ('active','inactive','suspended');
 CREATE TYPE occupation            AS ENUM ('student','employed','other');
 CREATE TYPE config_value_type     AS ENUM ('int','bool','string');
 CREATE TYPE audit_action          AS ENUM ('create','update','delete','import','export','assign','release','login');
 CREATE TYPE script_status         AS ENUM ('pending_validation','validated','rejected','deactivated');
 CREATE TYPE script_domain         AS ENUM ('it_technology','education','daily_life');
 CREATE TYPE script_review_action  AS ENUM ('accepted','edited','rejected');
+CREATE TYPE script_word_relation  AS ENUM ('semantic_equivalent','proper_noun');
 CREATE TYPE task_type             AS ENUM ('recording','review');
+CREATE TYPE campaign_status         AS ENUM ('draft','open','in_progress','completed','cancelled');
 CREATE TYPE task_status           AS ENUM ('draft','open','in_progress','completed','cancelled');
 CREATE TYPE assignment_status     AS ENUM ('active','completed','reassigned','cancelled');
 CREATE TYPE task_script_status    AS ENUM ('pending','completed','rejected');
@@ -71,6 +73,15 @@ CREATE TABLE speaker_profile (                    -- 1 : 0..1 with app_user
     major         VARCHAR(100)                    -- chuyên ngành: IT | english | business ...
 );
 
+-- Domains a reviewer is qualified to validate (Admin cannot judge every domain).
+CREATE TABLE user_domain (
+    user_id     BIGINT NOT NULL REFERENCES app_user(user_id) ON DELETE CASCADE,
+    domain      script_domain NOT NULL,
+    assigned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, domain)
+);
+CREATE INDEX idx_user_domain_domain ON user_domain (domain);
+
 CREATE TABLE system_config (
     config_id    SMALLINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     config_key   VARCHAR(100) NOT NULL UNIQUE,
@@ -111,12 +122,8 @@ CREATE TABLE import_batch (
 
 CREATE TABLE script (
     script_id       VARCHAR(11) PRIMARY KEY,       -- natural key: s_ + 9 meaningful digits
-    cs_content      TEXT NOT NULL,                 -- code-switching sentence, KEEPS the [vi]/[en] tags
-    ve_content      TEXT NOT NULL,                 -- pure Vietnamese equivalent
-    -- Word-level mapping from input_text.json, e.g. [{"source":"scan","target":"quét",...}].
-    -- Kept as JSONB because SCRIPT_EN_WORD was dropped: without this column the alignment
-    -- the teacher provides would be lost right after import.
-    alignment       JSONB,
+    cs_content      TEXT NOT NULL,                 -- code-switching sentence
+    vi_content      TEXT NOT NULL,                 -- pure Vietnamese equivalent
     status          script_status NOT NULL DEFAULT 'pending_validation',
     word_count      INT NOT NULL DEFAULT 0,
     en_word_count   INT NOT NULL DEFAULT 0,
@@ -129,8 +136,10 @@ CREATE TABLE script (
     -- ID digits must stay meaningful (teacher's rule):
     --   digit 1 (pos 3) = number of embedded English words
     --   digit 2 (pos 4) = domain code (1 IT / 2 education / 3 daily life)
-    --   digit 3 (pos 5) = EN-VN relation; no matching column since
-    --   SCRIPT_EN_WORD was removed -> enforced only at generation time.
+    --   digit 3 (pos 5) = EN-VN relation: 2 if the script has any proper_noun
+    --   row in script_word, else 1. The relation is stored per word in
+    --   script_word, so digits 1 and 3 are checked at COMMIT by the deferred
+    --   constraint trigger trg_script_word_consistency (section 5).
     CONSTRAINT ck_script_id_word_digit   CHECK (substr(script_id, 3, 1) = en_word_count::text),
     CONSTRAINT ck_script_id_domain_digit CHECK (substr(script_id, 4, 1) =
         CASE domain WHEN 'it_technology' THEN '1'
@@ -145,6 +154,20 @@ CREATE INDEX idx_script_status       ON script (status);        -- review/record
 CREATE INDEX idx_script_domain       ON script (domain);
 CREATE INDEX idx_script_created_by   ON script (created_by);
 CREATE INDEX idx_script_import_batch ON script (import_batch_id);
+
+-- One row per EMBEDDED ENGLISH word of script.cs_content, storing both sides
+-- (English word + Vietnamese counterpart) and how they relate. Mirrors the
+-- "alignment" block of input_text.json. Words without a row are Vietnamese.
+CREATE TABLE script_word (
+    script_id     VARCHAR(11) NOT NULL REFERENCES script(script_id) ON DELETE CASCADE,
+    word_position SMALLINT NOT NULL,               -- 1-based position in cs_content
+    en_word       VARCHAR(100) NOT NULL,
+    vi_word       VARCHAR(100) NOT NULL,           -- = en_word when proper_noun
+    relation      script_word_relation NOT NULL DEFAULT 'semantic_equivalent',
+    PRIMARY KEY (script_id, word_position),
+    CONSTRAINT ck_script_word_position CHECK (word_position >= 1),
+    CONSTRAINT ck_script_word_proper   CHECK (relation <> 'proper_noun' OR vi_word = en_word)
+);
 
 CREATE TABLE script_error_reason (
     reason_id   SMALLINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -161,30 +184,52 @@ CREATE TABLE script_review (
     error_reason_id   SMALLINT REFERENCES script_error_reason(reason_id),
     action            script_review_action NOT NULL,
     edited_cs_content TEXT,
-    edited_ve_content TEXT,
+    edited_vi_content TEXT,
     comment           TEXT,
     reviewed_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     -- edits always apply to the sentence PAIR as a unit
     CONSTRAINT ck_script_review_edited CHECK (action <> 'edited'
-        OR (edited_cs_content IS NOT NULL AND edited_ve_content IS NOT NULL))
+        OR (edited_cs_content IS NOT NULL AND edited_vi_content IS NOT NULL))
 );
 
 CREATE INDEX idx_script_review_script ON script_review (script_id);
 CREATE INDEX idx_script_review_user   ON script_review (user_id);
 
 -- ------------------------------------------------------------
--- TASK
+-- CAMPAIGN / TASK
 -- ------------------------------------------------------------
-CREATE TABLE task (
-    task_id     BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    created_by  BIGINT NOT NULL REFERENCES app_user(user_id),
-    task_type   task_type NOT NULL,
-    description TEXT,
-    target_qty  INT NOT NULL CHECK (target_qty > 0),
-    deadline    TIMESTAMPTZ,
-    status      task_status NOT NULL DEFAULT 'draft',
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+-- A campaign is the planning unit created by the Task Manager for a
+-- collection period (typically 1-2 weeks / month).
+CREATE TABLE campaign (
+    campaign_id   BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    campaign_name VARCHAR(255) NOT NULL,
+    target_qty    INT NOT NULL,
+    start_date    DATE NOT NULL,
+    end_date      DATE NOT NULL,
+    status        campaign_status NOT NULL DEFAULT 'draft',
+    created_by    BIGINT NOT NULL REFERENCES app_user(user_id),
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT ck_campaign_target_qty CHECK (target_qty BETWEEN 2000 AND 5000),
+    CONSTRAINT ck_campaign_dates CHECK (start_date <= end_date)
 );
+
+CREATE INDEX idx_campaign_created_by ON campaign (created_by);
+CREATE INDEX idx_campaign_status     ON campaign (status);
+CREATE INDEX idx_campaign_dates      ON campaign (start_date, end_date);
+
+CREATE TABLE task (
+    task_id      BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    campaign_id  BIGINT NOT NULL REFERENCES campaign(campaign_id),
+    created_by   BIGINT NOT NULL REFERENCES app_user(user_id),
+    task_type    task_type NOT NULL,
+    description  TEXT,
+    target_qty   INT NOT NULL CHECK (target_qty > 0),
+    deadline     TIMESTAMPTZ,
+    status       task_status NOT NULL DEFAULT 'draft',
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_task_campaign ON task (campaign_id);
 
 CREATE TABLE task_assignment (
     assignment_id     BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,  -- surrogate: keeps history
@@ -221,6 +266,7 @@ CREATE TABLE recording (
     audio_format     VARCHAR(10) NOT NULL DEFAULT 'wav',
     status           recording_status NOT NULL DEFAULT 'pending_review',
     duration_sec     NUMERIC(8,2) NOT NULL CHECK (duration_sec > 0),
+    qc_metrics       JSONB,                        -- auto-QC result at upload; NULL until run
     recorded_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT ck_recording_id_format CHECK
         (recording_id ~ '^r_(cs|vi)_[0-9]{9}(_t[2-9][0-9]*)?$'),
@@ -315,18 +361,14 @@ CREATE TABLE dataset_recording (
 CREATE INDEX idx_dataset_recording_recording ON dataset_recording (recording_id);
 
 -- ============================================================
--- 4. AUDIT_LOG MONTHLY PARTITIONS (2025-01 .. 2028-12)
+-- 4. AUDIT_LOG MONTHLY PARTITIONS (2025-01 .. 2027-12)
+--    Covers the whole capstone (09/2026 - 03/2027) with room to spare.
 --    Extend yearly, or manage with pg_partman / cron.
---
---    A row whose changed_at has no partition makes the INSERT fail, and because fn_audit
---    runs inside the business transaction, the whole business operation fails with it.
---    Two safeguards: four years of monthly partitions, plus a DEFAULT partition that
---    catches anything outside that range.
 -- ============================================================
 DO $$ DECLARE
     d DATE;
 BEGIN
-    FOR i IN 0..47 LOOP
+    FOR i IN 0..35 LOOP
         d := DATE '2025-01-01' + (i * INTERVAL '1 month');
         EXECUTE format(
             'CREATE TABLE IF NOT EXISTS audit_log_%s PARTITION OF audit_log
@@ -335,7 +377,12 @@ BEGIN
     END LOOP;
 END $$;
 
-CREATE TABLE IF NOT EXISTS audit_log_default PARTITION OF audit_log DEFAULT;
+-- Safety net: if the date ever passes the last monthly partition above
+-- (2027-12), audited INSERT/UPDATE on script, campaign and task would fail
+-- with "no partition found". Rows landing here are caught instead.
+-- Before creating a new monthly partition, move any rows out of the default
+-- partition that fall in that month (or use pg_partman).
+CREATE TABLE audit_log_default PARTITION OF audit_log DEFAULT;
 
 -- ============================================================
 -- 5. TRIGGER FUNCTIONS  (rules the ERD marks "trigger-enforced")
@@ -351,6 +398,319 @@ CREATE TRIGGER trg_script_touch        BEFORE UPDATE ON script
     FOR EACH ROW EXECUTE FUNCTION fn_touch_updated_at();
 CREATE TRIGGER trg_system_config_touch BEFORE UPDATE ON system_config
     FOR EACH ROW EXECUTE FUNCTION fn_touch_updated_at();
+
+-- [ERD / CAMPAIGN] Campaign creators must be Task Manager or Admin.
+-- Task creators must be Task Manager.
+CREATE OR REPLACE FUNCTION fn_require_task_manager_creator() RETURNS trigger AS $$
+DECLARE
+    v_role_name VARCHAR(32);
+BEGIN
+    SELECT r.role_name
+      INTO v_role_name
+      FROM app_user u
+      JOIN role r ON r.role_id = u.role_id
+     WHERE u.user_id = NEW.created_by;
+
+    IF TG_TABLE_NAME = 'campaign' THEN
+        IF v_role_name NOT IN ('task_manager', 'admin') THEN
+            RAISE EXCEPTION 'campaign creator (user %) must have task_manager or admin role', NEW.created_by;
+        END IF;
+    ELSIF TG_TABLE_NAME = 'task' THEN
+        IF v_role_name IS DISTINCT FROM 'task_manager' THEN
+            RAISE EXCEPTION 'task creator (user %) must have task_manager role', NEW.created_by;
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_campaign_creator_role
+    BEFORE INSERT OR UPDATE OF created_by ON campaign
+    FOR EACH ROW EXECUTE FUNCTION fn_require_task_manager_creator();
+
+CREATE TRIGGER trg_task_creator_role
+    BEFORE INSERT OR UPDATE OF created_by ON task
+    FOR EACH ROW EXECUTE FUNCTION fn_require_task_manager_creator();
+
+-- [ERD / CAMPAIGN] Every task deadline, when present, must fall
+-- inside its campaign period (inclusive of the end date).
+CREATE OR REPLACE FUNCTION fn_validate_task_campaign_window() RETURNS trigger AS $$
+DECLARE
+    v_start_date DATE;
+    v_end_date   DATE;
+BEGIN
+    SELECT start_date, end_date
+      INTO v_start_date, v_end_date
+      FROM campaign
+     WHERE campaign_id = NEW.campaign_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'campaign % does not exist', NEW.campaign_id;
+    END IF;
+
+    IF NEW.deadline IS NOT NULL
+       AND (
+           NEW.deadline < v_start_date::timestamptz
+           OR NEW.deadline >= (v_end_date + 1)::timestamptz
+       ) THEN
+        RAISE EXCEPTION
+            'task % deadline % must be within campaign % (% to %)',
+            NEW.task_id, NEW.deadline, NEW.campaign_id, v_start_date, v_end_date;
+    END IF;
+
+    RETURN NEW;
+END $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_task_campaign_window
+    BEFORE INSERT OR UPDATE OF campaign_id, deadline ON task
+    FOR EACH ROW EXECUTE FUNCTION fn_validate_task_campaign_window();
+
+-- [ERD / CAMPAIGN] The sum of task target quantities in one campaign
+-- may not exceed the campaign target.
+--
+-- The campaign row is locked in a deterministic order so concurrent
+-- allocations to the same campaign (or moves between campaigns)
+-- cannot race or deadlock because of lock-order inversion.
+CREATE OR REPLACE FUNCTION fn_validate_campaign_task_target() RETURNS trigger AS $$
+DECLARE
+    v_new_target       INT;
+    v_new_total        BIGINT;
+    v_old_target       INT;
+    v_first_campaign   BIGINT;
+    v_second_campaign  BIGINT;
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        -- Deleting a task cannot increase allocation.
+        RETURN OLD;
+    END IF;
+
+    IF TG_OP = 'INSERT' THEN
+        SELECT c.target_qty
+          INTO v_new_target
+          FROM campaign c
+         WHERE c.campaign_id = NEW.campaign_id
+         FOR UPDATE;
+
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'campaign % does not exist', NEW.campaign_id;
+        END IF;
+
+        SELECT COALESCE(SUM(t.target_qty), 0)
+          INTO v_new_total
+          FROM task t
+         WHERE t.campaign_id = NEW.campaign_id;
+
+        IF v_new_total + NEW.target_qty > v_new_target THEN
+            RAISE EXCEPTION
+                'campaign % target exceeded: allocated task quantity % + task quantity % > campaign target %',
+                NEW.campaign_id, v_new_total, NEW.target_qty, v_new_target;
+        END IF;
+
+        RETURN NEW;
+    END IF;
+
+    IF NEW.campaign_id = OLD.campaign_id THEN
+        SELECT c.target_qty
+          INTO v_new_target
+          FROM campaign c
+         WHERE c.campaign_id = NEW.campaign_id
+         FOR UPDATE;
+
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'campaign % does not exist', NEW.campaign_id;
+        END IF;
+
+        SELECT COALESCE(SUM(t.target_qty), 0)
+          INTO v_new_total
+          FROM task t
+         WHERE t.campaign_id = NEW.campaign_id
+           AND t.task_id <> OLD.task_id;
+
+        IF v_new_total + NEW.target_qty > v_new_target THEN
+            RAISE EXCEPTION
+                'campaign % target exceeded: allocated task quantity % + task quantity % > campaign target %',
+                NEW.campaign_id, v_new_total, NEW.target_qty, v_new_target;
+        END IF;
+
+        RETURN NEW;
+    END IF;
+
+    -- UPDATE moving a task from one campaign to another.
+    -- Lock both campaign rows in ascending campaign_id order.
+    v_first_campaign := LEAST(OLD.campaign_id, NEW.campaign_id);
+    v_second_campaign := GREATEST(OLD.campaign_id, NEW.campaign_id);
+
+    PERFORM 1
+      FROM campaign
+     WHERE campaign_id = v_first_campaign
+     FOR UPDATE;
+
+    PERFORM 1
+      FROM campaign
+     WHERE campaign_id = v_second_campaign
+     FOR UPDATE;
+
+    SELECT c.target_qty
+      INTO v_old_target
+      FROM campaign c
+     WHERE c.campaign_id = OLD.campaign_id;
+
+    SELECT c.target_qty
+      INTO v_new_target
+      FROM campaign c
+     WHERE c.campaign_id = NEW.campaign_id;
+
+    IF v_old_target IS NULL OR v_new_target IS NULL THEN
+        RAISE EXCEPTION 'source or destination campaign does not exist';
+    END IF;
+
+    -- The old campaign cannot become over-allocated by moving a task out.
+    -- Check only the destination campaign, excluding the row being moved.
+    SELECT COALESCE(SUM(t.target_qty), 0)
+      INTO v_new_total
+      FROM task t
+     WHERE t.campaign_id = NEW.campaign_id
+       AND t.task_id <> OLD.task_id;
+
+    IF v_new_total + NEW.target_qty > v_new_target THEN
+        RAISE EXCEPTION
+            'campaign % target exceeded: allocated task quantity % + moved task quantity % > campaign target %',
+            NEW.campaign_id, v_new_total, NEW.target_qty, v_new_target;
+    END IF;
+
+    RETURN NEW;
+END $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_task_campaign_target
+    BEFORE INSERT OR UPDATE OF campaign_id, target_qty ON task
+    FOR EACH ROW EXECUTE FUNCTION fn_validate_campaign_task_target();
+
+-- [ERD / CAMPAIGN] Do not lower a campaign target below the
+-- quantities already allocated to its tasks.
+CREATE OR REPLACE FUNCTION fn_validate_campaign_target_update() RETURNS trigger AS $$
+DECLARE
+    v_task_total BIGINT;
+BEGIN
+    IF NEW.target_qty IS DISTINCT FROM OLD.target_qty THEN
+        SELECT COALESCE(SUM(target_qty), 0)
+          INTO v_task_total
+          FROM task
+         WHERE campaign_id = NEW.campaign_id;
+
+        IF v_task_total > NEW.target_qty THEN
+            RAISE EXCEPTION
+                'campaign % target % is below allocated task quantity %',
+                NEW.campaign_id, NEW.target_qty, v_task_total;
+        END IF;
+    END IF;
+
+    IF NEW.start_date > NEW.end_date THEN
+        RAISE EXCEPTION 'campaign % start_date must be on or before end_date',
+            NEW.campaign_id;
+    END IF;
+
+    -- Existing task deadlines must remain inside the new campaign window.
+    IF NEW.start_date IS DISTINCT FROM OLD.start_date
+       OR NEW.end_date IS DISTINCT FROM OLD.end_date THEN
+        IF EXISTS (
+            SELECT 1
+              FROM task
+             WHERE campaign_id = NEW.campaign_id
+               AND deadline IS NOT NULL
+               AND (
+                   deadline < NEW.start_date::timestamptz
+                   OR deadline >= (NEW.end_date + 1)::timestamptz
+               )
+        ) THEN
+            RAISE EXCEPTION
+                'campaign % date range would make one or more task deadlines invalid',
+                NEW.campaign_id;
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_campaign_target_update
+    BEFORE UPDATE OF target_qty, start_date, end_date ON campaign
+    FOR EACH ROW EXECUTE FUNCTION fn_validate_campaign_target_update();
+
+-- [ERD / USER_DOMAIN] A script may only become 'validated' after an
+-- accepted/edited SCRIPT_REVIEW by a user qualified for the script's domain.
+CREATE OR REPLACE FUNCTION fn_script_validated_by_domain_reviewer() RETURNS trigger AS $$ BEGIN
+    IF NEW.status = 'validated'
+       AND (TG_OP = 'INSERT' OR OLD.status IS DISTINCT FROM 'validated') THEN
+        IF NOT EXISTS (
+            SELECT 1
+              FROM script_review sr
+              JOIN user_domain ud ON ud.user_id = sr.user_id
+                                 AND ud.domain  = NEW.domain
+             WHERE sr.script_id = NEW.script_id
+               AND sr.action IN ('accepted','edited')
+        ) THEN
+            RAISE EXCEPTION
+                'script % cannot be validated: no accepted/edited review by a reviewer qualified for domain %',
+                NEW.script_id, NEW.domain;
+        END IF;
+    END IF;
+    RETURN NEW;
+END $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_script_validated_domain
+    BEFORE INSERT OR UPDATE OF status ON script
+    FOR EACH ROW EXECUTE FUNCTION fn_script_validated_by_domain_reviewer();
+
+-- [ERD / SCRIPT_WORD] script_id digits must agree with script_word:
+--   digit 1 = number of English words = COUNT(script_word rows)
+--   digit 3 = 2 if any word is proper_noun, else 1
+-- Deferred to COMMIT so a script and its words can be inserted in any order
+-- inside one transaction (import / edit-regenerate).
+CREATE OR REPLACE FUNCTION fn_script_word_consistency() RETURNS trigger AS $$
+DECLARE
+    v_script_id VARCHAR(11);
+    v_en_count  INT;
+    v_has_proper BOOLEAN;
+    v_expected_relation CHAR(1);
+BEGIN
+    IF TG_TABLE_NAME = 'script' THEN
+        v_script_id := NEW.script_id;
+    ELSIF TG_OP = 'DELETE' THEN
+        v_script_id := OLD.script_id;
+    ELSE
+        v_script_id := NEW.script_id;
+    END IF;
+
+    SELECT en_word_count INTO v_en_count FROM script WHERE script_id = v_script_id;
+    IF NOT FOUND THEN
+        RETURN NULL;   -- script was deleted (words cascade); nothing to check
+    END IF;
+
+    IF (SELECT COUNT(*) FROM script_word WHERE script_id = v_script_id) <> v_en_count THEN
+        RAISE EXCEPTION 'script %: en_word_count % does not match number of script_word rows',
+            v_script_id, v_en_count;
+    END IF;
+
+    SELECT COALESCE(bool_or(relation = 'proper_noun'), FALSE)
+      INTO v_has_proper
+      FROM script_word WHERE script_id = v_script_id;
+    v_expected_relation := CASE WHEN v_has_proper THEN '2' ELSE '1' END;
+
+    IF substr(v_script_id, 5, 1) <> v_expected_relation THEN
+        RAISE EXCEPTION 'script %: id digit 3 must be % (relation derived from script_word)',
+            v_script_id, v_expected_relation;
+    END IF;
+    RETURN NULL;
+END $$ LANGUAGE plpgsql;
+
+CREATE CONSTRAINT TRIGGER trg_script_word_consistency
+    AFTER INSERT OR UPDATE OR DELETE ON script_word
+    DEFERRABLE INITIALLY DEFERRED
+    FOR EACH ROW EXECUTE FUNCTION fn_script_word_consistency();
+
+CREATE CONSTRAINT TRIGGER trg_script_consistency
+    AFTER INSERT OR UPDATE OF en_word_count ON script
+    DEFERRABLE INITIALLY DEFERRED
+    FOR EACH ROW EXECUTE FUNCTION fn_script_word_consistency();
 
 -- [ERD] reviewer_id must NOT equal recording's speaker_id
 CREATE OR REPLACE FUNCTION fn_review_no_self_review() RETURNS trigger AS $$ DECLARE
@@ -470,6 +830,14 @@ CREATE TRIGGER trg_audit_script
     AFTER INSERT OR UPDATE OR DELETE ON script
     FOR EACH ROW EXECUTE FUNCTION fn_audit('script', 'script_id');
 
+CREATE TRIGGER trg_audit_campaign
+    AFTER INSERT OR UPDATE OR DELETE ON campaign
+    FOR EACH ROW EXECUTE FUNCTION fn_audit('campaign', 'campaign_id');
+
+CREATE TRIGGER trg_audit_task
+    AFTER INSERT OR UPDATE OR DELETE ON task
+    FOR EACH ROW EXECUTE FUNCTION fn_audit('task', 'task_id');
+
 -- ============================================================
 -- 6. ID GENERATION HELPERS (call from backend/API)
 -- ============================================================
@@ -552,7 +920,11 @@ INSERT INTO system_config (config_key, config_value, value_type, description) VA
     ('recording.max_trailing_silence_sec',  '1',     'int',    'Max silence after speech (speaker guidance)'),
     ('recording.audio_format_default',      'wav',   'string', 'Default audio format'),
     ('recording.max_take',                  '99',    'int',    'Highest re-record take number'),
-    ('import.max_scripts_per_batch',        '100000','int',    'Sanity cap per import batch');
+    ('import.max_scripts_per_batch',        '100000','int',    'Sanity cap per import batch'),
+    -- anti-junk thresholds: PLACEHOLDER values, confirm with supervisor
+    ('quality.speaker_min_approval_rate',        '60', 'int', 'Min approval rate (%) before a speaker is flagged'),
+    ('quality.speaker_max_consecutive_qc_fail',  '5',  'int', 'Consecutive qc_failed recordings before warning/suspension'),
+    ('quality.min_recordings_before_eval',       '20', 'int', 'Recordings needed before approval rate is evaluated');
 
 -- Bootstrap admin — REPLACE the hash with a real bcrypt hash before first login.
 INSERT INTO app_user (role_id, full_name, email, password_hash, status)
@@ -566,6 +938,9 @@ FROM role WHERE role_name = 'admin';
 
 CREATE VIEW v_dashboard_summary AS
 SELECT
+    (SELECT COUNT(*) FROM campaign)                                  AS total_campaigns,
+    (SELECT COUNT(*) FROM campaign WHERE status = 'open')             AS open_campaigns,
+    (SELECT COUNT(*) FROM campaign WHERE status = 'in_progress')     AS active_campaigns,
     (SELECT COUNT(*) FROM script)                                    AS total_scripts,
     (SELECT COUNT(*) FROM script WHERE status = 'validated')         AS validated_scripts,
     (SELECT COUNT(*) FROM script WHERE status = 'pending_validation') AS pending_scripts,
@@ -615,6 +990,8 @@ GROUP BY u.user_id, u.full_name;
 CREATE VIEW v_task_progress AS
 SELECT
     t.task_id,
+    t.campaign_id,
+    c.campaign_name,
     t.task_type,
     t.status        AS task_status,
     t.target_qty,
@@ -623,7 +1000,31 @@ SELECT
     (SELECT COUNT(*) FROM task_script ts
         WHERE ts.task_id = t.task_id AND ts.status = 'completed')      AS scripts_completed,
     (SELECT COUNT(*) FROM review rv WHERE rv.task_id = t.task_id)      AS reviews_done
-FROM task t;
+FROM task t
+JOIN campaign c ON c.campaign_id = t.campaign_id;
+
+-- Campaign-level planning/progress summary
+CREATE VIEW v_campaign_progress AS
+SELECT
+    c.campaign_id,
+    c.campaign_name,
+    c.target_qty AS campaign_target_qty,
+    c.start_date,
+    c.end_date,
+    c.status AS campaign_status,
+    COALESCE(SUM(t.target_qty), 0) AS allocated_task_qty,
+    c.target_qty - COALESCE(SUM(t.target_qty), 0) AS remaining_task_qty,
+    COUNT(t.task_id) AS task_count,
+    COUNT(t.task_id) FILTER (WHERE t.status = 'completed') AS completed_task_count
+FROM campaign c
+LEFT JOIN task t ON t.campaign_id = c.campaign_id
+GROUP BY
+    c.campaign_id,
+    c.campaign_name,
+    c.target_qty,
+    c.start_date,
+    c.end_date,
+    c.status;
 
 -- Release validation: scripts inside a dataset missing one of the r_cs / r_vi pair
 CREATE VIEW v_dataset_missing_pair AS

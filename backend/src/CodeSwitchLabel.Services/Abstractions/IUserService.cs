@@ -32,4 +32,11 @@ public interface IUserService
     /// <summary>Ghi đè toàn bộ hồ sơ: trường nào gửi null là xoá trắng trường đó.</summary>
     Task<SpeakerProfileDto> UpdateOwnSpeakerProfileAsync(
         long userId, UpdateSpeakerProfileRequest request, CancellationToken ct = default);
+
+    /// <summary>Chủ đề Reviewer này đủ trình độ duyệt nội dung. Rỗng với người không phải Reviewer.</summary>
+    Task<IReadOnlyList<ScriptDomain>> GetDomainsAsync(long userId, CancellationToken ct = default);
+
+    /// <summary>Đặt lại toàn bộ chủ đề duyệt của một Reviewer; chủ đề không còn trong danh sách thì bị gỡ.</summary>
+    Task<IReadOnlyList<ScriptDomain>> ReplaceDomainsAsync(
+        long userId, IReadOnlyList<ScriptDomain> domains, CancellationToken ct = default);
 }

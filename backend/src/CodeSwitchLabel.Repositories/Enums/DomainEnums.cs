@@ -5,7 +5,11 @@ namespace CodeSwitchLabel.Repositories.Enums;
 // Vì database lưu bằng TÊN chứ không phải số, thứ tự khai báo ở đây không quan trọng —
 // nhưng đổi tên một giá trị là hỏng dữ liệu cũ.
 
-public enum UserStatus { Active, Inactive }
+/// <summary>
+/// Trạng thái tài khoản. Suspended = khoá tạm vì dữ liệu kém chất lượng,
+/// khác Inactive là tài khoản đã ngừng dùng. Ngưỡng nằm trong system_config (quality.*).
+/// </summary>
+public enum UserStatus { Active, Inactive, Suspended }
 
 public enum Occupation { Student, Employed, Other }
 
@@ -23,6 +27,12 @@ public enum ScriptDomain { ItTechnology, Education, DailyLife }
 
 public enum ScriptReviewAction { Accepted, Edited, Rejected }
 
+/// <summary>
+/// Quan hệ giữa từ tiếng Anh và từ tiếng Việt tương ứng, lưu theo từng từ trong script_word.
+/// proper_noun = danh từ riêng giữ nguyên, không dịch, nên vi_word phải bằng en_word.
+/// </summary>
+public enum ScriptWordRelation { SemanticEquivalent, ProperNoun }
+
 public enum TaskType { Recording, Review }
 
 /// <summary>
@@ -30,6 +40,12 @@ public enum TaskType { Recording, Review }
 /// System.Threading.Tasks.TaskStatus, nên phải khai báo tên kiểu PostgreSQL một cách tường minh.
 /// </summary>
 public enum WorkTaskStatus { Draft, Open, InProgress, Completed, Cancelled }
+
+/// <summary>
+/// Ứng với kiểu campaign_status. Một chiến dịch là đơn vị kế hoạch của Task Manager
+/// cho một đợt thu thập; mọi task đều phải thuộc một chiến dịch.
+/// </summary>
+public enum CampaignStatus { Draft, Open, InProgress, Completed, Cancelled }
 
 public enum AssignmentStatus { Active, Completed, Reassigned, Cancelled }
 

@@ -196,7 +196,7 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
                 tr.Recording.SentenceVariant,
                 tr.Recording.SentenceVariant == SentenceVariant.CodeSwitching
                     ? tr.Recording.Script.CsContent
-                    : tr.Recording.Script.VeContent,
+                    : tr.Recording.Script.ViContent,
                 tr.Recording.DurationSec,
                 tr.Recording.Status,
                 tr.Status,

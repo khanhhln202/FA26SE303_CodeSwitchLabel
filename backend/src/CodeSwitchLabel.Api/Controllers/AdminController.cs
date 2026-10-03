@@ -97,6 +97,12 @@ public class StatisticsController(IStatisticsService statistics) : ControllerBas
     [ProducesResponseType(typeof(IEnumerable<RejectionStatDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<RejectionStatDto>>> RejectionStats(CancellationToken ct)
         => Ok(await statistics.GetRejectionStatsAsync(ct));
+
+    /// <summary>Tiến độ từng chiến dịch: chỉ tiêu, phần đã chia cho task, phần còn lại, số task đã xong.</summary>
+    [HttpGet("statistics/campaigns")]
+    [ProducesResponseType(typeof(IEnumerable<CampaignProgressDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<CampaignProgressDto>>> Campaigns(CancellationToken ct)
+        => Ok(await statistics.GetCampaignProgressAsync(ct));
 }
 
 public record UpdateConfigRequest

@@ -1,3 +1,4 @@
+using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Services.Dtos;
 
 namespace CodeSwitchLabel.Services.Abstractions;
@@ -57,6 +58,22 @@ public interface IStatisticsService
     Task<IReadOnlyList<SpeakerQualityDto>> GetSpeakerQualityAsync(CancellationToken ct = default);
     Task<IReadOnlyList<ReviewerQualityDto>> GetReviewerQualityAsync(CancellationToken ct = default);
     Task<IReadOnlyList<RejectionStatDto>> GetRejectionStatsAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<CampaignProgressDto>> GetCampaignProgressAsync(CancellationToken ct = default);
+}
+
+/// <summary>Chiến dịch thu thập — đơn vị kế hoạch cha của mọi task.</summary>
+public interface ICampaignService
+{
+    Task<PagedResult<CampaignListItemDto>> SearchAsync(
+        CampaignSearchRequest request, CancellationToken ct = default);
+
+    Task<CampaignDto> GetAsync(long campaignId, CancellationToken ct = default);
+
+    Task<CampaignDto> CreateAsync(
+        CreateCampaignRequest request, long createdById, CancellationToken ct = default);
+
+    Task<CampaignDto> UpdateAsync(
+        long campaignId, UpdateCampaignRequest request, CancellationToken ct = default);
 }
 
 public record SystemConfigDto(
@@ -64,6 +81,9 @@ public record SystemConfigDto(
 
 /// <param name="ApprovedDurationSec">Tổng thời lượng các bản đã duyệt đạt, tính bằng giây.</param>
 public record DashboardDto(
+    long TotalCampaigns,
+    long OpenCampaigns,
+    long ActiveCampaigns,
     long TotalScripts,
     long ValidatedScripts,
     long PendingScripts,
@@ -83,3 +103,16 @@ public record ReviewerQualityDto(
     long UserId, string FullName, long ReviewsDone, long Approvals, long Rejections);
 
 public record RejectionStatDto(string ReasonCode, string Category, long TimesUsed);
+
+/// <summary>Tiến độ một chiến dịch, đọc thẳng từ view v_campaign_progress.</summary>
+public record CampaignProgressDto(
+    long CampaignId,
+    string CampaignName,
+    int CampaignTargetQty,
+    DateOnly StartDate,
+    DateOnly EndDate,
+    CampaignStatus CampaignStatus,
+    long AllocatedTaskQty,
+    long RemainingTaskQty,
+    long TaskCount,
+    long CompletedTaskCount);

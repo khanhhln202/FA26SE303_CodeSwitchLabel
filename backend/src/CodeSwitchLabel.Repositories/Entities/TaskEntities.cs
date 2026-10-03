@@ -2,9 +2,40 @@ using CodeSwitchLabel.Repositories.Enums;
 
 namespace CodeSwitchLabel.Repositories.Entities;
 
+/// <summary>
+/// Chiến dịch thu thập — đơn vị kế hoạch của Task Manager cho một đợt (thường 1-2 tuần).
+/// Mọi task đều thuộc một chiến dịch. Chỉ tiêu và thời gian do trigger của database ràng buộc
+/// với các task con: tổng chỉ tiêu task không được vượt chỉ tiêu chiến dịch, và hạn task phải
+/// nằm trong khoảng ngày của chiến dịch.
+/// </summary>
+public class Campaign
+{
+    public long CampaignId { get; set; }
+    public string CampaignName { get; set; } = string.Empty;
+
+    /// <summary>Chỉ tiêu cặp câu cho cả chiến dịch; lược đồ giới hạn 2000..5000.</summary>
+    public int TargetQty { get; set; }
+
+    public DateOnly StartDate { get; set; }
+    public DateOnly EndDate { get; set; }
+    public CampaignStatus Status { get; set; }
+
+    /// <summary>Người tạo phải mang vai task_manager, do trigger của database chặn.</summary>
+    public long CreatedBy { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public AppUser Creator { get; set; } = null!;
+    public ICollection<WorkTask> Tasks { get; set; } = [];
+}
+
 public class WorkTask
 {
     public long TaskId { get; set; }
+
+    /// <summary>Mỗi task phải thuộc một chiến dịch — lược đồ đặt campaign_id là NOT NULL.</summary>
+    public long CampaignId { get; set; }
+
     public long CreatedBy { get; set; }
     public TaskType TaskType { get; set; }
     public string? Description { get; set; }
@@ -16,6 +47,7 @@ public class WorkTask
     public WorkTaskStatus Status { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 
+    public Campaign Campaign { get; set; } = null!;
     public AppUser Creator { get; set; } = null!;
     public ICollection<TaskAssignment> Assignments { get; set; } = [];
     public ICollection<TaskScript> TaskScripts { get; set; } = [];

@@ -30,6 +30,7 @@ public class AppUser
 
     public Role Role { get; set; } = null!;
     public SpeakerProfile? SpeakerProfile { get; set; }
+    public ICollection<UserDomain> Domains { get; set; } = [];
 }
 
 /// <summary>
@@ -49,6 +50,20 @@ public class SpeakerProfile
 
     /// <summary>Chuyên ngành: IT, english, business…</summary>
     public string? Major { get; set; }
+
+    public AppUser User { get; set; } = null!;
+}
+
+/// <summary>
+/// Chủ đề một Reviewer đủ trình độ duyệt nội dung. Nhờ bảng này, một cặp câu chỉ được
+/// chuyển sang trạng thái validated khi có lượt duyệt của người có đúng chủ đề đó
+/// (trigger trg_script_validated_domain của database chặn).
+/// </summary>
+public class UserDomain
+{
+    public long UserId { get; set; }
+    public ScriptDomain Domain { get; set; }
+    public DateTimeOffset AssignedAt { get; set; }
 
     public AppUser User { get; set; } = null!;
 }

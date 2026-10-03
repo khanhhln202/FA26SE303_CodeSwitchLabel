@@ -36,6 +36,7 @@ internal static class UserMapper
 /// </summary>
 public class UserService(
     IUserRepository users,
+    IUserDomainRepository domains,
     IPasswordHasher hasher,
     IAccessTokenIssuer tokens,
     TimeProvider clock) : IUserService
@@ -238,6 +239,33 @@ public class UserService(
     {
         var user = await users.GetByIdAsync(userId, ct) ?? throw NotFound(userId);
         return user.SpeakerProfile.ToDto();
+    }
+
+    public async Task<IReadOnlyList<ScriptDomain>> GetDomainsAsync(
+        long userId, CancellationToken ct = default)
+    {
+        var user = await users.GetByIdAsync(userId, ct) ?? throw NotFound(userId);
+
+        // Chỉ Reviewer mới có chủ đề duyệt; người vai khác luôn trả rỗng.
+        return user.Role.RoleName == RoleName.Reviewer
+            ? await domains.GetDomainsAsync(userId, ct)
+            : [];
+    }
+
+    public async Task<IReadOnlyList<ScriptDomain>> ReplaceDomainsAsync(
+        long userId, IReadOnlyList<ScriptDomain> items, CancellationToken ct = default)
+    {
+        var user = await users.GetByIdAsync(userId, ct) ?? throw NotFound(userId);
+
+        if (user.Role.RoleName != RoleName.Reviewer)
+        {
+            throw new UnprocessableException(
+                "domains_reviewer_only",
+                "Chỉ Reviewer mới được phân chủ đề duyệt nội dung.");
+        }
+
+        await domains.ReplaceAsync(userId, items, ct);
+        return await domains.GetDomainsAsync(userId, ct);
     }
 
     public async Task<SpeakerProfileDto> UpdateOwnSpeakerProfileAsync(

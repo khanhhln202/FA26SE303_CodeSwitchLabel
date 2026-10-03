@@ -14,6 +14,8 @@ namespace CodeSwitchLabel.Repositories.Repositories;
 /// <param name="UsableItems">Số mục còn làm được — không tính mục đã bị loại.</param>
 public record TaskRow(
     long TaskId,
+    long CampaignId,
+    string CampaignName,
     TaskType TaskType,
     string? Description,
     WorkTaskStatus Status,
@@ -427,6 +429,8 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
     private IQueryable<TaskRow> ProjectRows(IQueryable<WorkTask> source) =>
         source.Select(t => new TaskRow(
             t.TaskId,
+            t.CampaignId,
+            t.Campaign.CampaignName,
             t.TaskType,
             t.Description,
             t.Status,

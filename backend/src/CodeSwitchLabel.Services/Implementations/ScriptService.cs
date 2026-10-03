@@ -13,15 +13,15 @@ namespace CodeSwitchLabel.Services.Implementations;
 internal static class ScriptMapper
 {
     public static ScriptListItemDto ToListItem(this Script s) =>
-        new(s.ScriptId, s.CsContent, s.VeContent, s.Status, s.Domain, s.WordCount, s.EnWordCount, s.CreatedAt);
+        new(s.ScriptId, s.CsContent, s.ViContent, s.Status, s.Domain, s.WordCount, s.EnWordCount, s.CreatedAt);
 
     public static ScriptDetailDto ToDetail(this Script s) =>
         new(s.ScriptId,
             s.CsContent,
             SafeStrip(s.CsContent),
-            s.VeContent,
-            SafeStrip(s.VeContent),
-            ScriptService.ReadAlignment(s.Alignment),
+            s.ViContent,
+            SafeStrip(s.ViContent),
+            ScriptService.ToAlignment(s.Words),
             s.Status,
             s.Domain,
             s.WordCount,
@@ -32,7 +32,7 @@ internal static class ScriptMapper
             s.UpdatedAt,
             [.. s.Reviews.Select(r => new ScriptReviewDto(
                 r.ScriptReviewId, r.UserId, r.Action, r.ErrorReason?.ReasonCode,
-                r.EditedCsContent, r.EditedVeContent, r.Comment, r.ReviewedAt))]);
+                r.EditedCsContent, r.EditedViContent, r.Comment, r.ReviewedAt))]);
 
     /// <summary>Dữ liệu cũ hoặc dữ liệu ghi thẳng bằng SQL có thể thiếu nhãn — không vì thế mà vỡ API.</summary>
     private static string SafeStrip(string content)
@@ -45,12 +45,11 @@ internal static class ScriptMapper
 public class ScriptService(
     IScriptRepository repository,
     IReasonRepository reasonRepository,
+    IUserDomainRepository domainRepository,
     ISystemConfigService config,
     ITaskProgressTracker taskTracker,
     TimeProvider clock) : IScriptService
 {
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = false };
-
     public async Task<PagedResult<ScriptListItemDto>> SearchAsync(
         ScriptSearchRequest request, CancellationToken ct = default)
     {
@@ -69,9 +68,13 @@ public class ScriptService(
         return script.ToDetail();
     }
 
+    /// <summary>
+    /// Admin thêm tay một cặp câu. Lược đồ bắt buộc mọi cặp câu phải qua một lượt duyệt của
+    /// người đủ trình độ đúng chủ đề mới chuyển sang đã duyệt, nên câu thêm tay cũng nằm CHỜ DUYỆT.
+    /// </summary>
     public Task<ScriptDetailDto> CreateAsync(
         CreateScriptRequest request, long createdById, CancellationToken ct = default) =>
-        CreateInternalAsync(request, createdById, ScriptStatus.Validated, null, ct);
+        CreateInternalAsync(request, createdById, ScriptStatus.PendingValidation, null, ct);
 
     public Task<ScriptDetailDto> ContributeAsync(
         CreateScriptRequest request, long contributorId, CancellationToken ct = default) =>
@@ -112,7 +115,6 @@ public class ScriptService(
                     CsContent = item.CsTranscript,
                     VeContent = item.ViEquivalent,
                     Domain = ParseDomain(item.Domain),
-                    Relation = RelationOf(item.Alignment),
                     Alignment = item.Alignment
                 };
 
@@ -163,14 +165,13 @@ public class ScriptService(
         switch (action)
         {
             case ScriptReviewAction.Accepted:
-                script.Status = ScriptStatus.Validated;
                 break;
 
             case ScriptReviewAction.Edited:
                 var (cs, ve) = RequireEditedPair(request);
                 review.EditedCsContent = cs;
-                review.EditedVeContent = ve;
-                await ApplyEditAsync(script, cs, ve, ct);
+                review.EditedViContent = ve;
+                await ApplyEditAsync(script, request, cs, ve, ct);
                 break;
 
             case ScriptReviewAction.Rejected:
@@ -181,8 +182,20 @@ public class ScriptService(
 
         repository.AddReview(review);
 
-        // updated_at do trigger trg_script_touch của database tự đặt.
+        // Lưu lượt duyệt TRƯỚC khi chốt trạng thái validated: trigger trg_script_validated_domain
+        // đòi hỏi đã có lượt duyệt của người đủ trình độ đúng chủ đề ngay lúc status đổi, mà trigger
+        // không phải loại defer, nên lượt duyệt phải nằm sẵn trong database trước.
         await repository.SaveChangesAsync(ct);
+
+        if (action is ScriptReviewAction.Accepted or ScriptReviewAction.Edited)
+        {
+            await EnsureDomainQualifiedAsync(userId, script.Domain, ct);
+
+            script.Status = ScriptStatus.Validated;
+
+            // updated_at do trigger trg_script_touch của database tự đặt.
+            await repository.SaveChangesAsync(ct);
+        }
 
         // Câu bị loại thì task nào đang chờ thu câu đó cũng mất mục ấy.
         if (action == ScriptReviewAction.Rejected)
@@ -209,10 +222,17 @@ public class ScriptService(
         }
 
         var domain = request.Domain!.Value;
-        var relation = request.Relation ?? ScriptRelation.DirectTranslation;
+
+        // Mỗi từ tiếng Anh phải có ĐÚNG một dòng script_word, nếu không trigger defer
+        // trg_script_word_consistency sẽ chặn lúc COMMIT — nên alignment phải phủ đủ số từ.
+        var words = BuildWords(request.Alignment, enWordCount);
+
+        // Chữ số thứ ba của mã lấy từ chính các dòng script_word, không tin giá trị client gửi:
+        // mã và bảng script_word phải luôn khớp nhau.
+        var relation = RelationOf(words);
 
         // Mã do database sinh: số thứ tự nằm trong sequence, và ba chữ số đầu phải khớp
-        // với en_word_count cùng chủ đề, nếu không ràng buộc CHECK sẽ từ chối.
+        // với en_word_count, chủ đề và quan hệ, nếu không ràng buộc sẽ từ chối.
         var scriptId = await repository.GenerateIdAsync(enWordCount, domain, relation, ct);
         var now = clock.GetUtcNow();
 
@@ -220,10 +240,7 @@ public class ScriptService(
         {
             ScriptId = scriptId,
             CsContent = cs,
-            VeContent = ve,
-            Alignment = request.Alignment.Count == 0
-                ? null
-                : JsonSerializer.Serialize(request.Alignment, JsonOptions),
+            ViContent = ve,
             Status = status,
             WordCount = wordCount,
             EnWordCount = enWordCount,
@@ -234,10 +251,13 @@ public class ScriptService(
             UpdatedAt = now
         };
 
+        foreach (var word in words) word.ScriptId = scriptId;
+
         repository.Add(script);
+        repository.AddWords(words);
         await repository.SaveChangesAsync(ct);
 
-        return script.ToDetail();
+        return (await repository.GetWithReviewsAsync(scriptId, ct))!.ToDetail();
     }
 
     /// <summary>
@@ -296,7 +316,8 @@ public class ScriptService(
     /// Lược đồ không lưu phiên bản cũ, nên chỉ cho sửa khi chưa có bản ghi âm nào.
     /// Số từ tiếng Anh cũng không được đổi: nó nằm trong mã script, mà mã thì không đổi được.
     /// </summary>
-    private async Task ApplyEditAsync(Script script, string cs, string ve, CancellationToken ct)
+    private async Task ApplyEditAsync(
+        Script script, ReviewScriptRequest request, string cs, string ve, CancellationToken ct)
     {
         if (await repository.HasRecordingsAsync(script.ScriptId, ct))
         {
@@ -316,10 +337,27 @@ public class ScriptService(
                 "Muốn đổi số từ tiếng Anh thì phải tạo cặp câu mới.");
         }
 
+        // Sửa cả alignment thì thay cả bộ dòng script_word của câu. Số từ tiếng Anh phải giữ nguyên,
+        // và quan hệ Anh–Việt cũng không đổi được vì nó là chữ số trong mã câu.
+        if (request.EditedAlignment is { Count: > 0 } edited)
+        {
+            var words = BuildWords(edited, enWordCount);
+
+            if (RelationOf(words) != RelationDigitOf(script.ScriptId))
+            {
+                throw new UnprocessableException(
+                    "relation_locked",
+                    $"Bản sửa đổi quan hệ Anh–Việt, nhưng quan hệ đã nằm trong mã {script.ScriptId} nên không đổi được.");
+            }
+
+            repository.RemoveWords(script.Words);
+            foreach (var word in words) word.ScriptId = script.ScriptId;
+            repository.AddWords(words);
+        }
+
         script.CsContent = cs;
-        script.VeContent = ve;
+        script.ViContent = ve;
         script.WordCount = wordCount;
-        script.Status = ScriptStatus.Validated;
     }
 
     private async Task<short> ResolveErrorReasonIdAsync(string? code, CancellationToken ct)
@@ -377,17 +415,92 @@ public class ScriptService(
         };
     }
 
-    /// <summary>Có một cặp từ là danh từ riêng thì cả câu tính mã quan hệ 2.</summary>
-    private static ScriptRelation RelationOf(List<AlignmentItem> alignment) =>
-        alignment.Any(a => a.Relation.Contains("proper", StringComparison.OrdinalIgnoreCase))
+    /// <summary>Có một từ là danh từ riêng thì cả câu mang mã quan hệ 2 (ProperNoun).</summary>
+    private static ScriptRelation RelationOf(List<ScriptWord> words) =>
+        words.Any(w => w.Relation == ScriptWordRelation.ProperNoun)
             ? ScriptRelation.ProperNoun
             : ScriptRelation.DirectTranslation;
 
-    internal static IReadOnlyList<AlignmentItem> ReadAlignment(string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json)) return [];
+    /// <summary>
+    /// Quan hệ ghi trong mã câu: chữ số thứ ba (vị trí 5) là 2 khi câu có danh từ riêng.
+    /// </summary>
+    private static ScriptRelation RelationDigitOf(string scriptId) =>
+        scriptId.Length >= 5 && scriptId[4] == '2'
+            ? ScriptRelation.ProperNoun
+            : ScriptRelation.DirectTranslation;
 
-        try { return JsonSerializer.Deserialize<List<AlignmentItem>>(json) ?? []; }
-        catch (JsonException) { return []; }
+    /// <summary>
+    /// Đổi alignment thành các dòng script_word — đúng một dòng cho mỗi từ tiếng Anh.
+    /// Thiếu hay thừa dòng đều bị từ chối vì trigger defer của database buộc số dòng khớp en_word_count.
+    /// </summary>
+    private static List<ScriptWord> BuildWords(List<AlignmentItem> alignment, int enWordCount)
+    {
+        if (alignment.Count != enWordCount)
+        {
+            throw new UnprocessableException(
+                "alignment_incomplete",
+                $"Câu có {enWordCount} từ tiếng Anh nhưng alignment có {alignment.Count} mục. " +
+                "Mỗi từ tiếng Anh phải có đúng một mục alignment từ [en] sang nghĩa tiếng Việt.");
+        }
+
+        var words = new List<ScriptWord>(alignment.Count);
+
+        for (var i = 0; i < alignment.Count; i++)
+        {
+            var item = alignment[i];
+            var en = item.Source.Trim();
+
+            if (en.Length == 0)
+            {
+                throw new UnprocessableException(
+                    "alignment_word_missing", $"Mục alignment thứ {i + 1} thiếu từ tiếng Anh.");
+            }
+
+            var isProper = item.Relation.Contains("proper", StringComparison.OrdinalIgnoreCase);
+
+            // Danh từ riêng giữ nguyên, không dịch: lược đồ bắt buộc vi_word = en_word.
+            var vi = isProper ? en : item.Target.Trim();
+
+            if (vi.Length == 0)
+            {
+                throw new UnprocessableException(
+                    "alignment_word_missing", $"Mục alignment thứ {i + 1} thiếu nghĩa tiếng Việt.");
+            }
+
+            words.Add(new ScriptWord
+            {
+                WordPosition = (short)(i + 1),
+                EnWord = en,
+                ViWord = vi,
+                Relation = isProper ? ScriptWordRelation.ProperNoun : ScriptWordRelation.SemanticEquivalent
+            });
+        }
+
+        return words;
+    }
+
+    /// <summary>Đổi các dòng script_word thành alignment trả cho client, đúng thứ tự vị trí.</summary>
+    internal static IReadOnlyList<AlignmentItem> ToAlignment(IEnumerable<ScriptWord> words) =>
+        [.. words
+            .OrderBy(w => w.WordPosition)
+            .Select(w => new AlignmentItem
+            {
+                Source = w.EnWord,
+                Target = w.ViWord,
+                Relation = SnakeCaseNaming.ToSnakeCase(w.Relation.ToString())
+            })];
+
+    /// <summary>
+    /// Cặp câu chỉ được chuyển sang đã duyệt khi người duyệt có đúng chủ đề. Kiểm ở đây để trả
+    /// thông báo rõ ràng, thay vì để trigger trg_script_validated_domain ném lỗi thô từ database.
+    /// </summary>
+    private async Task EnsureDomainQualifiedAsync(long userId, ScriptDomain domain, CancellationToken ct)
+    {
+        if (await domainRepository.IsQualifiedAsync(userId, domain, ct)) return;
+
+        throw new UnprocessableException(
+            "reviewer_domain_required",
+            $"Chỉ người được phân đúng chủ đề {domain} mới duyệt được cặp câu này sang trạng thái đã duyệt. " +
+            "Nhờ Admin phân chủ đề cho Reviewer trước (PUT /api/users/{id}/domains).");
     }
 }

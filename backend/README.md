@@ -108,7 +108,7 @@ Ba Reviewer vì **mỗi bản ghi cần đủ ba lượt duyệt của ba ngư�
 | Cột | Nội dung |
 |---|---|
 | `cs_content` | Câu chen tiếng Anh, **giữ nguyên nhãn**: `[vi]Em nên [en]scan [vi]tài liệu này.` |
-| `ve_content` | Câu thuần Việt tương đương: `[vi]Em nên quét tài liệu này.` |
+| `vi_content` | Câu thuần Việt tương đương: `[vi]Em nên quét tài liệu này.` |
 | `alignment` | JSON ánh xạ từng từ: `scan → quét`. Cột này nhóm thêm vào lược đồ để dữ liệu của cô không mất sau khi nhập |
 
 **Mã câu có nghĩa**, do hàm `fn_generate_script_id` của database sinh:

@@ -23,14 +23,17 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<AppUser> AppUsers => Set<AppUser>();
     public DbSet<SpeakerProfile> SpeakerProfiles => Set<SpeakerProfile>();
+    public DbSet<UserDomain> UserDomains => Set<UserDomain>();
     public DbSet<SystemConfig> SystemConfigs => Set<SystemConfig>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     public DbSet<ImportBatch> ImportBatches => Set<ImportBatch>();
     public DbSet<Script> Scripts => Set<Script>();
+    public DbSet<ScriptWord> ScriptWords => Set<ScriptWord>();
     public DbSet<ScriptErrorReason> ScriptErrorReasons => Set<ScriptErrorReason>();
     public DbSet<ScriptReview> ScriptReviews => Set<ScriptReview>();
 
+    public DbSet<Campaign> Campaigns => Set<Campaign>();
     public DbSet<WorkTask> WorkTasks => Set<WorkTask>();
     public DbSet<TaskAssignment> TaskAssignments => Set<TaskAssignment>();
     public DbSet<TaskScript> TaskScripts => Set<TaskScript>();
@@ -48,18 +51,19 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
     public DbSet<SpeakerPerformance> SpeakerPerformance => Set<SpeakerPerformance>();
     public DbSet<ReviewerPerformance> ReviewerPerformance => Set<ReviewerPerformance>();
     public DbSet<RejectionReasonStat> RejectionReasonStats => Set<RejectionReasonStat>();
+    public DbSet<CampaignProgress> CampaignProgress => Set<CampaignProgress>();
 
-    protected override void OnModelCreating(ModelBuilder b)
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        DeclarePostgresEnums(b);
-        MapUsers(b);
-        MapScripts(b);
-        MapTasks(b);
-        MapRecordings(b);
-        MapSystem(b);
-        MapViews(b);
+        DeclarePostgresEnums(modelBuilder);
+        MapUsers(modelBuilder);
+        MapScripts(modelBuilder);
+        MapTasks(modelBuilder);
+        MapRecordings(modelBuilder);
+        MapSystem(modelBuilder);
+        MapViews(modelBuilder);
 
-        b.ApplySnakeCaseNames();
+        modelBuilder.ApplySnakeCaseNames();
     }
 
     /// <summary>
@@ -67,55 +71,57 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
     /// set_config với tham số thứ ba là true nghĩa là chỉ có hiệu lực trong transaction hiện tại,
     /// nên giá trị không rò sang request khác khi connection quay lại pool.
     /// </summary>
-    public override async Task<int> SaveChangesAsync(CancellationToken ct = default)
+    public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        if (AuditUserId is null) return await base.SaveChangesAsync(ct);
+        if (AuditUserId is null) return await base.SaveChangesAsync(cancellationToken);
 
         if (Database.CurrentTransaction is not null)
         {
-            await ApplyAuditUserAsync(ct);
-            return await base.SaveChangesAsync(ct);
+            await ApplyAuditUserAsync(cancellationToken);
+            return await base.SaveChangesAsync(cancellationToken);
         }
 
-        await using var transaction = await Database.BeginTransactionAsync(ct);
+        await using var transaction = await Database.BeginTransactionAsync(cancellationToken);
 
-        await ApplyAuditUserAsync(ct);
-        var written = await base.SaveChangesAsync(ct);
+        await ApplyAuditUserAsync(cancellationToken);
+        var written = await base.SaveChangesAsync(cancellationToken);
 
-        await transaction.CommitAsync(ct);
+        await transaction.CommitAsync(cancellationToken);
         return written;
     }
 
-    private Task ApplyAuditUserAsync(CancellationToken ct) =>
+    private Task ApplyAuditUserAsync(CancellationToken cancellationToken) =>
         Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT set_config('app.user_id', {AuditUserId.ToString()}, true)", ct);
+            $"SELECT set_config('app.user_id', {AuditUserId.ToString()}, true)", cancellationToken);
 
-    private static void DeclarePostgresEnums(ModelBuilder b)
+    private static void DeclarePostgresEnums(ModelBuilder modelBuilder)
     {
         // Tên kiểu trong database suy ra từ tên enum theo snake_case, trừ hai chỗ đặt tên khác.
-        b.HasPostgresEnum<UserStatus>();
-        b.HasPostgresEnum<Occupation>();
-        b.HasPostgresEnum<ConfigValueType>();
-        b.HasPostgresEnum<AuditAction>();
-        b.HasPostgresEnum<ScriptStatus>();
-        b.HasPostgresEnum<ScriptDomain>();
-        b.HasPostgresEnum<ScriptReviewAction>();
-        b.HasPostgresEnum<TaskType>();
-        b.HasPostgresEnum<WorkTaskStatus>(name: "task_status");
-        b.HasPostgresEnum<AssignmentStatus>();
-        b.HasPostgresEnum<TaskScriptStatus>();
-        b.HasPostgresEnum<SentenceVariant>();
-        b.HasPostgresEnum<RecordingStatus>();
-        b.HasPostgresEnum<TaskRecordingStatus>();
-        b.HasPostgresEnum<ReviewDecision>();
-        b.HasPostgresEnum<RejectionCategory>();
-        b.HasPostgresEnum<DatasetStatus>();
-        b.HasPostgresEnum<DatasetFileFormat>();
+        modelBuilder.HasPostgresEnum<UserStatus>();
+        modelBuilder.HasPostgresEnum<Occupation>();
+        modelBuilder.HasPostgresEnum<ConfigValueType>();
+        modelBuilder.HasPostgresEnum<AuditAction>();
+        modelBuilder.HasPostgresEnum<ScriptStatus>();
+        modelBuilder.HasPostgresEnum<ScriptDomain>();
+        modelBuilder.HasPostgresEnum<ScriptReviewAction>();
+        modelBuilder.HasPostgresEnum<ScriptWordRelation>();
+        modelBuilder.HasPostgresEnum<TaskType>();
+        modelBuilder.HasPostgresEnum<WorkTaskStatus>(name: "task_status");
+        modelBuilder.HasPostgresEnum<CampaignStatus>();
+        modelBuilder.HasPostgresEnum<AssignmentStatus>();
+        modelBuilder.HasPostgresEnum<TaskScriptStatus>();
+        modelBuilder.HasPostgresEnum<SentenceVariant>();
+        modelBuilder.HasPostgresEnum<RecordingStatus>();
+        modelBuilder.HasPostgresEnum<TaskRecordingStatus>();
+        modelBuilder.HasPostgresEnum<ReviewDecision>();
+        modelBuilder.HasPostgresEnum<RejectionCategory>();
+        modelBuilder.HasPostgresEnum<DatasetStatus>();
+        modelBuilder.HasPostgresEnum<DatasetFileFormat>();
     }
 
-    private static void MapUsers(ModelBuilder b)
+    private static void MapUsers(ModelBuilder modelBuilder)
     {
-        b.Entity<Role>(e =>
+        modelBuilder.Entity<Role>(e =>
         {
             e.ToTable("role");
             e.HasKey(x => x.RoleId);
@@ -128,7 +134,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.HasIndex(x => x.RoleName).IsUnique();
         });
 
-        b.Entity<AppUser>(e =>
+        modelBuilder.Entity<AppUser>(e =>
         {
             e.ToTable("app_user");
             e.HasKey(x => x.UserId);
@@ -141,7 +147,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.HasOne(x => x.Role).WithMany(r => r.Users).HasForeignKey(x => x.RoleId);
         });
 
-        b.Entity<SpeakerProfile>(e =>
+        modelBuilder.Entity<SpeakerProfile>(e =>
         {
             e.ToTable("speaker_profile");
             e.HasKey(x => x.UserId);
@@ -152,29 +158,47 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.HasOne(x => x.User).WithOne(u => u.SpeakerProfile)
                 .HasForeignKey<SpeakerProfile>(x => x.UserId);
         });
+
+        modelBuilder.Entity<UserDomain>(e =>
+        {
+            e.ToTable("user_domain");
+            e.HasKey(x => new { x.UserId, x.Domain });
+
+            e.HasOne(x => x.User).WithMany(u => u.Domains).HasForeignKey(x => x.UserId);
+        });
     }
 
-    private static void MapScripts(ModelBuilder b)
+    private static void MapScripts(ModelBuilder modelBuilder)
     {
-        b.Entity<ImportBatch>(e =>
+        modelBuilder.Entity<ImportBatch>(e =>
         {
             e.ToTable("import_batch");
             e.HasKey(x => x.BatchId);
             e.HasOne(x => x.Importer).WithMany().HasForeignKey(x => x.ImportedBy);
         });
 
-        b.Entity<Script>(e =>
+        modelBuilder.Entity<Script>(e =>
         {
             e.ToTable("script");
             e.HasKey(x => x.ScriptId);
             e.Property(x => x.ScriptId).HasMaxLength(11).ValueGeneratedNever();
-            e.Property(x => x.Alignment).HasColumnType("jsonb");
 
             e.HasOne(x => x.Creator).WithMany().HasForeignKey(x => x.CreatedBy);
             e.HasOne(x => x.ImportBatch).WithMany(i => i.Scripts).HasForeignKey(x => x.ImportBatchId);
         });
 
-        b.Entity<ScriptErrorReason>(e =>
+        modelBuilder.Entity<ScriptWord>(e =>
+        {
+            e.ToTable("script_word");
+            e.HasKey(x => new { x.ScriptId, x.WordPosition });
+            e.Property(x => x.ScriptId).HasMaxLength(11);
+            e.Property(x => x.EnWord).HasMaxLength(100);
+            e.Property(x => x.ViWord).HasMaxLength(100);
+
+            e.HasOne(x => x.Script).WithMany(s => s.Words).HasForeignKey(x => x.ScriptId);
+        });
+
+        modelBuilder.Entity<ScriptErrorReason>(e =>
         {
             e.ToTable("script_error_reason");
             e.HasKey(x => x.ReasonId);
@@ -182,7 +206,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.HasIndex(x => x.ReasonCode).IsUnique();
         });
 
-        b.Entity<ScriptReview>(e =>
+        modelBuilder.Entity<ScriptReview>(e =>
         {
             e.ToTable("script_review");
             e.HasKey(x => x.ScriptReviewId);
@@ -194,16 +218,28 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         });
     }
 
-    private static void MapTasks(ModelBuilder b)
+    private static void MapTasks(ModelBuilder modelBuilder)
     {
-        b.Entity<WorkTask>(e =>
+        modelBuilder.Entity<Campaign>(e =>
+        {
+            e.ToTable("campaign");
+            e.HasKey(x => x.CampaignId);
+            e.Property(x => x.CampaignName).HasMaxLength(255);
+            e.Property(x => x.StartDate).HasColumnType("date");
+            e.Property(x => x.EndDate).HasColumnType("date");
+
+            e.HasOne(x => x.Creator).WithMany().HasForeignKey(x => x.CreatedBy);
+        });
+
+        modelBuilder.Entity<WorkTask>(e =>
         {
             e.ToTable("task");
             e.HasKey(x => x.TaskId);
             e.HasOne(x => x.Creator).WithMany().HasForeignKey(x => x.CreatedBy);
+            e.HasOne(x => x.Campaign).WithMany(c => c.Tasks).HasForeignKey(x => x.CampaignId);
         });
 
-        b.Entity<TaskAssignment>(e =>
+        modelBuilder.Entity<TaskAssignment>(e =>
         {
             e.ToTable("task_assignment");
             e.HasKey(x => x.AssignmentId);
@@ -218,7 +254,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
                 .HasFilter("assignment_status = 'active'");
         });
 
-        b.Entity<TaskScript>(e =>
+        modelBuilder.Entity<TaskScript>(e =>
         {
             e.ToTable("task_script");
             e.HasKey(x => new { x.TaskId, x.ScriptId });
@@ -228,7 +264,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.HasOne(x => x.Script).WithMany(s => s.TaskScripts).HasForeignKey(x => x.ScriptId);
         });
 
-        b.Entity<TaskRecording>(e =>
+        modelBuilder.Entity<TaskRecording>(e =>
         {
             e.ToTable("task_recording");
             e.HasKey(x => new { x.TaskId, x.RecordingId });
@@ -239,9 +275,9 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         });
     }
 
-    private static void MapRecordings(ModelBuilder b)
+    private static void MapRecordings(ModelBuilder modelBuilder)
     {
-        b.Entity<Recording>(e =>
+        modelBuilder.Entity<Recording>(e =>
         {
             e.ToTable("recording");
             e.HasKey(x => x.RecordingId);
@@ -257,7 +293,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.HasOne(x => x.Task).WithMany().HasForeignKey(x => x.TaskId);
         });
 
-        b.Entity<RejectionReason>(e =>
+        modelBuilder.Entity<RejectionReason>(e =>
         {
             e.ToTable("rejection_reason");
             e.HasKey(x => x.ReasonId);
@@ -265,7 +301,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.HasIndex(x => x.ReasonCode).IsUnique();
         });
 
-        b.Entity<Review>(e =>
+        modelBuilder.Entity<Review>(e =>
         {
             e.ToTable("review");
             e.HasKey(x => x.ReviewId);
@@ -280,7 +316,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.HasIndex(x => new { x.RecordingId, x.ReviewerId }).IsUnique();
         });
 
-        b.Entity<ReviewRejectionReason>(e =>
+        modelBuilder.Entity<ReviewRejectionReason>(e =>
         {
             e.ToTable("review_rejection_reason");
             e.HasKey(x => new { x.ReviewId, x.ReasonId });
@@ -290,9 +326,9 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         });
     }
 
-    private static void MapSystem(ModelBuilder b)
+    private static void MapSystem(ModelBuilder modelBuilder)
     {
-        b.Entity<SystemConfig>(e =>
+        modelBuilder.Entity<SystemConfig>(e =>
         {
             e.ToTable("system_config");
             e.HasKey(x => x.ConfigId);
@@ -301,7 +337,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.HasOne<AppUser>().WithMany().HasForeignKey(x => x.UpdatedBy);
         });
 
-        b.Entity<AuditLog>(e =>
+        modelBuilder.Entity<AuditLog>(e =>
         {
             e.ToTable("audit_log");
             e.HasKey(x => new { x.AuditId, x.ChangedAt });
@@ -311,7 +347,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.Property(x => x.NewValue).HasColumnType("jsonb");
         });
 
-        b.Entity<Dataset>(e =>
+        modelBuilder.Entity<Dataset>(e =>
         {
             e.ToTable("dataset");
             e.HasKey(x => x.DatasetId);
@@ -322,7 +358,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.HasIndex(x => new { x.DatasetName, x.Version }).IsUnique();
         });
 
-        b.Entity<DatasetRecording>(e =>
+        modelBuilder.Entity<DatasetRecording>(e =>
         {
             e.ToTable("dataset_recording");
             e.HasKey(x => new { x.DatasetId, x.RecordingId });
@@ -334,12 +370,13 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
     }
 
     /// <summary>Bốn view thống kê có sẵn trong lược đồ — chỉ đọc, không khoá chính.</summary>
-    private static void MapViews(ModelBuilder b)
+    private static void MapViews(ModelBuilder modelBuilder)
     {
-        b.Entity<DashboardSummary>().HasNoKey().ToView("v_dashboard_summary");
-        b.Entity<SpeakerPerformance>().HasNoKey().ToView("v_speaker_performance");
-        b.Entity<ReviewerPerformance>().HasNoKey().ToView("v_reviewer_performance");
-        b.Entity<RejectionReasonStat>().HasNoKey().ToView("v_rejection_reason_stats");
+        modelBuilder.Entity<DashboardSummary>().HasNoKey().ToView("v_dashboard_summary");
+        modelBuilder.Entity<SpeakerPerformance>().HasNoKey().ToView("v_speaker_performance");
+        modelBuilder.Entity<ReviewerPerformance>().HasNoKey().ToView("v_reviewer_performance");
+        modelBuilder.Entity<RejectionReasonStat>().HasNoKey().ToView("v_rejection_reason_stats");
+        modelBuilder.Entity<CampaignProgress>().HasNoKey().ToView("v_campaign_progress");
     }
 
     private static RoleName ParseRole(string value) =>
