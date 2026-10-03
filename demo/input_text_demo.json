@@ -1,0 +1,60 @@
+[
+  {
+    "id": "2110000",
+    "domain": "IT/Technology",
+    "cs_transcript": "[vi]Em nên [en]scan [vi]tài liệu này rồi gửi qua [en]email [vi]cho tôi.",
+    "vi_equivalent": "[vi]Em nên quét tài liệu này rồi gửi qua thư điện tử cho tôi.",
+    "alignment": [
+      { "source": "scan", "source_lang": "en", "target": "quét", "target_lang": "vi", "relation": "semantic_equivalent" },
+      { "source": "email", "source_lang": "en", "target": "thư điện tử", "target_lang": "vi", "relation": "semantic_equivalent" }
+    ]
+  },
+  {
+    "id": "demo-02",
+    "domain": "Education",
+    "cs_transcript": "[vi]Cô vừa đăng [en]quiz [vi]mới, cả lớp làm trước tối nay nhé.",
+    "vi_equivalent": "[vi]Cô vừa đăng bài kiểm tra ngắn mới, cả lớp làm trước tối nay nhé.",
+    "alignment": [
+      { "source": "quiz", "source_lang": "en", "target": "bài kiểm tra ngắn", "target_lang": "vi", "relation": "semantic_equivalent" }
+    ]
+  },
+  {
+    "id": "demo-03",
+    "domain": "Daily life",
+    "cs_transcript": "[vi]Cuối tuần này mình đi [en]shopping [vi]ở trung tâm thương mại nha.",
+    "vi_equivalent": "[vi]Cuối tuần này mình đi mua sắm ở trung tâm thương mại nha.",
+    "alignment": [
+      { "source": "shopping", "source_lang": "en", "target": "mua sắm", "target_lang": "vi", "relation": "semantic_equivalent" }
+    ]
+  },
+  {
+    "id": "demo-04",
+    "domain": "Daily life",
+    "cs_transcript": "[vi]Tôi [en]very [vi]thích ăn phở vào buổi sáng.",
+    "vi_equivalent": "[vi]Tôi rất thích ăn phở vào buổi sáng.",
+    "alignment": [
+      { "source": "very", "source_lang": "en", "target": "rất", "target_lang": "vi", "relation": "semantic_equivalent" }
+    ]
+  },
+  {
+    "id": "demo-05-cau-thuan-viet-co-nhan-en",
+    "domain": "Daily life",
+    "cs_transcript": "[vi]Mình [en]order [vi]trà sữa cho cả nhóm rồi.",
+    "vi_equivalent": "[vi]Mình [en]order [vi]trà sữa cho cả nhóm rồi.",
+    "alignment": []
+  },
+  {
+    "id": "demo-06-trung-cau-dau-tien",
+    "domain": "IT/Technology",
+    "cs_transcript": "[vi]Em nên [en]scan [vi]tài liệu này rồi gửi qua [en]email [vi]cho tôi.",
+    "vi_equivalent": "[vi]Em nên quét tài liệu này rồi gửi qua thư điện tử cho tôi.",
+    "alignment": []
+  },
+  {
+    "id": "demo-07-chu-de-khong-co",
+    "domain": "Sports",
+    "cs_transcript": "[vi]Tối nay có [en]match [vi]bóng đá đó.",
+    "vi_equivalent": "[vi]Tối nay có trận bóng đá đó.",
+    "alignment": []
+  }
+]

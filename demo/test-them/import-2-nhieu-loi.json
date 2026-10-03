@@ -1,0 +1,39 @@
+[
+  {
+    "id": "hop-le",
+    "domain": "Education",
+    "cs_transcript": "[vi]Thầy dời [en]deadline [vi]nộp báo cáo sang thứ hai.",
+    "vi_equivalent": "[vi]Thầy dời hạn chót nộp báo cáo sang thứ hai.",
+    "alignment": [
+      { "source": "deadline", "source_lang": "en", "target": "hạn chót", "target_lang": "vi", "relation": "semantic_equivalent" }
+    ]
+  },
+  {
+    "id": "khong-co-tu-tieng-anh",
+    "domain": "Daily life",
+    "cs_transcript": "[vi]Hôm nay trời mưa rất to.",
+    "vi_equivalent": "[vi]Hôm nay trời mưa rất to.",
+    "alignment": []
+  },
+  {
+    "id": "qua-9-tu-tieng-anh",
+    "domain": "IT/Technology",
+    "cs_transcript": "[vi]Em [en]please check the new pull request and merge it into main branch today [vi]nhé.",
+    "vi_equivalent": "[vi]Em kiểm tra yêu cầu hợp nhất mới rồi gộp vào nhánh chính hôm nay nhé.",
+    "alignment": []
+  },
+  {
+    "id": "nhan-ngon-ngu-sai",
+    "domain": "Daily life",
+    "cs_transcript": "[vi]Mình đi [fr]café [vi]nhé.",
+    "vi_equivalent": "[vi]Mình đi cà phê nhé.",
+    "alignment": []
+  },
+  {
+    "id": "thieu-cau-tuong-duong",
+    "domain": "Education",
+    "cs_transcript": "[vi]Nhớ nộp [en]report [vi]trước tối nay.",
+    "vi_equivalent": "",
+    "alignment": []
+  }
+]
