@@ -315,7 +315,48 @@ Câu phải có từ 1 đến 9 từ tiếng Anh, vì con số này nằm trong 
 **Mọi lượt đều duyệt mù**: API không bao giờ trả ý kiến của người duyệt khác khi bản ghi còn đang chờ, kể cả qua
 `GET /api/recordings/{id}/reviews`. Giao diện không cần làm gì thêm để giữ điều này.
 
-**Tiến độ** — `GET /api/reviewer/progress`. Reviewer cũng dùng được màn hình **duyệt câu** giống Speaker.
+**Duyệt theo danh sách của task**
+
+Ngoài cách nhận từng bản bằng `next`, Reviewer mở được cả task một lượt:
+
+1. `GET /api/reviewer/tasks/{taskId}/recordings` — phân trang (`page`, `pageSize`), mặc định trả cả task.
+   Thêm `?onlyReviewable=true` để chỉ còn những bản bấm vào duyệt được.
+
+```json
+{
+  "items": [
+    {
+      "recordingId": "r_cs_131000006",
+      "speakerId": 6,
+      "scriptId": "s_131000006",
+      "sentenceVariant": "CodeSwitching",
+      "scriptText": "Mình cần review lại phần mã nguồn này",
+      "durationSec": 3,
+      "status": "PendingReview",
+      "queueStatus": "Queued",
+      "reviewsDone": 1, "roundsRequired": 3,
+      "myReviewDone": false,
+      "blocker": "None", "canReview": true
+    }
+  ],
+  "page": 1, "pageSize": 20, "total": 1, "totalPages": 1, "hasNext": false
+}
+```
+
+2. Bấm vào một dòng có `canReview: true` thì gọi `GET /api/reviewer/recordings/{recordingId}` —
+   trả **đúng cấu trúc như `next`** (có `round`, `scriptTagged`, `audioUrl`), rồi nộp duyệt như bước 3 ở trên.
+
+- `reviewsDone`/`roundsRequired` chỉ là **số lượt**, không phải quyết định — luật duyệt mù vẫn nguyên.
+  Biết "2/3 lượt" không cho biết hai lượt kia đạt hay trượt.
+- `myReviewDone` để tô dòng đã làm. `blocker` nói vì sao không duyệt được:
+  `None`, `OwnRecording`, `AlreadyReviewedByMe`, `NotPendingReview`, `RoundsFull`.
+- **403 `task_not_reviewable`** nghĩa là task đó không phải task duyệt **đang mở** và đang giao cho mình.
+  Task đã `Completed` cũng trả 403 — hiện chưa xem lại được task đã đóng.
+- Mở một bản không duyệt được thì nhận đúng mã lỗi của lúc nộp: **403 `self_review_forbidden`**,
+  **409 `already_reviewed`**, **409 `recording_not_reviewable`**, **409 `no_more_rounds`**.
+
+**Tiến độ** — `GET /api/reviewer/progress`, trả `activeTasks` kèm `taskId` để gọi danh sách ở trên.
+Reviewer cũng dùng được màn hình **duyệt câu** giống Speaker.
 
 ### Task Manager
 
@@ -440,6 +481,7 @@ recorder.onstop = async () => {
 | `AssignmentStatus` | `Active`, `Completed`, `Reassigned`, `Cancelled` |
 | `TaskScriptStatus` | `Pending`, `Completed`, `Rejected` |
 | `TaskRecordingStatus` | `Queued`, `Reviewed`, `Skipped` |
+| `ReviewBlocker` | `None`, `OwnRecording`, `AlreadyReviewedByMe`, `NotPendingReview`, `RoundsFull` |
 | `RoleName` | `Speaker`, `Reviewer`, `TaskManager`, `Admin` |
 | `UserStatus` | `Active`, `Inactive` (bị khoá) |
 | `Occupation` | `Student`, `Employed`, `Other` |
@@ -471,9 +513,9 @@ Ai đã code theo bản API trước ngày 22/09/2026 thì cần sửa:
 
 | Chức năng | Ảnh hưởng tới màn hình |
 |---|---|
-| Reviewer xem danh sách bản ghi trong task | Hiện đang lấy lần lượt từng bản bằng `next` |
 | Khôi phục câu đã bị loại | Nút khôi phục trong kho câu |
 | Dataset: tạo, phát hành, tải về | Màn hình dataset của Admin |
+| Xem lại task duyệt đã đóng | Danh sách bản ghi trong task chỉ mở được khi task còn chạy |
 
 Giao diện cho các phần này cứ làm trước; khi backend xong sẽ cập nhật mục này và Swagger.
 

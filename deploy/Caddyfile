@@ -1,0 +1,25 @@
+# Caddy tự xin và tự gia hạn chứng chỉ HTTPS của Let's Encrypt, miễn là hai tên miền dưới đây
+# đã trỏ A record về IP máy chủ và cổng 80, 443 mở.
+
+{$API_DOMAIN} {
+	encode zstd gzip
+	# Bỏ header Server để không khai báo luôn công nghệ phía sau cho người quét cổng.
+	header -Server
+	reverse_proxy api:8080
+	log {
+		output file /data/api-access.log {
+			roll_size 10mb
+			roll_keep 5
+		}
+	}
+}
+
+{$FILES_DOMAIN} {
+	# Trình duyệt tải file âm thanh thẳng từ đây bằng link tạm có chữ ký.
+	# Caddy giữ nguyên Host header nên chữ ký vẫn hợp lệ.
+	request_body {
+		max_size 25MB
+	}
+	header -Server
+	reverse_proxy minio:9000
+}

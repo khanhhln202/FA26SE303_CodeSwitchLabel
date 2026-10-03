@@ -1,0 +1,10 @@
+{
+  "id": "2120000",
+  "domain": "IT/Technology",
+  "cs_transcript": "[vi]Anh gửi [en]file [vi]thiết kế qua [en]Zalo [vi]giúp em nhé.",
+  "vi_equivalent": "[vi]Anh gửi tệp thiết kế qua Zalo giúp em nhé.",
+  "alignment": [
+    { "source": "file", "source_lang": "en", "target": "tệp", "target_lang": "vi", "relation": "semantic_equivalent" },
+    { "source": "Zalo", "source_lang": "en", "target": "Zalo", "target_lang": "vi", "relation": "proper_noun" }
+  ]
+}

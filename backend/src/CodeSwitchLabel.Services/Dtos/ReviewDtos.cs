@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using CodeSwitchLabel.Repositories.Enums;
+using CodeSwitchLabel.Services.Reviews;
 
 namespace CodeSwitchLabel.Services.Dtos;
 
@@ -79,3 +80,42 @@ public record ReviewTaskProgressDto(
     bool IsOverdue);
 
 public record ReviewerProgressDto(int TotalReviews, IReadOnlyList<ReviewTaskProgressDto> ActiveTasks);
+
+/// <summary>Tham số của danh sách bản ghi trong một task duyệt.</summary>
+public record TaskReviewQuery : PageRequest
+{
+    /// <summary>
+    /// Mặc định trả cả task: bản chưa duyệt lẫn bản đã duyệt, để Reviewer thấy mình đi tới đâu.
+    /// Đặt true thì chỉ còn những bản bấm vào duyệt được ngay.
+    /// </summary>
+    public bool OnlyReviewable { get; init; }
+}
+
+/// <summary>
+/// Một bản ghi trong task duyệt, nhìn từ phía Reviewer.
+///
+/// KHÔNG kèm quyết định của bất kỳ ai — luật duyệt mù. Chỉ nói đã có mấy lượt trên tổng số cần có,
+/// và người đang xem đã duyệt bản này chưa. Biết "2/3 lượt" không cho biết hai lượt kia đạt hay trượt.
+/// </summary>
+/// <param name="ScriptText">Câu cần đối chiếu, đã bỏ nhãn — đủ để hiện trong danh sách.</param>
+/// <param name="QueueStatus">Trạng thái của bản ghi trong hàng chờ của task.</param>
+/// <param name="ReviewsDone">Số lượt đã có, không kèm ai duyệt và duyệt thế nào.</param>
+/// <param name="MyReviewDone">Chính người đang xem đã duyệt bản này rồi.</param>
+/// <param name="Blocker">Lý do chưa duyệt được; <c>None</c> là mở ra duyệt được ngay.</param>
+public record TaskReviewItemDto(
+    string RecordingId,
+    long SpeakerId,
+    string ScriptId,
+    SentenceVariant SentenceVariant,
+    string ScriptText,
+    decimal DurationSec,
+    RecordingStatus Status,
+    TaskRecordingStatus QueueStatus,
+    int ReviewsDone,
+    int RoundsRequired,
+    bool MyReviewDone,
+    ReviewBlocker Blocker)
+{
+    /// <summary>Có mở được bằng <c>GET /api/reviewer/recordings/{id}</c> không.</summary>
+    public bool CanReview => Blocker == ReviewBlocker.None;
+}

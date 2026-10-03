@@ -1,0 +1,126 @@
+# Bản chạy trên máy chủ. Khác bản dev ở bốn điểm:
+#   - Chỉ Caddy mở cổng ra Internet (80, 443); database và kho file chỉ nói chuyện trong mạng nội bộ.
+#   - Mọi mật khẩu và khoá lấy từ file .env, không ghi trong file này.
+#   - API chạy ASPNETCORE_ENVIRONMENT=Production, Swagger và dữ liệu mẫu bật bằng công tắc riêng.
+#   - Container tự bật lại khi máy chủ khởi động lại.
+#
+# Chạy:  docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build
+
+name: codeswitchlabel
+
+# Log cua Docker mac dinh khong xoay vong: chay vai tuan la day dia may chu.
+# Gioi han 3 file x 10 MB cho moi service, tong toi da 120 MB cho ca he.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: csl-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      API_DOMAIN: ${API_DOMAIN}
+      FILES_DOMAIN: ${FILES_DOMAIN}
+    logging: *logging
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data      # chứng chỉ HTTPS, mất là phải xin lại
+      - caddy-config:/config
+    depends_on:
+      - api
+      - minio
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: csl-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: codeswitchlabel
+      POSTGRES_USER: csl
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    logging: *logging
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      # Lược đồ chỉ chạy một lần, lúc database còn trống.
+      - ../docs/codeswitchlabel.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U csl -d codeswitchlabel"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z.hotfix.7aa24e772
+    container_name: csl-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    logging: *logging
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ../backend
+    image: codeswitchlabel-api:prod
+    container_name: csl-api
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_HTTP_PORTS: 8080
+
+      # Mặc định EF Core in ra TOÀN BỘ câu SQL ở mức Information. Trên máy chủ thì đó là
+      # rác chiếm đĩa và lộ cấu trúc truy vấn trong log. Cần xem lại thì đổi về Information,
+      # chạy "docker compose ... up -d api", xem log, rồi đặt lại Warning.
+      Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Command: Warning
+
+      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=codeswitchlabel;Username=csl;Password=${POSTGRES_PASSWORD}"
+
+      Jwt__Issuer: "https://${API_DOMAIN}"
+      Jwt__Audience: "https://${API_DOMAIN}"
+      Jwt__Key: ${JWT_KEY}
+      Jwt__ExpiryMinutes: ${JWT_EXPIRY_MINUTES:-120}
+
+      # ServiceUrl: API gọi MinIO trong mạng nội bộ. PublicUrl: địa chỉ trình duyệt tải file,
+      # bắt buộc https vì trang frontend chạy https.
+      ObjectStorage__ServiceUrl: "http://minio:9000"
+      ObjectStorage__PublicUrl: "https://${FILES_DOMAIN}"
+      ObjectStorage__AccessKey: ${MINIO_ROOT_USER}
+      ObjectStorage__SecretKey: ${MINIO_ROOT_PASSWORD}
+      ObjectStorage__BucketName: recordings
+      ObjectStorage__ForcePathStyle: "true"
+      ObjectStorage__PresignedUrlMinutes: 15
+
+      # Trình duyệt chỉ cho frontend gọi API nếu origin nằm trong danh sách này.
+      Cors__AllowedOrigins__0: ${FE_ORIGIN}
+      Cors__AllowedOrigins__1: ${FE_ORIGIN_PREVIEW:-${FE_ORIGIN}}
+
+      # Máy chủ thử nghiệm cho đội frontend: bật Swagger và tạo dữ liệu mẫu.
+      # Khi chuyển sang bản chạy thật, đặt Swagger__Enabled=false và bỏ trống Seed__DefaultPassword.
+      Swagger__Enabled: ${SWAGGER_ENABLED:-true}
+      Seed__DefaultPassword: ${SEED_PASSWORD}
+    logging: *logging
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+volumes:
+  pg-data:
+  minio-data:
+  caddy-data:
+  caddy-config:

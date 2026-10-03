@@ -52,35 +52,85 @@ public class ReviewService(
         if (recording is null) return null;
 
         var existing = await reviews.GetReviewsAsync(recording.RecordingId, ct);
-        var key = storage.GetObjectKey(recording.CloudLink);
 
-        if (key is null)
+        return await BuildPayloadAsync(recording, existing.Count, roundsRequired, ct);
+    }
+
+    public async Task<PagedResult<TaskReviewItemDto>> GetTaskRecordingsAsync(
+        long taskId, long reviewerId, TaskReviewQuery query, CancellationToken ct = default)
+    {
+        if (!await reviews.IsActiveReviewTaskOfAsync(taskId, reviewerId, ct))
         {
-            throw new UnprocessableException(
-                "external_recording",
-                $"Bản ghi {recording.RecordingId} trỏ tới kho lưu trữ khác, không nghe được qua hệ thống.");
+            throw new ForbiddenException(
+                "task_not_reviewable", $"Task #{taskId} không phải task duyệt đang giao cho bạn.");
         }
 
-        var (url, expiresAt) = await storage.GetDownloadUrlAsync(key, ct);
+        var roundsRequired = await RoundsRequiredAsync(ct);
 
-        // Bản cs đọc câu chen tiếng Anh, bản vi đọc câu thuần Việt — đưa đúng câu cần đối chiếu.
-        var tagged = recording.SentenceVariant == SentenceVariant.CodeSwitching
-            ? recording.Script.CsContent
-            : recording.Script.ViContent;
+        var (rows, total) = await reviews.GetTaskReviewRowsAsync(
+            taskId, reviewerId, query.OnlyReviewable, roundsRequired, query.Page, query.PageSize, ct);
 
-        return new NextReviewDto(
-            recording.RecordingId,
-            recording.SpeakerId,
-            ReviewRules.NextRound(existing.Count),
-            roundsRequired,
-            await config.GetBoolAsync(ConfigKeys.ReviewDefaultBlind, true, ct),
-            recording.ScriptId,
-            recording.SentenceVariant,
-            CodeSwitchText.Strip(tagged),
-            tagged,
-            recording.DurationSec,
-            url,
-            expiresAt);
+        var items = rows
+            .Select(x => new TaskReviewItemDto(
+                x.RecordingId,
+                x.SpeakerId,
+                x.ScriptId,
+                x.SentenceVariant,
+                CodeSwitchText.Strip(x.ScriptTagged),
+                x.DurationSec,
+                x.Status,
+                x.QueueStatus,
+                x.ReviewsDone,
+                roundsRequired,
+                x.MyReviewDone,
+                ReviewRules.BlockerFor(
+                    x.SpeakerId == reviewerId, x.MyReviewDone, x.Status, x.ReviewsDone, roundsRequired)))
+            .ToList();
+
+        return new PagedResult<TaskReviewItemDto>(items, query.Page, query.PageSize, total);
+    }
+
+    public async Task<NextReviewDto> GetForReviewAsync(
+        string recordingId, long reviewerId, CancellationToken ct = default)
+    {
+        var recording = await reviews.GetWithScriptAsync(recordingId, ct)
+                        ?? throw new NotFoundException(
+                            "recording_not_found", $"Không tìm thấy bản ghi {recordingId}.");
+
+        var existing = await reviews.GetReviewsAsync(recordingId, ct);
+        var roundsRequired = await RoundsRequiredAsync(ct);
+
+        var blocker = ReviewRules.BlockerFor(
+            recording.SpeakerId == reviewerId,
+            existing.Any(v => v.ReviewerId == reviewerId),
+            recording.Status,
+            existing.Count,
+            roundsRequired);
+
+        // Tách mã lỗi theo từng lý do, trùng với mã mà POST reviews trả về, để FE xử lý một kiểu
+        // cho cả hai chỗ: 403 là không có quyền, 409 là người khác đã làm trước.
+        switch (blocker)
+        {
+            case ReviewBlocker.OwnRecording:
+                throw new ForbiddenException(
+                    "self_review_forbidden", "Bạn không được duyệt bản ghi do chính mình thu.");
+
+            case ReviewBlocker.AlreadyReviewedByMe:
+                throw new ConflictException(
+                    "already_reviewed",
+                    $"Bạn đã duyệt bản ghi {recordingId} rồi. Mỗi người chỉ được duyệt một lần.");
+
+            case ReviewBlocker.NotPendingReview:
+                throw new ConflictException(
+                    "recording_not_reviewable",
+                    $"Bản ghi {recordingId} đang ở trạng thái {recording.Status}, không còn chờ duyệt.");
+
+            case ReviewBlocker.RoundsFull:
+                throw new ConflictException(
+                    "no_more_rounds", $"Bản ghi {recordingId} đã đủ {roundsRequired} lượt duyệt.");
+        }
+
+        return await BuildPayloadAsync(recording, existing.Count, roundsRequired, ct);
     }
 
     public async Task<SubmitReviewResult> SubmitAsync(
@@ -246,6 +296,44 @@ public class ReviewService(
     }
 
     // ----------------------------------------------------------------- nội bộ
+
+    /// <summary>
+    /// Dữ liệu một Reviewer cần để duyệt: câu đối chiếu và link nghe tạm. Dùng chung cho bản do
+    /// hệ thống phát (GET next) và bản người ta tự chọn trong task — hai đường vào phải trả y như nhau.
+    /// </summary>
+    private async Task<NextReviewDto> BuildPayloadAsync(
+        Recording recording, int reviewsSoFar, int roundsRequired, CancellationToken ct)
+    {
+        var key = storage.GetObjectKey(recording.CloudLink);
+
+        if (key is null)
+        {
+            throw new UnprocessableException(
+                "external_recording",
+                $"Bản ghi {recording.RecordingId} trỏ tới kho lưu trữ khác, không nghe được qua hệ thống.");
+        }
+
+        var (url, expiresAt) = await storage.GetDownloadUrlAsync(key, ct);
+
+        // Bản cs đọc câu chen tiếng Anh, bản vi đọc câu thuần Việt — đưa đúng câu cần đối chiếu.
+        var tagged = recording.SentenceVariant == SentenceVariant.CodeSwitching
+            ? recording.Script.CsContent
+            : recording.Script.ViContent;
+
+        return new NextReviewDto(
+            recording.RecordingId,
+            recording.SpeakerId,
+            ReviewRules.NextRound(reviewsSoFar),
+            roundsRequired,
+            await config.GetBoolAsync(ConfigKeys.ReviewDefaultBlind, true, ct),
+            recording.ScriptId,
+            recording.SentenceVariant,
+            CodeSwitchText.Strip(tagged),
+            tagged,
+            recording.DurationSec,
+            url,
+            expiresAt);
+    }
 
     /// <summary>
     /// Số lượt duyệt cần có. Trigger của database ghim cứng con số 3, nên đặt tham số khác đi

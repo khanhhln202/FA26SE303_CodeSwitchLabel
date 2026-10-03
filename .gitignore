@@ -15,6 +15,8 @@ appsettings.Production.json
 appsettings.*.Production.json
 .env
 .env.*
+# Trừ file mẫu: không có giá trị thật, chỉ liệt kê các khoá phải điền khi deploy.
+!.env.example
 *.pfx
 secrets.json
 
