@@ -62,4 +62,64 @@ public class ReviewRulesTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => ReviewRules.Outcome([Ok], 0));
     }
+
+    // ----------------------------------------------- vì sao chưa duyệt được
+
+    [Fact]
+    public void ConChoDuyetVaChuaAiCham_ThiDuyetDuoc()
+    {
+        var blocker = ReviewRules.BlockerFor(
+            isOwnRecording: false, reviewedByMe: false,
+            RecordingStatus.PendingReview, reviewCount: 0, Required);
+
+        Assert.Equal(ReviewBlocker.None, blocker);
+    }
+
+    [Fact]
+    public void BanGhiCuaChinhMinh_ChanTruoc()
+    {
+        var blocker = ReviewRules.BlockerFor(
+            isOwnRecording: true, reviewedByMe: false,
+            RecordingStatus.PendingReview, reviewCount: 0, Required);
+
+        Assert.Equal(ReviewBlocker.OwnRecording, blocker);
+    }
+
+    [Theory]
+    [InlineData(RecordingStatus.PendingReview)]
+    [InlineData(RecordingStatus.Approved)]
+    [InlineData(RecordingStatus.Rejected)]
+    public void DaDuyetRoi_ThiBaoDaDuyet_KeCaKhiBanGhiDaChot(RecordingStatus status)
+    {
+        // Màn hình cần đánh dấu "mình làm rồi" ngay cả với bản ghi đã chốt xong,
+        // nên lý do này phải thắng lý do "không còn chờ duyệt".
+        var blocker = ReviewRules.BlockerFor(
+            isOwnRecording: false, reviewedByMe: true, status, reviewCount: 3, Required);
+
+        Assert.Equal(ReviewBlocker.AlreadyReviewedByMe, blocker);
+    }
+
+    [Theory]
+    [InlineData(RecordingStatus.Approved)]
+    [InlineData(RecordingStatus.Rejected)]
+    [InlineData(RecordingStatus.QcFailed)]
+    public void BanGhiKhongConChoDuyet(RecordingStatus status)
+    {
+        var blocker = ReviewRules.BlockerFor(
+            isOwnRecording: false, reviewedByMe: false, status, reviewCount: 3, Required);
+
+        Assert.Equal(ReviewBlocker.NotPendingReview, blocker);
+    }
+
+    [Fact]
+    public void DuLuotNhungChuaKipChot_ThiHetCho()
+    {
+        // Trigger chốt ngay trong transaction, nhưng vẫn phải có nhánh này: nếu số vòng cấu hình
+        // nhỏ hơn 3 thì bản ghi đủ lượt mà trạng thái chưa đổi.
+        var blocker = ReviewRules.BlockerFor(
+            isOwnRecording: false, reviewedByMe: false,
+            RecordingStatus.PendingReview, reviewCount: 3, Required);
+
+        Assert.Equal(ReviewBlocker.RoundsFull, blocker);
+    }
 }

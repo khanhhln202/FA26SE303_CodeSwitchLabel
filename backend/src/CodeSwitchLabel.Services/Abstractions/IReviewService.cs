@@ -16,6 +16,20 @@ public interface IReviewService
         long reviewerId, long? taskId, long? speakerId, bool random, CancellationToken ct = default);
 
     /// <summary>
+    /// Danh sách bản ghi trong một task duyệt đang giao cho người này. Không kèm quyết định của
+    /// bất kỳ ai, chỉ kèm số lượt đã có và cờ "mình đã duyệt chưa".
+    /// </summary>
+    Task<PagedResult<TaskReviewItemDto>> GetTaskRecordingsAsync(
+        long taskId, long reviewerId, TaskReviewQuery query, CancellationToken ct = default);
+
+    /// <summary>
+    /// Mở một bản ghi cụ thể để duyệt, thay vì nhận bản do hệ thống chọn. Cùng bộ điều kiện với
+    /// <see cref="GetNextAsync"/>; không đủ điều kiện thì ném lỗi nói rõ vì sao.
+    /// </summary>
+    Task<NextReviewDto> GetForReviewAsync(
+        string recordingId, long reviewerId, CancellationToken ct = default);
+
+    /// <summary>
     /// Ghi một lượt duyệt độc lập. Đủ số vòng yêu cầu thì trigger của database chốt trạng thái
     /// bản ghi theo đa số — tầng này chỉ đọc lại kết quả.
     /// </summary>

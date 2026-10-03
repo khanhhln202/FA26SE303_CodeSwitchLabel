@@ -41,6 +41,49 @@ public class ReviewsController(IReviewService reviewService) : ControllerBase
         return next is null ? NoContent() : Ok(next);
     }
 
+    /// <summary>Danh sách bản ghi trong một task duyệt được giao cho mình.</summary>
+    /// <remarks>
+    /// Dùng cho màn hình "task duyệt của tôi": thấy cả task một lượt thay vì bấm `next` từng bản.
+    ///
+    /// **Giữ nguyên luật duyệt mù** — không trả quyết định của ai. Mỗi bản chỉ cho biết đã có mấy
+    /// lượt trên tổng số cần có (`reviewsDone`/`roundsRequired`), và bản thân bạn đã duyệt chưa
+    /// (`myReviewDone`). Biết "2/3 lượt" không cho biết hai lượt kia đạt hay trượt.
+    ///
+    /// `canReview` cho biết bấm vào duyệt được ngay hay không, `blocker` nói vì sao không:
+    /// `OwnRecording`, `AlreadyReviewedByMe`, `NotPendingReview`, `RoundsFull`.
+    ///
+    /// Mặc định trả cả task; đặt `onlyReviewable=true` để chỉ còn những bản duyệt được.
+    /// Bấm vào một bản thì gọi `GET /api/reviewer/recordings/{id}` để lấy câu và link nghe.
+    /// </remarks>
+    [HttpGet("api/reviewer/tasks/{taskId:long}/recordings")]
+    [Authorize(Roles = "Reviewer")]
+    [ProducesResponseType(typeof(PagedResult<TaskReviewItemDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<PagedResult<TaskReviewItemDto>>> TaskRecordings(
+        long taskId, [FromQuery] TaskReviewQuery query, CancellationToken ct)
+        => Ok(await reviewService.GetTaskRecordingsAsync(taskId, User.GetUserId(), query, ct));
+
+    /// <summary>Mở một bản ghi cụ thể để duyệt.</summary>
+    /// <remarks>
+    /// Trả đúng dữ liệu như `GET /api/reviewer/recordings/next`, nhưng cho bản **bạn tự chọn**
+    /// từ danh sách của task. Điều kiện cũng y như vậy, và lỗi trả về mã giống lúc nộp duyệt:
+    ///
+    /// - **403 `self_review_forbidden`** — bản ghi do chính bạn thu.
+    /// - **409 `already_reviewed`** — bạn đã duyệt bản này.
+    /// - **409 `recording_not_reviewable`** — bản ghi không còn chờ duyệt.
+    /// - **409 `no_more_rounds`** — đã đủ số lượt.
+    ///
+    /// Đường `next` là một segment cố định nên không đụng vào `{id}` ở đây.
+    /// </remarks>
+    [HttpGet("api/reviewer/recordings/{id}")]
+    [Authorize(Roles = "Reviewer")]
+    [ProducesResponseType(typeof(NextReviewDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<NextReviewDto>> ForReview(string id, CancellationToken ct)
+        => Ok(await reviewService.GetForReviewAsync(id, User.GetUserId(), ct));
+
     /// <summary>Duyệt đạt hoặc từ chối một bản ghi.</summary>
     /// <remarks>
     /// Từ chối thì **bắt buộc ít nhất một** mã lý do lấy từ `GET /api/rejection-reasons`;

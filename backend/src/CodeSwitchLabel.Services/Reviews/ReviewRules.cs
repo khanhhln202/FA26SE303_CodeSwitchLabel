@@ -3,6 +3,28 @@ using CodeSwitchLabel.Repositories.Enums;
 namespace CodeSwitchLabel.Services.Reviews;
 
 /// <summary>
+/// Vì sao một bản ghi chưa duyệt được. Màn hình danh sách của Reviewer hiện lý do này ngay,
+/// thay vì để người ta bấm vào rồi mới nhận lỗi.
+/// </summary>
+public enum ReviewBlocker
+{
+    /// <summary>Duyệt được ngay.</summary>
+    None,
+
+    /// <summary>Bản ghi do chính người đang xem thu.</summary>
+    OwnRecording,
+
+    /// <summary>Người đang xem đã duyệt bản này rồi; mỗi người chỉ được một lượt.</summary>
+    AlreadyReviewedByMe,
+
+    /// <summary>Bản ghi không còn ở trạng thái chờ duyệt.</summary>
+    NotPendingReview,
+
+    /// <summary>Đã đủ số lượt duyệt cần có, đang chờ database chốt.</summary>
+    RoundsFull
+}
+
+/// <summary>
 /// Luật duyệt theo lược đồ nhóm chốt: mỗi bản ghi cần ĐỦ BA LƯỢT duyệt mù độc lập,
 /// rồi chốt theo đa số.
 ///
@@ -35,5 +57,27 @@ public static class ReviewRules
         return approved >= (roundsRequired / 2) + 1
             ? RecordingStatus.Approved
             : RecordingStatus.Rejected;
+    }
+
+    /// <summary>
+    /// Đúng những điều kiện mà GET next đang lọc, nhưng viết thành một hàm thuần để dùng lại được
+    /// cho danh sách và cho lúc Reviewer mở thẳng một bản ghi.
+    ///
+    /// Thứ tự kiểm có chủ ý: bản của chính mình là lý do gốc; đã duyệt rồi thì nói vậy kể cả khi
+    /// bản ghi đã chốt xong, vì màn hình cần đánh dấu "mình làm rồi".
+    /// </summary>
+    public static ReviewBlocker BlockerFor(
+        bool isOwnRecording,
+        bool reviewedByMe,
+        RecordingStatus status,
+        int reviewCount,
+        int roundsRequired)
+    {
+        if (isOwnRecording) return ReviewBlocker.OwnRecording;
+        if (reviewedByMe) return ReviewBlocker.AlreadyReviewedByMe;
+        if (status != RecordingStatus.PendingReview) return ReviewBlocker.NotPendingReview;
+        if (IsComplete(reviewCount, roundsRequired)) return ReviewBlocker.RoundsFull;
+
+        return ReviewBlocker.None;
     }
 }
