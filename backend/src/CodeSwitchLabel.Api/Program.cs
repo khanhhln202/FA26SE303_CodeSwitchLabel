@@ -156,7 +156,10 @@ using (var scope = app.Services.CreateScope())
 
 app.UseExceptionHandler();
 
-if (app.Environment.IsDevelopment())
+// Ba thứ dưới đây trước kia chỉ bật ở môi trường dev. Nay mỗi thứ có công tắc riêng, vì máy chủ
+// thử nghiệm cho đội frontend cần Swagger và dữ liệu mẫu, nhưng KHÔNG được chạy ở chế độ Development:
+// chế độ đó trả nguyên nội dung lỗi ra ngoài.
+if (builder.Configuration.GetValue("Swagger:Enabled", app.Environment.IsDevelopment()))
 {
     app.UseSwagger();
     app.UseSwaggerUI(options =>
@@ -169,25 +172,28 @@ if (app.Environment.IsDevelopment())
 
         options.DefaultModelsExpandDepth(-1);
     });
+}
 
-    var seedPassword = builder.Configuration["Seed:DefaultPassword"];
+// Có khoá Seed:DefaultPassword thì tạo tài khoản và câu mẫu, bất kể môi trường nào.
+// Bản chạy thật bỏ trống khoá này là không seed gì cả.
+var seedPassword = builder.Configuration["Seed:DefaultPassword"];
 
-    if (!string.IsNullOrWhiteSpace(seedPassword))
-    {
-        await DatabaseSeeder.SeedAsync(app.Services, seedPassword);
-    }
+if (!string.IsNullOrWhiteSpace(seedPassword))
+{
+    await DatabaseSeeder.SeedAsync(app.Services, seedPassword);
+}
 
-    try
-    {
-        await app.Services.GetRequiredService<IObjectStorage>().EnsureBucketAsync();
-    }
-    catch (Exception ex)
-    {
-        // Kho lưu trữ chưa bật thì API vẫn chạy, chỉ riêng phần bản ghi âm không dùng được.
-        // Nhờ vậy ai đang làm module khác không bị buộc phải bật đủ mọi dịch vụ.
-        // Phân biệt với THIẾU CẤU HÌNH ở trên: thiếu cấu hình là lỗi cài đặt, phải dừng ngay.
-        app.Logger.LogWarning(ex, "Không kết nối được kho lưu trữ file — các endpoint bản ghi âm sẽ lỗi.");
-    }
+try
+{
+    // Luôn thử tạo bucket: máy chủ mới dựng thì chưa có, thiếu nó là mọi endpoint bản ghi âm hỏng.
+    await app.Services.GetRequiredService<IObjectStorage>().EnsureBucketAsync();
+}
+catch (Exception ex)
+{
+    // Kho lưu trữ chưa bật thì API vẫn chạy, chỉ riêng phần bản ghi âm không dùng được.
+    // Nhờ vậy ai đang làm module khác không bị buộc phải bật đủ mọi dịch vụ.
+    // Phân biệt với THIẾU CẤU HÌNH ở trên: thiếu cấu hình là lỗi cài đặt, phải dừng ngay.
+    app.Logger.LogWarning(ex, "Không kết nối được kho lưu trữ file — các endpoint bản ghi âm sẽ lỗi.");
 }
 
 app.UseCors();
