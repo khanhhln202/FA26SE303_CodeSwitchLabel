@@ -229,6 +229,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.Property(x => x.EndDate).HasColumnType("date");
 
             e.HasOne(x => x.Creator).WithMany().HasForeignKey(x => x.CreatedBy);
+            e.HasOne(x => x.AssignedToUser).WithMany().HasForeignKey(x => x.AssignedTo);
         });
 
         modelBuilder.Entity<WorkTask>(e =>

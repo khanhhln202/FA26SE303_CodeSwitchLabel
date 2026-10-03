@@ -208,6 +208,7 @@ CREATE TABLE campaign (
     end_date      DATE NOT NULL,
     status        campaign_status NOT NULL DEFAULT 'draft',
     created_by    BIGINT NOT NULL REFERENCES app_user(user_id),
+    assigned_to   BIGINT REFERENCES app_user(user_id) ON DELETE SET NULL,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT ck_campaign_target_qty CHECK (target_qty BETWEEN 2000 AND 5000),
     CONSTRAINT ck_campaign_dates CHECK (start_date <= end_date)
@@ -216,6 +217,7 @@ CREATE TABLE campaign (
 CREATE INDEX idx_campaign_created_by ON campaign (created_by);
 CREATE INDEX idx_campaign_status     ON campaign (status);
 CREATE INDEX idx_campaign_dates      ON campaign (start_date, end_date);
+CREATE INDEX idx_campaign_assigned_to ON campaign (assigned_to);
 
 CREATE TABLE task (
     task_id      BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -399,7 +401,7 @@ CREATE TRIGGER trg_script_touch        BEFORE UPDATE ON script
 CREATE TRIGGER trg_system_config_touch BEFORE UPDATE ON system_config
     FOR EACH ROW EXECUTE FUNCTION fn_touch_updated_at();
 
--- [ERD / CAMPAIGN] Campaign creators must be Task Manager or Admin.
+-- [ERD / CAMPAIGN] Campaign creators must be Admin.
 -- Task creators must be Task Manager.
 CREATE OR REPLACE FUNCTION fn_require_task_manager_creator() RETURNS trigger AS $$
 DECLARE
@@ -412,8 +414,8 @@ BEGIN
      WHERE u.user_id = NEW.created_by;
 
     IF TG_TABLE_NAME = 'campaign' THEN
-        IF v_role_name NOT IN ('task_manager', 'admin') THEN
-            RAISE EXCEPTION 'campaign creator (user %) must have task_manager or admin role', NEW.created_by;
+        IF v_role_name IS DISTINCT FROM 'admin' THEN
+            RAISE EXCEPTION 'campaign creator (user %) must have admin role', NEW.created_by;
         END IF;
     ELSIF TG_TABLE_NAME = 'task' THEN
         IF v_role_name IS DISTINCT FROM 'task_manager' THEN
@@ -634,6 +636,27 @@ END $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_campaign_target_update
     BEFORE UPDATE OF target_qty, start_date, end_date ON campaign
     FOR EACH ROW EXECUTE FUNCTION fn_validate_campaign_target_update();
+
+-- [ERD / CAMPAIGN] assigned_to must be a Task Manager (or NULL).
+CREATE OR REPLACE FUNCTION fn_validate_campaign_assigned_to() RETURNS trigger AS $$
+DECLARE
+    v_role_name VARCHAR(32);
+BEGIN
+    IF NEW.assigned_to IS NOT NULL THEN
+        SELECT r.role_name INTO v_role_name
+        FROM app_user u JOIN role r ON r.role_id = u.role_id
+        WHERE u.user_id = NEW.assigned_to;
+
+        IF v_role_name IS DISTINCT FROM 'task_manager' THEN
+            RAISE EXCEPTION 'assigned_to user % must have task_manager role', NEW.assigned_to;
+        END IF;
+    END IF;
+    RETURN NEW;
+END $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_campaign_assigned_to_role
+    BEFORE INSERT OR UPDATE OF assigned_to ON campaign
+    FOR EACH ROW EXECUTE FUNCTION fn_validate_campaign_assigned_to();
 
 -- [ERD / USER_DOMAIN] A script may only become 'validated' after an
 -- accepted/edited SCRIPT_REVIEW by a user qualified for the script's domain.
@@ -1012,6 +1035,7 @@ SELECT
     c.start_date,
     c.end_date,
     c.status AS campaign_status,
+    c.assigned_to,
     COALESCE(SUM(t.target_qty), 0) AS allocated_task_qty,
     c.target_qty - COALESCE(SUM(t.target_qty), 0) AS remaining_task_qty,
     COUNT(t.task_id) AS task_count,
@@ -1024,7 +1048,8 @@ GROUP BY
     c.target_qty,
     c.start_date,
     c.end_date,
-    c.status;
+    c.status,
+    c.assigned_to;
 
 -- Release validation: scripts inside a dataset missing one of the r_cs / r_vi pair
 CREATE VIEW v_dataset_missing_pair AS

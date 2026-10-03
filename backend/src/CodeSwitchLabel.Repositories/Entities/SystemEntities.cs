@@ -141,6 +141,7 @@ public class CampaignProgress
     public DateOnly StartDate { get; set; }
     public DateOnly EndDate { get; set; }
     public CampaignStatus CampaignStatus { get; set; }
+    public long? AssignedTo { get; set; }
     public long AllocatedTaskQty { get; set; }
     public long RemainingTaskQty { get; set; }
     public long TaskCount { get; set; }

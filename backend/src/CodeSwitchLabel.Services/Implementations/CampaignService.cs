@@ -17,10 +17,16 @@ public class CampaignService(
     TimeProvider clock) : ICampaignService
 {
     public async Task<PagedResult<CampaignListItemDto>> SearchAsync(
-        CampaignSearchRequest request, CancellationToken ct = default)
+        CampaignSearchRequest request, long? userId, RoleName? userRole, CancellationToken ct = default)
     {
+        long? assignedTo = null;
+        if (userRole == RoleName.TaskManager && userId.HasValue)
+        {
+            assignedTo = userId.Value;
+        }
+
         var (items, total) = await campaigns.SearchAsync(
-            request.Status, request.Page, request.PageSize, ct);
+            request.Status, assignedTo, request.Page, request.PageSize, ct);
 
         var ids = items.Select(c => c.CampaignId).ToList();
         var progress = (await campaigns.GetProgressAsync(ids, ct))
@@ -32,7 +38,7 @@ public class CampaignService(
 
             return new CampaignListItemDto(
                 c.CampaignId, c.CampaignName, c.TargetQty, c.StartDate, c.EndDate, c.Status, c.CreatedAt,
-                p?.AllocatedTaskQty ?? 0, (int)(p?.TaskCount ?? 0), (int)(p?.CompletedTaskCount ?? 0));
+                p?.AllocatedTaskQty ?? 0, (int)(p?.TaskCount ?? 0), (int)(p?.CompletedTaskCount ?? 0), c.AssignedTo);
         }).ToList();
 
         return new PagedResult<CampaignListItemDto>(mapped, request.Page, request.PageSize, total);
@@ -109,8 +115,28 @@ public class CampaignService(
         return ToDto(campaign);
     }
 
+    public async Task<CampaignDto> AssignAsync(
+        long campaignId, long? assignedToUserId, CancellationToken ct = default)
+    {
+        var campaign = await campaigns.GetForUpdateAsync(campaignId, ct) ?? throw NotFound(campaignId);
+
+        if (assignedToUserId.HasValue)
+        {
+            var isTaskManager = await campaigns.IsTaskManagerAsync(assignedToUserId.Value, ct);
+            if (!isTaskManager)
+            {
+                throw new UnprocessableException("assigned_to_invalid_role", "assigned_to user must have task_manager role");
+            }
+        }
+
+        campaign.AssignedTo = assignedToUserId;
+
+        await campaigns.SaveChangesAsync(ct);
+        return ToDto(campaign);
+    }
+
     private static CampaignDto ToDto(Campaign c) =>
-        new(c.CampaignId, c.CampaignName, c.TargetQty, c.StartDate, c.EndDate, c.Status, c.CreatedBy, c.CreatedAt);
+        new(c.CampaignId, c.CampaignName, c.TargetQty, c.StartDate, c.EndDate, c.Status, c.CreatedBy, c.AssignedTo, c.CreatedAt);
 
     private static NotFoundException NotFound(long campaignId) =>
         new("campaign_not_found", $"Không tìm thấy chiến dịch #{campaignId}.");
