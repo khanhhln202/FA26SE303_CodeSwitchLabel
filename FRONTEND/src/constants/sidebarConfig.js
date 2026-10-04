@@ -8,6 +8,12 @@ import {
 import {
   SIDEBAR_BG_SPEAKER,
   SIDEBAR_IDLE_TEXT_SPEAKER,
+  SIDEBAR_BORDER_SPEAKER,
+  SIDEBAR_ACTIVE_TEXT_SPEAKER,
+  SIDEBAR_HOVER_BG_SPEAKER,
+  SIDEBAR_HOVER_TEXT_SPEAKER,
+  SIDEBAR_PROMO_BG_SPEAKER,
+  SIDEBAR_PROMO_TITLE_SPEAKER,
   SIDEBAR_BG_REVIEWER,
   TEXT_ON_DARK_SECONDARY,
   SPEAKER_ACCENT_ACTIVE_ICON,
@@ -27,11 +33,20 @@ export const SIDEBAR_CONFIG = {
   speaker: {
     background: SIDEBAR_BG_SPEAKER,
     idleText: SIDEBAR_IDLE_TEXT_SPEAKER,
-    // Vạch trái của mục đang chọn dùng bản sáng của accent để nổi trên nền xanh đá
+    // Sidebar nền trắng: mục đang chọn = nền teal nhạt + vạch trái teal + chữ teal đậm
     accent: SPEAKER_ACCENT_ACTIVE_ICON,
     accentIcon: SPEAKER_ACCENT_ACTIVE_ICON,
     accentSoftBg: SPEAKER_ACCENT_SOFT_BG,
-    logoVariant: 'light',
+    // Màu cho sidebar nền sáng - role nào không khai báo thì Sidebar dùng mặc định cho nền tối
+    activeText: SIDEBAR_ACTIVE_TEXT_SPEAKER,
+    hoverBg: SIDEBAR_HOVER_BG_SPEAKER,
+    hoverText: SIDEBAR_HOVER_TEXT_SPEAKER,
+    lineColor: SIDEBAR_BORDER_SPEAKER,
+    borderColor: SIDEBAR_BORDER_SPEAKER,
+    promoBg: SIDEBAR_PROMO_BG_SPEAKER,
+    promoTitle: SIDEBAR_PROMO_TITLE_SPEAKER,
+    footerActiveBg: SPEAKER_ACCENT_SOFT_BG,
+    logoVariant: 'dark',
     // Menu chia nhóm, phẳng (không dropdown) - tên gọi hướng tới tình nguyện viên
     sections: [
       {

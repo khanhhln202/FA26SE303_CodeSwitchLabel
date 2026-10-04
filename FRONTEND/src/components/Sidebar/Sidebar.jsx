@@ -15,9 +15,11 @@ import { SIDEBAR_CONFIG } from '../../constants/sidebarConfig';
  * Lưu ý kỹ thuật: màu chữ "idle" (chưa active) được set qua CSS custom property
  * (--sidebar-idle) trên thẻ <aside> thay vì style inline trực tiếp trên từng NavLink.
  * Nếu set thẳng style={{ color: idleText }} thì style inline sẽ đè luôn cả lúc
- * hover, khiến hover:text-white không còn tác dụng (style inline luôn thắng class
+ * hover, khiến class hover không còn tác dụng (style inline luôn thắng class
  * Tailwind). Dùng text-[var(--sidebar-idle)] để vẫn là một class Tailwind bình
- * thường, hover:text-white mới ghi đè được đúng như thiết kế gốc.
+ * thường, class hover (màu lấy từ --sidebar-hover-*) mới ghi đè được.
+ * Các màu còn lại (chữ mục đang chọn, hover, đường kẻ, promo) cũng truyền qua biến CSS,
+ * mặc định là màu cho sidebar nền tối; role có sidebar nền sáng (speaker) khai báo thêm trong config.
  */
 export default function Sidebar({ role, isOpen, onClose }) {
   const location = useLocation();
@@ -41,10 +43,22 @@ export default function Sidebar({ role, isOpen, onClose }) {
     return null;
   }
 
-  const { background, idleText, accent, accentIcon, accentSoftBg, items, sections, promo } = config;
+  const {
+    background, idleText, accent, accentIcon, accentSoftBg, items, sections, promo,
+    // Màu phụ cho sidebar nền sáng - không khai báo thì giữ đúng màu cũ của sidebar nền tối
+    activeText = '#FFFFFF',
+    hoverBg = 'rgba(255,255,255,0.06)',
+    hoverText = '#FFFFFF',
+    lineColor = 'rgba(255,255,255,0.10)',
+    borderColor = 'transparent',
+    promoBg = 'rgba(255,255,255,0.04)',
+    promoTitle = '#FFFFFF',
+    footerActiveBg = 'rgba(255,255,255,0.10)',
+  } = config;
 
   const itemBase = 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-ui font-label transition-all';
-  const idleCls = 'text-[var(--sidebar-idle)] hover:bg-white/[0.06] hover:text-white';
+  const idleCls = 'text-[var(--sidebar-idle)] hover:bg-[var(--sidebar-hover-bg)] hover:text-[var(--sidebar-hover-text)]';
+  const activeCls = 'text-[var(--sidebar-active-text)] border border-l-[3px]';
   const activeStyle = { background: accentSoftBg, borderColor: accent };
 
   const toggleGroup = (name) => setOpenGroups((prev) => ({ ...prev, [name]: !prev[name] }));
@@ -54,7 +68,16 @@ export default function Sidebar({ role, isOpen, onClose }) {
       className={`w-64 font-sans h-screen fixed left-0 top-0 flex flex-col justify-between p-5 z-40 overflow-y-auto transition-transform duration-300 ease-in-out ${
         isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
       }`}
-      style={{ background, '--sidebar-idle': idleText }}
+      style={{
+        background,
+        borderRight: `1px solid ${borderColor}`,
+        '--sidebar-idle': idleText,
+        '--sidebar-active-text': activeText,
+        '--sidebar-hover-bg': hoverBg,
+        '--sidebar-hover-text': hoverText,
+        '--sidebar-line': lineColor,
+        '--sidebar-footer-active-bg': footerActiveBg,
+      }}
     >
       <div className="space-y-5 flex-1 text-left flex flex-col">
         {/* Logo - luôn 1 màu cố định, không đổi theo role */}
@@ -87,7 +110,7 @@ export default function Sidebar({ role, isOpen, onClose }) {
                         to={item.to}
                         end={item.end}
                         onClick={onClose}
-                        className={({ isActive }) => `${itemBase} ${isActive || inFlow ? 'text-white border border-l-[3px]' : idleCls}`}
+                        className={({ isActive }) => `${itemBase} ${isActive || inFlow ? activeCls : idleCls}`}
                         style={({ isActive }) => (isActive || inFlow ? activeStyle : {})}
                       >
                         {({ isActive }) => (
@@ -119,7 +142,7 @@ export default function Sidebar({ role, isOpen, onClose }) {
                 <div key={item.name}>
                   <button
                     onClick={() => toggleGroup(item.name)}
-                    className={`${itemBase} w-full justify-between ${active ? 'text-white border border-l-[3px]' : idleCls}`}
+                    className={`${itemBase} w-full justify-between ${active ? activeCls : idleCls}`}
                     style={active ? activeStyle : {}}
                   >
                     <span className="flex items-center gap-3">
@@ -134,7 +157,7 @@ export default function Sidebar({ role, isOpen, onClose }) {
                       open ? 'max-h-40 opacity-100 mt-1' : 'max-h-0 opacity-0'
                     }`}
                   >
-                    <div className="ml-4 pl-3 border-l border-white/10 space-y-1">
+                    <div className="ml-4 pl-3 border-l border-[var(--sidebar-line)] space-y-1">
                       {item.children.map((child) => {
                         const ChildIcon = child.icon;
                         return (
@@ -144,7 +167,7 @@ export default function Sidebar({ role, isOpen, onClose }) {
                             onClick={onClose}
                             className={({ isActive: a }) =>
                               `flex items-center gap-2.5 px-3 py-2 rounded-lg text-ui font-label transition-all ${
-                                a ? 'bg-white/[0.06] text-white' : idleCls
+                                a ? 'bg-[var(--sidebar-hover-bg)] text-[var(--sidebar-active-text)]' : idleCls
                               }`
                             }
                           >
@@ -170,7 +193,7 @@ export default function Sidebar({ role, isOpen, onClose }) {
                 to={item.to}
                 end={item.end}
                 onClick={onClose}
-                className={({ isActive }) => `${itemBase} ${isActive ? 'text-white border border-l-[3px]' : idleCls}`}
+                className={({ isActive }) => `${itemBase} ${isActive ? activeCls : idleCls}`}
                 style={({ isActive }) => (isActive ? activeStyle : {})}
               >
                 {({ isActive }) => (
@@ -187,10 +210,10 @@ export default function Sidebar({ role, isOpen, onClose }) {
 
         {/* Thẻ nhắc nhở nhỏ cuối sidebar - chỉ hiện nếu role có cấu hình promo */}
         {promo && (
-          <div className="mt-auto mb-2 bg-white/[0.04] p-4 rounded-xl border border-white/10 space-y-2">
+          <div className="mt-auto mb-2 p-4 rounded-xl border border-[var(--sidebar-line)] space-y-2" style={{ background: promoBg }}>
             <div className="flex items-center gap-2">
               <promo.icon className="w-3.5 h-3.5" style={{ color: accent }} />
-              <span className="type-label text-white">{promo.title}</span>
+              <span className="type-label" style={{ color: promoTitle }}>{promo.title}</span>
             </div>
             <p className="type-meta text-[var(--sidebar-idle)]">{promo.description}</p>
           </div>
@@ -198,13 +221,13 @@ export default function Sidebar({ role, isOpen, onClose }) {
       </div>
 
       {/* Footer dùng chung cho mọi role */}
-      <div className="space-y-1 pt-4 border-t border-white/10 text-left shrink-0">
+      <div className="space-y-1 pt-4 border-t border-[var(--sidebar-line)] text-left shrink-0">
         <NavLink
           to="help-center"
           onClick={onClose}
           className={({ isActive }) =>
             `flex items-center gap-3 px-3 py-2.5 w-full text-[13px] font-semibold rounded-lg transition-colors cursor-pointer ${
-              isActive ? 'bg-white/10 text-white' : idleCls
+              isActive ? 'bg-[var(--sidebar-footer-active-bg)] text-[var(--sidebar-active-text)]' : idleCls
             }`
           }
         >

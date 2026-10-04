@@ -123,7 +123,7 @@ export default function SubmitTask() {
       toast.success("Đã gửi bản ghi!", {
         description: "Cả 2 bản ghi đang chờ đội ngũ kiểm duyệt chất lượng.",
       });
-      navigate("/review-text");
+      navigate("/speaker/review-text");
     }, 1200);
   };
 
@@ -170,7 +170,7 @@ export default function SubmitTask() {
       {/* Hành động */}
       <div className="flex gap-3">
         <button
-          onClick={() => navigate("/record-speech")}
+          onClick={() => navigate("/speaker/record-speech")}
           className="flex-1 py-4 rounded-2xl text-ui font-label flex items-center justify-center gap-2 transition-all"
           style={{
             background: "#FFFFFF",

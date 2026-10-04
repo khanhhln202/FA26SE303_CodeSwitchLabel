@@ -41,8 +41,9 @@ export const BORDER_DARK_STRONG = 'rgba(255,255,255,0.2)';
 // ═══════════════════════════════════════════════════
 export const SPEAKER_ACCENT = '#3563C9';
 export const SPEAKER_ACCENT_HOVER = '#2B53AD';
-export const SPEAKER_ACCENT_ACTIVE_ICON = '#A9BEF0';          // icon mục đang chọn trên sidebar xanh đá
-export const SPEAKER_ACCENT_SOFT_BG = 'rgba(255,255,255,0.10)'; // nền mục đang chọn trên sidebar xanh đá
+export const SPEAKER_HEADER_ACCENT = '#059669';             // chữ vai trò + chấm thông báo ở header Speaker (cùng màu HOME_ACCENT)
+export const SPEAKER_ACCENT_ACTIVE_ICON = '#16A34A';          // icon + vạch trái mục đang chọn trên sidebar trắng (xanh lá, cùng màu logo)
+export const SPEAKER_ACCENT_SOFT_BG = 'rgba(22,163,74,0.10)';  // nền teal nhạt của mục đang chọn trên sidebar trắng
 export const SPEAKER_ACCENT_TEXT_ON = '#121212';   // chữ ĐẶT TRÊN nền accent (nút CTA)
 
 // ═══════════════════════════════════════════════════
@@ -60,8 +61,14 @@ export const TASK_MANAGER_ACCENT_SOFT_BG = "rgba(0,82,204,0.14)";
 // ═══════════════════════════════════════════════════
 // SIDEBAR
 // ═══════════════════════════════════════════════════
-export const SIDEBAR_BG_SPEAKER = '#2E3947';          // xanh đá (slate) - cùng họ với accent xanh dương, trầm nhưng vẫn rõ tông lạnh
-export const SIDEBAR_IDLE_TEXT_SPEAKER = '#AEB9C6';   // chữ mục chưa chọn trên nền xanh đá
+export const SIDEBAR_BG_SPEAKER = '#FFFFFF';          // sidebar trắng, ngăn với nội dung bằng viền phải
+export const SIDEBAR_IDLE_TEXT_SPEAKER = '#435A57';   // chữ mục chưa chọn trên nền trắng
+export const SIDEBAR_BORDER_SPEAKER = '#DCEAE8';      // viền phải sidebar + đường kẻ trong sidebar
+export const SIDEBAR_ACTIVE_TEXT_SPEAKER = '#15803D'; // chữ mục đang chọn (xanh lá đậm)
+export const SIDEBAR_HOVER_BG_SPEAKER = 'rgba(22,163,74,0.06)';
+export const SIDEBAR_HOVER_TEXT_SPEAKER = '#13211F';
+export const SIDEBAR_PROMO_BG_SPEAKER = '#F4F9F9';    // nền thẻ "Vì sao giọng nói của bạn quan trọng"
+export const SIDEBAR_PROMO_TITLE_SPEAKER = '#13211F';
 export const SIDEBAR_BG_REVIEWER = '#0A0E1A';
 
 // ═══════════════════════════════════════════════════
@@ -104,36 +111,44 @@ export const RANK_GOLD = '#D9A441';
 export const RANK_GOLD_BG = 'linear-gradient(90deg, rgba(217,164,65,0.18), rgba(217,164,65,0.04))';
 export const RANK_GOLD_BORDER = 'rgba(217,164,65,0.45)';
 // ═══════════════════════════════════════════════════
-// TRANG CHỦ SPEAKER — hero xanh đá + thẻ nhiệm vụ
+// TRANG CHỦ SPEAKER — đợt ghi âm (nền sáng + 1 khối emerald làm điểm nhấn)
 // Bảng màu riêng của trang chủ (tiền tố HOME_), không đụng tới token chung ở trên
 // ═══════════════════════════════════════════════════
-export const HOME_HERO_BG = '#364354';                          // nền khối bảng xếp hạng
-export const HOME_HERO_ROW = 'rgba(255,255,255,0.05)';          // nền hàng hạng 2 trở xuống
-export const HOME_HERO_DIVIDER = 'rgba(255,255,255,0.08)';      // đường kẻ trên dải thông tin vòng
-export const HOME_HERO_TEXT = '#E6EAF0';                        // trắng ngà thay trắng tinh để đỡ chói trên nền màu
-export const HOME_HERO_TEXT_MUTED = '#C9D2DD';                  // đủ tương phản (>4.5:1) để đọc lâu không căng mắt
-export const HOME_HERO_BAR = '#8FA3BA';                         // thanh tiến độ hạng 2 trở xuống
+export const HOME_ACCENT = '#059669';                           // nút chính, số liệu của "Bạn"
+export const HOME_ACCENT_HOVER = '#047857';
+export const HOME_ACCENT_SOFT_BG = '#ECFDF5';                   // nền hàng "Bạn", nút phụ, mục đang chọn
+export const HOME_ACCENT_SOFT_BORDER = '#A7F3D0';
+export const HOME_TEXT_HEADING = '#13211F';
+export const HOME_TEXT_BODY = '#435A57';
+export const HOME_TEXT_FAINT = '#70817F';
+export const HOME_BORDER = '#DFEBEA';                           // viền thẻ trắng
+export const HOME_SURFACE_SOFT = '#F2F7F7';                     // ô thông tin nhỏ trong thẻ
+export const HOME_TRACK = '#E6F1F0';                            // nền thanh tiến độ trên nền sáng
+export const HOME_BAR = '#9EDCC3';                              // thanh tiến độ của người khác
 
-// Nút chọn bảng xếp hạng (ngày / tuần) trên nền hero
-export const HOME_TAB_ACTIVE_TEXT = '#2E4F78';                  // chữ nút đang chọn (nền = HOME_HERO_TEXT)
-export const HOME_TAB_IDLE_BG = 'rgba(255,255,255,0.08)';
-export const HOME_TAB_IDLE_BORDER = 'rgba(255,255,255,0.18)';
+// Khối "Đợt hiện tại" (nền emerald)
+export const HOME_HERO_BG = 'radial-gradient(120% 160% at 100% 0%, #10A37A 0%, #0B8462 55%, #076B50 100%)';
+export const HOME_HERO_TEXT = '#FFFFFF';
+export const HOME_HERO_TEXT_MUTED = '#A7E3CB';                  // nhãn nhỏ trên nền emerald
+export const HOME_HERO_TEXT_SOFT = '#C6EEDD';                   // chữ phụ dài hơn trên nền emerald
+export const HOME_HERO_GLASS_BG = 'rgba(255,255,255,0.07)';     // ô chỉ số trong suốt
+export const HOME_HERO_GLASS_BORDER = 'rgba(255,255,255,0.13)';
+export const HOME_HERO_TRACK = 'rgba(255,255,255,0.12)';
+export const HOME_HERO_TICK = '#86C9AE';                        // số mốc 0/25/50/75/100
+export const HOME_MINT = '#6EE7B7';                             // điểm sáng duy nhất trên nền emerald
+export const HOME_PROGRESS_APPROVED = 'linear-gradient(90deg, #34D399, #6EE7B7)';
+export const HOME_PROGRESS_PENDING = 'rgba(110,231,183,0.35)';
 
-// Hạng 1: xanh lá - điểm nhấn duy nhất trên nền xanh đá
-export const HOME_RANK_FIRST = '#6FC08F';
-export const HOME_RANK_FIRST_BG = 'rgba(111,192,143,0.14)';
-export const HOME_RANK_FIRST_BORDER = 'rgba(111,192,143,0.33)';
-export const HOME_RANK_FIRST_TEXT = SIDEBAR_BG_SPEAKER;         // chữ nhãn "Dẫn đầu" trên nền xanh lá
+// Nhãn gấp (còn 1 ngày đăng ký) + lý do bị từ chối
+export const HOME_URGENT_TEXT = '#C93B3F';
+export const HOME_URGENT_BG = '#FDECEC';
+export const HOME_URGENT_DOT = '#E5484D';
 
 // Huy hiệu top 3 tự vẽ (thay emoji - emoji hiển thị khác nhau trên từng hệ điều hành)
 export const HOME_MEDAL_GOLD_BG = 'linear-gradient(145deg, #E8C872, #C9A04A)';
 export const HOME_MEDAL_GOLD_TEXT = '#4A3508';
 export const HOME_MEDAL_SILVER_BG = 'linear-gradient(145deg, #D5DBE3, #A9B3C0)';
-export const HOME_MEDAL_SILVER_TEXT = SIDEBAR_BG_SPEAKER;
+export const HOME_MEDAL_SILVER_TEXT = '#2E3947';
 export const HOME_MEDAL_BRONZE_BG = 'linear-gradient(145deg, #D9A984, #B07C56)';
 export const HOME_MEDAL_BRONZE_TEXT = '#3D2412';
-export const HOME_MEDAL_RING = 'rgba(255,255,255,0.35)';        // viền sáng bên trong huy hiệu
-
-// Tiến độ nhiệm vụ: >= 50% hoặc xong = xanh, < 50% = vàng
-export const HOME_PROGRESS_GOOD = '#3FA66B';
-export const HOME_PROGRESS_LOW = RANK_GOLD;
+export const HOME_TROPHY = '#C9A04A';

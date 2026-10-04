@@ -13,7 +13,7 @@
  *   className class bọc ngoài (để căn chỉnh vị trí)
  */
 
-const LOGO_ACCENT = '#1DB954';
+const LOGO_ACCENT = '#16A34A'; // xanh lá thương hiệu (cùng màu mục đang chọn ở sidebar Speaker)
 const INK = '#20233A'; // màu chữ khi đặt trên nền sáng
 
 export default function Logo({
