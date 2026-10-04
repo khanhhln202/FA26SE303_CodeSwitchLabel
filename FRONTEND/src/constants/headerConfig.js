@@ -1,4 +1,4 @@
-import { SPEAKER_ACCENT, REVIEWER_ACCENT } from './theme';
+import { SPEAKER_HEADER_ACCENT, REVIEWER_ACCENT } from './theme';
 
 /**
  * Cấu hình Header theo role - cùng kiểu với SIDEBAR_CONFIG.
@@ -9,8 +9,8 @@ import { SPEAKER_ACCENT, REVIEWER_ACCENT } from './theme';
  */
 export const HEADER_CONFIG = {
   speaker: {
-    accent: SPEAKER_ACCENT,
-    profilePath: '/profile',
+    accent: SPEAKER_HEADER_ACCENT,
+    profilePath: '/speaker/profile',
   },
   reviewer: {
     accent: REVIEWER_ACCENT,

@@ -339,7 +339,7 @@ export default function RecordSpeech() {
         <button
           onClick={() =>
             bothDone &&
-            navigate('/submit-task', {
+            navigate('/speaker/submit-task', {
               state: {
                 csAudioUrl: csUrl,
                 viAudioUrl: viUrl,

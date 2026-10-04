@@ -122,7 +122,7 @@ export default function ReviewText() {
   };
 
   const handleNextStep = () =>
-    navigate(`/record-speech?taskId=${selectedTask.id}`);
+    navigate(`/speaker/record-speech?taskId=${selectedTask.id}`);
   const handleSkip = () =>
     toast("Đã bỏ qua câu này.", { description: "Đang tải câu tiếp theo..." });
 

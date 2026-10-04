@@ -4,9 +4,9 @@ import { FileCheck2, Mic, UploadCloud, Check } from 'lucide-react';
 import { SPEAKER_ACCENT as ACCENT } from '../../constants/theme';
 
 const STEPS = [
-  { number: 1, label: 'Duyệt văn bản', path: '/review-text', icon: FileCheck2 },
-  { number: 2, label: 'Ghi âm', path: '/record-speech', icon: Mic },
-  { number: 3, label: 'Gửi bản ghi', path: '/submit-task', icon: UploadCloud },
+  { number: 1, label: 'Duyệt văn bản', path: '/speaker/review-text', icon: FileCheck2 },
+  { number: 2, label: 'Ghi âm', path: '/speaker/record-speech', icon: Mic },
+  { number: 3, label: 'Gửi bản ghi', path: '/speaker/submit-task', icon: UploadCloud },
 ];
 
 export default function TaskStepper({ currentStep = 2 }) {
