@@ -212,24 +212,34 @@ public static class TestDataBuilders
         private SentenceVariant _variant = SentenceVariant.CodeSwitching;
         private decimal _durationSec = 5.0m;
         private RecordingStatus _status = RecordingStatus.PendingReview;
+        private string? _recordingId;
 
         public RecordingBuilder WithScriptId(string id) { _scriptId = id; return this; }
         public RecordingBuilder WithSpeakerId(long id) { _speakerId = id; return this; }
         public RecordingBuilder WithVariant(SentenceVariant variant) { _variant = variant; return this; }
         public RecordingBuilder WithDuration(decimal seconds) { _durationSec = seconds; return this; }
         public RecordingBuilder WithStatus(RecordingStatus status) { _status = status; return this; }
+        public RecordingBuilder WithRecordingId(string id) { _recordingId = id; return this; }
 
-        public Recording Build() => new()
+        public Recording Build()
         {
-            ScriptId = _scriptId,
-            SpeakerId = _speakerId,
-            SentenceVariant = _variant,
-            DurationSec = _durationSec,
-            Status = _status,
-            CloudLink = "s3://recordings/test.wav",
-            AudioFormat = "wav",
-            RecordedAt = DateTimeOffset.UtcNow
-        };
+            // Mã phải đúng định dạng ck_recording_id_format: r_cs_/r_vi_ + 9 chữ số của script.
+            var recordingId = _recordingId
+                ?? (_variant == SentenceVariant.CodeSwitching ? "r_cs_" : "r_vi_") + _scriptId[2..];
+
+            return new Recording
+            {
+                RecordingId = recordingId,
+                ScriptId = _scriptId,
+                SpeakerId = _speakerId,
+                SentenceVariant = _variant,
+                DurationSec = _durationSec,
+                Status = _status,
+                CloudLink = $"s3://recordings/{recordingId}.wav",
+                AudioFormat = "wav",
+                RecordedAt = DateTimeOffset.UtcNow
+            };
+        }
     }
 
     // ---- ReviewBuilder ----

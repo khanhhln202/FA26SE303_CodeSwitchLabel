@@ -587,6 +587,41 @@ CREATE TRIGGER trg_task_campaign_target
     BEFORE INSERT OR UPDATE OF campaign_id, target_qty ON task
     FOR EACH ROW EXECUTE FUNCTION fn_validate_campaign_task_target();
 
+-- [TEAM_001 / ERD / TASK] A Task Manager creates tasks only inside campaigns the
+-- Admin assigned to them; a campaign with assigned_to NULL accepts no tasks yet.
+-- The service layer returns a friendly 422 first; this trigger is the safety net.
+CREATE OR REPLACE FUNCTION fn_validate_task_creator_assigned() RETURNS trigger AS $$
+DECLARE
+    v_assigned_to BIGINT;
+BEGIN
+    SELECT c.assigned_to
+      INTO v_assigned_to
+      FROM campaign c
+     WHERE c.campaign_id = NEW.campaign_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'campaign % does not exist', NEW.campaign_id;
+    END IF;
+
+    IF v_assigned_to IS NULL THEN
+        RAISE EXCEPTION
+            'campaign % has no assigned task manager yet; assign it before creating tasks',
+            NEW.campaign_id;
+    END IF;
+
+    IF v_assigned_to IS DISTINCT FROM NEW.created_by THEN
+        RAISE EXCEPTION
+            'task creator (user %) must be the assigned task manager (user %) of campaign %',
+            NEW.created_by, v_assigned_to, NEW.campaign_id;
+    END IF;
+
+    RETURN NEW;
+END $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_task_creator_assigned
+    BEFORE INSERT OR UPDATE OF campaign_id, created_by ON task
+    FOR EACH ROW EXECUTE FUNCTION fn_validate_task_creator_assigned();
+
 -- [ERD / CAMPAIGN] Do not lower a campaign target below the
 -- quantities already allocated to its tasks.
 CREATE OR REPLACE FUNCTION fn_validate_campaign_target_update() RETURNS trigger AS $$
@@ -939,8 +974,12 @@ INSERT INTO rejection_reason (reason_code, category, description) VALUES
 INSERT INTO system_config (config_key, config_value, value_type, description) VALUES
     ('review.rounds_required',              '3',     'int',    'Independent reviews per recording'),
     ('review.default_blind',                'true',  'bool',   'Reviews are blind by default'),
-    ('recording.max_leading_silence_sec',   '1',     'int',    'Max silence before speech (speaker guidance)'),
-    ('recording.max_trailing_silence_sec',  '1',     'int',    'Max silence after speech (speaker guidance)'),
+    -- [TEAM_001] silence thresholds double as auto-QC limits: exceeding them fails QC at upload
+    ('recording.max_leading_silence_sec',   '1',     'int',    'Max silence before speech: auto-QC threshold and speaker guidance'),
+    ('recording.max_trailing_silence_sec',  '1',     'int',    'Max silence after speech: auto-QC threshold and speaker guidance'),
+    -- [TEAM_001] analyser parameters (group proposal; DatabaseSeeder seeds the same keys for older DBs)
+    ('recording.silence_noise_db',          '-35',   'int',    'dB threshold treated as silence by the auto-QC analyser'),
+    ('recording.silence_min_duration_sec',  '0.5',   'string', 'Silences shorter than this (seconds) are ignored by the auto-QC analyser'),
     ('recording.audio_format_default',      'wav',   'string', 'Default audio format'),
     ('recording.max_take',                  '99',    'int',    'Highest re-record take number'),
     ('import.max_scripts_per_batch',        '100000','int',    'Sanity cap per import batch'),

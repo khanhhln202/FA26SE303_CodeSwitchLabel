@@ -14,7 +14,7 @@ namespace CodeSwitchLabel.Tests.Integration;
 [Collection("Database")]
 public class CheckConstraintTests : IntegrationTestBase
 {
-    public CheckConstraintTests(PostgreSqlFixture fixture) : base(fixture) { }
+    public CheckConstraintTests(DatabaseFixture fixture) : base(fixture) { }
 
     // ---------- Campaign constraints ----------
 

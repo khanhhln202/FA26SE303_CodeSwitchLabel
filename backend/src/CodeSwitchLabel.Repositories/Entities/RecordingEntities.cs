@@ -24,6 +24,12 @@ public class Recording
     public decimal DurationSec { get; set; }
     public DateTimeOffset RecordedAt { get; set; }
 
+    /// <summary>
+    /// Kết quả kiểm tra tự động lúc nộp (JSONB): khoảng lặng, âm lượng và các lỗi —
+    /// vì sao bản ghi trượt QC. Null tới khi QC chạy; dữ liệu cũ ghi thẳng bằng SQL có thể vẫn null.
+    /// </summary>
+    public string? QcMetrics { get; set; }
+
     public Script Script { get; set; } = null!;
     public AppUser Speaker { get; set; } = null!;
     public WorkTask? Task { get; set; }

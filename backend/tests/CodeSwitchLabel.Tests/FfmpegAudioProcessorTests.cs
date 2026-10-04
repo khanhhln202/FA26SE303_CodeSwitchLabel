@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using CodeSwitchLabel.Services.Audio;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -136,6 +137,75 @@ public sealed class FfmpegAudioProcessorTests : IDisposable
         {
             await process.StandardOutput.BaseStream.CopyToAsync(file);
         }
+
+        await process.WaitForExitAsync();
+
+        Assert.True(process.ExitCode == 0, $"ffmpeg không sinh được file thử: {await stderrTask}");
+        return path;
+    }
+
+    [Fact]
+    public async Task DoTinHieu_DoDuocKhoangLangDauCuoiVaAmLuong()
+    {
+        var wav = await GenerateSilenceToneSilenceWavAsync(leadSec: 1.5, toneSec: 2, trailSec: 1.2);
+
+        var probe = await _processor.ProbeAsync(wav);
+        var metrics = await _processor.AnalyzeSignalAsync(wav, probe.DurationSec, -35m, 0.5m);
+
+        Assert.InRange(metrics.LeadingSilenceSec, 1.35m, 1.65m);
+        Assert.InRange(metrics.TrailingSilenceSec, 1.05m, 1.35m);
+        Assert.NotNull(metrics.MeanVolumeDb);
+        Assert.NotNull(metrics.MaxVolumeDb);
+        Assert.False(metrics.ClippingSuspected);
+    }
+
+    [Fact]
+    public async Task DoTinHieu_FileChiCoTieng_KhongCoKhoangLangBien()
+    {
+        var webm = await GenerateBrowserLikeWebmAsync(seconds: 2);
+        var wav = Path.Combine(_workDir, "tone.wav");
+
+        await _processor.ConvertToWavAsync(webm, wav);
+
+        var probe = await _processor.ProbeAsync(wav);
+        var metrics = await _processor.AnalyzeSignalAsync(wav, probe.DurationSec, -35m, 0.5m);
+
+        // Tiếng liên tục: hai mép không có khoảng lặng đáng kể (chỉ vài ms lúc bộ lọc bắt đầu).
+        Assert.InRange(metrics.LeadingSilenceSec, 0m, 0.2m);
+        Assert.InRange(metrics.TrailingSilenceSec, 0m, 0.2m);
+    }
+
+    /// <summary>
+    /// Sinh WAV đúng cấu trúc một lượt thu thật: im lặng đầu (bấm nút rồi mới nói),
+    /// tiếng ở giữa, im lặng cuối (nói xong chưa bấm dừng).
+    /// </summary>
+    private async Task<string> GenerateSilenceToneSilenceWavAsync(double leadSec, double toneSec, double trailSec)
+    {
+        var path = Path.Combine(_workDir, $"silence-{Guid.NewGuid():N}.wav");
+
+        var startInfo = new ProcessStartInfo("ffmpeg")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        string[] arguments =
+        [
+            "-hide_banner", "-loglevel", "error", "-y",
+            "-f", "lavfi", "-i", $"anullsrc=r=16000:cl=mono:d={leadSec.ToString(CultureInfo.InvariantCulture)}",
+            "-f", "lavfi", "-i", $"sine=frequency=440:r=16000:d={toneSec.ToString(CultureInfo.InvariantCulture)}",
+            "-f", "lavfi", "-i", $"anullsrc=r=16000:cl=mono:d={trailSec.ToString(CultureInfo.InvariantCulture)}",
+            "-filter_complex", "[0:a][1:a][2:a]concat=n=3:v=0:a=1[out]",
+            "-map", "[out]",
+            path
+        ];
+
+        foreach (var argument in arguments) startInfo.ArgumentList.Add(argument);
+
+        using var process = Process.Start(startInfo)!;
+        var stderrTask = process.StandardError.ReadToEndAsync();
 
         await process.WaitForExitAsync();
 

@@ -31,7 +31,9 @@ public class ScriptAssignmentService(
 
         var guidance = new RecordingGuidanceDto(
             await config.GetDecimalAsync(ConfigKeys.RecordingMinDurationSec, 1m, ct),
-            await config.GetDecimalAsync(ConfigKeys.RecordingMaxDurationSec, 30m, ct));
+            await config.GetDecimalAsync(ConfigKeys.RecordingMaxDurationSec, 30m, ct),
+            await config.GetDecimalAsync(ConfigKeys.RecordingMaxLeadingSilenceSec, 1m, ct),
+            await config.GetDecimalAsync(ConfigKeys.RecordingMaxTrailingSilenceSec, 1m, ct));
 
         return new NextScriptDto(
             script.ScriptId,

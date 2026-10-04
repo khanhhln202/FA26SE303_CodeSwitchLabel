@@ -1,4 +1,3 @@
-using System.Globalization;
 using CodeSwitchLabel.Repositories.Entities;
 using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Repositories.Repositories;
@@ -60,7 +59,9 @@ public class RecordingService(
             }
 
             var probe = await ConvertAndMeasureAsync(inputPath, wavPath, ct);
-            var issues = await RunQualityChecksAsync(probe, ct);
+
+            // TEAM_001: QC giờ đo thêm khoảng lặng/âm lượng và ghi lại toàn bộ kết quả vào qc_metrics.
+            var (issues, qcReport) = await RunQualityChecksAsync(probe, wavPath, ct);
             var now = clock.GetUtcNow();
 
             var take = await NextTakeAsync(command, ct);
@@ -89,6 +90,7 @@ public class RecordingService(
                 Status = issues.Count == 0 ? RecordingStatus.PendingReview : RecordingStatus.QcFailed,
 
                 DurationSec = probe.DurationSec,
+                QcMetrics = RecordingQcJson.Serialize(qcReport),
                 RecordedAt = now
             };
 
@@ -114,7 +116,7 @@ public class RecordingService(
                 throw;
             }
 
-            return new UploadRecordingResult(recording.ToDto(), issues.Count == 0, issues, take);
+            return new UploadRecordingResult(recording.ToDto(), issues.Count == 0, issues, take, qcReport);
         }
         finally
         {
@@ -257,28 +259,35 @@ public class RecordingService(
         return probe;
     }
 
-    private async Task<IReadOnlyList<QcIssueDto>> RunQualityChecksAsync(
-        AudioProbeResult probe, CancellationToken ct)
+    /// <summary>
+    /// Chạy trọn bộ kiểm tra tự động: thời lượng, khoảng lặng đầu/cuối, âm lượng.
+    /// Trả cả danh sách lỗi (để chốt qc_failed) lẫn báo cáo đầy đủ (để ghi vào qc_metrics).
+    /// Mọi ngưỡng đọc từ system_config; thiếu hàng thì dùng mặc định ghi kèm.
+    /// </summary>
+    private async Task<(IReadOnlyList<QcIssueDto> Issues, RecordingQcReport Report)> RunQualityChecksAsync(
+        AudioProbeResult probe, string wavPath, CancellationToken ct)
     {
         var min = await config.GetDecimalAsync(ConfigKeys.RecordingMinDurationSec, 1m, ct);
         var max = await config.GetDecimalAsync(ConfigKeys.RecordingMaxDurationSec, 30m, ct);
+        var maxLeading = await config.GetDecimalAsync(ConfigKeys.RecordingMaxLeadingSilenceSec, 1m, ct);
+        var maxTrailing = await config.GetDecimalAsync(ConfigKeys.RecordingMaxTrailingSilenceSec, 1m, ct);
+        var silenceNoiseDb = await config.GetDecimalAsync(ConfigKeys.RecordingSilenceNoiseDb, -35m, ct);
+        var silenceMinSec = await config.GetDecimalAsync(ConfigKeys.RecordingSilenceMinDurationSec, 0.5m, ct);
 
-        var issues = new List<QcIssueDto>();
-        var actual = probe.DurationSec.ToString("0.##", CultureInfo.InvariantCulture);
+        var signal = await audio.AnalyzeSignalAsync(wavPath, probe.DurationSec, silenceNoiseDb, silenceMinSec, ct);
+        var issues = RecordingQcEvaluator.Evaluate(probe.DurationSec, signal, min, max, maxLeading, maxTrailing);
 
-        if (probe.DurationSec < min)
-        {
-            issues.Add(new QcIssueDto("too_short",
-                $"Bản ghi dài {actual} giây, ngắn hơn mức tối thiểu {min.ToString(CultureInfo.InvariantCulture)} giây."));
-        }
+        var report = new RecordingQcReport(
+            issues.Count == 0,
+            probe.DurationSec,
+            signal.LeadingSilenceSec,
+            signal.TrailingSilenceSec,
+            signal.MeanVolumeDb,
+            signal.MaxVolumeDb,
+            signal.ClippingSuspected,
+            issues);
 
-        if (probe.DurationSec > max)
-        {
-            issues.Add(new QcIssueDto("too_long",
-                $"Bản ghi dài {actual} giây, dài hơn mức tối đa {max.ToString(CultureInfo.InvariantCulture)} giây."));
-        }
-
-        return issues;
+        return (issues, report);
     }
 
     private async Task<Recording> LoadAccessibleAsync(

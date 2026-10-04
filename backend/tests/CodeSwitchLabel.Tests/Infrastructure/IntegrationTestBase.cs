@@ -30,7 +30,7 @@ namespace CodeSwitchLabel.Tests.Infrastructure;
 /// </summary>
 public abstract class IntegrationTestBase : IAsyncLifetime
 {
-    private readonly PostgreSqlFixture _fixture;
+    private readonly DatabaseFixture _fixture;
     protected readonly IServiceScope Scope;
     protected readonly CodeSwitchLabelDbContext Db;
     protected readonly IServiceProvider Services;
@@ -68,7 +68,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
     public long SpeakerUserId { get; private set; }
     public long CampaignId { get; private set; }
 
-    protected IntegrationTestBase(PostgreSqlFixture fixture)
+    protected IntegrationTestBase(DatabaseFixture fixture)
     {
         _fixture = fixture;
 
@@ -123,7 +123,6 @@ public abstract class IntegrationTestBase : IAsyncLifetime
     private async Task SeedTestDataAsync()
     {
         var hasher = Services.GetRequiredService<IPasswordHasher>();
-        var password = "Test@123456";
 
         var adminRole = await Db.Roles.FirstAsync(r => r.RoleName == RoleName.Admin);
         var managerRole = await Db.Roles.FirstAsync(r => r.RoleName == RoleName.TaskManager);
@@ -230,9 +229,16 @@ public abstract class IntegrationTestBase : IAsyncLifetime
                 EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(30)),
                 Status = CampaignStatus.Open,
                 CreatedBy = admin.UserId,
+                AssignedTo = manager.UserId,
                 CreatedAt = DateTimeOffset.UtcNow
             };
             Db.Campaigns.Add(campaign);
+        }
+        else if (campaign.AssignedTo is null)
+        {
+            // Trigger trg_task_creator_assigned đòi task thuộc chiến dịch ĐÃ GIAO cho người tạo;
+            // mọi task trong test đều do manager tạo nên giao chiến dịch test cho manager.
+            campaign.AssignedTo = manager.UserId;
         }
 
         await Db.SaveChangesAsync();
@@ -288,6 +294,8 @@ public abstract class IntegrationTestBase : IAsyncLifetime
             .Returns(Task.CompletedTask);
         mockStorage.Setup(s => s.GetDownloadUrlAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(("http://localhost:9000/test.wav", DateTimeOffset.UtcNow.AddHours(1)));
+        mockStorage.Setup(s => s.GetObjectUrl(It.IsAny<string>()))
+            .Returns((string key) => $"http://localhost:9000/recordings/{key}");
         mockStorage.Setup(s => s.GetObjectKey(It.IsAny<string>()))
             .Returns("test.wav");
 
@@ -298,6 +306,10 @@ public abstract class IntegrationTestBase : IAsyncLifetime
             .ReturnsAsync(new AudioProbeResult(5.0m, 16000, 1, "pcm_s16le"));
         mockAudio.Setup(a => a.ConvertToWavAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
+        mockAudio.Setup(a => a.AnalyzeSignalAsync(
+                It.IsAny<string>(), It.IsAny<decimal>(), It.IsAny<decimal>(), It.IsAny<decimal>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AudioSignalMetrics(0.1m, 0.1m, -23.5m, -1.2m, false));
 
         services.AddSingleton(mockAudio.Object);
 
@@ -414,14 +426,20 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         SentenceVariant variant,
         decimal durationSec = 5.0m)
     {
+        // Mã bản ghi phải đúng định dạng CHECK của lược đồ, và take phải tự tăng —
+        // gọi nhiều lần cho cùng cặp câu vẫn ra mã mới (r_cs_..._t2, _t3...).
+        var take = await Recordings.CountTakesAsync(scriptId, variant, CancellationToken.None) + 1;
+        var recordingId = await Recordings.GenerateIdAsync(scriptId, variant, take, CancellationToken.None);
+
         var recording = new Recording
         {
+            RecordingId = recordingId,
             ScriptId = scriptId,
             SpeakerId = speakerId,
             SentenceVariant = variant,
             DurationSec = durationSec,
             Status = RecordingStatus.PendingReview,
-            CloudLink = "s3://recordings/test.wav",
+            CloudLink = $"s3://recordings/{recordingId}.wav",
             AudioFormat = "wav",
             RecordedAt = DateTimeOffset.UtcNow
         };

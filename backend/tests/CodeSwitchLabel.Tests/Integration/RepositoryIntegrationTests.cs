@@ -12,7 +12,7 @@ namespace CodeSwitchLabel.Tests.Integration;
 [Collection("Database")]
 public class CampaignRepositoryIntegrationTests : IntegrationTestBase
 {
-    public CampaignRepositoryIntegrationTests(PostgreSqlFixture fixture) : base(fixture)
+    public CampaignRepositoryIntegrationTests(DatabaseFixture fixture) : base(fixture)
     {
     }
 
@@ -119,7 +119,7 @@ public class CampaignRepositoryIntegrationTests : IntegrationTestBase
 [Collection("Database")]
 public class TaskRepositoryIntegrationTests : IntegrationTestBase
 {
-    public TaskRepositoryIntegrationTests(PostgreSqlFixture fixture) : base(fixture)
+    public TaskRepositoryIntegrationTests(DatabaseFixture fixture) : base(fixture)
     {
     }
 
@@ -199,7 +199,7 @@ public class TaskRepositoryIntegrationTests : IntegrationTestBase
 [Collection("Database")]
 public class UserRepositoryIntegrationTests : IntegrationTestBase
 {
-    public UserRepositoryIntegrationTests(PostgreSqlFixture fixture) : base(fixture)
+    public UserRepositoryIntegrationTests(DatabaseFixture fixture) : base(fixture)
     {
     }
 
@@ -294,7 +294,7 @@ public class UserRepositoryIntegrationTests : IntegrationTestBase
 [Collection("Database")]
 public class RecordingRepositoryIntegrationTests : IntegrationTestBase
 {
-    public RecordingRepositoryIntegrationTests(PostgreSqlFixture fixture) : base(fixture)
+    public RecordingRepositoryIntegrationTests(DatabaseFixture fixture) : base(fixture)
     {
     }
 
@@ -418,7 +418,7 @@ public class RecordingRepositoryIntegrationTests : IntegrationTestBase
 [Collection("Database")]
 public class ReviewRepositoryIntegrationTests : IntegrationTestBase
 {
-    public ReviewRepositoryIntegrationTests(PostgreSqlFixture fixture) : base(fixture)
+    public ReviewRepositoryIntegrationTests(DatabaseFixture fixture) : base(fixture)
     {
     }
 
@@ -516,9 +516,9 @@ public class ReviewRepositoryIntegrationTests : IntegrationTestBase
         var recording = await CreateRecordingAsync(script.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching);
 
         // Act
-        await using var transaction = await Reviews.BeginTransactionAsync(CancellationToken.None);
+        // IntegrationTestBase đã mở transaction cho cả bài test, nên không mở thêm:
+        // mở chồng transaction trên cùng connection là lỗi của Npgsql/EF.
         var locked = await Reviews.LockRecordingAsync(recording.RecordingId, CancellationToken.None);
-        await transaction.CommitAsync(CancellationToken.None);
 
         // Assert
         Assert.NotNull(locked);
@@ -532,7 +532,7 @@ public class ReviewRepositoryIntegrationTests : IntegrationTestBase
 [Collection("Database")]
 public class ScriptRepositoryIntegrationTests : IntegrationTestBase
 {
-    public ScriptRepositoryIntegrationTests(PostgreSqlFixture fixture) : base(fixture)
+    public ScriptRepositoryIntegrationTests(DatabaseFixture fixture) : base(fixture)
     {
     }
 

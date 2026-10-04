@@ -17,9 +17,9 @@ public class SystemConfig
 }
 
 /// <summary>
-/// Khoá cấu hình. Bảy khoá đầu có sẵn trong docs/codeswitchlabel.sql.
-/// Hai khoá thời lượng là ĐỀ XUẤT của nhóm backend, chưa có trong file chung —
-/// thiếu thì hệ thống dùng giá trị mặc định trong code.
+/// Khoá cấu hình. Khoá nào có sẵn trong docs/codeswitchlabel.sql giữ nguyên tên theo lược đồ;
+/// khoá nào là đề xuất của nhóm backend thì nằm ở DatabaseSeeder — thiếu hàng trong database
+/// thì code chạy bằng giá trị mặc định ghi kèm tại chỗ đọc.
 /// </summary>
 public static class ConfigKeys
 {
@@ -30,6 +30,12 @@ public static class ConfigKeys
     public const string RecordingAudioFormatDefault = "recording.audio_format_default";
     public const string RecordingMaxTake = "recording.max_take";
     public const string ImportMaxScriptsPerBatch = "import.max_scripts_per_batch";
+
+    /// <summary>Ngưỡng dB coi là khoảng lặng khi phân tích tự động bản ghi.</summary>
+    public const string RecordingSilenceNoiseDb = "recording.silence_noise_db";
+
+    /// <summary>Khoảng lặng ngắn hơn mức này (giây) bị bỏ qua khi phân tích tự động.</summary>
+    public const string RecordingSilenceMinDurationSec = "recording.silence_min_duration_sec";
 
     public const string RecordingMinDurationSec = "recording.min_duration_sec";
     public const string RecordingMaxDurationSec = "recording.max_duration_sec";

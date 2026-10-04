@@ -106,7 +106,13 @@ public record NextScriptDto(
     IReadOnlyList<SentenceVariant> RemainingVariants,
     RecordingGuidanceDto Guidance);
 
-public record RecordingGuidanceDto(decimal MinDurationSec, decimal MaxDurationSec);
+/// <param name="MaxLeadingSilenceSec">Khoảng lặng đầu tối đa; vượt mức này là trượt kiểm tra tự động.</param>
+/// <param name="MaxTrailingSilenceSec">Khoảng lặng cuối tối đa; vượt mức này là trượt kiểm tra tự động.</param>
+public record RecordingGuidanceDto(
+    decimal MinDurationSec,
+    decimal MaxDurationSec,
+    decimal MaxLeadingSilenceSec,
+    decimal MaxTrailingSilenceSec);
 
 public record CreateScriptRequest
 {

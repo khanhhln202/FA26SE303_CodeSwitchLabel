@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Net.Http;
 
 namespace CodeSwitchLabel.Tests.Infrastructure;
 
@@ -13,7 +14,7 @@ namespace CodeSwitchLabel.Tests.Infrastructure;
 /// </summary>
 public abstract class ApiTestBase
 {
-    private readonly ApiFixture _fixture;
+    private readonly DatabaseFixture _fixture;
     protected readonly HttpClient Client;
     protected readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -21,7 +22,7 @@ public abstract class ApiTestBase
         PropertyNameCaseInsensitive = true
     };
 
-    protected ApiTestBase(ApiFixture fixture)
+    protected ApiTestBase(DatabaseFixture fixture)
     {
         _fixture = fixture;
         Client = fixture.Client;
@@ -41,10 +42,12 @@ public abstract class ApiTestBase
         return result!.AccessToken;
     }
 
-    protected async Task<string> LoginAsAdminAsync() => await LoginAsync("admin@test.local", "Test@123456");
-    protected async Task<string> LoginAsManagerAsync() => await LoginAsync("manager@test.local", "Test@123456");
-    protected async Task<string> LoginAsReviewerAsync() => await LoginAsync("reviewer@test.local", "Test@123456");
-    protected async Task<string> LoginAsSpeakerAsync() => await LoginAsync("speaker@test.local", "Test@123456");
+    protected async Task<string> GetAdminTokenAsync() => await LoginAsync("admin@codeswitchlabel.local", "Codeswitch@2026");
+    protected async Task<string> GetManagerTokenAsync() => await LoginAsync("manager@codeswitchlabel.local", "Codeswitch@2026");
+    protected async Task<string> GetReviewerTokenAsync() => await LoginAsync("reviewer@codeswitchlabel.local", "Codeswitch@2026");
+    protected async Task<string> GetReviewer2TokenAsync() => await LoginAsync("reviewer2@codeswitchlabel.local", "Codeswitch@2026");
+    protected async Task<string> GetReviewer3TokenAsync() => await LoginAsync("reviewer3@codeswitchlabel.local", "Codeswitch@2026");
+    protected async Task<string> GetSpeakerTokenAsync() => await LoginAsync("speaker1@codeswitchlabel.local", "Codeswitch@2026");
 
     protected async Task<HttpResponseMessage> GetAsync(string url, string? accessToken = null)
     {
@@ -56,6 +59,14 @@ public abstract class ApiTestBase
     {
         using var client = accessToken != null ? CreateAuthenticatedClient(accessToken) : Client;
         return await client.PostAsJsonAsync(url, payload, JsonOptions);
+    }
+
+    /// <summary>Gửi form nhiều phần (nhập file câu, nộp bản ghi âm) kèm token.</summary>
+    protected async Task<HttpResponseMessage> PostMultipartAsync(
+        string url, MultipartFormDataContent content, string? accessToken = null)
+    {
+        using var client = accessToken != null ? CreateAuthenticatedClient(accessToken) : Client;
+        return await client.PostAsync(url, content);
     }
 
     protected async Task<HttpResponseMessage> PutAsync<T>(string url, T payload, string? accessToken = null)

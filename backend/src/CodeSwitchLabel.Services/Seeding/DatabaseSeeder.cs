@@ -13,7 +13,7 @@ namespace CodeSwitchLabel.Services.Seeding;
 /// Dữ liệu mồi cho môi trường phát triển.
 ///
 /// Lược đồ, vai trò, danh mục lý do và tham số hệ thống đã do docs/codeswitchlabel.sql tạo sẵn.
-/// Lớp này chỉ thêm phần KHÔNG nằm trong file đó: tài khoản demo, hai tham số thời lượng,
+/// Lớp này chỉ thêm phần KHÔNG nằm trong file đó: tài khoản demo, các tham số bổ sung,
 /// và vài cặp câu mẫu. Mọi bước đều kiểm tra trước khi ghi nên chạy lại không nhân đôi dữ liệu.
 /// </summary>
 public static class DatabaseSeeder
@@ -33,7 +33,7 @@ public static class DatabaseSeeder
         var adminId = await SeedUsersAsync(db, hasher, defaultPassword, ct);
         await SeedReviewerDomainsAsync(db, ct);
         await SeedExtraConfigAsync(db, ct);
-        await SeedCampaignAsync(db, ct);
+        await SeedCampaignAsync(db, adminId, ct);
 
         var reviewerId = await db.AppUsers
             .Where(u => u.Email == "reviewer@codeswitchlabel.local")
@@ -189,9 +189,10 @@ public static class DatabaseSeeder
 
     /// <summary>
     /// Một chiến dịch mẫu cho Task Manager, vì mọi task giờ phải thuộc một chiến dịch.
+    /// Admin đứng tên người tạo rồi GIAO cho manager — trigger của lược đồ chặn mọi cách khác.
     /// Chỉ tiêu nằm trong khoảng lược đồ cho phép (2000..5000).
     /// </summary>
-    private static async Task SeedCampaignAsync(CodeSwitchLabelDbContext db, CancellationToken ct)
+    private static async Task SeedCampaignAsync(CodeSwitchLabelDbContext db, long adminId, CancellationToken ct)
     {
         if (await db.Campaigns.AnyAsync(ct)) return;
 
@@ -204,6 +205,8 @@ public static class DatabaseSeeder
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
+        // TEAM_001: Bản cũ đặt CreatedBy = manager nên vi phạm trigger trg_campaign_creator_role
+        // (người tạo campaign phải là admin) — database trống là vỡ ngay lúc khởi động.
         db.Campaigns.Add(new Campaign
         {
             CampaignName = "Đợt thu thập mẫu",
@@ -211,7 +214,8 @@ public static class DatabaseSeeder
             StartDate = today,
             EndDate = today.AddDays(30),
             Status = CampaignStatus.Open,
-            CreatedBy = managerId,
+            CreatedBy = adminId,
+            AssignedTo = managerId,
             CreatedAt = DateTimeOffset.UtcNow
         });
 
@@ -219,15 +223,23 @@ public static class DatabaseSeeder
     }
 
     /// <summary>
-    /// Hai ngưỡng thời lượng KHÔNG có trong docs/codeswitchlabel.sql — đây là đề xuất của nhóm
-    /// backend, chưa được giảng viên duyệt. Thiếu hai hàng này thì code chạy bằng giá trị mặc định.
+    /// Ngưỡng bổ sung cho database tạo từ trước: hai khoá thời lượng KHÔNG có trong
+    /// docs/codeswitchlabel.sql, và hai khoá phân tích khoảng lặng (có trong file .sql mới —
+    /// thêm ở đây để máy chưa dựng lại database vẫn nhận được). Mọi giá trị là đề xuất của
+    /// nhóm backend, chưa được giảng viên duyệt; thiếu hàng thì code chạy bằng mặc định.
     /// </summary>
     private static async Task SeedExtraConfigAsync(CodeSwitchLabelDbContext db, CancellationToken ct)
     {
-        (string Key, string Value, string Description)[] seeds =
+        (string Key, string Value, ConfigValueType Type, string Description)[] seeds =
         [
-            (ConfigKeys.RecordingMinDurationSec, "1", "Thời lượng tối thiểu của một bản ghi, tính bằng giây"),
-            (ConfigKeys.RecordingMaxDurationSec, "30", "Thời lượng tối đa của một bản ghi, tính bằng giây")
+            (ConfigKeys.RecordingMinDurationSec, "1", ConfigValueType.Int,
+                "Thời lượng tối thiểu của một bản ghi, tính bằng giây"),
+            (ConfigKeys.RecordingMaxDurationSec, "30", ConfigValueType.Int,
+                "Thời lượng tối đa của một bản ghi, tính bằng giây"),
+            (ConfigKeys.RecordingSilenceNoiseDb, "-35", ConfigValueType.Int,
+                "Ngưỡng dB coi là khoảng lặng khi phân tích tự động bản ghi"),
+            (ConfigKeys.RecordingSilenceMinDurationSec, "0.5", ConfigValueType.String,
+                "Khoảng lặng ngắn hơn mức này (giây) bị bỏ qua khi phân tích tự động")
         ];
 
         var existing = await db.SystemConfigs.Select(c => c.ConfigKey).ToListAsync(ct);
@@ -238,7 +250,7 @@ public static class DatabaseSeeder
             {
                 ConfigKey = s.Key,
                 ConfigValue = s.Value,
-                ValueType = ConfigValueType.Int,
+                ValueType = s.Type,
                 Description = s.Description,
                 UpdatedAt = DateTimeOffset.UtcNow
             })

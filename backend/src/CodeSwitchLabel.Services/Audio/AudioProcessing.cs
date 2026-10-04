@@ -30,6 +30,17 @@ public class AudioOptions
 
 public record AudioProbeResult(decimal DurationSec, int? SampleRate, int? Channels, string? CodecName);
 
+/// <summary>
+/// Kết quả phân tích tín hiệu của file WAV: khoảng lặng đầu/cuối và mức âm lượng.
+/// Trường âm lượng để null khi không đọc được (file lạ) — lớp QC vẫn chạy tiếp với các kiểm tra khác.
+/// </summary>
+public record AudioSignalMetrics(
+    decimal LeadingSilenceSec,
+    decimal TrailingSilenceSec,
+    decimal? MeanVolumeDb,
+    decimal? MaxVolumeDb,
+    bool ClippingSuspected);
+
 public interface IAudioProcessor
 {
     /// <summary>Chuyển mọi định dạng đầu vào sang WAV PCM 16-bit theo cấu hình.</summary>
@@ -37,6 +48,17 @@ public interface IAudioProcessor
 
     /// <summary>Đọc thời lượng, tần số lấy mẫu, số kênh của một file âm thanh.</summary>
     Task<AudioProbeResult> ProbeAsync(string filePath, CancellationToken ct = default);
+
+    /// <summary>
+    /// Đo khoảng lặng đầu/cuối và âm lượng trung bình/đỉnh của file WAV đã chuẩn hoá.
+    /// Một lượt ffmpeg chạy cả silencedetect lẫn volumedetect để khỏi giải mã file hai lần.
+    /// </summary>
+    Task<AudioSignalMetrics> AnalyzeSignalAsync(
+        string wavPath,
+        decimal durationSec,
+        decimal silenceNoiseDb,
+        decimal minSilenceSec,
+        CancellationToken ct = default);
 }
 
 /// <summary>
