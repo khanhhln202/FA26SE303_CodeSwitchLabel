@@ -65,7 +65,7 @@ public interface IStatisticsService
 public interface ICampaignService
 {
     Task<PagedResult<CampaignListItemDto>> SearchAsync(
-        CampaignSearchRequest request, CancellationToken ct = default);
+        CampaignSearchRequest request, long? userId, RoleName? userRole, CancellationToken ct = default);
 
     Task<CampaignDto> GetAsync(long campaignId, CancellationToken ct = default);
 
@@ -74,6 +74,9 @@ public interface ICampaignService
 
     Task<CampaignDto> UpdateAsync(
         long campaignId, UpdateCampaignRequest request, CancellationToken ct = default);
+
+    Task<CampaignDto> AssignAsync(
+        long campaignId, long? assignedToUserId, CancellationToken ct = default);
 }
 
 public record SystemConfigDto(
@@ -112,6 +115,7 @@ public record CampaignProgressDto(
     DateOnly StartDate,
     DateOnly EndDate,
     CampaignStatus CampaignStatus,
+    long? AssignedTo,
     long AllocatedTaskQty,
     long RemainingTaskQty,
     long TaskCount,

@@ -229,6 +229,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.Property(x => x.EndDate).HasColumnType("date");
 
             e.HasOne(x => x.Creator).WithMany().HasForeignKey(x => x.CreatedBy);
+            e.HasOne(x => x.AssignedToUser).WithMany().HasForeignKey(x => x.AssignedTo);
         });
 
         modelBuilder.Entity<WorkTask>(e =>
@@ -286,6 +287,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.Property(x => x.CloudLink).HasMaxLength(1024);
             e.Property(x => x.AudioFormat).HasMaxLength(10);
             e.Property(x => x.DurationSec).HasPrecision(8, 2);
+            e.Property(x => x.QcMetrics).HasColumnType("jsonb");
             e.HasIndex(x => x.CloudLink).IsUnique();
 
             e.HasOne(x => x.Script).WithMany(s => s.Recordings).HasForeignKey(x => x.ScriptId);

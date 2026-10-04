@@ -52,6 +52,18 @@ public class TaskService(
         var campaign = await campaigns.GetAsync(campaignId, ct)
             ?? throw new NotFoundException("campaign_not_found", $"Không tìm thấy chiến dịch #{campaignId}.");
 
+        // TEAM_001: ERD — Task Manager chỉ tạo được task trong chiến dịch Admin đã giao cho chính
+        // mình; chiến dịch chưa giao thì chưa nhận task. Trigger trg_task_creator_assigned của
+        // database chặn lần nữa ở tầng sâu.
+        if (campaign.AssignedTo != createdById)
+        {
+            throw new UnprocessableException(
+                "campaign_not_assigned_to_manager",
+                campaign.AssignedTo is null
+                    ? $"Chiến dịch #{campaignId} chưa được giao cho Task Manager nào nên chưa nhận task. Nhờ Admin giao chiến dịch trước."
+                    : $"Chiến dịch #{campaignId} đang giao cho người khác — bạn chỉ tạo được task trong chiến dịch của mình.");
+        }
+
         var targetQty = request.TargetQty!.Value;
         var deadline = ToUtcFuture(request.Deadline!.Value, now);
 

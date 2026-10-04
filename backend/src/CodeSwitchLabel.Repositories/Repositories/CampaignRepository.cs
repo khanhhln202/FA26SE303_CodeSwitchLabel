@@ -13,7 +13,7 @@ public interface ICampaignRepository
     Task<Campaign?> GetAsync(long campaignId, CancellationToken ct = default);
 
     Task<(IReadOnlyList<Campaign> Items, int Total)> SearchAsync(
-        CampaignStatus? status, int page, int pageSize, CancellationToken ct = default);
+        CampaignStatus? status, long? assignedTo, int page, int pageSize, CancellationToken ct = default);
 
     /// <summary>Tổng chỉ tiêu đã chia cho các task của một chiến dịch.</summary>
     Task<long> SumAllocatedAsync(long campaignId, CancellationToken ct = default);
@@ -21,6 +21,9 @@ public interface ICampaignRepository
     /// <summary>Tiến độ từ view v_campaign_progress; null = tất cả chiến dịch.</summary>
     Task<List<CampaignProgress>> GetProgressAsync(
         IReadOnlyCollection<long>? campaignIds, CancellationToken ct = default);
+
+    /// <summary>Kiểm tra user có role TaskManager không.</summary>
+    Task<bool> IsTaskManagerAsync(long userId, CancellationToken ct = default);
 
     Task<int> SaveChangesAsync(CancellationToken ct = default);
 }
@@ -36,11 +39,12 @@ public class CampaignRepository(CodeSwitchLabelDbContext db) : ICampaignReposito
         db.Campaigns.AsNoTracking().FirstOrDefaultAsync(c => c.CampaignId == campaignId, ct);
 
     public async Task<(IReadOnlyList<Campaign> Items, int Total)> SearchAsync(
-        CampaignStatus? status, int page, int pageSize, CancellationToken ct = default)
+        CampaignStatus? status, long? assignedTo, int page, int pageSize, CancellationToken ct = default)
     {
         var query = db.Campaigns.AsNoTracking();
 
         if (status.HasValue) query = query.Where(c => c.Status == status.Value);
+        if (assignedTo.HasValue) query = query.Where(c => c.AssignedTo == assignedTo.Value);
 
         var total = await query.CountAsync(ct);
 
@@ -69,6 +73,14 @@ public class CampaignRepository(CodeSwitchLabelDbContext db) : ICampaignReposito
         }
 
         return query.OrderByDescending(p => p.StartDate).ThenBy(p => p.CampaignId).ToListAsync(ct);
+    }
+
+    public async Task<bool> IsTaskManagerAsync(long userId, CancellationToken ct = default)
+    {
+        return await db.AppUsers
+            .Where(u => u.UserId == userId)
+            .Join(db.Roles, u => u.RoleId, r => r.RoleId, (u, r) => r.RoleName)
+            .AnyAsync(r => r == RoleName.TaskManager, ct);
     }
 
     public Task<int> SaveChangesAsync(CancellationToken ct = default) => db.SaveChangesAsync(ct);

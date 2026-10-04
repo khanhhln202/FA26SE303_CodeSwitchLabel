@@ -1,4 +1,5 @@
 using CodeSwitchLabel.Repositories.Enums;
+using CodeSwitchLabel.Services.Audio;
 
 namespace CodeSwitchLabel.Services.Dtos;
 
@@ -13,7 +14,7 @@ public record RecordingDto(
     decimal DurationSec,
     DateTimeOffset RecordedAt);
 
-/// <summary>Một lỗi của bước kiểm tra tự động. Chỉ trả trong response — lược đồ không có chỗ lưu.</summary>
+/// <summary>Một lỗi của bước kiểm tra tự động; trả trong response và nằm trong qc_metrics đã lưu.</summary>
 public record QcIssueDto(string Code, string Message);
 
 /// <summary>
@@ -21,11 +22,13 @@ public record QcIssueDto(string Code, string Message);
 /// qc_failed, chỉ là không vào hàng đợi của Reviewer.
 /// </summary>
 /// <param name="Take">Lần thu thứ mấy cho cặp câu và biến thể này. Lần đầu là 1.</param>
+/// <param name="QcMetrics">Kết quả đầy đủ của bước kiểm tra tự động — cùng dữ liệu đã ghi vào recording.qc_metrics.</param>
 public record UploadRecordingResult(
     RecordingDto Recording,
     bool QcPassed,
     IReadOnlyList<QcIssueDto> QcIssues,
-    int Take);
+    int Take,
+    RecordingQcReport QcMetrics);
 
 public record AudioUrlDto(string Url, DateTimeOffset ExpiresAt);
 

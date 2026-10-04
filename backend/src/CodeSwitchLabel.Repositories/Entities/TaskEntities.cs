@@ -20,12 +20,16 @@ public class Campaign
     public DateOnly EndDate { get; set; }
     public CampaignStatus Status { get; set; }
 
-    /// <summary>Người tạo phải mang vai task_manager, do trigger của database chặn.</summary>
+    /// <summary>Người tạo phải mang vai admin, do trigger của database chặn.</summary>
     public long CreatedBy { get; set; }
+
+    /// <summary>Task Manager được giao phụ trách chiến dịch (NULL = chưa giao). Chỉ Admin mới được set.</summary>
+    public long? AssignedTo { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
 
     public AppUser Creator { get; set; } = null!;
+    public AppUser? AssignedToUser { get; set; }
     public ICollection<WorkTask> Tasks { get; set; } = [];
 }
 

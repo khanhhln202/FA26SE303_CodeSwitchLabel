@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
-    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+    <TestingPlatformDotnetTestSupport>false</TestingPlatformDotnetTestSupport>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,9 +13,11 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
     <PackageReference Include="Moq" Version="4.21.0" />
     <PackageReference Include="Npgsql" Version="10.0.3" />
+    <PackageReference Include="Testcontainers" Version="4.15.0" />
     <PackageReference Include="Testcontainers.PostgreSql" Version="4.15.0" />
     <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0">
       <PrivateAssets>all</PrivateAssets>
@@ -30,7 +32,19 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\CodeSwitchLabel.Api\CodeSwitchLabel.Api.csproj" />
     <ProjectReference Include="..\..\src\CodeSwitchLabel.Services\CodeSwitchLabel.Services.csproj" />
     <ProjectReference Include="..\..\src\CodeSwitchLabel.Repositories\CodeSwitchLabel.Repositories.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="..\..\..\..\docs\codeswitchlabel.sql">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>codeswitchlabel.sql</Link>
+    </None>
+    <None Update="..\..\..\..\..\docs\codeswitchlabel.sql">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>codeswitchlabel.sql</Link>
+    </None>
   </ItemGroup>
 </Project>

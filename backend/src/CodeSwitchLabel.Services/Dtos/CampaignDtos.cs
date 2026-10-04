@@ -11,6 +11,7 @@ public record CampaignDto(
     DateOnly EndDate,
     CampaignStatus Status,
     long CreatedBy,
+    long? AssignedTo,
     DateTimeOffset CreatedAt);
 
 /// <param name="AllocatedTaskQty">Tổng chỉ tiêu đã chia cho các task trong chiến dịch.</param>
@@ -24,7 +25,8 @@ public record CampaignListItemDto(
     DateTimeOffset CreatedAt,
     long AllocatedTaskQty,
     int TaskCount,
-    int CompletedTaskCount);
+    int CompletedTaskCount,
+    long? AssignedTo);
 
 public record CreateCampaignRequest
 {

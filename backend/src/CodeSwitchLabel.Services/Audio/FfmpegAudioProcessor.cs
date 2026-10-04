@@ -79,7 +79,36 @@ public sealed class FfmpegAudioProcessor(
         }
     }
 
-    private async Task<string> RunAsync(string fileName, IReadOnlyList<string> arguments, CancellationToken ct)
+    public async Task<AudioSignalMetrics> AnalyzeSignalAsync(
+        string wavPath, decimal durationSec, decimal silenceNoiseDb, decimal minSilenceSec,
+        CancellationToken ct = default)
+    {
+        // Một lượt ffmpeg chạy cả hai bộ lọc: silencedetect tìm khoảng lặng, volumedetect đo âm lượng.
+        // "-f null -" vì chỉ cần phân tích chứ không cần file ra; "-nostats" để log gọn cho dễ đọc.
+        var filter = FormattableString.Invariant(
+            $"silencedetect=noise={silenceNoiseDb}dB:d={minSilenceSec},volumedetect");
+
+        var (_, stderr) = await RunCaptureAsync(_options.FfmpegPath,
+        [
+            "-hide_banner", "-nostats",
+            "-i", wavPath,
+            "-map", "0:a:0",
+            "-af", filter,
+            "-f", "null", "-"
+        ], ct);
+
+        return FfmpegOutputParser.ParseSignalMetrics(stderr, durationSec);
+    }
+
+    private async Task<string> RunAsync(string fileName, IReadOnlyList<string> arguments, CancellationToken ct) =>
+        (await RunCaptureAsync(fileName, arguments, ct)).Stdout;
+
+    /// <summary>
+    /// Chạy công cụ và trả về CẢ stdout lẫn stderr: ffmpeg in kết quả bộ lọc
+    /// (silencedetect, volumedetect) ra stderr nên phải đọc được luồng này.
+    /// </summary>
+    private async Task<(string Stdout, string Stderr)> RunCaptureAsync(
+        string fileName, IReadOnlyList<string> arguments, CancellationToken ct)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -149,7 +178,7 @@ public sealed class FfmpegAudioProcessor(
                 $"{Path.GetFileName(fileName)} không xử lý được file (mã thoát {process.ExitCode}).");
         }
 
-        return stdout;
+        return (stdout, stderr);
     }
 
     private static void TryKill(Process process)

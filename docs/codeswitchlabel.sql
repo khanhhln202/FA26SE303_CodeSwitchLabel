@@ -208,6 +208,7 @@ CREATE TABLE campaign (
     end_date      DATE NOT NULL,
     status        campaign_status NOT NULL DEFAULT 'draft',
     created_by    BIGINT NOT NULL REFERENCES app_user(user_id),
+    assigned_to   BIGINT REFERENCES app_user(user_id) ON DELETE SET NULL,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT ck_campaign_target_qty CHECK (target_qty BETWEEN 2000 AND 5000),
     CONSTRAINT ck_campaign_dates CHECK (start_date <= end_date)
@@ -216,6 +217,7 @@ CREATE TABLE campaign (
 CREATE INDEX idx_campaign_created_by ON campaign (created_by);
 CREATE INDEX idx_campaign_status     ON campaign (status);
 CREATE INDEX idx_campaign_dates      ON campaign (start_date, end_date);
+CREATE INDEX idx_campaign_assigned_to ON campaign (assigned_to);
 
 CREATE TABLE task (
     task_id      BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -399,7 +401,7 @@ CREATE TRIGGER trg_script_touch        BEFORE UPDATE ON script
 CREATE TRIGGER trg_system_config_touch BEFORE UPDATE ON system_config
     FOR EACH ROW EXECUTE FUNCTION fn_touch_updated_at();
 
--- [ERD / CAMPAIGN] Campaign creators must be Task Manager or Admin.
+-- [ERD / CAMPAIGN] Campaign creators must be Admin.
 -- Task creators must be Task Manager.
 CREATE OR REPLACE FUNCTION fn_require_task_manager_creator() RETURNS trigger AS $$
 DECLARE
@@ -412,8 +414,8 @@ BEGIN
      WHERE u.user_id = NEW.created_by;
 
     IF TG_TABLE_NAME = 'campaign' THEN
-        IF v_role_name NOT IN ('task_manager', 'admin') THEN
-            RAISE EXCEPTION 'campaign creator (user %) must have task_manager or admin role', NEW.created_by;
+        IF v_role_name IS DISTINCT FROM 'admin' THEN
+            RAISE EXCEPTION 'campaign creator (user %) must have admin role', NEW.created_by;
         END IF;
     ELSIF TG_TABLE_NAME = 'task' THEN
         IF v_role_name IS DISTINCT FROM 'task_manager' THEN
@@ -585,6 +587,41 @@ CREATE TRIGGER trg_task_campaign_target
     BEFORE INSERT OR UPDATE OF campaign_id, target_qty ON task
     FOR EACH ROW EXECUTE FUNCTION fn_validate_campaign_task_target();
 
+-- [TEAM_001 / ERD / TASK] A Task Manager creates tasks only inside campaigns the
+-- Admin assigned to them; a campaign with assigned_to NULL accepts no tasks yet.
+-- The service layer returns a friendly 422 first; this trigger is the safety net.
+CREATE OR REPLACE FUNCTION fn_validate_task_creator_assigned() RETURNS trigger AS $$
+DECLARE
+    v_assigned_to BIGINT;
+BEGIN
+    SELECT c.assigned_to
+      INTO v_assigned_to
+      FROM campaign c
+     WHERE c.campaign_id = NEW.campaign_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'campaign % does not exist', NEW.campaign_id;
+    END IF;
+
+    IF v_assigned_to IS NULL THEN
+        RAISE EXCEPTION
+            'campaign % has no assigned task manager yet; assign it before creating tasks',
+            NEW.campaign_id;
+    END IF;
+
+    IF v_assigned_to IS DISTINCT FROM NEW.created_by THEN
+        RAISE EXCEPTION
+            'task creator (user %) must be the assigned task manager (user %) of campaign %',
+            NEW.created_by, v_assigned_to, NEW.campaign_id;
+    END IF;
+
+    RETURN NEW;
+END $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_task_creator_assigned
+    BEFORE INSERT OR UPDATE OF campaign_id, created_by ON task
+    FOR EACH ROW EXECUTE FUNCTION fn_validate_task_creator_assigned();
+
 -- [ERD / CAMPAIGN] Do not lower a campaign target below the
 -- quantities already allocated to its tasks.
 CREATE OR REPLACE FUNCTION fn_validate_campaign_target_update() RETURNS trigger AS $$
@@ -634,6 +671,27 @@ END $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_campaign_target_update
     BEFORE UPDATE OF target_qty, start_date, end_date ON campaign
     FOR EACH ROW EXECUTE FUNCTION fn_validate_campaign_target_update();
+
+-- [ERD / CAMPAIGN] assigned_to must be a Task Manager (or NULL).
+CREATE OR REPLACE FUNCTION fn_validate_campaign_assigned_to() RETURNS trigger AS $$
+DECLARE
+    v_role_name VARCHAR(32);
+BEGIN
+    IF NEW.assigned_to IS NOT NULL THEN
+        SELECT r.role_name INTO v_role_name
+        FROM app_user u JOIN role r ON r.role_id = u.role_id
+        WHERE u.user_id = NEW.assigned_to;
+
+        IF v_role_name IS DISTINCT FROM 'task_manager' THEN
+            RAISE EXCEPTION 'assigned_to user % must have task_manager role', NEW.assigned_to;
+        END IF;
+    END IF;
+    RETURN NEW;
+END $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_campaign_assigned_to_role
+    BEFORE INSERT OR UPDATE OF assigned_to ON campaign
+    FOR EACH ROW EXECUTE FUNCTION fn_validate_campaign_assigned_to();
 
 -- [ERD / USER_DOMAIN] A script may only become 'validated' after an
 -- accepted/edited SCRIPT_REVIEW by a user qualified for the script's domain.
@@ -916,8 +974,12 @@ INSERT INTO rejection_reason (reason_code, category, description) VALUES
 INSERT INTO system_config (config_key, config_value, value_type, description) VALUES
     ('review.rounds_required',              '3',     'int',    'Independent reviews per recording'),
     ('review.default_blind',                'true',  'bool',   'Reviews are blind by default'),
-    ('recording.max_leading_silence_sec',   '1',     'int',    'Max silence before speech (speaker guidance)'),
-    ('recording.max_trailing_silence_sec',  '1',     'int',    'Max silence after speech (speaker guidance)'),
+    -- [TEAM_001] silence thresholds double as auto-QC limits: exceeding them fails QC at upload
+    ('recording.max_leading_silence_sec',   '1',     'int',    'Max silence before speech: auto-QC threshold and speaker guidance'),
+    ('recording.max_trailing_silence_sec',  '1',     'int',    'Max silence after speech: auto-QC threshold and speaker guidance'),
+    -- [TEAM_001] analyser parameters (group proposal; DatabaseSeeder seeds the same keys for older DBs)
+    ('recording.silence_noise_db',          '-35',   'int',    'dB threshold treated as silence by the auto-QC analyser'),
+    ('recording.silence_min_duration_sec',  '0.5',   'string', 'Silences shorter than this (seconds) are ignored by the auto-QC analyser'),
     ('recording.audio_format_default',      'wav',   'string', 'Default audio format'),
     ('recording.max_take',                  '99',    'int',    'Highest re-record take number'),
     ('import.max_scripts_per_batch',        '100000','int',    'Sanity cap per import batch'),
@@ -1012,6 +1074,7 @@ SELECT
     c.start_date,
     c.end_date,
     c.status AS campaign_status,
+    c.assigned_to,
     COALESCE(SUM(t.target_qty), 0) AS allocated_task_qty,
     c.target_qty - COALESCE(SUM(t.target_qty), 0) AS remaining_task_qty,
     COUNT(t.task_id) AS task_count,
@@ -1024,7 +1087,8 @@ GROUP BY
     c.target_qty,
     c.start_date,
     c.end_date,
-    c.status;
+    c.status,
+    c.assigned_to;
 
 -- Release validation: scripts inside a dataset missing one of the r_cs / r_vi pair
 CREATE VIEW v_dataset_missing_pair AS
