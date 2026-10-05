@@ -183,11 +183,10 @@ public sealed class DatabaseFixture : IAsyncLifetime
                     services.RemoveAll(typeof(IAudioProcessor));
                     services.RemoveAll(typeof(TimeProvider));
 
-                    // Disable AccountStateValidator for tests (avoids DB lookup on every request)
-                    services.Configure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
-                    {
-                        options.Events = new JwtBearerEvents();
-                    });
+                    // KHÔNG tắt AccountStateValidator ở đây. Nó là chỗ thực thi luật "khoá tài khoản,
+                    // đổi vai hay đổi mật khẩu có hiệu lực ngay"; tắt đi thì luật đó không còn test nào phủ,
+                    // và test cũng không còn giống môi trường thật. Cái giá là một truy vấn theo khoá chính
+                    // cho mỗi request — không đáng kể so với thời gian chạy một test tích hợp.
 
                     var mockStorage = new Mock<IObjectStorage>();
                     mockStorage.Setup(s => s.EnsureBucketAsync(It.IsAny<CancellationToken>()))
