@@ -35,18 +35,22 @@ public class ReviewRepositoryTests : IntegrationTestBase
     [Fact]
     public async Task GetNextForReviewerAsync_ReturnsRecording_WhenAvailable()
     {
-        // Arrange
+        // Arrange — người đọc riêng cho test này. Hàng đợi duyệt là hàng đợi CHUNG của cả hệ thống:
+        // hỏi mà không kèm bộ lọc thì bản ghi do test khác tạo trong cùng database tạm cũng lọt vào,
+        // và test hỏng hay không là tuỳ thứ tự chạy.
+        var speaker = await CreateUserAsync(NewUniqueEmail("speaker-next"), RoleName.Speaker);
+
         var script = await CreateScriptAsync(
             "[vi]Test [en]next [vi]recording",
             "[vi]Test bản ghi tiếp theo",
             ScriptDomain.ItTechnology,
             AdminUserId);
 
-        var recording = await CreateRecordingAsync(script.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching);
+        var recording = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
 
         // Act
         var result = await Reviews.GetNextForReviewerAsync(
-            ReviewerUserId, null, null, false, 3, CancellationToken.None);
+            ReviewerUserId, null, speaker.UserId, false, 3, CancellationToken.None);
 
         // Assert
         Assert.NotNull(result);
