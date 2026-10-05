@@ -309,7 +309,8 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
 
             query = query
                 // Một cặp câu một người đọc: bỏ qua câu người khác đã đụng vào.
-                .Where(s => !s.Recordings.Any(r => r.SpeakerId != uid))
+                // Bản trượt QC không giữ chỗ.
+                .Where(s => !s.Recordings.Any(r => r.SpeakerId != uid && r.Status != RecordingStatus.QcFailed))
                 // Người này còn thiếu ít nhất một biến thể thì mới có việc để làm.
                 .Where(s =>
                     !s.Recordings.Any(r => r.SentenceVariant == SentenceVariant.CodeSwitching &&
@@ -326,8 +327,9 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         }
         else
         {
-            // Chưa giao cho ai thì chỉ lấy câu chưa ai thu, để giao cho người nào cũng được.
-            query = query.Where(s => !s.Recordings.Any());
+            // Chưa giao cho ai thì chỉ lấy câu chưa ai thu (bỏ qua bản trượt QC),
+            // để giao cho người nào cũng được.
+            query = query.Where(s => !s.Recordings.Any(r => r.Status != RecordingStatus.QcFailed));
         }
 
         return query
@@ -378,7 +380,8 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
                 .AsNoTracking()
                 .Where(ts => ts.TaskId == taskId && ts.Status == TaskScriptStatus.Pending)
                 // Cặp câu đã thuộc về người đọc khác thì người nhận task không đụng vào được.
-                .Where(ts => ts.Script.Recordings.Any(r => r.SpeakerId != userId))
+                // Bản trượt QC không giữ chỗ.
+                .Where(ts => ts.Script.Recordings.Any(r => r.SpeakerId != userId && r.Status != RecordingStatus.QcFailed))
                 .OrderBy(ts => ts.ScriptId)
                 .Select(ts => ts.ScriptId)
                 .ToListAsync(ct)

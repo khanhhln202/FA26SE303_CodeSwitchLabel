@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CodeSwitchLabel.Repositories.Entities;
+using Microsoft.EntityFrameworkCore;
 using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Repositories.Persistence;
 using CodeSwitchLabel.Repositories.Repositories;
@@ -83,19 +84,20 @@ public class ScriptService(
     public async Task<ImportResultDto> ImportAsync(
         Stream jsonFile, string fileName, long importedById, CancellationToken ct = default)
     {
-        var items = await ReadItemsAsync(jsonFile, ct);
         var cap = await config.GetIntAsync(ConfigKeys.ImportMaxScriptsPerBatch, 100_000, ct);
+        var items = await ReadItemsAsync(jsonFile, cap, ct);
 
-        if (items.Count > cap)
+        if (items.Count == 0)
         {
-            throw new UnprocessableException(
-                "import_too_large", $"File có {items.Count} câu, vượt giới hạn {cap} câu mỗi lần nhập.");
+            throw new UnprocessableException("empty_file", "File không có câu nào để nhập.");
         }
+
+        var safeName = SanitizeFileName(fileName);
 
         var batch = new ImportBatch
         {
             ImportedBy = importedById,
-            FileName = fileName,
+            FileName = safeName,
             ScriptCount = 0,
             CreatedAt = clock.GetUtcNow()
         };
@@ -103,38 +105,151 @@ public class ScriptService(
         repository.AddBatch(batch);
         await repository.SaveChangesAsync(ct);
 
+        // Dedupe trong file + so với DB bằng một câu truy vấn duy nhất.
+        var trimmedCs = items.Select(i => (i.CsTranscript ?? string.Empty).Trim()).Distinct().ToArray();
+        var existing = await repository.FindExistingContentsAsync(trimmedCs, ct);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
         var skipped = new List<ImportSkippedDto>();
+        var pendingScripts = new List<Script>();
+        var pendingWords = new List<ScriptWord>();
         var imported = new List<string>();
 
         foreach (var item in items)
         {
             try
             {
-                var request = new CreateScriptRequest
+                var cs = (item.CsTranscript ?? string.Empty).Trim();
+                var ve = (item.ViEquivalent ?? string.Empty).Trim();
+
+                if (cs.Length == 0 || ve.Length == 0)
                 {
-                    CsContent = item.CsTranscript,
-                    VeContent = item.ViEquivalent,
-                    Domain = ParseDomain(item.Domain),
-                    Alignment = item.Alignment
+                    throw new UnprocessableException("empty_content", "Thiếu câu chen tiếng Anh hoặc câu thuần Việt.");
+                }
+
+                if (!seen.Add(cs))
+                {
+                    throw ConflictException.DuplicateContent();
+                }
+
+                if (existing.Contains(cs))
+                {
+                    throw ConflictException.DuplicateContent();
+                }
+
+                var domain = ParseDomain(item.Domain);
+                var (wordCount, enWordCount) = ValidatePair(cs, ve);
+                var words = BuildWords(item.Alignment ?? [], enWordCount);
+                var relation = RelationOf(words);
+                var scriptId = await repository.GenerateIdAsync(enWordCount, domain, relation, ct);
+                var now = clock.GetUtcNow();
+
+                var script = new Script
+                {
+                    ScriptId = scriptId,
+                    CsContent = cs,
+                    ViContent = ve,
+                    Status = ScriptStatus.PendingValidation,
+                    WordCount = wordCount,
+                    EnWordCount = enWordCount,
+                    Domain = domain,
+                    CreatedBy = importedById,
+                    ImportBatchId = batch.BatchId,
+                    CreatedAt = now,
+                    UpdatedAt = now
                 };
 
-                // Câu nhập từ file vẫn phải qua bước duyệt nội dung, đúng mặc định của lược đồ.
-                var created = await CreateInternalAsync(
-                    request, importedById, ScriptStatus.PendingValidation, batch.BatchId, ct);
+                foreach (var word in words) word.ScriptId = scriptId;
 
-                imported.Add(created.ScriptId);
+                pendingScripts.Add(script);
+                pendingWords.AddRange(words);
+                imported.Add(scriptId);
             }
             catch (AppException ex)
             {
-                // Một câu hỏng không được làm hỏng cả file — ghi lại lý do rồi đi tiếp.
-                skipped.Add(new ImportSkippedDto(item.Id, ex.Message));
+                // Một câu hỏng không được làm hỏng cả file — ghi lại mã + lý do rồi đi tiếp.
+                skipped.Add(new ImportSkippedDto(item.Id, ex.Code, ex.Message));
+            }
+        }
+
+        if (pendingScripts.Count > 0)
+        {
+            try
+            {
+                foreach (var script in pendingScripts) repository.Add(script);
+                repository.AddWords(pendingWords);
+                await repository.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateException)
+            {
+                // Race (trùng unique) hoặc trigger defer: rớt cả bulk thì thử lại từng câu
+                // để giữ partial-success thay vì mất trắng.
+                repository.ClearTracked();
+                imported.Clear();
+
+                foreach (var script in pendingScripts)
+                {
+                    try
+                    {
+                        repository.Add(script);
+                        repository.AddWords(pendingWords.Where(w => w.ScriptId == script.ScriptId));
+                        await repository.SaveChangesAsync(ct);
+                        imported.Add(script.ScriptId);
+                    }
+                    catch (DbUpdateException dbEx)
+                    {
+                        repository.ClearTracked();
+                        skipped.Add(new ImportSkippedDto(null, IsUniqueViolation(dbEx) ? "duplicate_content" : "db_error",
+                            IsUniqueViolation(dbEx) ? "Câu này đã tồn tại trong kho." : "Không lưu được câu này."));
+                    }
+                    catch (AppException ex)
+                    {
+                        repository.ClearTracked();
+                        skipped.Add(new ImportSkippedDto(null, ex.Code, ex.Message));
+                    }
+                }
             }
         }
 
         batch.ScriptCount = imported.Count;
         await repository.SaveChangesAsync(ct);
 
-        return new ImportResultDto(batch.BatchId, fileName, imported.Count, imported, skipped);
+        return new ImportResultDto(batch.BatchId, safeName, imported.Count, imported, skipped);
+    }
+
+    public async Task<PagedResult<ImportBatchDto>> ListBatchesAsync(PageRequest request, CancellationToken ct = default)
+    {
+        var (items, total) = await repository.ListBatchesAsync(request.Page, request.PageSize, ct);
+
+        return new PagedResult<ImportBatchDto>(
+            [.. items.Select(b => new ImportBatchDto(b.BatchId, b.FileName, b.ScriptCount, b.ImportedBy, b.CreatedAt))],
+            request.Page, request.PageSize, total);
+    }
+
+    public async Task<ImportBatchDetailDto> GetBatchAsync(long batchId, CancellationToken ct = default)
+    {
+        var batch = await repository.GetBatchAsync(batchId, ct)
+            ?? throw new NotFoundException("batch_not_found", $"Không tìm thấy batch #{batchId}.");
+
+        var scriptIds = await repository.GetScriptIdsByBatchAsync(batchId, ct);
+
+        return new ImportBatchDetailDto(batch.BatchId, batch.FileName, batch.ScriptCount, batch.ImportedBy, batch.CreatedAt, scriptIds);
+    }
+
+    private static string SanitizeFileName(string fileName)
+    {
+        var name = Path.GetFileName(fileName ?? string.Empty).Trim();
+
+        if (string.IsNullOrWhiteSpace(name)) return "input_text.json";
+        if (name.Length > 255) name = name[^255..];
+
+        return name;
+    }
+
+    private static bool IsUniqueViolation(DbUpdateException ex)
+    {
+        return ex.InnerException is Npgsql.PostgresException pg &&
+            pg.SqlState == Npgsql.PostgresErrorCodes.UniqueViolation;
     }
 
     public async Task<ScriptDetailDto> ReviewAsync(
@@ -380,23 +495,68 @@ public class ScriptService(
         return reason.ReasonId;
     }
 
-    private static async Task<List<ImportScriptItem>> ReadItemsAsync(Stream file, CancellationToken ct)
+    private static async Task<List<ImportScriptItem>> ReadItemsAsync(Stream file, int cap, CancellationToken ct)
     {
         try
         {
-            using var document = await JsonDocument.ParseAsync(file, cancellationToken: ct);
+            // Copy giới hạn bởi RequestSizeLimit (20MB). Đọc từ buffer để phát hiện
+            // array/single mà không giữ DOM JsonDocument + GetRawText gấp đôi bộ nhớ.
+            await using var buffer = new MemoryStream();
+            await file.CopyToAsync(buffer, ct);
+            var bytes = buffer.ToArray();
 
-            // Nhận cả file một câu lẫn file nhiều câu, vì mẫu của giảng viên là một phần tử rời.
-            var json = document.RootElement.GetRawText();
+            if (bytes.Length == 0)
+            {
+                throw new UnprocessableException("empty_file", "File rỗng, không có gì để nhập.");
+            }
 
-            return document.RootElement.ValueKind == JsonValueKind.Array
-                ? JsonSerializer.Deserialize<List<ImportScriptItem>>(json) ?? []
-                : [JsonSerializer.Deserialize<ImportScriptItem>(json)!];
+            var isArray = IsJsonArray(bytes);
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = false };
+
+            if (!isArray)
+            {
+                var single = JsonSerializer.Deserialize<ImportScriptItem>(bytes, options)
+                    ?? throw new UnprocessableException("invalid_json", "File không chứa câu nào.");
+                return [single];
+            }
+
+            // Streaming: đếm dần và chặn ngay khi vượt cap, không tải cả 100k vào DOM.
+            var items = new List<ImportScriptItem>();
+            await using var stream = new MemoryStream(bytes, writable: false);
+            await foreach (var item in JsonSerializer.DeserializeAsyncEnumerable<ImportScriptItem>(stream, options, ct))
+            {
+                if (item is null) continue;
+                items.Add(item);
+
+                if (items.Count > cap)
+                {
+                    throw new UnprocessableException(
+                        "import_too_large", $"File có hơn {cap} câu, vượt giới hạn {cap} câu mỗi lần nhập.");
+                }
+            }
+
+            return items;
+        }
+        catch (UnprocessableException)
+        {
+            throw;
         }
         catch (JsonException ex)
         {
             throw new UnprocessableException("invalid_json", $"File không phải JSON hợp lệ: {ex.Message}");
         }
+    }
+
+    private static bool IsJsonArray(byte[] bytes)
+    {
+        foreach (var b in bytes)
+        {
+            if (b == (byte)' ' || b == (byte)'\t' || b == (byte)'\r' || b == (byte)'\n' || b == 0xEF || b == 0xBB || b == 0xBF)
+                continue;
+            return b == (byte)'[';
+        }
+
+        return false;
     }
 
     /// <summary>"IT/Technology", "daily life", "Daily_Life" đều hiểu được.</summary>

@@ -31,7 +31,7 @@ public class RecordingsController(IRecordingService recordingService) : Controll
     [HttpPost]
     [Authorize(Roles = "Speaker")]
     [Consumes("multipart/form-data")]
-    [RequestSizeLimit(25 * 1024 * 1024)]
+    [RequestSizeLimit(20 * 1024 * 1024)]
     [ProducesResponseType(typeof(UploadRecordingResult), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]

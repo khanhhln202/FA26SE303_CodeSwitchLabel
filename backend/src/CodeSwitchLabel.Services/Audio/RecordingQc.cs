@@ -31,7 +31,9 @@ public static class RecordingQcEvaluator
         decimal minDurationSec,
         decimal maxDurationSec,
         decimal maxLeadingSilenceSec,
-        decimal maxTrailingSilenceSec)
+        decimal maxTrailingSilenceSec,
+        decimal? minMeanVolumeDb = null,
+        decimal? maxPeakDb = null)
     {
         var issues = new List<QcIssueDto>();
         var actual = Format(durationSec);
@@ -62,6 +64,25 @@ public static class RecordingQcEvaluator
                 issues.Add(new QcIssueDto("excess_trailing_silence",
                     $"Khoảng lặng cuối bản ghi dài {Format(signal.TrailingSilenceSec)} giây, " +
                     $"vượt mức cho phép {Format(maxTrailingSilenceSec)} giây."));
+            }
+
+            if (minMeanVolumeDb.HasValue && signal.MeanVolumeDb.HasValue &&
+                signal.MeanVolumeDb.Value < minMeanVolumeDb.Value)
+            {
+                issues.Add(new QcIssueDto("too_quiet",
+                    $"Âm lượng trung bình {Format(signal.MeanVolumeDb.Value)} dB thấp hơn mức tối thiểu {Format(minMeanVolumeDb.Value)} dB."));
+            }
+
+            var peak = signal.MaxVolumeDb;
+            if (maxPeakDb.HasValue && peak.HasValue && peak.Value > maxPeakDb.Value)
+            {
+                issues.Add(new QcIssueDto("clipping_detected",
+                    $"Đỉnh âm lượng {Format(peak.Value)} dB vượt mức cho phép {Format(maxPeakDb.Value)} dB, nghi ngờ vỡ tiếng."));
+            }
+            else if (!maxPeakDb.HasValue && signal.ClippingSuspected)
+            {
+                issues.Add(new QcIssueDto("clipping_detected",
+                    "Nghi ngờ âm thanh bị vỡ tiếng (đỉnh gần 0 dBFS)."));
             }
         }
 

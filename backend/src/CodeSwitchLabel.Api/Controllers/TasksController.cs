@@ -74,7 +74,7 @@ public class TasksController(ITaskService taskService) : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<TaskDetailDto>> Update(
         long id, [FromBody] UpdateTaskRequest request, CancellationToken ct)
-        => Ok(await taskService.UpdateAsync(id, request, ct));
+        => Ok(await taskService.UpdateAsync(id, request, ct, User.GetUserId(), User.IsInRole("Admin")));
 
     /// <summary>Thêm mục vào task — chọn tay, hoặc để hệ thống tự lấp.</summary>
     /// <remarks>
@@ -87,7 +87,7 @@ public class TasksController(ITaskService taskService) : ControllerBase
     /// Mục không hợp lệ **không làm hỏng cả request**: phần hợp lệ vẫn được thêm,
     /// phần bị loại nằm trong <c>skipped</c> kèm lý do.
     ///
-    /// Tự lấp cho task thu âm ưu tiên script có **ít giọng đã duyệt nhất**, để độ phủ trải đều.
+    /// Tự lấp cho task thu âm lấy theo `script_id` (cũ nhất trước), lọc theo chủ đề nếu có.
     /// Task đã có người nhận thì tự lấp tránh script người đó đã thu, đã bỏ qua, hoặc đang có trong task khác.
     /// Tự lấp cho task duyệt lấy bản **cũ nhất trước**, không lấy bản do chính người nhận thu.
     /// </remarks>
@@ -98,18 +98,18 @@ public class TasksController(ITaskService taskService) : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<AddTaskItemsResult>> AddItems(
         long id, [FromBody] AddTaskItemsRequest request, CancellationToken ct)
-        => Ok(await taskService.AddItemsAsync(id, request, ct));
+        => Ok(await taskService.AddItemsAsync(id, request, ct, User.GetUserId(), User.IsInRole("Admin")));
 
     /// <summary>Gỡ một mục chưa làm khỏi task.</summary>
     /// <remarks>
-    /// Chỉ gỡ được mục còn chờ. Mục đã xong hay đã bị bỏ qua thì giữ lại để còn dấu vết công việc.
+    /// Chỉ gỡ được mục còn chờ trong task chưa hoàn thành. Mục đã xong hay đã bị bỏ qua thì giữ lại để còn dấu vết công việc.
     /// </remarks>
     [HttpDelete("{id:long}/items/{itemId}")]
     [ProducesResponseType(typeof(TaskDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<TaskDetailDto>> RemoveItem(long id, string itemId, CancellationToken ct)
-        => Ok(await taskService.RemoveItemAsync(id, itemId, ct));
+        => Ok(await taskService.RemoveItemAsync(id, itemId, ct, User.GetUserId(), User.IsInRole("Admin")));
 
     /// <summary>Giao task cho một người — hoặc chuyển sang người khác.</summary>
     /// <remarks>
@@ -127,7 +127,7 @@ public class TasksController(ITaskService taskService) : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<TaskDetailDto>> Assign(
         long id, [FromBody] AssignTaskRequest request, CancellationToken ct)
-        => Ok(await taskService.AssignAsync(id, request.UserId!.Value, ct));
+        => Ok(await taskService.AssignAsync(id, request.UserId!.Value, ct, User.GetUserId(), User.IsInRole("Admin")));
 
     /// <summary>Huỷ task — việc duy nhất phải bấm tay.</summary>
     /// <remarks>
@@ -140,7 +140,7 @@ public class TasksController(ITaskService taskService) : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<TaskDetailDto>> Cancel(long id, CancellationToken ct)
-        => Ok(await taskService.CancelAsync(id, ct));
+        => Ok(await taskService.CancelAsync(id, ct, User.GetUserId(), User.IsInRole("Admin")));
 
     /// <summary>Những người giao được một loại task, kèm khối lượng đang nhận.</summary>
     /// <remarks>

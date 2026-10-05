@@ -124,9 +124,11 @@ public class TaskService(
         LoadDetailAsync(taskId, ct);
 
     public async Task<TaskDetailDto> UpdateAsync(
-        long taskId, UpdateTaskRequest request, CancellationToken ct = default)
+        long taskId, UpdateTaskRequest request, CancellationToken ct = default,
+        long? callerId = null, bool isAdmin = false)
     {
         var task = await LoadEditableAsync(taskId, ct);
+        await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
 
         if (request.Description is not null) task.Description = Clean(request.Description);
 
@@ -160,9 +162,11 @@ public class TaskService(
     }
 
     public async Task<AddTaskItemsResult> AddItemsAsync(
-        long taskId, AddTaskItemsRequest request, CancellationToken ct = default)
+        long taskId, AddTaskItemsRequest request, CancellationToken ct = default,
+        long? callerId = null, bool isAdmin = false)
     {
-        var task = await LoadEditableAsync(taskId, ct);
+        var task = await LoadMutableAsync(taskId, ct);
+        await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
 
         var hasIds = request.Ids.Count > 0;
         var hasAutoFill = request.AutoFill is not null;
@@ -217,14 +221,17 @@ public class TaskService(
         }
 
         await tasks.SaveChangesAsync(ct);
+        await tracker.RefreshStatusAsync(taskId, ct);
 
         return new AddTaskItemsResult(accepted.Count, skipped, await LoadDetailAsync(taskId, ct));
     }
 
     public async Task<TaskDetailDto> RemoveItemAsync(
-        long taskId, string itemId, CancellationToken ct = default)
+        long taskId, string itemId, CancellationToken ct = default,
+        long? callerId = null, bool isAdmin = false)
     {
-        var task = await LoadEditableAsync(taskId, ct);
+        var task = await LoadMutableAsync(taskId, ct);
+        await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
 
         if (task.TaskType == TaskType.Recording)
         {
@@ -265,9 +272,12 @@ public class TaskService(
         return await LoadDetailAsync(taskId, ct);
     }
 
-    public async Task<TaskDetailDto> AssignAsync(long taskId, long userId, CancellationToken ct = default)
+    public async Task<TaskDetailDto> AssignAsync(
+        long taskId, long userId, CancellationToken ct = default,
+        long? callerId = null, bool isAdmin = false)
     {
-        var task = await LoadEditableAsync(taskId, ct);
+        var task = await LoadMutableAsync(taskId, ct);
+        await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
 
         var user = await tasks.GetUserWithRoleAsync(userId, ct)
                    ?? throw new NotFoundException("user_not_found", $"Không tìm thấy tài khoản #{userId}.");
@@ -333,9 +343,12 @@ public class TaskService(
         return await LoadDetailAsync(taskId, ct);
     }
 
-    public async Task<TaskDetailDto> CancelAsync(long taskId, CancellationToken ct = default)
+    public async Task<TaskDetailDto> CancelAsync(
+        long taskId, CancellationToken ct = default,
+        long? callerId = null, bool isAdmin = false)
     {
         var task = await LoadEditableAsync(taskId, ct);
+        await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
 
         if (task.Status == WorkTaskStatus.Completed)
         {
@@ -405,7 +418,7 @@ public class TaskService(
                 skipped.Add(new SkippedItemDto(id, "Không tồn tại."));
             else if (script.Status != ScriptStatus.Validated)
                 skipped.Add(new SkippedItemDto(id, $"Đang ở trạng thái {script.Status}, chỉ nhận câu đã duyệt nội dung."));
-            else if (assigneeId.HasValue && script.Recordings.Any(r => r.SpeakerId != assigneeId.Value))
+            else if (assigneeId.HasValue && script.Recordings.Any(r => r.SpeakerId != assigneeId.Value && r.Status != RecordingStatus.QcFailed))
                 skipped.Add(new SkippedItemDto(id, "Cặp câu này do người đọc khác thu."));
             else
                 accepted.Add(id);
@@ -508,6 +521,44 @@ public class TaskService(
         }
 
         return task;
+    }
+
+    /// <summary>
+    /// Task đã Completed thì không giao/thêm/gỡ mục nữa — muốn làm tiếp thì Task Manager
+    /// nâng chỉ tiêu qua PATCH để task tự mở lại. Update và Cancel dùng LoadEditableAsync riêng.
+    /// </summary>
+    private async Task<WorkTask> LoadMutableAsync(long taskId, CancellationToken ct)
+    {
+        var task = await LoadEditableAsync(taskId, ct);
+
+        if (task.Status == WorkTaskStatus.Completed)
+        {
+            throw new ConflictException(
+                "task_completed",
+                $"Task #{taskId} đã hoàn thành. Muốn thêm việc thì nâng chỉ tiêu trước, task sẽ tự mở lại.");
+        }
+
+        return task;
+    }
+
+    /// <summary>
+    /// Chỉ Task Manager sở hữu chiến dịch (campaign.AssignedTo) hoặc Admin được sửa task.
+    /// callerId null nghĩa là caller cũ (test) — bỏ qua để tương thích ngược.
+    /// </summary>
+    private async Task EnsureCampaignOwnerAsync(WorkTask task, long? callerId, bool isAdmin, CancellationToken ct)
+    {
+        if (!callerId.HasValue) return;
+        if (isAdmin) return;
+
+        var campaign = await campaigns.GetAsync(task.CampaignId, ct)
+            ?? throw new NotFoundException("campaign_not_found", $"Không tìm thấy chiến dịch #{task.CampaignId}.");
+
+        if (campaign.AssignedTo != callerId.Value)
+        {
+            throw new ForbiddenException(
+                "task_not_owned",
+                $"Task #{task.TaskId} thuộc chiến dịch #{campaign.CampaignId} không giao cho bạn.");
+        }
     }
 
     private async Task<TaskDetailDto> LoadDetailAsync(long taskId, CancellationToken ct)
