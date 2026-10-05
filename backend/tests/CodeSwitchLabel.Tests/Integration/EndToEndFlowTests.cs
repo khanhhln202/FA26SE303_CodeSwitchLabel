@@ -16,6 +16,7 @@ namespace CodeSwitchLabel.Tests.Integration;
 /// → ba Reviewer duyệt đa số → task tự hoàn thành. Kèm nhánh QC trượt và luật phân task.
 /// </summary>
 [Collection("Database")]
+[Trait("Category", "Integration")]
 public sealed class EndToEndFlowTests : ApiTestBase
 {
     private readonly DatabaseFixture _api;
@@ -159,7 +160,7 @@ public sealed class EndToEndFlowTests : ApiTestBase
         }
         finally
         {
-            _api.ProbeDurationSec = 5.0m;
+            _api.ResetAudioFakes();
         }
 
         // Hàng bản ghi vẫn được giữ kèm lý do trượt — không vào hàng đợi của Reviewer.

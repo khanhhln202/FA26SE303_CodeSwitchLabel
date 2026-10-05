@@ -55,10 +55,30 @@ public sealed class DatabaseFixture : IAsyncLifetime
     public HttpClient Client { get; private set; } = null!;
 
     /// <summary>Fake ffprobe duration; tests can override to exercise QC pass/fail branches.</summary>
-    public decimal ProbeDurationSec { get; set; } = 5.0m;
+    /// <remarks>Khóa khi đọc/ghi vì E2E đổi qua lại giữa các test chạy tuần tự.</remarks>
+    public decimal ProbeDurationSec
+    {
+        get { lock (_audioFakeLock) return _probeDurationSec; }
+        set { lock (_audioFakeLock) _probeDurationSec = value; }
+    }
 
     /// <summary>Fake signal metrics; default is a clean recording.</summary>
-    public AudioSignalMetrics SignalMetrics { get; set; } = new(0.1m, 0.1m, -23.5m, -1.2m, false);
+    public AudioSignalMetrics SignalMetrics
+    {
+        get { lock (_audioFakeLock) return _signalMetrics; }
+        set { lock (_audioFakeLock) _signalMetrics = value; }
+    }
+
+    private readonly object _audioFakeLock = new();
+    private decimal _probeDurationSec = 5.0m;
+    private AudioSignalMetrics _signalMetrics = new(0.1m, 0.1m, -23.5m, -1.2m, false);
+
+    /// <summary>Trả fake âm thanh về mặc định sau mỗi test đổi nó (dùng trong try/finally).</summary>
+    public void ResetAudioFakes()
+    {
+        ProbeDurationSec = 5.0m;
+        SignalMetrics = new AudioSignalMetrics(0.1m, 0.1m, -23.5m, -1.2m, false);
+    }
 
     public async ValueTask InitializeAsync()
     {
@@ -574,19 +594,17 @@ private async Task SeedTestDataAsync()
 
     private static string FindSchemaFile()
     {
-        var absolutePath = @"D:\GitHub\codeswitchlabel-backend\docs\codeswitchlabel.sql";
-        if (File.Exists(absolutePath))
-        {
-            return absolutePath;
-        }
-
-        var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+        // Ưu tiên đường dẫn tương đối/portable trước để chạy được trên Linux CI.
+        // Đường dẫn tuyệt đối Windows chỉ là fallback cuối cho máy dev cũ.
+        var baseDir = AppContext.BaseDirectory;
         var possiblePaths = new[]
         {
+            Path.GetFullPath(Path.Combine(baseDir, "codeswitchlabel.sql")),
             Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..", "..", "docs", "codeswitchlabel.sql")),
             Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "docs", "codeswitchlabel.sql")),
             Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "docs", "codeswitchlabel.sql")),
-            Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "docs", "codeswitchlabel.sql"))
+            Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "docs", "codeswitchlabel.sql")),
+            @"D:\GitHub\codeswitchlabel-backend\docs\codeswitchlabel.sql"
         };
 
         foreach (var path in possiblePaths)
@@ -599,7 +617,7 @@ private async Task SeedTestDataAsync()
 
         throw new FileNotFoundException(
             $"Schema file not found. Tried: {string.Join(", ", possiblePaths)}. " +
-            "Ensure tests run from solution root or adjust path.");
+            "Ensure docs/codeswitchlabel.sql exists and tests copy it to output (see .csproj).");
     }
 }
 

@@ -7,12 +7,22 @@ namespace CodeSwitchLabel.Tests;
 /// Luật chốt theo đa số nằm ở trigger trg_review_majority dưới database. Các test này khoá
 /// bản sao trong C# đúng bằng luật đó — lệch nhau là API báo một đằng, database ghi một nẻo.
 /// </summary>
+[Trait("Category", "Unit")]
 public class ReviewRulesTests
 {
     private const ReviewDecision Ok = ReviewDecision.Approved;
     private const ReviewDecision No = ReviewDecision.Rejected;
 
-    private const int Required = ReviewRules.RoundsRequiredInDatabase;
+    // Ghim cứng con số trigger đang chờ. Không dùng RoundsRequiredInDatabase trực tiếp:
+    // dùng hằng của code thì đổi hằng là test tự xanh mà database vẫn chờ số cũ.
+    private const int Required = 3;
+
+    [Fact]
+    public void SoVongDatabase_DangChoDungBaLuot()
+    {
+        // Arrange + Act + Assert — lệch là báo động: phải sửa trigger hoặc code cùng lúc.
+        Assert.Equal(3, ReviewRules.RoundsRequiredInDatabase);
+    }
 
     [Theory]
     [InlineData(0, 1)]
@@ -20,12 +30,29 @@ public class ReviewRulesTests
     [InlineData(2, 3)]
     public void VongKeTiep_LaSoLuotDaCoCongMot(int existing, int expected)
     {
-        Assert.Equal(expected, ReviewRules.NextRound(existing));
+        // Arrange + Act
+        var next = ReviewRules.NextRound(existing);
+
+        // Assert
+        Assert.Equal(expected, next);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(-100)]
+    public void VongKeTiep_VoiSoAm_VanCongMot(int existing)
+    {
+        // Arrange + Act
+        var next = ReviewRules.NextRound(existing);
+
+        // Assert
+        Assert.Equal(existing + 1, next);
     }
 
     [Fact]
     public void ChuaDuLuot_ChuaChot()
     {
+        // Arrange + Act + Assert
         Assert.Null(ReviewRules.Outcome([Ok], Required));
         Assert.Null(ReviewRules.Outcome([Ok, No], Required));
     }
@@ -36,7 +63,11 @@ public class ReviewRulesTests
     [InlineData(No, Ok, Ok)]
     public void DuBaLuot_HaiPhieuDat_ThiDat(ReviewDecision a, ReviewDecision b, ReviewDecision c)
     {
-        Assert.Equal(RecordingStatus.Approved, ReviewRules.Outcome([a, b, c], Required));
+        // Arrange + Act
+        var outcome = ReviewRules.Outcome([a, b, c], Required);
+
+        // Assert
+        Assert.Equal(RecordingStatus.Approved, outcome);
     }
 
     [Theory]
@@ -45,7 +76,11 @@ public class ReviewRulesTests
     [InlineData(No, Ok, No)]
     public void DuBaLuot_HaiPhieuTuChoi_ThiTuChoi(ReviewDecision a, ReviewDecision b, ReviewDecision c)
     {
-        Assert.Equal(RecordingStatus.Rejected, ReviewRules.Outcome([a, b, c], Required));
+        // Arrange + Act
+        var outcome = ReviewRules.Outcome([a, b, c], Required);
+
+        // Assert
+        Assert.Equal(RecordingStatus.Rejected, outcome);
     }
 
     [Theory]
@@ -54,13 +89,39 @@ public class ReviewRulesTests
     [InlineData(4, true)]
     public void DuLuotHayChua(int reviewCount, bool expected)
     {
-        Assert.Equal(expected, ReviewRules.IsComplete(reviewCount, Required));
+        // Arrange + Act
+        var complete = ReviewRules.IsComplete(reviewCount, Required);
+
+        // Assert
+        Assert.Equal(expected, complete);
     }
 
     [Fact]
     public void SoVongPhaiLonHonKhong()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => ReviewRules.Outcome([Ok], 0));
+        // Arrange + Act
+        void Act() => ReviewRules.Outcome([Ok], 0);
+
+        // Assert
+        Assert.Throws<ArgumentOutOfRangeException>(Act);
+    }
+
+    [Theory]
+    [InlineData(5)]
+    [InlineData(4)]
+    public void Outcome_VoiSoLuotCauHinhLa_TheoDungNguongDo(int roundsRequired)
+    {
+        // Arrange — đủ lượt theo đúng cấu hình truyền vào thì chốt, thiếu thì chờ.
+        var decisions = new[] { Ok, Ok, Ok };
+
+        // Act
+        var outcome = ReviewRules.Outcome(decisions, roundsRequired);
+
+        // Assert
+        if (roundsRequired <= decisions.Length)
+            Assert.NotNull(outcome);
+        else
+            Assert.Null(outcome);
     }
 
     // ----------------------------------------------- vì sao chưa duyệt được
@@ -68,20 +129,24 @@ public class ReviewRulesTests
     [Fact]
     public void ConChoDuyetVaChuaAiCham_ThiDuyetDuoc()
     {
+        // Arrange + Act
         var blocker = ReviewRules.BlockerFor(
             isOwnRecording: false, reviewedByMe: false,
-            RecordingStatus.PendingReview, reviewCount: 0, Required);
+            status: RecordingStatus.PendingReview, reviewCount: 0, roundsRequired: Required);
 
+        // Assert
         Assert.Equal(ReviewBlocker.None, blocker);
     }
 
     [Fact]
     public void BanGhiCuaChinhMinh_ChanTruoc()
     {
+        // Arrange + Act
         var blocker = ReviewRules.BlockerFor(
             isOwnRecording: true, reviewedByMe: false,
-            RecordingStatus.PendingReview, reviewCount: 0, Required);
+            status: RecordingStatus.PendingReview, reviewCount: 0, roundsRequired: Required);
 
+        // Assert
         Assert.Equal(ReviewBlocker.OwnRecording, blocker);
     }
 
@@ -91,11 +156,13 @@ public class ReviewRulesTests
     [InlineData(RecordingStatus.Rejected)]
     public void DaDuyetRoi_ThiBaoDaDuyet_KeCaKhiBanGhiDaChot(RecordingStatus status)
     {
-        // Màn hình cần đánh dấu "mình làm rồi" ngay cả với bản ghi đã chốt xong,
+        // Arrange — màn hình cần đánh dấu "mình làm rồi" ngay cả với bản ghi đã chốt xong,
         // nên lý do này phải thắng lý do "không còn chờ duyệt".
+        // Act
         var blocker = ReviewRules.BlockerFor(
-            isOwnRecording: false, reviewedByMe: true, status, reviewCount: 3, Required);
+            isOwnRecording: false, reviewedByMe: true, status: status, reviewCount: 3, roundsRequired: Required);
 
+        // Assert
         Assert.Equal(ReviewBlocker.AlreadyReviewedByMe, blocker);
     }
 
@@ -105,21 +172,25 @@ public class ReviewRulesTests
     [InlineData(RecordingStatus.QcFailed)]
     public void BanGhiKhongConChoDuyet(RecordingStatus status)
     {
+        // Arrange + Act
         var blocker = ReviewRules.BlockerFor(
-            isOwnRecording: false, reviewedByMe: false, status, reviewCount: 3, Required);
+            isOwnRecording: false, reviewedByMe: false, status: status, reviewCount: 3, roundsRequired: Required);
 
+        // Assert
         Assert.Equal(ReviewBlocker.NotPendingReview, blocker);
     }
 
     [Fact]
     public void DuLuotNhungChuaKipChot_ThiHetCho()
     {
-        // Trigger chốt ngay trong transaction, nhưng vẫn phải có nhánh này: nếu số vòng cấu hình
+        // Arrange — trigger chốt ngay trong transaction, nhưng vẫn phải có nhánh này: nếu số vòng cấu hình
         // nhỏ hơn 3 thì bản ghi đủ lượt mà trạng thái chưa đổi.
+        // Act
         var blocker = ReviewRules.BlockerFor(
             isOwnRecording: false, reviewedByMe: false,
-            RecordingStatus.PendingReview, reviewCount: 3, Required);
+            status: RecordingStatus.PendingReview, reviewCount: 3, roundsRequired: Required);
 
+        // Assert
         Assert.Equal(ReviewBlocker.RoundsFull, blocker);
     }
 }

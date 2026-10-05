@@ -150,26 +150,27 @@ public static class DatabaseSeeder
         hash.Length == 60 && hash.StartsWith("$2", StringComparison.Ordinal);
 
     /// <summary>
-    /// Ba Reviewer demo được phân CẢ BA chủ đề, để câu mẫu nào cũng có người đủ trình độ duyệt.
-    /// Nhờ vậy luồng "duyệt câu rồi mới sang đã duyệt" chạy được ngay sau khi seed.
+    /// Admin (người nhập/duyệt tự động) và ba Reviewer demo được phân CẢ BA chủ đề, để câu mẫu
+    /// nào cũng có người đủ trình độ duyệt. Nhờ vậy luồng "Admin nhập vào thẳng đã duyệt"
+    /// (kèm lượt Accepted tự động) qua được trigger trg_script_validated_domain ngay sau khi seed.
     /// </summary>
     private static async Task SeedReviewerDomainsAsync(CodeSwitchLabelDbContext db, CancellationToken ct)
     {
-        var reviewers = await db.AppUsers
-            .Where(u => u.Email.StartsWith("reviewer"))
+        var userIds = await db.AppUsers
+            .Where(u => u.Email.StartsWith("reviewer") || u.Email == "admin@codeswitchlabel.local")
             .Select(u => u.UserId)
             .ToListAsync(ct);
 
-        if (reviewers.Count == 0) return;
+        if (userIds.Count == 0) return;
 
         var existing = await db.UserDomains
-            .Where(d => reviewers.Contains(d.UserId))
+            .Where(d => userIds.Contains(d.UserId))
             .Select(d => new { d.UserId, d.Domain })
             .ToListAsync(ct);
 
         var have = existing.Select(e => (e.UserId, e.Domain)).ToHashSet();
 
-        foreach (var userId in reviewers)
+        foreach (var userId in userIds)
         {
             foreach (var domain in Enum.GetValues<ScriptDomain>())
             {
@@ -232,11 +233,19 @@ public static class DatabaseSeeder
     {
         (string Key, string Value, ConfigValueType Type, string Description)[] seeds =
         [
-            (ConfigKeys.RecordingMinDurationSec, "1", ConfigValueType.Int,
+            (ConfigKeys.RecordingMinDurationSec, "1", ConfigValueType.String,
                 "Thời lượng tối thiểu của một bản ghi, tính bằng giây"),
-            (ConfigKeys.RecordingMaxDurationSec, "30", ConfigValueType.Int,
+            (ConfigKeys.RecordingMaxDurationSec, "30", ConfigValueType.String,
                 "Thời lượng tối đa của một bản ghi, tính bằng giây"),
-            (ConfigKeys.RecordingSilenceNoiseDb, "-35", ConfigValueType.Int,
+            (ConfigKeys.RecordingMaxLeadingSilenceSec, "1", ConfigValueType.String,
+                "Khoảng lặng đầu tối đa (giây), vượt là trượt QC"),
+            (ConfigKeys.RecordingMaxTrailingSilenceSec, "1", ConfigValueType.String,
+                "Khoảng lặng cuối tối đa (giây), vượt là trượt QC"),
+            (ConfigKeys.RecordingMaxTake, "99", ConfigValueType.Int,
+                "Số lần thu tối đa cho mỗi (cặp câu, biến thể)"),
+            (ConfigKeys.RecordingAudioFormatDefault, "wav", ConfigValueType.String,
+                "Định dạng lưu chuẩn sau khi chuyển đổi"),
+            (ConfigKeys.RecordingSilenceNoiseDb, "-35", ConfigValueType.String,
                 "Ngưỡng dB coi là khoảng lặng khi phân tích tự động bản ghi"),
             (ConfigKeys.RecordingSilenceMinDurationSec, "0.5", ConfigValueType.String,
                 "Khoảng lặng ngắn hơn mức này (giây) bị bỏ qua khi phân tích tự động"),

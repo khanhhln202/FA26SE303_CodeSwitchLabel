@@ -7,6 +7,7 @@ namespace CodeSwitchLabel.Tests;
 /// Trạng thái task được tính lại từ số liệu thật sau mỗi việc xảy ra. Tính sai thì task hiện
 /// "Hoàn thành" khi chưa xong, hoặc kẹt ở "Nháp" dù đã giao — nên mỗi nhánh có test riêng.
 /// </summary>
+[Trait("Category", "Unit")]
 public class TaskStateMachineTests
 {
     [Theory]
@@ -15,36 +16,27 @@ public class TaskStateMachineTests
     [InlineData(true, 12, 10, 10)]
     public void DaHuy_KhongBaoGioTuMoLai_KeCaKhiDatChiTieu(bool hasAssignee, int started, int done, int target)
     {
-        Assert.Equal(
-            WorkTaskStatus.Cancelled,
-            TaskStateMachine.Evaluate(WorkTaskStatus.Cancelled, hasAssignee, started, done, target));
+        // Arrange + Act
+        var status = TaskStateMachine.Evaluate(WorkTaskStatus.Cancelled, hasAssignee, started, done, target);
+
+        // Assert
+        Assert.Equal(WorkTaskStatus.Cancelled, status);
     }
 
-    [Fact]
-    public void ChuaGiaoChoAi_LaNhap()
+    [Theory]
+    [InlineData(WorkTaskStatus.Draft, false, 0, 0, 10, WorkTaskStatus.Draft)]
+    [InlineData(WorkTaskStatus.Draft, true, 0, 0, 10, WorkTaskStatus.Open)]
+    [InlineData(WorkTaskStatus.Open, true, 1, 0, 10, WorkTaskStatus.InProgress)]
+    [InlineData(WorkTaskStatus.InProgress, true, 10, 7, 10, WorkTaskStatus.InProgress)]
+    [InlineData(WorkTaskStatus.InProgress, true, 4, 2, 10, WorkTaskStatus.InProgress)]
+    public void ChuyenTrangThai_CoBan_TheoNguoiNhanVaTienDo(
+        WorkTaskStatus current, bool hasAssignee, int started, int done, int target, WorkTaskStatus expected)
     {
-        Assert.Equal(WorkTaskStatus.Draft, TaskStateMachine.Evaluate(WorkTaskStatus.Draft, false, 0, 0, 10));
-    }
+        // Arrange + Act
+        var status = TaskStateMachine.Evaluate(current, hasAssignee, started, done, target);
 
-    [Fact]
-    public void DaGiao_ChuaLamGi_LaMo()
-    {
-        Assert.Equal(WorkTaskStatus.Open, TaskStateMachine.Evaluate(WorkTaskStatus.Draft, true, 0, 0, 10));
-    }
-
-    [Fact]
-    public void DaGiao_DaNopViecDauTien_LaDangLam()
-    {
-        Assert.Equal(WorkTaskStatus.InProgress, TaskStateMachine.Evaluate(WorkTaskStatus.Open, true, 1, 0, 10));
-    }
-
-    /// <summary>
-    /// Nộp nhiều mà chưa được duyệt đạt thì chưa xong — đúng lựa chọn "xong khi được duyệt đạt".
-    /// </summary>
-    [Fact]
-    public void NopDuChiTieu_NhungChuaDuDat_ChuaHoanThanh()
-    {
-        Assert.Equal(WorkTaskStatus.InProgress, TaskStateMachine.Evaluate(WorkTaskStatus.InProgress, true, 10, 7, 10));
+        // Assert
+        Assert.Equal(expected, status);
     }
 
     /// <summary>Vượt chỉ tiêu vẫn là hoàn thành — các bản còn chờ duyệt được duyệt nốt sau khi task đã xong.</summary>
@@ -53,21 +45,22 @@ public class TaskStateMachineTests
     [InlineData(13)]
     public void DatHoacVuotChiTieu_HoanThanh(int done)
     {
-        Assert.Equal(WorkTaskStatus.Completed, TaskStateMachine.Evaluate(WorkTaskStatus.InProgress, true, 15, done, 10));
+        // Arrange + Act
+        var status = TaskStateMachine.Evaluate(WorkTaskStatus.InProgress, true, 15, done, 10);
+
+        // Assert
+        Assert.Equal(WorkTaskStatus.Completed, status);
     }
 
     /// <summary>Completed không phải trạng thái cuối: Task Manager nâng chỉ tiêu thì task tự mở lại.</summary>
     [Fact]
     public void DaHoanThanh_NangChiTieu_TuMoLai()
     {
-        Assert.Equal(WorkTaskStatus.InProgress, TaskStateMachine.Evaluate(WorkTaskStatus.Completed, true, 10, 10, 20));
-    }
+        // Arrange + Act
+        var status = TaskStateMachine.Evaluate(WorkTaskStatus.Completed, true, 10, 10, 20);
 
-    /// <summary>Giao lại cho người khác giữa chừng: người mới chưa làm gì nhưng task đã có việc thật.</summary>
-    [Fact]
-    public void GiaoLai_TaskDaCoViec_VanDangLam()
-    {
-        Assert.Equal(WorkTaskStatus.InProgress, TaskStateMachine.Evaluate(WorkTaskStatus.InProgress, true, 4, 2, 10));
+        // Assert
+        Assert.Equal(WorkTaskStatus.InProgress, status);
     }
 
     [Theory]
@@ -78,7 +71,11 @@ public class TaskStateMachineTests
     [InlineData(WorkTaskStatus.Cancelled, false)]
     public void ChiTaskMoHoacDangLam_MoiNhanViec(WorkTaskStatus status, bool expected)
     {
-        Assert.Equal(expected, TaskStateMachine.AcceptsWork(status));
+        // Arrange + Act
+        var accepts = TaskStateMachine.AcceptsWork(status);
+
+        // Assert
+        Assert.Equal(expected, accepts);
     }
 
     [Theory]
@@ -89,9 +86,30 @@ public class TaskStateMachineTests
     [InlineData(10, 10, 100)]
     [InlineData(13, 10, 100)]
     [InlineData(5, 0, 0)]
+    [InlineData(-3, 10, -30)] // số âm: hàm không chặn, service phải chặn trước khi gọi
+    [InlineData(5, -10, 0)] // chỉ tiêu âm coi như không có chỉ tiêu
     public void PhanTram_LamTronRaXa0_ChanTren100(int done, int target, int expected)
     {
-        // 1/8 = 12.5%: làm tròn kiểu ngân hàng mặc định của Math.Round sẽ ra 12.
-        Assert.Equal(expected, TaskStateMachine.Percent(done, target));
+        // Arrange — 1/8 = 12.5%: làm tròn kiểu ngân hàng mặc định của Math.Round sẽ ra 12.
+        // Act
+        var percent = TaskStateMachine.Percent(done, target);
+
+        // Assert
+        Assert.Equal(expected, percent);
+    }
+
+    [Fact]
+    public void TrangThaiLa_GiaTriKhongXacDinh_RoiVaoNhanhMacDinh()
+    {
+        // Arrange — phòng khi enum thêm giá trị mới mà state machine chưa biết.
+        var unknown = (WorkTaskStatus)999;
+
+        // Act
+        var evaluated = TaskStateMachine.Evaluate(unknown, hasActiveAssignee: true, started: 0, done: 0, target: 10);
+        var accepts = TaskStateMachine.AcceptsWork(unknown);
+
+        // Assert
+        Assert.Equal(WorkTaskStatus.Open, evaluated);
+        Assert.False(accepts);
     }
 }

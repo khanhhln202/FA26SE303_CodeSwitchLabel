@@ -15,13 +15,13 @@ public interface IScriptService
 
     Task<ScriptDetailDto> GetAsync(string scriptId, CancellationToken ct = default);
 
-    /// <summary>Admin thêm tay một cặp câu — vào thẳng trạng thái đã duyệt.</summary>
+    /// <summary>Admin thêm tay một cặp câu — vào thẳng trạng thái đã duyệt kèm lượt duyệt tự động.</summary>
     Task<ScriptDetailDto> CreateAsync(CreateScriptRequest request, long createdById, CancellationToken ct = default);
 
     /// <summary>Speaker đóng góp một cặp câu — nằm chờ duyệt nội dung.</summary>
     Task<ScriptDetailDto> ContributeAsync(CreateScriptRequest request, long contributorId, CancellationToken ct = default);
 
-    /// <summary>Nhập hàng loạt từ file input_text.json. Giữ partial-success: câu hỏng không làm hỏng cả file.</summary>
+    /// <summary>Nhập hàng loạt từ file input_text.json. Câu hợp lệ vào thẳng đã duyệt kèm lượt duyệt tự động; câu hỏng không làm hỏng cả file.</summary>
     Task<ImportResultDto> ImportAsync(
         Stream jsonFile, string fileName, long importedById, CancellationToken ct = default);
 

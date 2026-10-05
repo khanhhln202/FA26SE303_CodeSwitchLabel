@@ -32,7 +32,7 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
     public async Task<ActionResult<ScriptDetailDto>> Get(string id, CancellationToken ct)
         => Ok(await scriptService.GetAsync(id, ct));
 
-    /// <summary>Admin thêm tay một cặp câu — vào thẳng trạng thái đã duyệt.</summary>
+    /// <summary>Admin thêm tay một cặp câu — vào thẳng trạng thái đã duyệt kèm lượt duyệt tự động.</summary>
     /// <remarks>
     /// Cả hai câu phải có nhãn ngôn ngữ, ví dụ:
     /// `[vi]Em nên [en]scan [vi]tài liệu này` và `[vi]Em nên quét tài liệu này`.
@@ -61,7 +61,8 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
     /// (số từ tiếng Anh, chủ đề, quan hệ Anh–Việt) rồi cấp số thứ tự mới.
     ///
     /// Câu hỏng **không làm hỏng cả file**: phần hợp lệ vẫn được nhập, phần bị loại nằm trong
-    /// `skipped` kèm lý do. Câu nhập vào ở trạng thái **chờ duyệt nội dung**.
+    /// `skipped` kèm lý do. Câu nhập vào ở trạng thái **đã duyệt**, kèm một lượt duyệt
+    /// `Accepted` tự động của chính Admin nhập (để qua trigger kiểm tra đúng chủ đề).
     /// </remarks>
     [HttpPost("import")]
     [Authorize(Roles = "Admin")]

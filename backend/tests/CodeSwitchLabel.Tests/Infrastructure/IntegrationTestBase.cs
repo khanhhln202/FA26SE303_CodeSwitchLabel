@@ -30,11 +30,10 @@ namespace CodeSwitchLabel.Tests.Infrastructure;
 /// </summary>
 public abstract class IntegrationTestBase : IAsyncLifetime
 {
-    private readonly DatabaseFixture _fixture;
     protected readonly IServiceScope Scope;
     protected readonly CodeSwitchLabelDbContext Db;
     protected readonly IServiceProvider Services;
-    private readonly IDbContextTransaction _transaction;
+    private IDbContextTransaction? _transaction;
 
     // Repositories
     protected readonly IUserRepository Users;
@@ -70,8 +69,6 @@ public abstract class IntegrationTestBase : IAsyncLifetime
 
     protected IntegrationTestBase(DatabaseFixture fixture)
     {
-        _fixture = fixture;
-
         var services = BuildServiceProvider(fixture.ConnectionString);
         Scope = services.CreateScope();
         Services = Scope.ServiceProvider;
@@ -99,24 +96,25 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         SystemConfigService = Services.GetRequiredService<ISystemConfigService>();
         ReasonService = Services.GetRequiredService<IReasonService>();
         StatisticsService = Services.GetRequiredService<IStatisticsService>();
-
-        // Begin transaction for test isolation
-        _transaction = Db.Database.BeginTransaction();
-
-        // Pre-seed common test data synchronously in constructor
-        SeedTestDataAsync().GetAwaiter().GetResult();
     }
 
     public virtual async ValueTask InitializeAsync()
     {
-        // Data is seeded in constructor, just verify database is accessible
+        // Mở transaction + seed trong InitializeAsync (bất đồng bộ) thay vì ctor .GetAwaiter().GetResult()
+        // để tránh deadlock trên SynchronizationContext và giữ ctor nhẹ.
+        _transaction = await Db.Database.BeginTransactionAsync();
+        await SeedTestDataAsync();
         await Db.Database.CanConnectAsync();
     }
 
     public virtual async ValueTask DisposeAsync()
     {
-        await _transaction.RollbackAsync();
-        _transaction.Dispose();
+        if (_transaction is not null)
+        {
+            await _transaction.RollbackAsync();
+            _transaction.Dispose();
+            _transaction = null;
+        }
         Scope.Dispose();
     }
 
@@ -455,5 +453,29 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         var issuer = Services.GetRequiredService<IAccessTokenIssuer>();
         var token = issuer.Issue(user);
         return token.AccessToken;
+    }
+
+    /// <summary>Email duy nhất cho mỗi test — tránh xung đột khi seed chạy nhiều lần.</summary>
+    protected static string NewUniqueEmail(string prefix = "user") =>
+        $"{prefix}{Guid.NewGuid():N}@test.local";
+
+    /// <summary>Tạo user nhanh qua builder — thay cho dựng AppUser thủ công trong từng test.</summary>
+    protected async Task<AppUser> CreateUserWithBuilderAsync(
+        RoleName role, string? email = null, string fullName = "Test User")
+    {
+        var hasher = Services.GetRequiredService<IPasswordHasher>();
+        var roleEntity = await Db.Roles.FirstAsync(r => r.RoleName == role);
+
+        var user = new TestDataBuilders.UserBuilder()
+            .WithEmail(email ?? NewUniqueEmail(role.ToString().ToLowerInvariant()))
+            .WithRole(role)
+            .WithFullName(fullName)
+            .Build(hasher);
+
+        // Builder gán RoleId theo enum cứng; ghi đè bằng RoleId thật trong database.
+        user.RoleId = roleEntity.RoleId;
+        Db.AppUsers.Add(user);
+        await Db.SaveChangesAsync();
+        return user;
     }
 }
