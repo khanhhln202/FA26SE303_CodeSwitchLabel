@@ -1,0 +1,48 @@
+name: Backend
+
+# Repo dùng chung cho cả frontend lẫn backend, nên chỉ chạy khi phần backend hoặc lược đồ database
+# thay đổi. Commit của đội frontend không kích hoạt workflow này.
+on:
+  pull_request:
+    branches: [dev, main]
+    paths:
+      - 'backend/**'
+      - 'docs/codeswitchlabel.sql'
+      - 'global.json'
+      - '.github/workflows/backend.yml'
+  push:
+    branches: [dev, main]
+    paths:
+      - 'backend/**'
+      - 'docs/codeswitchlabel.sql'
+      - 'global.json'
+      - '.github/workflows/backend.yml'
+
+jobs:
+  build-and-test:
+    name: Build và chạy test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Lấy mã nguồn
+        uses: actions/checkout@v5
+
+      - name: Cài .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Tải gói phụ thuộc
+        run: dotnet restore backend/CodeSwitchLabel.sln
+
+      # -warnaserror: cảnh báo mới là hỏng build. Giữ mức 0 cảnh báo đã dọn được,
+      # không để tích dần tới lúc nộp mới xử lý.
+      - name: Build (cảnh báo tính là lỗi)
+        run: dotnet build backend/CodeSwitchLabel.sln -c Release --no-restore -warnaserror
+
+      # Test tích hợp tự bật PostgreSQL bằng Testcontainers; máy ảo của GitHub có sẵn Docker.
+      # Chạy bằng dotnet run vì dự án dùng xunit.v3 trên Microsoft.Testing.Platform —
+      # dotnet test báo "Zero tests ran".
+      - name: Chạy test
+        run: dotnet run --project backend/tests/CodeSwitchLabel.Tests/CodeSwitchLabel.Tests.csproj -c Release --no-build

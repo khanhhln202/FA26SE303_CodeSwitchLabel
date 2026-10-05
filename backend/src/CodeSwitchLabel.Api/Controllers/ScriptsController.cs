@@ -73,19 +73,24 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
     public async Task<ActionResult<ImportResultDto>> Import(
         [FromForm] ImportScriptsForm form, CancellationToken ct)
     {
-        var ext = Path.GetExtension(form.File!.FileName ?? string.Empty).ToLowerInvariant();
+        // [Required] trên form đã chặn trường hợp không đính kèm file. Tên file có thể rỗng khi client
+        // gửi phần multipart không kèm filename, nên đặt sẵn một tên thay thế: cột file_name không nhận NULL.
+        var file = form.File!;
+        var fileName = string.IsNullOrWhiteSpace(file.FileName) ? "import.json" : file.FileName;
+
+        var ext = Path.GetExtension(fileName).ToLowerInvariant();
         if (ext is not (".json" or ""))
         {
             return UnprocessableEntity(new ProblemDetails
             {
                 Status = StatusCodes.Status422UnprocessableEntity,
-                Title = $"File {form.File.FileName} không phải JSON.",
+                Title = $"File {fileName} không phải JSON.",
                 Type = "https://codeswitchlabel.local/errors/invalid_file_type",
                 Extensions = { ["code"] = "invalid_file_type" }
             });
         }
 
-        if (form.File.Length == 0)
+        if (file.Length == 0)
         {
             return UnprocessableEntity(new ProblemDetails
             {
@@ -96,9 +101,9 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
             });
         }
 
-        await using var stream = form.File!.OpenReadStream();
+        await using var stream = file.OpenReadStream();
 
-        return Ok(await scriptService.ImportAsync(stream, form.File.FileName, User.GetUserId(), ct));
+        return Ok(await scriptService.ImportAsync(stream, fileName, User.GetUserId(), ct));
     }
 
     /// <summary>Danh sách batch đã nhập, mới nhất trước.</summary>

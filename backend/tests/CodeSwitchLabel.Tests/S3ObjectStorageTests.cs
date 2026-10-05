@@ -44,7 +44,7 @@ public class S3ObjectStorageTests
         using var storage = Create(Internal, Public);
 
         // Act
-        var (url, _) = await storage.GetDownloadUrlAsync("recordings/2026/09/r_cs_211000001.wav");
+        var (url, _) = await storage.GetDownloadUrlAsync("recordings/2026/09/r_cs_211000001.wav", TestContext.Current.CancellationToken);
 
         // Assert — chỉ kiểm tiền tố: phần còn lại là chữ ký có thời hạn, mỗi lần mỗi khác.
         Assert.StartsWith("http://localhost:9000/recordings/recordings/2026/09/r_cs_211000001.wav", url);
