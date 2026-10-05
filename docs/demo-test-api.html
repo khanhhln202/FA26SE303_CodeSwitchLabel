@@ -1,0 +1,735 @@
+<title>Demo backend CodeSwitchLabel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --bg:#F4F4F8;--panel:#FFFFFF;--ink:#17161F;--ink2:#5D5A6E;--line:#DEDCE8;
+  --accent:#5B3FD0;--accent-soft:#ECE8FD;--code:#F7F6FB;
+  --ok:#1D7A4A;--ok-bg:#E3F3EA;--warn:#9A5700;--warn-bg:#FCEFD8;--bad:#B42B2B;--bad-bg:#FBE5E5;
+  --get:#1F6FC5;--post:#177A4F;--put:#A95D00;--patch:#0B7A68;--del:#B42828;--tool:#5D5A6E;
+  --sans:"Be Vietnam Pro","Segoe UI",system-ui,sans-serif;
+  --mono:"JetBrains Mono","Cascadia Code",Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#121118;--panel:#1B1A24;--ink:#ECEAF4;--ink2:#A5A1B8;--line:#2E2C3B;
+  --accent:#A895FF;--accent-soft:#2A2445;--code:#16151E;
+  --ok:#6FD39B;--ok-bg:#16301F;--warn:#F2B45A;--warn-bg:#33260F;--bad:#FF8A8A;--bad-bg:#3A1A1C;
+  --get:#2C74C4;--post:#1C7F52;--put:#A65E0A;--patch:#11786A;--del:#B03030;--tool:#4A4760;
+}}
+:root[data-theme="dark"]{
+  --bg:#121118;--panel:#1B1A24;--ink:#ECEAF4;--ink2:#A5A1B8;--line:#2E2C3B;
+  --accent:#A895FF;--accent-soft:#2A2445;--code:#16151E;
+  --ok:#6FD39B;--ok-bg:#16301F;--warn:#F2B45A;--warn-bg:#33260F;--bad:#FF8A8A;--bad-bg:#3A1A1C;
+  --get:#2C74C4;--post:#1C7F52;--put:#A65E0A;--patch:#11786A;--del:#B03030;--tool:#4A4760;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.6 var(--sans);padding-inline:16px;padding-block:0 64px}
+.wrap{max-width:880px;margin:0 auto}
+header{padding-block:40px 24px;border-bottom:1px solid var(--line)}
+.eyebrow{font:600 12px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink2)}
+h1{font-size:clamp(30px,5vw,44px);line-height:1.1;font-weight:800;letter-spacing:-.02em;margin:12px 0 10px;text-wrap:balance}
+h2{font-size:22px;font-weight:800;letter-spacing:-.01em;margin:0 0 6px;text-wrap:balance}
+h3{font-size:17px;font-weight:600;margin:28px 0 4px;text-wrap:balance}
+p{margin:0 0 12px;max-width:68ch}
+.lede{color:var(--ink2);font-size:17px}
+.sample{font-size:19px;font-weight:500;margin:20px 0 4px}
+.en{background:var(--accent-soft);color:var(--accent);border-radius:3px;padding:0 4px;font-weight:600}
+.raw{font:13px/1.5 var(--mono);color:var(--ink2);margin:0 0 4px;word-break:break-word}
+.raw i{font-style:normal;color:var(--accent)}
+.spec{font:12px/1.4 var(--mono);color:var(--ink2)}
+.facts{display:flex;flex-wrap:wrap;gap:8px 20px;margin-top:18px;font-size:14px}
+.facts b{font:600 15px var(--mono);font-variant-numeric:tabular-nums}
+nav.toc{display:flex;flex-wrap:wrap;gap:6px;padding-block:14px;border-bottom:1px solid var(--line);position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);z-index:2}
+nav.toc a{font-size:13px;color:var(--ink2);text-decoration:none;padding:3px 8px;border-radius:4px}
+nav.toc a:hover,nav.toc a:focus-visible{background:var(--accent-soft);color:var(--accent);outline:none}
+section{padding-block:36px 8px}
+.muted{color:var(--ink2)}
+.tbl{overflow-x:auto;margin-top:12px;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+th{font:600 12px var(--mono);letter-spacing:.04em;text-transform:uppercase;color:var(--ink2);background:var(--code)}
+td.actor{font-weight:600;white-space:nowrap}
+code,.mono{font-family:var(--mono);font-size:13px}
+.pill{display:inline-block;font:600 12px/1.6 var(--mono);padding:0 7px;border-radius:4px;white-space:nowrap}
+.done{color:var(--ok);background:var(--ok-bg)}.part{color:var(--warn);background:var(--warn-bg)}.todo{color:var(--bad);background:var(--bad-bg)}
+.callout{border:1px solid var(--line);border-left:3px solid var(--warn);background:var(--panel);padding:12px 16px;border-radius:0 6px 6px 0;margin-top:16px}
+.flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:8px;margin-top:14px}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 12px;font-size:13px;flex:1 1 150px}
+.box b{display:block;font-size:14px}
+.arrow{align-self:center;color:var(--ink2);font-family:var(--mono)}
+ul.points{padding-left:18px;margin:10px 0}ul.points li{margin-bottom:8px;max-width:72ch}
+ol.prep{padding-left:20px;margin:12px 0 0}ol.prep li{margin-bottom:12px;max-width:72ch}
+.ids{display:grid;gap:10px;margin:14px 0 4px}
+.idrow{display:flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:6px;background:var(--panel);overflow:hidden}
+.seg{flex:1 1 104px;padding:10px 12px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:4px}
+.seg:last-child{border-right:0}
+.seg b{font:600 20px/1.1 var(--mono);letter-spacing:.02em;color:var(--ink)}
+.seg.key b{color:var(--accent)}
+.seg span{font-size:12px;line-height:1.35;color:var(--ink2)}
+.ways{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:14px}
+.way{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px 14px}
+.way h3{margin:0 0 6px;font-size:15px}
+.way p{font-size:14px;margin:0 0 8px}
+pre{background:var(--code);border:1px solid var(--line);border-radius:6px;padding:8px 12px;margin:8px 0 0;overflow-x:auto;font:13px/1.5 var(--mono);white-space:pre-wrap;word-break:break-word;position:relative}
+pre.has-copy{padding-right:70px}
+pre.out{background:transparent;border-style:dashed;color:var(--ink2);white-space:pre;word-break:normal;font-size:12px;margin-top:4px}
+.toolbar{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 14px;margin-top:14px;font-size:14px}
+.toolbar label{display:flex;gap:8px;align-items:center;cursor:pointer}
+.toolbar .btns{display:flex;flex-wrap:wrap;gap:8px}
+button{font:600 12px var(--sans);color:var(--accent);background:var(--accent-soft);border:0;border-radius:4px;padding:4px 10px;cursor:pointer}
+button:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.act{margin-top:30px}
+.act h3{margin:0;display:flex;gap:6px 10px;align-items:baseline;flex-wrap:wrap}
+.act h3 small{font:400 13px var(--sans);color:var(--ink2)}
+.act h3 .grp{font:600 11px var(--mono);color:var(--ink2);border:1px solid var(--line);border-radius:3px;padding:0 5px}
+.act .note{font-size:14px;color:var(--ink2);margin:6px 0 0}
+ol.steps{list-style:none;padding:0;margin:10px 0 0;border-top:1px solid var(--line)}
+.step{display:grid;grid-template-columns:24px minmax(0,1fr);gap:10px;padding:12px 0;border-bottom:1px solid var(--line)}
+.step input{margin-top:5px;width:16px;height:16px;accent-color:var(--accent)}
+.step.checked .sb{opacity:.5}
+.hd{display:flex;flex-wrap:wrap;gap:6px 8px;align-items:center}
+.num{font:600 12px var(--mono);color:var(--ink2);min-width:30px}
+.who{font:600 12px var(--mono);color:var(--accent)}
+.m{font:600 11px/1.7 var(--mono);color:#fff;padding:0 6px;border-radius:3px}
+.GET{background:var(--get)}.POST{background:var(--post)}.PUT{background:var(--put)}.PATCH{background:var(--patch)}.DELETE{background:var(--del)}.SQL,.CLI,.WEB{background:var(--tool)}
+.path{font-family:var(--mono);font-size:13px;word-break:break-all}
+.st{margin-left:auto}
+.s2{color:var(--ok);background:var(--ok-bg)}.s4w{color:var(--warn);background:var(--warn-bg)}.s4b{color:var(--bad);background:var(--bad-bg)}
+.core-tag{font:600 10px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--accent);border:1px solid var(--accent);border-radius:3px;padding:0 4px}
+.exp{margin:6px 0 0;font-size:14px}
+.copy{position:absolute;top:6px;right:6px}
+details.verify{margin-top:10px;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
+details.verify summary{cursor:pointer;padding:6px 12px;font:600 13px var(--sans);color:var(--accent);list-style:none;display:flex;gap:8px;align-items:center}
+details.verify summary::-webkit-details-marker{display:none}
+details.verify summary::before{content:"▸";font-family:var(--mono)}
+details.verify[open] summary::before{content:"▾"}
+.vb{padding:0 12px 12px;display:grid;gap:12px}
+.chk .k{font:600 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink2)}
+.chk .exp{margin-top:4px}
+body.short .step:not(.core){display:none}
+body.short .act.extra{display:none}
+@media (max-width:560px){.st{margin-left:0}.arrow{display:none}.seg{flex-basis:40%}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">FA26SE303 · Backend · 22/09/2026</div>
+  <h1>Demo backend CodeSwitchLabel</h1>
+  <p class="lede">Hệ thống thu thập và kiểm soát chất lượng dữ liệu tiếng nói Việt–Anh cho huấn luyện ASR. Trang này gồm báo cáo những gì backend đã làm, kịch bản test API từng bước trên Swagger, và cách kiểm tra dữ liệu đã thật sự được lưu.</p>
+  <p class="sample">Em nên <span class="en">scan</span> tài liệu này rồi gửi qua <span class="en">email</span> cho tôi.</p>
+  <p class="raw"><i>[vi]</i>Em nên <i>[en]</i>scan <i>[vi]</i>tài liệu này rồi gửi qua <i>[en]</i>email <i>[vi]</i>cho tôi.</p>
+  <div class="spec">câu mẫu trong input_text.json của cô · nhập vào thành s_211000007 · bản ghi được chuyển thành WAV · 16 kHz · mono</div>
+  <div class="facts">
+    <span><b>48</b> endpoint</span><span><b>19</b> bảng · <b>8</b> trigger · <b>6</b> view</span><span><b>68</b> unit test đạt</span><span><b>15/19</b> chức năng của cô đã xong, 4 làm một phần</span><span>Mọi bước bên dưới, kể cả câu SQL kiểm tra, đã chạy thử trên database trống</span>
+  </div>
+</header>
+
+<nav class="toc" aria-label="Mục lục">
+  <a href="#chuc-nang">Đã làm</a><a href="#noi-bat">Điểm nổi bật</a><a href="#cong-nghe">Công nghệ</a><a href="#chuan-bi">Chuẩn bị</a><a href="#kiem-tra">Kiểm tra dữ liệu</a><a href="#kich-ban">Kịch bản test</a><a href="#gop-y">Cần cô góp ý</a>
+</nav>
+
+<section id="chuc-nang">
+  <h2>Đã làm được gì</h2>
+  <p class="muted">Đối chiếu với 19 chức năng cô gửi cho 4 actor. Chỉ tính phần backend.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Actor</th><th>Chức năng</th><th>Trạng thái</th><th>Đã có gì</th></tr></thead>
+    <tbody>
+      <tr><td class="actor" rowspan="3">Speaker</td><td>Review Text</td><td><span class="pill done">Xong</span></td><td>Chấp nhận, sửa cả cặp câu, hoặc từ chối kèm lý do. Câu đã có bản ghi thì khoá sửa.</td></tr>
+      <tr><td>Record Speech</td><td><span class="pill done">Xong</span></td><td>Mỗi cặp câu thu hai bản: chen tiếng Anh và thuần Việt. Tự chuyển WAV, kiểm tra thời lượng, thu lại được, nghe lại bằng link tạm.</td></tr>
+      <tr><td>Contribute Text</td><td><span class="pill done">Xong</span></td><td>Gửi cặp câu có nhãn <code>[vi]</code>/<code>[en]</code> và alignment. Câu vào hàng chờ duyệt.</td></tr>
+      <tr><td class="actor" rowspan="5">Reviewer</td><td>Receive Review Task</td><td><span class="pill part">Một phần</span></td><td>Nhận task, chỉ tiêu, hạn, lấy lần lượt từng bản. Chưa xem được cả danh sách bản ghi trong task.</td></tr>
+      <tr><td>Review Recordings</td><td><span class="pill done">Xong</span></td><td>Lấy bản kế tiếp theo từng người đọc (<code>speakerId</code>) hoặc ngẫu nhiên (<code>random=true</code>).</td></tr>
+      <tr><td>Duyệt Recordings</td><td><span class="pill done">Xong</span></td><td>Mỗi bản ghi ba lượt duyệt mù của ba người khác nhau. Database chốt theo đa số.</td></tr>
+      <tr><td>Record Rejection Reason</td><td><span class="pill done">Xong</span></td><td>Bắt buộc ít nhất một trong 9 lý do, chia 4 nhóm: nội dung, âm thanh, phát âm, khác. Lỗi nội dung tự đưa câu về bước duyệt văn bản.</td></tr>
+      <tr><td>Track Review Progress</td><td><span class="pill done">Xong</span></td><td>Số đã duyệt, chỉ tiêu, phần trăm, số giờ còn lại tới hạn.</td></tr>
+      <tr><td class="actor" rowspan="5">Task Manager</td><td>Create Tasks</td><td><span class="pill done">Xong</span></td><td>Task thu âm và task duyệt. Thêm mục bằng tay hoặc để hệ thống tự lấp.</td></tr>
+      <tr><td>Assign Tasks</td><td><span class="pill done">Xong</span></td><td>Ô chọn người nhận kèm khối lượng đang nhận. Kiểm tra đúng vai và đủ mục làm được.</td></tr>
+      <tr><td>Set Target &amp; Deadline</td><td><span class="pill done">Xong</span></td><td>Chỉ tiêu thu âm đếm theo cặp câu. Sửa được về sau; nâng chỉ tiêu thì task tự mở lại.</td></tr>
+      <tr><td>Monitor Progress</td><td><span class="pill done">Xong</span></td><td>Lọc task quá hạn, chi tiết từng task, tổng hợp theo người nhận.</td></tr>
+      <tr><td>Reassign Tasks</td><td><span class="pill done">Xong</span></td><td>Giao sang người khác, lượt giao cũ giữ lại trong lịch sử.</td></tr>
+      <tr><td class="actor" rowspan="6">Admin</td><td>Manage Text Data</td><td><span class="pill part">Một phần</span></td><td>Nhập file <code>input_text.json</code>, thêm từng cặp, tìm và lọc. Chưa ẩn hay khôi phục được câu đã bị loại.</td></tr>
+      <tr><td>Manage Users &amp; Roles</td><td><span class="pill done">Xong</span></td><td>Tạo tài khoản kèm mật khẩu tạm, khoá, đổi vai, cấp lại mật khẩu. Có hiệu lực ngay.</td></tr>
+      <tr><td>Manage Recordings &amp; Dataset</td><td><span class="pill part">Một phần</span></td><td>Xem, lọc, nghe bản ghi. Chưa có dataset và tải về.</td></tr>
+      <tr><td>View Dashboard &amp; Statistics</td><td><span class="pill done">Xong</span></td><td>Tổng số câu, số bản đạt và bị từ chối, tổng thời lượng đã duyệt, số người đọc và người duyệt.</td></tr>
+      <tr><td>Monitor Data Quality</td><td><span class="pill done">Xong</span></td><td>Lý do từ chối phổ biến, tỉ lệ đạt của từng người đọc, hiệu suất từng người duyệt.</td></tr>
+      <tr><td>System Configuration</td><td><span class="pill part">Một phần</span></td><td>Đổi ngưỡng khi đang chạy. Danh mục lý do mới chỉ đọc được; 3 tham số chưa có tác dụng.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="noi-bat">
+  <h2>Điểm kỹ thuật nổi bật</h2>
+  <ul class="points">
+    <li><b>Database tự giữ luật.</b> Lược đồ nhóm chốt có 8 trigger: chốt đa số sau ba lượt duyệt, chặn tự duyệt, mỗi cặp câu một người đọc, lỗi nội dung đưa câu về duyệt lại, tự ghi nhật ký kèm người thao tác. Backend không tự đặt trạng thái bản ghi: ghi lượt duyệt rồi đọc lại kết quả.</li>
+    <li><b>Ba lượt duyệt mù.</b> Không ai thấy ý kiến người khác khi bản ghi chưa chốt, kể cả qua API lịch sử. Hai người bấm cùng lúc thì khoá hàng bằng <code>SELECT … FOR UPDATE</code> và so vòng client đã thấy (<code>expectedRound</code>): người đến sau nhận <code>409 round_changed</code>.</li>
+    <li><b>Âm thanh.</b> Nhận file trình duyệt ghi ra (WebM, M4A, WAV), ffmpeg chuyển sang WAV 16 kHz mono, đo thời lượng trên file đã chuyển rồi kiểm tra theo ngưỡng cấu hình. File nằm trong MinIO, người nghe nhận link tạm 15 phút.</li>
+    <li><b>Task tự chạy trạng thái</b> Draft → Open → InProgress → Completed. Chỉ tiêu thu âm đếm theo cặp câu: một cặp chỉ xong khi cả hai bản được duyệt đạt.</li>
+    <li><b>Tài khoản.</b> Mật khẩu băm bcrypt. Khoá, đổi vai hay đổi mật khẩu có hiệu lực ngay: mỗi request đối chiếu token với database, và token mang dấu của mật khẩu lúc cấp.</li>
+    <li><b>Lỗi trả về theo một chuẩn</b> (ProblemDetails, RFC 7807) với 58 mã ổn định để FE xử lý. Cả hệ thống chạy bằng một lệnh Docker.</li>
+  </ul>
+
+  <h3>Mã có nghĩa, do database sinh</h3>
+  <p class="muted">Nhìn mã là biết câu thuộc loại nào, bản ghi là biến thể nào và thu lần thứ mấy.</p>
+  <div class="ids">
+    <div class="idrow" role="group" aria-label="Cấu tạo mã cặp câu s_211000007">
+      <div class="seg"><b>s_</b><span>Cặp câu</span></div>
+      <div class="seg key"><b>2</b><span>Số từ tiếng Anh</span></div>
+      <div class="seg key"><b>1</b><span>Chủ đề: 1 IT/Technology, 2 Education, 3 Daily Life</span></div>
+      <div class="seg key"><b>1</b><span>Quan hệ: 1 dịch nghĩa, 2 tên riêng</span></div>
+      <div class="seg"><b>000007</b><span>Số thứ tự toàn kho, tăng dần</span></div>
+    </div>
+    <div class="idrow" role="group" aria-label="Cấu tạo mã bản ghi r_vi_111000003_t2">
+      <div class="seg key"><b>r_vi_</b><span>Bản thuần Việt; <code>r_cs_</code> là bản chen tiếng Anh</span></div>
+      <div class="seg"><b>111000003</b><span>Chín số của cặp câu s_111000003</span></div>
+      <div class="seg key"><b>_t2</b><span>Lần thu thứ 2</span></div>
+    </div>
+  </div>
+
+  <h3>Kiến trúc</h3>
+  <div class="flow">
+    <div class="box"><b>Swagger UI / React</b>Gọi REST, gửi JWT</div><span class="arrow">→</span>
+    <div class="box"><b>Api</b>Controller, kiểm tài khoản mỗi request, lỗi chuẩn</div><span class="arrow">→</span>
+    <div class="box"><b>Services</b>Luật nghiệp vụ, TaskStateMachine, luật duyệt</div><span class="arrow">→</span>
+    <div class="box"><b>Repositories</b>EF Core → PostgreSQL, trigger, view</div>
+  </div>
+  <div class="flow">
+    <div class="box"><b>ffmpeg / ffprobe</b>Chuyển sang WAV, đo thời lượng</div>
+    <div class="box"><b>MinIO (chuẩn S3)</b>Lưu file WAV, cấp link nghe tạm</div>
+  </div>
+</section>
+
+<section id="cong-nghe">
+  <h2>Công nghệ sử dụng</h2>
+  <div class="tbl"><table>
+    <thead><tr><th>Phần</th><th>Công nghệ</th><th>Dùng để</th></tr></thead>
+    <tbody>
+      <tr><td>Nền tảng</td><td>.NET 10 LTS · ASP.NET Core Web API · C# 14</td><td>REST API, tách 3 tầng Api → Services → Repositories. Được hỗ trợ tới 11/2028</td></tr>
+      <tr><td>Database</td><td>PostgreSQL 16</td><td>Lược đồ nhóm chốt <code>docs/codeswitchlabel.sql</code>: 19 bảng, 18 enum, 8 trigger, 6 view. Tự chạy khi tạo database, không dùng migration</td></tr>
+      <tr><td>ORM</td><td>Entity Framework Core 10 · Npgsql 10</td><td>Ánh xạ bảng và enum của lược đồ, tên cột snake_case</td></tr>
+      <tr><td>Xác thực</td><td>JWT Bearer · BCrypt.Net-Next 4.2</td><td>Đăng nhập, phân quyền 4 vai, thu hồi quyền ngay khi khoá tài khoản</td></tr>
+      <tr><td>Tài liệu API</td><td>Swagger · Swashbuckle 10.2</td><td>48 endpoint chia 12 nhóm, chú thích tiếng Việt từng endpoint</td></tr>
+      <tr><td>Lưu file</td><td>MinIO · AWSSDK.S3</td><td>Lưu âm thanh theo chuẩn S3; sau này đổi sang AWS S3 chỉ cần sửa cấu hình</td></tr>
+      <tr><td>Âm thanh</td><td>ffmpeg / ffprobe</td><td>Chuyển về WAV 16 kHz mono, đo thời lượng</td></tr>
+      <tr><td>Kiểm thử</td><td>xUnit 2.9</td><td>68 unit test cho luật duyệt, luật task, nhãn ngôn ngữ, âm thanh, token. Kịch bản đầu–cuối chính là trang này</td></tr>
+      <tr><td>Đóng gói</td><td>Docker Compose</td><td>Bật PostgreSQL, MinIO và API bằng một lệnh, đội FE không phải cài .NET</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout"><b>Khác bản đăng ký.</b> Bản đăng ký đề tài ghi <i>Backend: FastAPI hoặc NestJS</i>, <i>Database: PostgreSQL</i>. Backend hiện làm bằng ASP.NET Core, database vẫn đúng như đăng ký. Cần thống nhất với cô xem có phải cập nhật bản đăng ký không.</div>
+</section>
+
+<section id="chuan-bi">
+  <h2>Chuẩn bị trước buổi demo</h2>
+  <ol class="prep">
+    <li>Mở Docker Desktop. Tại thư mục project, xoá dữ liệu cũ để ID khớp kịch bản. <b>Lệnh này xoá toàn bộ dữ liệu dev.</b><pre>docker compose --profile api down -v</pre></li>
+    <li>Bật cả hệ thống, rồi mở <b>http://localhost:5053</b> là vào thẳng Swagger. Lần đầu mất vài phút để build.<pre>docker compose --profile api up -d --build</pre></li>
+    <li>File test nằm sẵn trong thư mục <code>demo/</code> của project:
+      <ul class="points">
+        <li><code>input_text_demo.json</code>: 7 câu theo đúng định dạng của cô, 4 câu hợp lệ và 3 câu cố ý sai. Dùng ở màn 2.</li>
+        <li><code>giong-4s.m4a</code> dài 4 giây, định dạng điện thoại hay ghi. <code>giong-3s.wav</code> dài 3 giây. <code>qua-ngan.wav</code> dài 0,5 giây, để trượt kiểm tra tự động. Dùng ở màn 5 và 8.</li>
+        <li><code>test-them/</code>: 5 file nhập (một câu, nhiều lỗi, sai cú pháp JSON, mảng rỗng, file văn bản) và 4 file âm thanh (WebM của Chrome, dài 35 giây, file rỗng, file giả). Dùng ở phần bổ sung A và B.</li>
+        <li>Muốn thật hơn thì thu giọng mình bằng <b>Sound Recorder</b> đọc câu <i>“Mình cần review lại phần mã nguồn này”</i> để dùng ở bước 5.2. Riêng bước 8.4 vẫn dùng <code>giong-4s.m4a</code> vì file phải ngắn hơn 5 giây.</li>
+      </ul>
+    </li>
+    <li>Mở <b>mỗi tài khoản một tab Swagger</b>, vì mỗi tab giữ token riêng. Đăng nhập bằng <code>POST /api/auth/login</code>, chép <code>accessToken</code>, bấm <b>Authorize</b> và dán vào, không gõ chữ “Bearer”. Mật khẩu mọi tài khoản: <code>Codeswitch@2026</code>.</li>
+    <li>Mở sẵn một cửa sổ terminal để kiểm tra database, xem mục ngay dưới.</li>
+    <li>Bấm nhầm hay làm lệch thứ tự thì chạy lại bước 1 và 2 rồi làm lại từ đầu, mất khoảng một phút.</li>
+  </ol>
+  <div class="tbl"><table>
+    <thead><tr><th>Tài khoản (@codeswitchlabel.local)</th><th>Vai</th><th>ID sau khi xoá dữ liệu</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">admin</td><td>Admin</td><td class="mono">1</td></tr>
+      <tr><td class="mono">manager</td><td>Task Manager</td><td class="mono">2</td></tr>
+      <tr><td class="mono">reviewer · reviewer2 · reviewer3</td><td>Reviewer</td><td class="mono">3 · 4 · 5</td></tr>
+      <tr><td class="mono">speaker1 · speaker2</td><td>Speaker</td><td class="mono">6 · 7</td></tr>
+      <tr><td class="mono">speaker3</td><td>Speaker, tạo ở màn 9</td><td class="mono">8</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="kiem-tra">
+  <h2>Cách kiểm tra dữ liệu đã lưu</h2>
+  <p class="muted">API trả 200 chưa đủ để chứng minh dữ liệu đã nằm trong database. Mỗi bước có ghi dữ liệu trong kịch bản có mục <b>Kiểm tra dữ liệu đã lưu</b>, bấm vào để mở, kèm câu lệnh và kết quả đúng khi chạy thử.</p>
+  <div class="ways">
+    <div class="way">
+      <h3>Gọi lại API</h3>
+      <p>Thứ frontend thấy. Ví dụ nhập file xong thì <code>GET /api/scripts?status=PendingValidation</code> phải ra đủ các câu vừa nhập.</p>
+    </div>
+    <div class="way">
+      <h3>Hỏi thẳng database</h3>
+      <p>Mở psql một lần, rồi dán từng câu SQL trong kịch bản vào:</p>
+      <pre class="has-copy"><button type="button" class="copy">Chép</button>docker exec -it csl-postgres psql -U csl -d codeswitchlabel</pre>
+      <p style="margin-top:8px">Gõ <code>\pset pager off</code> để kết quả dài không dừng lại chờ bấm phím. <code>\dt</code> liệt kê các bảng, <code>\q</code> để thoát. Chữ tiếng Việt bị lỗi thì thoát ra, chạy <code>chcp 65001</code> rồi mở lại.</p>
+    </div>
+    <div class="way">
+      <h3>Xem file âm thanh</h3>
+      <p>Vào <b>http://localhost:9090</b>, đăng nhập bằng <code>MINIO_ROOT_USER</code> / <code>MINIO_ROOT_PASSWORD</code> trong <code>docker-compose.yml</code>, mở bucket <code>recordings</code>. Hoặc kiểm tra file đã chuyển sang WAV 16 kHz mono bằng ffprobe trên link nghe:</p>
+      <pre class="has-copy"><button type="button" class="copy">Chép</button>ffprobe -v error -show_entries stream=codec_name,sample_rate,channels -of default=nw=1 "DÁN_LINK_NGHE_VÀO_ĐÂY"</pre>
+    </div>
+    <div class="way">
+      <h3>Tắt máy có mất không</h3>
+      <p>Dữ liệu nằm trong volume của Docker. Tắt rồi bật lại bằng <code>down</code> và <code>up</code> thì vẫn còn; chỉ lệnh có <code>-v</code> mới xoá. Phần bổ sung C chứng minh điều này ngay trước mặt cô.</p>
+    </div>
+  </div>
+</section>
+
+<section id="kich-ban">
+  <h2>Kịch bản test API</h2>
+  <p class="muted">Chạy đúng thứ tự, vì bước sau dùng kết quả của bước trước. Các ID ghi sẵn chỉ đúng khi database vừa được xoá. Trên Swagger, nhập file có một ô <code>File</code>; nộp bản ghi có bốn ô <code>Audio</code>, <code>ScriptId</code>, <code>SentenceVariant</code>, <code>TaskId</code>.</p>
+  <div class="toolbar">
+    <label for="short"><input type="checkbox" id="short"> Chỉ hiện các bước của bản rút gọn, khoảng 15 phút</label>
+    <span class="muted" id="count"></span>
+    <span class="btns">
+      <button type="button" id="openAll">Mở hết phần kiểm tra</button>
+      <button type="button" id="reset">Bỏ đánh dấu tất cả</button>
+    </span>
+  </div>
+  <div id="acts"></div>
+</section>
+
+<section id="gop-y">
+  <h2>Cần cô góp ý</h2>
+  <ul class="points">
+    <li><b>Khối lượng duyệt.</b> Mỗi cặp câu cần 6 lượt duyệt (hai bản, mỗi bản ba lượt) trong khi nhóm có 4 người. Có khả thi khi thu dữ liệu thật không?</li>
+    <li><b>Một cặp câu chỉ một người đọc</b> — đúng ý cô chứ? Điều này ảnh hưởng tới độ đa dạng giọng trong dataset.</li>
+    <li><b>Một người từ chối câu là câu bị loại với mọi người.</b> Có cần Admin xác nhận, hoặc khôi phục được không?</li>
+    <li><b>Dataset xuất định dạng gì</b>, có kèm alignment và nhãn <code>[vi]</code>/<code>[en]</code> không?</li>
+    <li><b>Các ngưỡng do nhóm đề xuất</b>, chưa được duyệt: bản ghi dài 1–30 giây. Hai tham số khoảng lặng đầu/cuối có trong lược đồ nhưng hệ thống chưa đo được.</li>
+    <li><b>Đồng ý cho dùng dữ liệu.</b> Có cần người đọc đồng ý trước khi thu không? Hệ thống lưu giọng nói, năm sinh, tỉnh.</li>
+    <li><b>Thông báo.</b> Có cần báo cho người đọc khi bản ghi bị từ chối không? Hiện người đọc tự xem lý do trong danh sách bản ghi của mình.</li>
+    <li><b>Còn phải làm:</b> Reviewer xem danh sách bản ghi trong task, khôi phục câu bị loại, dataset và tải về, Admin quản lý danh mục lý do, giới hạn đăng nhập sai, deploy lên máy chủ (dự kiến 12/2026).</li>
+  </ul>
+</section>
+</div>
+
+<script>
+(function () {
+  var d = new Date(Date.now() + 7 * 864e5 + 7 * 36e5);
+  var p = function (n) { return String(n).padStart(2, '0'); };
+  var DEADLINE = d.getUTCFullYear() + '-' + p(d.getUTCMonth() + 1) + '-' + p(d.getUTCDate()) + 'T17:00:00+07:00';
+  var PW = 'Codeswitch@2026';
+  var ngay = function (lech) { return new Date(Date.now() + lech * 864e5).toISOString().slice(0, 10); };
+  var HOM_QUA = ngay(-1), BA_MUOI_NGAY = ngay(30);
+
+  // Mỗi mục kiểm tra: k = nơi kiểm tra, c = câu lệnh, o = kết quả khi chạy thử, n = cách đọc kết quả.
+  var V = {
+    import: [
+      { k: 'SQL', c: 'select batch_id, file_name, script_count, imported_by from import_batch;', o:
+` batch_id |      file_name       | script_count | imported_by
+----------+----------------------+--------------+-------------
+        1 | input_text_demo.json |            4 |           1
+(1 row)`, n: 'Mỗi lần nhập là một <b>lô</b>: tên file, số câu vào được, và ai nhập (<code>1</code> là admin).' },
+      { k: 'SQL', c: 'select script_id, status, domain, en_word_count, import_batch_id from script where import_batch_id = 1 order by script_id;', o:
+`  script_id  |       status       |    domain     | en_word_count | import_batch_id
+-------------+--------------------+---------------+---------------+-----------------
+ s_121000008 | pending_validation | education     |             1 |               1
+ s_131000009 | pending_validation | daily_life    |             1 |               1
+ s_131000010 | pending_validation | daily_life    |             1 |               1
+ s_211000007 | pending_validation | it_technology |             2 |               1
+(4 rows)`, n: 'Đúng 4 câu, đều thuộc lô 1. Ba câu sai trong file không có dòng nào.' },
+      { k: 'SQL', c: "select script_id, cs_content, ve_content, alignment from script where script_id = 's_211000007' \\gx", o:
+`-[ RECORD 1 ]---------------------------------------------------------
+script_id  | s_211000007
+cs_content | [vi]Em nên [en]scan [vi]tài liệu này rồi gửi qua [en]email [vi]cho tôi.
+ve_content | [vi]Em nên quét tài liệu này rồi gửi qua thư điện tử cho tôi.
+alignment  | [{"source": "scan", "target": "quét", "relation": "semantic_equivalent", …}, {"source": "email", "target": "thư điện tử", …}]`, n: 'Kết thúc bằng <code>\\gx</code> thay cho dấu chấm phẩy để xem dạng dọc. Nhãn <code>[vi]</code>/<code>[en]</code> và alignment được lưu nguyên như trong file của cô.' }
+    ],
+    scriptReview: [
+      { k: 'SQL', c: 'select sr.script_id, sr.action, e.reason_code, sr.user_id, s.status from script_review sr left join script_error_reason e on e.reason_id = sr.error_reason_id join script s on s.script_id = sr.script_id order by sr.script_review_id;', o:
+`  script_id  |  action  | reason_code | user_id |  status
+-------------+----------+-------------+---------+-----------
+ s_131000010 | rejected | unnatural   |       6 | rejected
+ s_121000008 | edited   |             |       6 | validated
+ s_211000007 | accepted |             |       6 | validated
+(3 rows)`, n: 'Mỗi lượt duyệt câu là một dòng trong <code>script_review</code>, kèm lý do và người duyệt (<code>6</code> là speaker1). Trạng thái câu đổi theo.' },
+      { k: 'SQL', c: "select script_id, cs_content from script where script_id = 's_121000008';", o:
+`  script_id  |                                  cs_content
+-------------+------------------------------------------------------------------------------
+ s_121000008 | [vi]Cô vừa đăng [en]quiz [vi]mới lên hệ thống, cả lớp làm trước tối nay nhé.
+(1 row)`, n: 'Nội dung đã sửa được ghi đè vào câu, bản cũ vẫn còn trong lịch sử duyệt.' },
+      { k: 'SQL', c: "select script_id, status, created_by from script where script_id = 's_211000011';", o:
+`  script_id  |       status       | created_by
+-------------+--------------------+------------
+ s_211000011 | pending_validation |          6
+(1 row)`, n: 'Câu đóng góp ghi rõ người tạo là speaker1, đang chờ duyệt.' }
+    ],
+    task: [
+      { k: 'SQL', c: "select task_id, task_type, target_qty, status, deadline at time zone 'Asia/Ho_Chi_Minh' as han_gio_vn from task;", o:
+` task_id | task_type | target_qty | status |     han_gio_vn
+---------+-----------+------------+--------+---------------------
+       1 | recording |          1 | open   | 2026-09-29 17:00:00
+(1 row)`, n: 'Hạn là 17:00 giờ Việt Nam của ngày sau hôm nay 7 ngày. Database lưu UTC, câu lệnh đổi về giờ Việt Nam để đọc.' },
+      { k: 'SQL', c: 'select script_id, status from task_script where task_id = 1 order by script_id;', o:
+`  script_id  | status
+-------------+---------
+ s_111000003 | pending
+ s_211000001 | pending
+(2 rows)` },
+      { k: 'SQL', c: 'select user_id, assignment_status from task_assignment where task_id = 1;', o:
+` user_id | assignment_status
+---------+-------------------
+       6 | active
+(1 row)`, n: 'Lượt giao là một dòng riêng; giao lại cho người khác thì dòng này chuyển <code>reassigned</code> chứ không bị xoá.' }
+    ],
+    recording: [
+      { k: 'SQL', c: 'select recording_id, sentence_variant, status, duration_sec, audio_format, task_id from recording order by recorded_at;', o:
+`   recording_id    | sentence_variant |     status     | duration_sec | audio_format | task_id
+-------------------+------------------+----------------+--------------+--------------+---------
+ r_cs_111000003    | code_switching   | pending_review |         4.02 | wav          |       1
+ r_vi_111000003    | pure_vietnamese  | qc_failed      |         0.50 | wav          |       1
+ r_vi_111000003_t2 | pure_vietnamese  | pending_review |         3.00 | wav          |       1
+(3 rows)`, n: 'Cả ba lần nộp đều được lưu, kể cả bản trượt kiểm tra. Thời lượng đo trên file đã chuyển sang WAV.' },
+      { k: 'SQL', c: "select recording_id, cloud_link from recording where recording_id = 'r_cs_111000003';", o:
+`  recording_id  |                               cloud_link
+----------------+------------------------------------------------------------------------
+ r_cs_111000003 | http://localhost:9000/recordings/recordings/2026/09/r_cs_111000003.wav
+(1 row)`, n: 'Database chỉ lưu đường dẫn, file thật nằm trong MinIO theo thư mục năm/tháng thu.' },
+      { k: 'WEB', c: 'http://localhost:9090  →  Buckets  →  recordings  →  recordings/2026/09/', n: 'Thấy 3 file <code>r_cs_111000003.wav</code>, <code>r_vi_111000003.wav</code>, <code>r_vi_111000003_t2.wav</code>. Tải về nghe được.' },
+      { k: 'CLI', c: 'ffprobe -v error -show_entries stream=codec_name,sample_rate,channels -of default=nw=1 "DÁN_LINK_Ở_BƯỚC_5.7"', o:
+`codec_name=pcm_s16le
+sample_rate=16000
+channels=1`, n: 'File gửi lên là m4a nhưng file lưu là WAV PCM 16-bit, 16 kHz, 1 kênh. Cần cài ffmpeg trên máy.' },
+      { k: 'SQL', c: 'select status from task where task_id = 1;', o:
+`   status
+-------------
+ in_progress
+(1 row)`, n: 'Task tự chuyển trạng thái khi có bản nộp đầu tiên.' }
+    ],
+    reviewMid: [
+      { k: 'SQL', c: "select recording_id, status from recording where recording_id = 'r_cs_111000003';", o:
+`  recording_id  |     status
+----------------+----------------
+ r_cs_111000003 | pending_review
+(1 row)`, n: 'Đã có 2 lượt nhưng trạng thái chưa đổi: phải đủ 3 lượt mới chốt.' }
+    ],
+    reviewDone: [
+      { k: 'SQL', c: 'select recording_id, review_round, reviewer_id, decision, left(comment, 35) as ghi_chu from review order by review_id;', o:
+`   recording_id    | review_round | reviewer_id | decision |               ghi_chu
+-------------------+--------------+-------------+----------+-------------------------------------
+ r_cs_111000003    |            1 |           3 | approved |
+ r_cs_111000003    |            2 |           4 | rejected | Có tiếng quạt ở nền
+ r_cs_111000003    |            3 |           5 | approved | Tiếng quạt nhỏ, vẫn nghe rõ từng từ
+ r_vi_111000003_t2 |            1 |           3 | approved |
+ r_vi_111000003_t2 |            2 |           4 | approved |
+ r_vi_111000003_t2 |            3 |           5 | approved |
+(6 rows)`, n: 'Mỗi bản ghi đúng 3 lượt của 3 người khác nhau (3, 4, 5).' },
+      { k: 'SQL', c: 'select r.recording_id, r.review_round, rr.reason_code, rr.category from review_rejection_reason x join review r on r.review_id = x.review_id join rejection_reason rr on rr.reason_id = x.reason_id;', o:
+`  recording_id  | review_round |   reason_code    |   category
+----------------+--------------+------------------+---------------
+ r_cs_111000003 |            2 | background_noise | audio_quality
+(1 row)`, n: 'Lý do từ chối nằm ở bảng nối <code>review_rejection_reason</code>, gắn với đúng lượt duyệt.' },
+      { k: 'SQL', c: "select recording_id, status from recording where recording_id in ('r_cs_111000003', 'r_vi_111000003_t2');", o:
+`   recording_id    |  status
+-------------------+----------
+ r_cs_111000003    | approved
+ r_vi_111000003_t2 | approved
+(2 rows)`, n: 'Backend không ghi cột này. Trigger <code>trg_review_majority</code> ghi khi đủ 3 lượt, theo đa số.' }
+    ],
+    taskDone: [
+      { k: 'SQL', c: 'select script_id, status from task_script where task_id = 1 order by script_id;', o:
+`  script_id  |  status
+-------------+-----------
+ s_111000003 | completed
+ s_211000001 | pending
+(2 rows)`, n: 'Chỉ tiêu là 1 cặp nên một mục xong là task xong; mục còn lại vẫn chờ.' }
+    ],
+    dashboard: [
+      { k: 'SQL', c: 'select * from v_dashboard_summary \\gx', o:
+`-[ RECORD 1 ]---------+-----
+total_scripts         | 11
+validated_scripts     | 8
+pending_scripts       | 2
+total_recordings      | 3
+approved_recordings   | 2
+rejected_recordings   | 0
+approved_duration_sec | 7.02
+speakers              | 2
+reviewers             | 3
+released_datasets     | 0`, n: 'Số trên API lấy thẳng từ view này, nên số trên màn hình và số trong báo cáo SQL luôn là một.' }
+    ],
+    stats: [
+      { k: 'SQL', c: 'select * from v_rejection_reason_stats;', o:
+`   reason_code    |   category    | times_used
+------------------+---------------+------------
+ background_noise | audio_quality |          1
+(1 row)` }
+    ],
+    config: [
+      { k: 'SQL', c: "select config_key, config_value, updated_by, updated_at from system_config where config_key = 'recording.min_duration_sec';", o:
+`         config_key         | config_value | updated_by |          updated_at
+----------------------------+--------------+------------+-------------------------------
+ recording.min_duration_sec | 5            |          1 | 2026-09-22 07:53:25.961093+00
+(1 row)`, n: 'Ghi luôn ai đổi (<code>1</code> là admin) và lúc nào.' }
+    ],
+    configEffect: [
+      { k: 'SQL', c: "select recording_id, status, duration_sec from recording where recording_id = 'r_cs_121000004';", o:
+`  recording_id  |  status   | duration_sec
+----------------+-----------+--------------
+ r_cs_121000004 | qc_failed |         4.02
+(1 row)` }
+    ],
+    user: [
+      { k: 'SQL', c: 'select user_id, email, status, left(password_hash, 7) as dau_bcrypt, length(password_hash) as do_dai from app_user where user_id = 8;', o:
+` user_id |             email              | status | dau_bcrypt | do_dai
+---------+--------------------------------+--------+------------+--------
+       8 | speaker3@codeswitchlabel.local | active | $2a$11$    |     60
+(1 row)`, n: 'Email lưu chữ thường. Mật khẩu không lưu dạng thật mà là chuỗi bcrypt 60 ký tự: <code>$2a$</code> là thuật toán, <code>11</code> là độ khó.' },
+      { k: 'SQL', c: 'select user_id, birth_year, province, english_level from speaker_profile where user_id = 8;', o:
+` user_id | birth_year | province | english_level
+---------+------------+----------+---------------
+       8 |            |          |
+(1 row)`, n: 'Tài khoản Speaker được tạo sẵn hồ sơ trống để người đó tự điền.' }
+    ],
+    lock: [
+      { k: 'SQL', c: 'select email, status from app_user where user_id = 8;', o:
+`             email              |  status
+--------------------------------+----------
+ speaker3@codeswitchlabel.local | inactive
+(1 row)` }
+    ]
+  };
+
+  // [số, bản rút gọn, tài khoản, phương thức, đường dẫn, body, mã HTTP, kết quả mong đợi, kiểm tra dữ liệu]
+  var ACTS = [
+    { t: 'Màn 1 · Đăng nhập và phân quyền', g: 'Authentication', time: '2 phút', steps: [
+      ['1.1', 0, 'khách', 'GET', '/health', null, 200, 'API còn sống: <code>{"status":"ok"}</code>.'],
+      ['1.2', 0, 'khách', 'GET', '/api/users', null, 401, 'Chưa đăng nhập thì bị chặn. Body rỗng, header <code>WWW-Authenticate: Bearer</code>.'],
+      ['1.3', 0, 'khách', 'POST', '/api/auth/login', { email: 'admin@codeswitchlabel.local', password: 'sai-mat-khau' }, 400, '<code>invalid_credentials</code>. Email sai cũng nhận đúng câu này, để không lộ email nào có thật trong hệ thống.'],
+      ['1.4', 1, 'khách', 'POST', '/api/auth/login', { email: 'admin@codeswitchlabel.local', password: PW }, 200, 'Có <code>accessToken</code>, <code>user.userId = 1</code>, <code>role = "Admin"</code>. Bấm Authorize và dán token.'],
+      ['1.5', 1, 'khách', 'POST', '/api/auth/login', null, 200, 'Đăng nhập lần lượt manager, reviewer, reviewer2, reviewer3, speaker1, speaker2, mỗi tài khoản một tab.'],
+      ['1.6', 1, 'speaker1', 'GET', '/api/users', null, 403, 'Đúng token nhưng sai vai: Speaker không vào được chức năng quản lý người dùng.']
+    ]},
+    { t: 'Màn 2 · Nhập kho câu', g: 'Scripts', time: '3 phút', steps: [
+      ['2.1', 1, 'admin', 'POST', '/api/scripts/import', 'File = demo/input_text_demo.json', 200, '<code>imported = 4</code>: <code>s_211000007</code>, <code>s_121000008</code>, <code>s_131000009</code>, <code>s_131000010</code>. <code>skipped</code> có 3 câu kèm lý do: câu tương đương còn nhãn <code>[en]</code>, câu trùng, chủ đề “Sports” không có. Một câu hỏng không làm hỏng cả file.', V.import],
+      ['2.2', 1, 'admin', 'GET', '/api/scripts/s_211000007', null, 200, 'Câu mẫu của cô: <code>csContent</code> giữ nguyên nhãn, <code>csPlain</code> để hiển thị, <code>alignment</code> có 2 cặp (scan → quét, email → thư điện tử), <code>enWordCount = 2</code>, <code>importBatchId = 1</code>. Trạng thái <code>PendingValidation</code>: câu nhập từ file vẫn phải qua bước duyệt văn bản.'],
+      ['2.3', 0, 'admin', 'GET', '/api/scripts?status=PendingValidation', null, 200, '<code>total = 4</code>, câu mới nhất đứng đầu, kèm <code>totalPages</code>, <code>hasNext</code> để phân trang.']
+    ]},
+    { t: 'Màn 3 · Duyệt câu trước khi thu', g: 'Scripts · Rejection Reasons', time: '3 phút', steps: [
+      ['3.1', 0, 'speaker1', 'GET', '/api/script-error-reasons', null, 200, '7 lý do lỗi câu: <code>meaningless</code>, <code>unnatural</code>, <code>grammar</code>, <code>spelling</code>, <code>mismatch</code>, <code>duplicate</code>, <code>other</code>.'],
+      ['3.2', 0, 'speaker1', 'POST', '/api/scripts/s_131000010/review', { action: 'Rejected' }, 422, '<code>error_reason_required</code>: từ chối câu thì phải nêu lý do.'],
+      ['3.3', 1, 'speaker1', 'POST', '/api/scripts/s_131000010/review', { action: 'Rejected', errorReasonCode: 'unnatural', comment: 'Người Việt không chêm "very" vào giữa câu như vậy' }, 200, '<code>status = "Rejected"</code>: câu “Tôi very thích ăn phở” chêm tiếng Anh không tự nhiên, bị loại khỏi kho.'],
+      ['3.3b', 1, 'speaker1', 'POST', '/api/scripts/s_211000007/review', { action: 'Accepted', comment: 'Câu này ổn' }, 422, '<code>reviewer_domain_required</code>: người đọc góp ý được, nhưng <b>đưa câu sang trạng thái đã duyệt thì phải là người duyệt được phân đúng chủ đề</b>. Admin phân chủ đề bằng <code>PUT /api/users/{id}/domains</code>; dữ liệu mẫu đã phân sẵn cả ba chủ đề cho ba tài khoản Reviewer.'],
+      ['3.4', 1, 'reviewer', 'POST', '/api/scripts/s_121000008/review', { action: 'Edited', editedCsContent: '[vi]Cô vừa đăng [en]quiz [vi]mới lên hệ thống, cả lớp làm trước tối nay nhé.', editedVeContent: '[vi]Cô vừa đăng bài kiểm tra ngắn mới lên hệ thống, cả lớp làm trước tối nay nhé.', comment: 'Thêm "lên hệ thống" cho rõ nghĩa' }, 200, '<code>Validated</code>. Sửa là sửa cả cặp; số từ tiếng Anh phải giữ nguyên vì con số đó nằm trong mã câu.'],
+      ['3.5', 1, 'reviewer', 'POST', '/api/scripts/s_211000007/review', { action: 'Accepted', comment: 'Câu tự nhiên, đúng kiểu nói hằng ngày' }, 200, '<code>Validated</code>, sẵn sàng để thu.'],
+      ['3.6', 0, 'speaker1', 'POST', '/api/speaker/scripts/contribute', { csContent: '[vi]Tối nay mình phải [en]fix bug [vi]gấp cho khách.', veContent: '[vi]Tối nay mình phải sửa lỗi gấp cho khách.', domain: 'ItTechnology', alignment: [{ source: 'fix', source_lang: 'en', target: 'sửa', target_lang: 'vi', relation: 'semantic_equivalent' }, { source: 'bug', source_lang: 'en', target: 'lỗi', target_lang: 'vi', relation: 'semantic_equivalent' }] }, 201, 'Contribute Text: câu mới <code>s_211000011</code>, “fix bug” tính là 2 từ tiếng Anh, trạng thái <code>PendingValidation</code>.', V.scriptReview]
+    ]},
+    { t: 'Màn 4 · Chiến dịch và giao việc', g: 'Campaigns · Tasks · Users', time: '4 phút', steps: [
+      ['4.0a', 1, 'admin', 'POST', '/api/campaigns', { campaignName: 'Đợt thu thập demo', targetQty: 2000, startDate: HOM_QUA, endDate: BA_MUOI_NGAY }, 201, 'Chiến dịch #2, trạng thái <code>Draft</code>. <b>Mọi task phải thuộc một chiến dịch</b> — đây là đơn vị kế hoạch của cả đợt thu thập. Chỉ tiêu nằm trong khoảng 2000–5000 cặp câu theo lược đồ của nhóm.'],
+      ['4.0b', 0, 'manager', 'POST', '/api/tasks', { campaignId: 2, taskType: 'Recording', description: 'Tạo sớm quá', targetQty: 1, deadline: DEADLINE }, 422, '<code>campaign_not_assigned_to_manager</code>: chiến dịch chưa giao cho ai thì chưa nhận task.'],
+      ['4.0c', 1, 'admin', 'POST', '/api/campaigns/2/assign', { assignedToUserId: 2 }, 200, 'Giao chiến dịch cho Task Manager. Chỉ Admin giao được, và chỉ giao được cho người giữ vai Task Manager.'],
+      ['4.1', 1, 'manager', 'GET', '/api/tasks/assignable-users?taskType=Recording', null, 200, 'speaker1 (6) và speaker2 (7), đang nhận 0 task. Chỉ trả tên và khối lượng, không lộ email hay số điện thoại.'],
+      ['4.2', 1, 'manager', 'POST', '/api/tasks', { campaignId: 2, taskType: 'Recording', description: 'Thu âm câu chủ đề IT', targetQty: 1, deadline: DEADLINE }, 201, 'Task #1, <code>Draft</code>. Hạn gửi theo giờ Việt Nam, backend lưu UTC. Chỉ tiêu 1 nghĩa là một cặp câu, cả hai bản phải đạt.'],
+      ['4.3', 1, 'manager', 'POST', '/api/tasks/1/items', { autoFill: { count: 2, domain: 'ItTechnology' } }, 200, '<code>added = 2</code>: <code>s_111000003</code> và <code>s_211000001</code>. Hệ thống ưu tiên câu có ít giọng đã duyệt nhất.'],
+      ['4.4', 0, 'manager', 'POST', '/api/tasks/1/assign', { userId: 3 }, 422, '<code>assignee_role_mismatch</code>: task thu âm không giao được cho Reviewer.'],
+      ['4.5', 1, 'manager', 'POST', '/api/tasks/1/assign', { userId: 6 }, 200, 'Giao cho speaker1, task chuyển sang <code>Open</code>.', V.task],
+      ['4.6', 0, 'admin', 'PUT', '/api/users/6/role', { role: 'Reviewer' }, 409, '<code>user_has_active_tasks</code>: speaker1 đang nhận task #1 nên chưa đổi vai được.']
+    ]},
+    { t: 'Màn 5 · Thu âm', g: 'Speaker · Recordings', time: '4 phút', steps: [
+      ['5.1', 1, 'speaker1', 'GET', '/api/speaker/scripts/next?taskId=1', null, 200, '<code>s_111000003</code> “Mình cần review lại phần mã nguồn này”. <code>remainingVariants</code>: <code>CodeSwitching</code>, <code>PureVietnamese</code>. <code>guidance</code>: 1–30 giây.'],
+      ['5.2', 1, 'speaker1', 'POST', '/api/recordings', 'Audio = demo/giong-4s.m4a · ScriptId = s_111000003 · SentenceVariant = CodeSwitching · TaskId = 1', 201, '<code>r_cs_111000003</code>, <code>PendingReview</code>, <code>audioFormat = "wav"</code> (file m4a đã được chuyển sang WAV 16 kHz mono), <code>durationSec = 4.02</code>, <code>qcPassed = true</code>.'],
+      ['5.3', 0, 'manager', 'GET', '/api/tasks/1', null, 200, 'Task tự sang <code>InProgress</code>. <code>submitted = 1</code>, <code>done = 0</code>: nộp rồi nhưng chưa được duyệt đạt thì chưa tính là xong.'],
+      ['5.4', 0, 'manager', 'GET', '/api/tasks/by-assignee', null, 200, 'speaker1: 1 task, chỉ tiêu 1, đã xong 0, không trễ hạn.'],
+      ['5.5', 1, 'speaker1', 'POST', '/api/recordings', 'Audio = demo/qua-ngan.wav · ScriptId = s_111000003 · SentenceVariant = PureVietnamese · TaskId = 1', 201, '<code>r_vi_111000003</code>, <code>QcFailed</code>, <code>qcIssues</code> báo <code>too_short</code>: 0,5 giây. Vẫn lưu lại để thống kê, nhưng không vào hàng chờ duyệt.'],
+      ['5.6', 1, 'speaker1', 'POST', '/api/recordings', 'Audio = demo/giong-3s.wav · ScriptId = s_111000003 · SentenceVariant = PureVietnamese · TaskId = 1', 201, 'Thu lại: <code>r_vi_111000003_t2</code>, <code>take = 2</code>, <code>qcPassed = true</code>.', V.recording],
+      ['5.7', 0, 'speaker1', 'GET', '/api/recordings/r_cs_111000003/audio-url', null, 200, 'Mở <code>url</code> ở tab mới để nghe bản WAV đã chuyển. Link hết hạn sau 15 phút.'],
+      ['5.8', 0, 'speaker2', 'POST', '/api/recordings', 'Audio = demo/giong-3s.wav · ScriptId = s_111000003 · SentenceVariant = CodeSwitching', 409, '<code>script_owned_by_other_speaker</code>: mỗi cặp câu chỉ một người đọc.'],
+      ['5.9', 0, 'speaker1', 'POST', '/api/scripts/s_111000003/review', { action: 'Edited', editedCsContent: '[vi]Mình cần [en]review [vi]lại phần mã nguồn này', editedVeContent: '[vi]Mình cần xem lại phần mã nguồn này nhé' }, 409, '<code>script_already_recorded</code>: câu đã có bản ghi thì không sửa được, nếu không transcript sẽ lệch với âm thanh.'],
+      ['5.10', 0, 'speaker1', 'GET', '/api/recordings', null, 200, 'Ba bản của chính mình, kể cả bản trượt kiểm tra. Speaker không thấy bản của người khác.']
+    ]},
+    { t: 'Màn 6 · Duyệt ba lượt mù', g: 'Reviews · Rejection Reasons', time: '6 phút', steps: [
+      ['6.1', 1, 'reviewer', 'GET', '/api/rejection-reasons', null, 200, '9 lý do chia 4 nhóm <code>Content</code>, <code>AudioQuality</code>, <code>Pronunciation</code>, <code>Other</code>, đúng câu trong đề: “lỗi về nội dung, âm thanh hoặc phát âm”.'],
+      ['6.2', 1, 'reviewer', 'GET', '/api/reviewer/recordings/next', null, 200, '<code>r_cs_111000003</code>, <code>round = 1</code>, <code>isBlind = true</code>, kèm câu cần đối chiếu và <code>audioUrl</code> để nghe.'],
+      ['6.3', 1, 'reviewer', 'POST', '/api/recordings/r_cs_111000003/reviews', { decision: 'Approved', expectedRound: 1 }, 201, '<code>isFinal = false</code>: mới 1/3 lượt.'],
+      ['6.4', 0, 'reviewer2', 'POST', '/api/recordings/r_cs_111000003/reviews', { decision: 'Approved', expectedRound: 1 }, 409, '<code>round_changed</code>: giả sử reviewer2 mở bản ghi từ lúc còn vòng 1. Server từ chối thay vì ghi nhầm sang vòng 2.'],
+      ['6.5', 0, 'reviewer2', 'GET', '/api/reviewer/recordings/next', null, 200, 'Cùng bản ghi, <code>round = 2</code>, không kèm ý kiến của người trước.'],
+      ['6.6', 0, 'reviewer2', 'GET', '/api/recordings/r_cs_111000003/reviews', null, 200, '<code>[]</code>: gọi API lịch sử cũng không xem trộm được.'],
+      ['6.7', 0, 'reviewer2', 'POST', '/api/recordings/r_cs_111000003/reviews', { decision: 'Rejected', expectedRound: 2 }, 422, '<code>rejection_reason_required</code>.'],
+      ['6.8', 1, 'reviewer2', 'POST', '/api/recordings/r_cs_111000003/reviews', { decision: 'Rejected', expectedRound: 2, rejectionReasonCodes: ['background_noise'], comment: 'Có tiếng quạt ở nền' }, 201, '<code>isFinal = false</code>: 1 đạt, 1 từ chối, cần lượt thứ ba.', V.reviewMid],
+      ['6.9', 0, 'speaker1', 'GET', '/api/recordings/r_cs_111000003/reviews', null, 200, '<code>[]</code>: người đọc chỉ thấy kết quả khi bản ghi đã chốt.'],
+      ['6.10', 0, 'reviewer3', 'GET', '/api/reviewer/recordings/next', null, 200, '<code>round = 3</code>.'],
+      ['6.11', 1, 'reviewer3', 'POST', '/api/recordings/r_cs_111000003/reviews', { decision: 'Approved', expectedRound: 3, comment: 'Tiếng quạt nhỏ, vẫn nghe rõ từng từ' }, 201, '<code>isFinal = true</code>, <code>recordingStatus = "Approved"</code>: 2 đạt, 1 từ chối, trigger trong database chốt theo đa số.'],
+      ['6.12', 1, 'speaker1', 'GET', '/api/recordings/r_cs_111000003/reviews', null, 200, 'Đủ 3 lượt, <code>reviewerId = null</code>. Lượt 2 hiện lý do <code>background_noise</code> và ghi chú: đây là chỗ người đọc xem lý do bị từ chối.'],
+      ['6.13', 1, 'reviewer → reviewer3', 'POST', '/api/recordings/r_vi_111000003_t2/reviews', { decision: 'Approved', expectedRound: 1 }, 201, 'Duyệt đạt cả ba lượt: tab reviewer gửi <code>expectedRound: 1</code>, reviewer2 gửi <code>2</code>, reviewer3 gửi <code>3</code>. Lượt 3 trả <code>isFinal = true</code>, <code>Approved</code>.', V.reviewDone]
+    ]},
+    { t: 'Màn 7 · Tiến độ và thống kê', g: 'Tasks · Dashboard & Statistics', time: '3 phút', steps: [
+      ['7.1', 1, 'manager', 'GET', '/api/tasks/1', null, 200, '<code>Completed</code>, <code>done = 1</code> / 1 cặp câu, 100%: cặp <code>s_111000003</code> đủ hai bản đạt nên task tự hoàn thành.', V.taskDone],
+      ['7.2', 0, 'speaker1', 'GET', '/api/speaker/progress', null, 200, '<code>totalSubmitted = 2</code>, <code>totalApproved = 2</code>. Bản trượt kiểm tra tự động không tính là đã nộp.'],
+      ['7.3', 0, 'reviewer2', 'GET', '/api/reviewer/progress', null, 200, '<code>totalReviews = 2</code>.'],
+      ['7.4', 1, 'admin', 'GET', '/api/admin/dashboard', null, 200, '11 câu (8 đã duyệt, 2 chờ duyệt), 3 bản ghi, 2 bản đạt, 7,02 giây đã duyệt, 2 người đọc, 3 người duyệt.', V.dashboard],
+      ['7.5', 1, 'admin', 'GET', '/api/admin/statistics/rejection-reasons', null, 200, '<code>background_noise</code>: 1 lần. Con số đếm cả lượt từ chối bị đa số bác, nên nghĩa là số lần người duyệt báo lỗi này, không phải số bản bị loại.', V.stats],
+      ['7.6', 0, 'admin', 'GET', '/api/admin/statistics/speakers', null, 200, 'speaker1: 3 lần nộp, 2 đạt, tỉ lệ đạt 66,7%. Tỉ lệ này tính cả bản trượt kiểm tra tự động.'],
+      ['7.7', 0, 'admin', 'GET', '/api/admin/statistics/reviewers', null, 200, 'Mỗi người duyệt 2 lượt; reviewer2 có 1 lượt từ chối.']
+    ]},
+    { t: 'Màn 8 · Cấu hình hệ thống', g: 'System Configuration', time: '2 phút', steps: [
+      ['8.1', 0, 'admin', 'GET', '/api/admin/config', null, 200, '9 tham số. Có tác dụng: thời lượng tối thiểu và tối đa, số lần thu lại, số câu mỗi lần nhập. <code>review.rounds_required</code> phải giữ 3; hai tham số khoảng lặng và định dạng âm thanh chưa được dùng.'],
+      ['8.2', 1, 'admin', 'PUT', '/api/admin/config/recording.min_duration_sec', { value: '5' }, 204, 'Nâng thời lượng tối thiểu lên 5 giây, không phải sửa code hay khởi động lại.', V.config],
+      ['8.3', 0, 'speaker2', 'GET', '/api/speaker/scripts/next', null, 200, '<code>s_121000004</code> “Thầy cho em xin slide của buổi hôm nay với”, <code>guidance.minDurationSec = 5</code>: hướng dẫn đổi theo ngay.'],
+      ['8.4', 1, 'speaker2', 'POST', '/api/recordings', 'Audio = demo/giong-4s.m4a · ScriptId = s_121000004 · SentenceVariant = CodeSwitching', 201, '<code>r_cs_121000004</code>, <code>QcFailed</code>: 4,02 giây ngắn hơn mức mới 5 giây. Cùng file này ở bước 5.2 thì đạt.', V.configEffect],
+      ['8.5', 1, 'admin', 'PUT', '/api/admin/config/recording.min_duration_sec', { value: '1' }, 204, 'Trả về như cũ.']
+    ]},
+    { t: 'Màn 9 · Quản lý người dùng', g: 'Users · Account', time: '3 phút', steps: [
+      ['9.1', 1, 'admin', 'POST', '/api/users', { fullName: 'Người đọc số 3', email: 'Speaker3@CodeSwitchLabel.local', role: 'Speaker' }, 201, '<code>userId = 8</code>, email được lưu chữ thường. <code>temporaryPassword</code> dài 12 ký tự và chỉ hiện đúng lần này, chép lại ngay.', V.user],
+      ['9.2', 1, 'khách', 'POST', '/api/auth/login', { email: 'speaker3@codeswitchlabel.local', password: 'dán mật khẩu tạm ở bước 9.1' }, 200, 'Mở tab mới cho speaker3, Authorize bằng token này.'],
+      ['9.3', 0, 'speaker3', 'PUT', '/api/me/password', { currentPassword: 'dán mật khẩu tạm ở bước 9.1', newPassword: 'MatKhauMoi2026' }, 200, 'Trả token mới giống lúc đăng nhập. Dán lại vào Authorize, vì token cũ đã bị thu hồi.'],
+      ['9.4', 1, 'admin', 'POST', '/api/users/8/lock', null, 200, '<code>status = "Inactive"</code>.', V.lock],
+      ['9.5', 1, 'speaker3', 'GET', '/api/auth/me', null, 401, 'Bị chặn ngay ở request kế tiếp, không phải đợi token hết hạn.'],
+      ['9.6', 0, 'admin', 'POST', '/api/users/8/unlock', null, 200, '<code>Active</code>. speaker3 gọi lại <code>GET /api/auth/me</code> thì được 200.'],
+      ['9.7', 0, 'admin', 'POST', '/api/users/8/reset-password', null, 200, 'Mật khẩu tạm mới. speaker3 gọi lại <code>GET /api/auth/me</code> thì nhận 401: cấp lại mật khẩu là người đó bị đăng xuất khỏi mọi máy.'],
+      ['9.8', 0, 'admin', 'POST', '/api/users/1/lock', null, 409, '<code>cannot_lock_self</code>: Admin không tự khoá mình được.'],
+      ['9.9', 0, 'admin', 'GET', '/api/users?role=Speaker', null, 200, '3 người đọc: speaker1, speaker2, speaker3.']
+    ]},
+    { t: 'Màn 10 · Ngoài Swagger, nếu cô hỏi thêm', g: '', time: '3 phút', steps: [
+      ['10.1', 0, 'psql', 'SQL', 'Chặn tự duyệt ngay trong database', "insert into review (recording_id, reviewer_id, review_round, decision) values ('r_cs_121000004', 7, 1, 'approved');", 'ERR', 'Báo lỗi <code>self-review blocked: user 7 is the speaker of r_cs_121000004</code>, do trigger <code>trg_review_no_self</code> chặn, kể cả khi ghi thẳng bằng SQL.'],
+      ['10.2', 0, 'psql', 'SQL', 'Nhật ký tự ghi người thao tác', 'select changed_at::time(0), user_id, entity_type, entity_id, action from audit_log order by changed_at desc limit 5;', 'OK', 'Các lượt duyệt câu ghi <code>user_id = 6</code> (speaker1), lượt nhập file ghi <code>user_id = 1</code> (admin). Trigger <code>fn_audit</code> tự ghi; backend chỉ đặt biến phiên <code>app.user_id</code>.'],
+      ['10.3', 0, 'trình duyệt', 'WEB', 'http://localhost:9090', 'Tài khoản: MINIO_ROOT_USER / MINIO_ROOT_PASSWORD trong docker-compose.yml', 'OK', 'Bucket <code>recordings</code> chứa các file WAV đã chuyển đổi.'],
+      ['10.4', 0, 'terminal', 'CLI', 'Chạy unit test', 'dotnet test backend/CodeSwitchLabel.sln', 'OK', '68 test đạt. Cần cài .NET 10 SDK.']
+    ]},
+    { t: 'Bổ sung A · Các trường hợp nhập file', g: 'Scripts', time: '4 phút', extra: 1,
+      note: 'Chạy sau màn 9. Mọi file nằm trong <code>demo/test-them/</code>. Chạy trên database vừa xoá thì mã câu mới có số thứ tự nhỏ hơn.', steps: [
+      ['A.1', 0, 'admin', 'POST', '/api/scripts/import', 'File = demo/test-them/import-1-mot-cau.json', 200, 'File chỉ có <b>một câu rời</b>, đúng như mẫu cô gửi (không bọc trong mảng). <code>imported = 1</code>: <code>s_212000012</code>. Số thứ ba là <code>2</code> vì câu có tên riêng “Zalo” (<code>relation: proper_noun</code>).', [
+        { k: 'SQL', c: 'select script_id, domain, en_word_count, status, import_batch_id from script where import_batch_id = (select max(batch_id) from import_batch);', o:
+`  script_id  |    domain     | en_word_count |       status       | import_batch_id
+-------------+---------------+---------------+--------------------+-----------------
+ s_212000012 | it_technology |             2 | pending_validation |               2
+(1 row)`, n: 'Câu vào lô nhập mới, trạng thái chờ duyệt như mọi câu nhập từ file.' }
+      ]],
+      ['A.2', 0, 'admin', 'POST', '/api/scripts/import', 'File = demo/test-them/import-2-nhieu-loi.json', 200, '<code>imported = 1</code> (<code>s_121000013</code>), <code>skipped</code> 4 câu, mỗi câu một lý do: 0 từ tiếng Anh; 13 từ tiếng Anh, vượt mức 9; nhãn <code>[fr]</code> không hợp lệ; câu tương đương để trống. Câu trống hiện báo “câu phải bắt đầu bằng nhãn” — nhóm sẽ sửa cho rõ hơn.'],
+      ['A.3', 0, 'admin', 'POST', '/api/scripts/import', 'File = demo/test-them/import-3-sai-cu-phap.json', 422, '<code>invalid_json</code>, kèm số dòng bị lỗi. Không lưu gì.', [
+        { k: 'SQL', c: 'select count(*) from import_batch;', n: 'Chạy trước và sau bước này: con số không đổi.' }
+      ]],
+      ['A.4', 0, 'admin', 'POST', '/api/scripts/import', 'File = demo/test-them/import-4-mang-rong.json', 422, '<code>empty_file</code>: file không có câu nào thì bị từ chối hẳn, không tạo lô nhập rỗng.'],
+      ['A.5', 0, 'admin', 'POST', '/api/scripts/import', 'File = demo/test-them/import-5-van-ban.txt', 422, '<code>invalid_json</code>: file không phải JSON thì bị từ chối, không lưu gì.'],
+      ['A.6', 0, 'admin', 'PUT', '/api/admin/config/import.max_scripts_per_batch', { value: '2' }, 204, 'Tạm hạ giới hạn xuống 2 câu mỗi lần nhập.'],
+      ['A.7', 0, 'admin', 'POST', '/api/scripts/import', 'File = demo/test-them/import-2-nhieu-loi.json', 422, '<code>import_too_large</code>: “File có 5 câu, vượt giới hạn 2 câu mỗi lần nhập.” Bị chặn trước khi ghi bất cứ thứ gì.'],
+      ['A.8', 0, 'admin', 'PUT', '/api/admin/config/import.max_scripts_per_batch', { value: '100000' }, 204, 'Trả giới hạn về như cũ.', [
+        { k: 'SQL', c: 'select batch_id, file_name, script_count, imported_by from import_batch order by batch_id;', o:
+` batch_id |        file_name        | script_count | imported_by
+----------+-------------------------+--------------+-------------
+        1 | input_text_demo.json    |            4 |           1
+        2 | import-1-mot-cau.json   |            1 |           1
+        3 | import-2-nhieu-loi.json |            1 |           1
+        4 | import-4-mang-rong.json |            0 |           1
+(4 rows)`, n: 'Chỉ các lần nhập thành công mới có lô. Ba lần bị từ chối (A.3, A.5, A.7) không để lại dòng nào.' }
+      ]]
+    ]},
+    { t: 'Bổ sung B · Các trường hợp nộp âm thanh', g: 'Recordings', time: '3 phút', extra: 1,
+      note: 'Chạy bằng tab speaker2, với cặp câu <code>s_121000005</code> chưa ai thu. File nằm trong <code>demo/test-them/</code>.', steps: [
+      ['B.1', 0, 'speaker2', 'POST', '/api/recordings', 'Audio = demo/test-them/audio-giong-2s.webm · ScriptId = s_121000005 · SentenceVariant = CodeSwitching', 201, 'File WebM, đúng định dạng Chrome ghi ra. <code>r_cs_121000005</code>, <code>PendingReview</code>, <code>audioFormat = "wav"</code>, <code>durationSec = 2</code>.', [
+        { k: 'CLI', c: 'ffprobe -v error -show_entries stream=codec_name,sample_rate,channels -of default=nw=1 "DÁN_LINK_TỪ GET /api/recordings/r_cs_121000005/audio-url"', o:
+`codec_name=pcm_s16le
+sample_rate=16000
+channels=1`, n: 'Gửi lên WebM, lưu thành WAV 16 kHz mono.' }
+      ]],
+      ['B.2', 0, 'speaker2', 'POST', '/api/recordings', 'Audio = demo/test-them/audio-qua-dai-35s.wav · ScriptId = s_121000005 · SentenceVariant = PureVietnamese', 201, '<code>r_vi_121000005</code>, <code>QcFailed</code>, <code>qcIssues</code> báo <code>too_long</code>: 35 giây, dài hơn mức tối đa 30 giây.'],
+      ['B.3', 0, 'speaker2', 'POST', '/api/recordings', 'Audio = demo/test-them/audio-rong.wav · ScriptId = s_121000005 · SentenceVariant = PureVietnamese', 422, '<code>empty_audio</code>: file rỗng.'],
+      ['B.4', 0, 'speaker2', 'POST', '/api/recordings', 'Audio = demo/test-them/audio-khong-phai-am-thanh.m4a · ScriptId = s_121000005 · SentenceVariant = PureVietnamese', 422, '<code>invalid_audio</code>: file đặt đuôi .m4a nhưng thật ra là văn bản, ffmpeg không đọc được.', [
+        { k: 'SQL', c: "select recording_id, status, duration_sec, audio_format from recording where script_id = 's_121000005' order by recorded_at;", o:
+`  recording_id  |     status     | duration_sec | audio_format
+----------------+----------------+--------------+--------------
+ r_cs_121000005 | pending_review |         2.00 | wav
+ r_vi_121000005 | qc_failed      |        35.00 | wav
+(2 rows)`, n: 'Chỉ 2 dòng: file rỗng và file giả bị chặn trước khi ghi, không để lại gì trong database hay MinIO.' }
+      ]]
+    ]},
+    { t: 'Bổ sung C · Tắt bật lại, dữ liệu còn không', g: '', time: '2 phút', extra: 1,
+      note: 'Chứng minh dữ liệu nằm trong database thật chứ không phải trong bộ nhớ. Chạy ở thư mục project.', steps: [
+      ['C.1', 0, 'psql', 'SQL', 'Đếm dữ liệu trước khi tắt', 'select (select count(*) from script) as cau, (select count(*) from recording) as ban_ghi, (select count(*) from app_user) as tai_khoan;', 'OK', 'Nếu đã chạy hết 9 màn và phần bổ sung A, B: <code>13 | 6 | 8</code>. Ghi lại con số, rồi <code>\\q</code> để thoát psql.'],
+      ['C.2', 0, 'terminal', 'CLI', 'Tắt hẳn cả hệ thống, không có -v', 'docker compose --profile api down', 'OK', 'Ba container bị xoá, nhưng volume chứa dữ liệu vẫn giữ lại.'],
+      ['C.3', 0, 'terminal', 'CLI', 'Bật lại', 'docker compose --profile api up -d', 'OK', 'Đợi khoảng 20 giây tới khi mở được <b>http://localhost:5053</b>.'],
+      ['C.4', 0, 'admin', 'GET', '/api/scripts/s_211000007', null, 200, 'Dữ liệu còn nguyên, dùng luôn tab cũ: token vẫn hợp lệ vì khoá ký và mật khẩu không đổi. Mở lại psql chạy câu ở C.1 thì ra đúng con số cũ; link nghe <code>r_cs_111000003</code> vẫn phát được.']
+    ]}
+  ];
+
+  var store = {};
+  try { store = JSON.parse(localStorage.getItem('csl-demo-v2') || '{}'); } catch (e) {}
+  var save = function () { try { localStorage.setItem('csl-demo-v2', JSON.stringify(store)); } catch (e) {} };
+  var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  var stClass = function (s) { return s === 'ERR' ? 's4b' : (s === 'OK' || s < 300) ? 's2' : (s === 409 || s === 422) ? 's4w' : 's4b'; };
+  var PLACE = { SQL: 'Trong database · dán vào psql', API: 'Qua API', WEB: 'Trong MinIO', CLI: 'Trong terminal' };
+  var copyPre = function (text) { return '<pre class="has-copy"><button type="button" class="copy">Chép</button>' + esc(text) + '</pre>'; };
+
+  var renderChecks = function (checks) {
+    return '<details class="verify"><summary>Kiểm tra dữ liệu đã lưu</summary><div class="vb">' +
+      checks.map(function (c) {
+        return '<div class="chk"><span class="k">' + PLACE[c.k] + '</span>' +
+          (c.k === 'WEB' ? '<p class="exp mono">' + esc(c.c) + '</p>' : copyPre(c.c)) +
+          (c.o ? '<pre class="out">' + esc(c.o) + '</pre>' : '') +
+          (c.n ? '<p class="exp">' + c.n + '</p>' : '') + '</div>';
+      }).join('') + '</div></details>';
+  };
+
+  var html = '';
+  ACTS.forEach(function (act) {
+    html += '<div class="act' + (act.extra ? ' extra' : '') + '"><h3>' + esc(act.t) + (act.g ? ' <span class="grp">' + esc(act.g) + '</span>' : '') +
+      ' <small>' + act.time + '</small></h3>' + (act.note ? '<p class="note">' + act.note + '</p>' : '') + '<ol class="steps">';
+    act.steps.forEach(function (s) {
+      var id = 'c' + s[0].replace('.', '-');
+      var isJson = s[5] !== null && typeof s[5] !== 'string';
+      var isCmd = s[3] === 'SQL' || s[3] === 'CLI';
+      var body = s[5] === null ? '' : isJson ? JSON.stringify(s[5], null, 2) : s[5];
+      html += '<li class="step' + (s[1] ? ' core' : '') + (store[id] ? ' checked' : '') + '">' +
+        '<input type="checkbox" id="' + id + '"' + (store[id] ? ' checked' : '') + ' aria-label="Đã làm bước ' + s[0] + '">' +
+        '<div class="sb"><div class="hd"><span class="num">' + s[0] + '</span><span class="who">' + esc(s[2]) + '</span>' +
+        '<span class="m ' + s[3] + '">' + s[3] + '</span><span class="path">' + esc(s[4]) + '</span>' +
+        (s[1] ? '<span class="core-tag">rút gọn</span>' : '') +
+        '<span class="pill st ' + stClass(s[6]) + '">' + s[6] + '</span></div>' +
+        (body ? (isJson || isCmd ? copyPre(body) : '<p class="exp mono">' + esc(body) + '</p>') : '') +
+        '<p class="exp">' + s[7] + '</p>' + (s[8] ? renderChecks(s[8]) : '') + '</div></li>';
+    });
+    html += '</ol></div>';
+  });
+  document.getElementById('acts').innerHTML = html;
+
+  var countEl = document.getElementById('count');
+  var updateCount = function () {
+    var visible = document.body.classList.contains('short') ? '.act:not(.extra) .step.core' : '.step';
+    var all = document.querySelectorAll(visible + ' input').length;
+    var done = document.querySelectorAll(visible + ' input:checked').length;
+    countEl.textContent = 'Đã làm ' + done + '/' + all + ' bước';
+  };
+
+  document.getElementById('acts').addEventListener('change', function (e) {
+    if (e.target.type !== 'checkbox') return;
+    store[e.target.id] = e.target.checked;
+    e.target.closest('.step').classList.toggle('checked', e.target.checked);
+    save(); updateCount();
+  });
+
+  document.body.addEventListener('click', function (e) {
+    if (!e.target.classList.contains('copy')) return;
+    var text = e.target.parentNode.textContent.replace(/^(Chép|Đã chép)/, '');
+    var done = function () { e.target.textContent = 'Đã chép'; setTimeout(function () { e.target.textContent = 'Chép'; }, 1200); };
+    var fallback = function () {
+      var ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); done(); } catch (err) {} ta.remove();
+    };
+    if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, fallback); else fallback();
+  });
+
+  var openAll = document.getElementById('openAll');
+  openAll.addEventListener('click', function () {
+    var boxes = document.querySelectorAll('details.verify');
+    var anyClosed = Array.prototype.some.call(boxes, function (b) { return !b.open; });
+    Array.prototype.forEach.call(boxes, function (b) { b.open = anyClosed; });
+    openAll.textContent = anyClosed ? 'Thu gọn phần kiểm tra' : 'Mở hết phần kiểm tra';
+  });
+
+  var shortBox = document.getElementById('short');
+  try { shortBox.checked = localStorage.getItem('csl-short-v2') === '1'; } catch (e) {}
+  document.body.classList.toggle('short', shortBox.checked);
+  updateCount();
+  shortBox.addEventListener('change', function () {
+    document.body.classList.toggle('short', shortBox.checked);
+    try { localStorage.setItem('csl-short-v2', shortBox.checked ? '1' : '0'); } catch (e) {}
+    updateCount();
+  });
+
+  document.getElementById('reset').addEventListener('click', function () {
+    store = {}; save();
+    document.querySelectorAll('.step input').forEach(function (i) { i.checked = false; i.closest('.step').classList.remove('checked'); });
+    updateCount();
+  });
+})();
+</script>
