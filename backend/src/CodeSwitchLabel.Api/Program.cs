@@ -9,6 +9,7 @@ using CodeSwitchLabel.Services.Audio;
 using CodeSwitchLabel.Services.Options;
 using CodeSwitchLabel.Services.Seeding;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 
@@ -41,17 +42,23 @@ builder.Services
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
-var jwt = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
-    ?? throw new InvalidOperationException("Thiếu cấu hình mục Jwt.");
-
 // ---------------------------------------------------------------- dịch vụ
 
 builder.Services.AddCodeSwitchLabel(connectionString);
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
+    .AddJwtBearer();
+
+// Khoá ký lấy từ IOptions<JwtOptions>, KHÔNG chụp cấu hình ngay tại đây. Chụp sớm thì cấu hình ghi đè
+// sau đó — biến môi trường lúc deploy, hay WebApplicationFactory trong test — chỉ áp cho bên cấp token
+// mà không áp cho bên kiểm token, và lỗi hiện ra là 401 "signature key was not found" rất khó lần.
+builder.Services
+    .AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
+    .Configure<IOptions<JwtOptions>>((options, jwtOptions) =>
     {
+        var jwt = jwtOptions.Value;
+
         // Giữ nguyên tên claim như trong token. Mặc định ASP.NET đổi "sub" thành
         // một URI dài của schema SOAP cũ, khiến code đọc claim "sub" lặng lẽ trả null.
         options.MapInboundClaims = false;

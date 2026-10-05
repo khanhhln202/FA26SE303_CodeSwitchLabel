@@ -144,6 +144,12 @@ public sealed class DatabaseFixture : IAsyncLifetime
         _factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
             {
+                // PHẢI đặt bằng UseSetting, không phải ConfigureAppConfiguration: Program.cs đọc chuỗi kết nối
+                // ngay lúc dựng builder, trước khi ConfigureAppConfiguration được áp. Đặt sai chỗ thì API trong
+                // test nối vào database dev trên máy lập trình viên, ghi rác vào đó, còn phần kiểm tra lại đọc
+                // database tạm nên không thấy gì.
+                builder.UseSetting("ConnectionStrings:Postgres", ConnectionString);
+
                 builder.ConfigureAppConfiguration((context, config) =>
                 {
                     config.AddInMemoryCollection(new Dictionary<string, string?>
@@ -594,20 +600,20 @@ private async Task SeedTestDataAsync()
 
     private static string FindSchemaFile()
     {
-        // Ưu tiên đường dẫn tương đối/portable trước để chạy được trên Linux CI.
-        // Đường dẫn tuyệt đối Windows chỉ là fallback cuối cho máy dev cũ.
-        var baseDir = AppContext.BaseDirectory;
-        var possiblePaths = new[]
+        // Bản chép sang thư mục build (xem .csproj) là đường đi thường gặp; nếu không có thì đi ngược
+        // lên cây thư mục tìm docs/codeswitchlabel.sql. Cách này không phụ thuộc repo nằm ở đâu trên
+        // máy nào, nên chạy được cả trên máy dev lẫn CI — đường dẫn cứng thì không.
+        var tried = new List<string>
         {
-            Path.GetFullPath(Path.Combine(baseDir, "codeswitchlabel.sql")),
-            Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..", "..", "docs", "codeswitchlabel.sql")),
-            Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "docs", "codeswitchlabel.sql")),
-            Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "docs", "codeswitchlabel.sql")),
-            Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "docs", "codeswitchlabel.sql")),
-            @"D:\GitHub\codeswitchlabel-backend\docs\codeswitchlabel.sql"
+            Path.Combine(AppContext.BaseDirectory, "codeswitchlabel.sql")
         };
 
-        foreach (var path in possiblePaths)
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            tried.Add(Path.Combine(dir.FullName, "docs", "codeswitchlabel.sql"));
+        }
+
+        foreach (var path in tried)
         {
             if (File.Exists(path))
             {
@@ -616,8 +622,8 @@ private async Task SeedTestDataAsync()
         }
 
         throw new FileNotFoundException(
-            $"Schema file not found. Tried: {string.Join(", ", possiblePaths)}. " +
-            "Ensure docs/codeswitchlabel.sql exists and tests copy it to output (see .csproj).");
+            $"Schema file not found. Tried: {string.Join(", ", tried)}. " +
+            "Ensure docs/codeswitchlabel.sql exists in the repository.");
     }
 }
 
