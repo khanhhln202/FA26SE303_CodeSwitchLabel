@@ -40,6 +40,8 @@ Mật khẩu chung: **`Codeswitch@2026`**. Email có đuôi `@codeswitchlabel.lo
 
 Cần ba Reviewer vì mỗi bản ghi phải được **ba người khác nhau** duyệt.
 
+Dữ liệu mẫu phân sẵn **cả ba chủ đề** cho ba tài khoản Reviewer, và tạo sẵn **một chiến dịch đã giao cho `manager`,** nên luồng duyệt câu và luồng tạo task chạy được ngay sau khi dựng hệ thống. Tạo Reviewer mếi thì phải tự phân chủ đề.
+
 ---
 
 ## 2. Quy ước chung
@@ -219,6 +221,12 @@ Các mã còn lại: `config_not_found`, `duplicate_content`, `error_reason_inac
 
 Sửa là sửa **cả cặp**. Câu đã có bản ghi thì không sửa được nữa.
 
+> **Lượt duyệt của Speaker không chuyển câu sang `Validated`.** Một cặp câu chỉ sang `Validated` khi
+> người duyệt là **Reviewer đã được Admin phân đúng chủ đề** của câu đó. Speaker gửi `action: "Accepted"`
+> sẽ nhận **422 `reviewer_domain_required`**; câu vẫn ở `PendingValidation` và chờ Reviewer chốt.
+> Vì vậy màn hình này của Speaker nên trình bày là **góp ý**, và chỉ hai hành động `Edited` và `Rejected`
+> mới thực sự thay đổi được gì. Hỏi lại backend nếu nhóm muốn Speaker chốt được câu.
+
 **Thu âm**
 
 1. `GET /api/speaker/scripts/next` (thêm `?taskId=` khi đang làm trong một task).
@@ -355,15 +363,33 @@ Ngoài cách nhận từng bản bằng `next`, Reviewer mở được cả task
 - Mở một bản không duyệt được thì nhận đúng mã lỗi của lúc nộp: **403 `self_review_forbidden`**,
   **409 `already_reviewed`**, **409 `recording_not_reviewable`**, **409 `no_more_rounds`**.
 
+**Chủ đề mình duyệt được** — `GET /api/me/domains` trả danh sách chủ đề Admin đã phân cho mình. Câu thuộc chủ đề
+ngoài danh sách này thì lượt duyệt của mình không chốt được câu (**422 `reviewer_domain_required`**), nên màn hình
+duyệt câu nên lọc theo đúng các chủ đề này.
+
 **Tiến độ** — `GET /api/reviewer/progress`, trả `activeTasks` kèm `taskId` để gọi danh sách ở trên.
 Reviewer cũng dùng được màn hình **duyệt câu** giống Speaker.
 
 ### Task Manager
 
+**Mọi task phải thuộc một chiến dịch.** Đây là điều kiện mới, không có đường đi vòng:
+
+1. **Admin** tạo chiến dịch (`POST /api/campaigns`) rồi **giao** cho một Task Manager
+   (`POST /api/campaigns/{id}/assign`). Task Manager không tạo được chiến dịch — gọi sẽ nhận **403**.
+2. Task Manager mở `GET /api/campaigns` để lấy danh sách chiến dịch, rồi tạo task **kèm `campaignId`**.
+
+| Lỗi | Nghĩa |
+|---|---|
+| **400** `Phải chọn chiến dịch` | Thiếu `campaignId` trong body |
+| **404** `campaign_not_found` | `campaignId` không tồn tại |
+| **422** `campaign_not_assigned_to_manager` | Chiến dịch chưa được giao, hoặc được giao cho Task Manager khác. Nhờ Admin giao trước |
+
 | Màn hình | API |
 |---|---|
-| Danh sách task | `GET /api/tasks` — lọc tuỳ chọn: `taskType`, `status`, `assigneeId`, `overdue`, `page`, `pageSize` |
-| Tạo task | `POST /api/tasks` `{ "taskType": "Recording", "description": "…", "targetQty": 10, "deadline": "2026-09-30T17:00:00+07:00" }` |
+| Danh sách chiến dịch | `GET /api/campaigns` — lọc tuỳ chọn `status`, `page`, `pageSize`. Mỗi dòng kèm `allocatedTaskQty` (tổng chỉ tiêu đã chia cho các task), `taskCount`, `completedTaskCount`, `assignedTo` |
+| Chi tiết chiến dịch | `GET /api/campaigns/{id}` |
+| Danh sách task | `GET /api/tasks` — lọc tuỳ chọn: `taskType`, `status`, `assigneeId`, `overdue`, `page`, `pageSize`. Mỗi dòng kèm `campaignId`, `campaignName` |
+| Tạo task | `POST /api/tasks` `{ "campaignId": 2, "taskType": "Recording", "description": "…", "targetQty": 10, "deadline": "2026-09-30T17:00:00+07:00" }` |
 | Chi tiết task | `GET /api/tasks/{id}` — tiến độ, lịch sử giao, danh sách mục |
 | Sửa task | `PATCH /api/tasks/{id}` — chỉ gửi trường cần đổi |
 | Thêm mục chọn tay | `POST /api/tasks/{id}/items` `{ "ids": ["s_211000001", "s_131000002"] }` |
@@ -378,13 +404,15 @@ Reviewer cũng dùng được màn hình **duyệt câu** giống Speaker.
 
 - Chỉ tiêu task **thu âm đếm theo cặp câu**: một cặp chỉ xong khi cả hai bản đều đạt. Task **duyệt** đếm theo bản ghi. Trường `progress.unit` cho biết đơn vị để hiển thị.
 - **Trạng thái task tự chạy**, frontend không gửi trạng thái: `Draft` → `Open` (đã giao) → `InProgress` (có việc đầu tiên) → `Completed`. Chỉ có huỷ là bấm tay.
+- **Chỉ tiêu không được vượt số mục trong task.** Giao task mà `targetQty` lớn hơn số mục người nhận làm được
+  thì nhận **422 `target_exceeds_items`**. Thêm mục hoặc hạ chỉ tiêu trước khi giao.
 
 ### Admin
 
 | Màn hình | API |
 |---|---|
 | Nhập kho câu từ file | `POST /api/scripts/import` — multipart, trường **`File`** là file JSON theo mẫu `docs/Requirement.txt` |
-| Thêm một cặp câu | `POST /api/scripts` — body như phần đóng góp câu, câu vào thẳng trạng thái đã duyệt |
+| Thêm một cặp câu | `POST /api/scripts` — body như phần đóng góp câu. Câu vào thẳng `Validated` kèm một lượt duyệt `Accepted` tự động của chính Admin |
 | Kho câu | `GET /api/scripts` — lọc tuỳ chọn: `status`, `domain`, `keyword`, `page`, `pageSize`. Chi tiết: `GET /api/scripts/{id}` |
 | Bản ghi | `GET /api/recordings` — lọc tuỳ chọn: `status`, `scriptId`, `speakerId`, `page`, `pageSize`. Nghe: `GET /api/recordings/{id}/audio-url` |
 | Cấu hình | `GET /api/admin/config`, `PUT /api/admin/config/{key}` `{ "value": "30" }` |
@@ -395,6 +423,28 @@ Reviewer cũng dùng được màn hình **duyệt câu** giống Speaker.
 | Lý do từ chối phổ biến | `GET /api/admin/statistics/rejection-reasons` |
 
 Kết quả nhập file có `imported`, `scriptIds` và `skipped` (kèm lý do từng câu bị loại). Một câu hỏng không làm hỏng cả file.
+
+> **Nhập file và thêm câu tay đòi Admin được phân đúng chủ đề.** Câu Admin đưa vào hệ thống được duyệt sẵn,
+> nên backend kiểm trước: Admin phải có **mọi chủ đề xuất hiện trong file**, nếu không **cả lần nhập bị từ chối**
+> bằng **422 `reviewer_domain_required`** — không phải bỏ qua từng câu. Màn hình nhập file nên hiện lỗi này ở
+> mức toàn file và chỉ sang trang phân chủ đề.
+>
+> Lưu ý ngược đời đáng biết: `GET /api/users/{id}/domains` **luôn trả `[]` cho tài khoản không phải Reviewer**,
+> kể cả khi tài khoản đó thật sự có chủ đề trong database. Vì vậy đừng dùng endpoint này để đoán Admin nhập
+> được file hay không.
+
+**Chiến dịch** — chỉ Admin tạo, sửa và giao
+
+| Việc | API |
+|---|---|
+| Tạo | `POST /api/campaigns` `{ "campaignName": "Thu dữ liệu đợt 1", "targetQty": 2000, "startDate": "2026-10-05", "endDate": "2027-01-05" }` |
+| Danh sách, chi tiết | `GET /api/campaigns`, `GET /api/campaigns/{id}` |
+| Sửa | `PATCH /api/campaigns/{id}` — chỉ gửi trường cần đổi, kể cả `status` |
+| Giao cho Task Manager | `POST /api/campaigns/{id}/assign` `{ "assignedToUserId": 2 }` |
+
+- `targetQty` **phải từ 2000 đến 5000** cặp câu; ngoài khoảng đó là **400**. Đây là giới hạn của lược đồ database.
+- `startDate` và `endDate` là **ngày thuần** dạng `YYYY-MM-DD`, không có giờ và không có múi giờ.
+- Chiến dịch mới tạo ở `Draft` và `assignedTo: null`. **Chưa giao thì Task Manager chưa tạo được task nào trong đó.**
 
 **Quản lý người dùng**
 
@@ -407,6 +457,8 @@ Kết quả nhập file có `imported`, `scriptIds` và `skipped` (kèm lý do t
 | Đổi vai | `PUT /api/users/{id}/role` `{ "role": "Reviewer" }` |
 | Khoá, mở khoá | `POST /api/users/{id}/lock`, `POST /api/users/{id}/unlock` |
 | Cấp lại mật khẩu | `POST /api/users/{id}/reset-password` |
+| Xem chủ đề duyệt | `GET /api/users/{id}/domains` → `["ItTechnology","Education"]` |
+| Phân chủ đề duyệt | `PUT /api/users/{id}/domains` `{ "domains": ["ItTechnology","Education"] }` — **đặt lại toàn bộ**, chủ đề không gửi lên thì bị gỡ; gửi `[]` để thu hết |
 
 - **Mật khẩu tạm chỉ hiện đúng một lần.** Tạo tài khoản và cấp lại mật khẩu đều trả `temporaryPassword`; database chỉ lưu
   bản băm nên đóng hộp thoại là mất. Hiện kèm nút sao chép và nhắc Admin chép lại. Mật khẩu tạm dài 12 ký tự và không có
@@ -419,6 +471,10 @@ Kết quả nhập file có `imported`, `scriptIds` và `skipped` (kèm lý do t
 - Khoá hay mở khoá lần hai không báo lỗi, nên làm dạng nút bật tắt được.
 - Đổi vai **bị chặn** khi người đó còn task chưa xong (`user_has_active_tasks`). Đổi sang vai khác thì hồ sơ người đọc được giữ lại.
 - Khoá và đổi vai **có hiệu lực ngay**: người bị khoá hay bị đổi vai sẽ bị đưa về trang đăng nhập ở thao tác kế tiếp.
+- **Phân chủ đề là việc bắt buộc, không phải tuỳ chọn.** Một cặp câu chỉ sang `Validated` khi có lượt duyệt của
+  Reviewer được phân đúng chủ đề của câu. Hệ thống mới dựng mà chưa phân chủ đề cho ai thì **không câu nào duyệt
+  được, nên cũng không thu âm được** — màn hình quản lý người dùng nên nhắc Admin việc này ngay sau khi tạo Reviewer.
+- Chỉ phân được cho **vai Reviewer**. Gửi cho Speaker, Task Manager hay Admin đều nhận **422 `domains_reviewer_only`**.
 
 ---
 
@@ -483,7 +539,8 @@ recorder.onstop = async () => {
 | `TaskRecordingStatus` | `Queued`, `Reviewed`, `Skipped` |
 | `ReviewBlocker` | `None`, `OwnRecording`, `AlreadyReviewedByMe`, `NotPendingReview`, `RoundsFull` |
 | `RoleName` | `Speaker`, `Reviewer`, `TaskManager`, `Admin` |
-| `UserStatus` | `Active`, `Inactive` (bị khoá) |
+| `UserStatus` | `Active`, `Inactive` (bị khoá), `Suspended` |
+| `CampaignStatus` | `Draft`, `Open`, `InProgress`, `Completed`, `Cancelled` |
 | `Occupation` | `Student`, `Employed`, `Other` |
 
 Mã lý do từ chối và lý do lỗi câu **luôn lấy từ API** (`/api/rejection-reasons`, `/api/script-error-reasons`),
@@ -508,6 +565,11 @@ Ai đã code theo bản API trước ngày 22/09/2026 thì cần sửa:
 | — | Mới: quản lý người dùng `/api/users`, trang cá nhân `/api/me/*`, ô chọn người nhận `GET /api/tasks/assignable-users` |
 | `PUT /api/me/password` trả 204 | Trả **200 kèm token mới** — thay token đang lưu |
 | Token cấp trước bản cập nhật này | Hết hiệu lực — đăng nhập lại một lần |
+| `POST /api/tasks` không cần chiến dịch | Thêm bắt buộc **`campaignId`**, và chiến dịch phải được Admin giao cho đúng Task Manager đó |
+| Nhập file và thêm câu tay không kiểm chủ đề | Vẫn vào `Validated`, nhưng Admin phải có đúng chủ đề của câu; nhập file thiếu chủ đề là **cả lần nhập** trả 422 `reviewer_domain_required` |
+| Ai duyệt câu cũng chốt được sang `Validated` | Chỉ **Reviewer được phân đúng chủ đề**; Speaker và Admin nhận 422 `reviewer_domain_required` |
+| — | Mới: chiến dịch `/api/campaigns/*`, phân chủ đề `/api/users/{id}/domains`, tự xem chủ đề `GET /api/me/domains` |
+| — | Mới: Reviewer xem danh sách bản ghi trong task `GET /api/reviewer/tasks/{taskId}/recordings` và mở một bản `GET /api/reviewer/recordings/{id}` |
 
 ## 9. Chưa có — backend đang làm
 
