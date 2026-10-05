@@ -147,7 +147,7 @@ Lỗi hệ thống trả 500 với `code: "internal_error"`. Gặp lỗi này th
 
 ### Mã lỗi cần xử lý riêng
 
-Đây là 58 mã hiện có. Mã nào không nằm trong nhóm "cần xử lý riêng" thì cứ hiện `title` là đủ.
+Đây là 74 mã hiện có. Mã nào không nằm trong nhóm "cần xử lý riêng" thì cứ hiện `title` là đủ.
 
 | Mã | HTTP | Khi nào | Frontend nên làm gì |
 |---|---|---|---|
@@ -176,13 +176,19 @@ Lỗi hệ thống trả 500 với `code: "internal_error"`. Gặp lỗi này th
 | `cannot_lock_self` / `cannot_change_own_role` | 409 | Admin khoá hoặc đổi vai chính mình | Ẩn hai nút này ở dòng tài khoản của chính mình |
 | `invalid_current_password` | 422 | Đổi mật khẩu mà nhập sai mật khẩu hiện tại | Hiện lỗi cạnh ô mật khẩu hiện tại |
 | `same_password` | 422 | Mật khẩu mới trùng mật khẩu hiện tại | Hiện lỗi cạnh ô mật khẩu mới |
+| `task_target_exceeds_campaign` | 422 | Chỉ tiêu task vượt phần còn lại của chiến dịch | Hiện `title` — trong đó có số đã chia và chỉ tiêu chiến dịch. Lấy `allocatedTaskQty` ở danh sách chiến dịch để chặn ngay trên form |
+| `task_deadline_outside_campaign` | 422 | Hạn của task nằm ngoài khoảng ngày của chiến dịch | Giới hạn ô chọn ngày theo `startDate` và `endDate` của chiến dịch |
+| `campaign_target_below_allocated` | 422 | Hạ chỉ tiêu chiến dịch xuống dưới phần đã chia cho task | Hiện `title`, có kèm con số đã chia |
+| `assigned_to_invalid_role` | 422 | Giao chiến dịch cho người không phải Task Manager | Ô chọn người nhận chỉ lọc Task Manager |
 
-Các mã còn lại: `config_not_found`, `duplicate_content`, `error_reason_inactive`, `error_reason_required`,
+Các mã còn lại: `alignment_incomplete`, `alignment_word_missing`, `already_assigned`, `batch_not_found`,
+`campaign_dates_invalid`, `campaign_not_found`, `config_not_found`, `deadline_in_past`, `duplicate_content`,
+`empty_content`, `empty_file`, `en_word_count_out_of_range`, `error_reason_inactive`, `error_reason_required`,
 `error_reason_unknown`, `external_recording`, `import_too_large`, `invalid_json`, `invalid_language_tags`,
-`items_source_required`, `already_assigned`, `deadline_in_past`, `en_word_count_out_of_range`, `last_admin`,
-`recording_not_found`, `rejection_reason_inactive`, `rejection_reason_unknown`, `role_unchanged`, `script_not_found`,
-`script_not_recordable`, `script_not_reviewable`, `task_item_not_found`, `task_item_not_removable`,
-`task_not_found`, `unknown_domain`, `user_inactive`, `user_not_found`, `ve_not_pure_vietnamese`.
+`items_source_required`, `last_admin`, `recording_not_found`, `rejection_reason_inactive`,
+`rejection_reason_unknown`, `relation_locked`, `role_unchanged`, `script_not_found`, `script_not_recordable`,
+`script_not_reviewable`, `task_item_not_found`, `task_item_not_removable`, `task_not_found`, `task_not_owned`,
+`unknown_domain`, `user_inactive`, `user_not_found`, `ve_not_pure_vietnamese`.
 
 ---
 
@@ -250,6 +256,23 @@ Sửa là sửa **cả cặp**. Câu đã có bản ghi thì không sửa đư�
    - `qcPassed: false` — bản đã lưu nhưng trượt kiểm tra tự động. Hiện `qcIssues[].message` và mời thu lại.
    - `take` — đây là lần thu thứ mấy.
 4. Nộp đủ hai bản thì gọi lại bước 1 để lấy câu tiếp theo. **204** nghĩa là đã hết câu.
+
+**Các lỗi của bước kiểm tra tự động** — giá trị `qcIssues[].code`:
+
+| Mã | Nghĩa | Nói gì với người đọc |
+|---|---|---|
+| `too_short` | Ngắn hơn mức tối thiểu, mặc định 1 giây | Bản ghi quá ngắn, đọc lại cả câu |
+| `too_long` | Dài hơn mức tối đa, mặc định 30 giây | Bản ghi quá dài, đọc gọn lại |
+| `excess_leading_silence` | Im lặng ở đầu quá 1 giây | Bấm thu xong thì đọc luôn, đừng chờ |
+| `excess_trailing_silence` | Im lặng ở cuối quá 1 giây | Đọc xong bấm dừng ngay |
+| `too_quiet` | Âm lượng trung bình thấp hơn ngưỡng | Nói to hơn hoặc đưa micro lại gần |
+| `clipping_detected` | Đỉnh âm vượt ngưỡng, tiếng bị rè | Nói nhỏ lại hoặc đưa micro ra xa |
+
+Mỗi phần tử có sẵn `message` tiếng Việt, hiện thẳng cũng được. **Đừng viết cứng các con số ngưỡng trong giao diện**:
+chúng nằm trong cấu hình hệ thống, Admin đổi được lúc đang chạy, và `guidance` ở bước lấy câu luôn trả về mức hiện hành.
+
+Bản trượt kiểm tra **vẫn được lưu** kèm toàn bộ số đo (thời lượng, khoảng lặng hai đầu, âm lượng trung bình, đỉnh âm)
+để sau này thống kê chất lượng. Nó không vào hàng đợi duyệt; thu lại thì mã bản ghi có thêm hậu tố `_t2`, `_t3`.
 
 **Bản ghi của tôi**
 
