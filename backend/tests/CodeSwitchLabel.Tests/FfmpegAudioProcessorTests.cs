@@ -10,10 +10,10 @@ namespace CodeSwitchLabel.Tests;
 /// <summary>
 /// Test tích hợp với ffmpeg THẬT, không giả lập.
 ///
-/// Giả lập ffmpeg chềEkiểm được rằng code truyền đúng tham sềE Ekhông kiểm được điều
+/// Giả lập ffmpeg chỉ kiểm được rằng code truyền đúng tham số — không kiểm được điều
 /// quan trọng thật sự: ffmpeg có xử lý file của trình duyệt đúng như ta giả định không.
 ///
-/// Máy chưa cài ffmpeg thì nhóm này tự bềEqua (Skip), không làm đềEsuite:
+/// Máy chưa cài ffmpeg thì nhóm này tự bỏ qua (Skip), không làm đỏ suite:
 ///   dotnet test --filter "Category!=RequiresFfmpeg"
 /// </summary>
 [Trait("Category", "RequiresFfmpeg")]
@@ -42,26 +42,26 @@ public sealed class FfmpegAudioProcessorTests : IDisposable
         }
         catch (IOException)
         {
-            // Thư mục tạm  EhềEđiều hành sẽ dọn sau.
+            // Thư mục tạm — hệ điều hành sẽ dọn sau.
         }
         catch (UnauthorizedAccessException)
         {
-            // File còn bềEffmpeg giữ trên Windows  EbềEqua, lần chạy sau dùng GUID mới.
+            // File còn bị ffmpeg giữ trên Windows — bỏ qua, lần chạy sau dùng GUID mới.
         }
     }
 
     private bool SkipIfNoFfmpeg()
     {
-        // xunit.v3 ềErepo này không có API Skip động, nên test tự bềEqua êm khi thiếu ffmpeg:
+        // xunit.v3 ở repo này không có API Skip động, nên test tự bỏ qua êm khi thiếu ffmpeg:
         // return true nghĩa là "không chạy tiếp", suite vẫn xanh, log lý do trong comment.
         return !_ffmpegAvailable;
     }
 
     /// <summary>
     /// Lý do tồn tại của bước "chuyển sang WAV rồi mới đo".
-    /// Trình duyệt ghi WebM theo kiểu phát trực tiếp, không tua lại đầu file đềEghi thời lượng,
+    /// Trình duyệt ghi WebM theo kiểu phát trực tiếp, không tua lại đầu file để ghi thời lượng,
     /// nên đo thẳng file gốc là không được. Nếu test này có ngày không còn đúng nữa,
-    /// thì mới được bàn tới chuyện bềEbước chuyển đổi.
+    /// thì mới được bàn tới chuyện bỏ bước chuyển đổi.
     /// </summary>
     [Fact]
     public async Task FileGhiNhuTrinhDuyet_KhongDoDuocThoiLuongTuFileGoc()
@@ -86,8 +86,8 @@ public sealed class FfmpegAudioProcessorTests : IDisposable
         var wav = Path.Combine(_workDir, "out.wav");
 
         // Act
-        await _processor.ConvertToWavAsync(webm, wav);
-        var probe = await _processor.ProbeAsync(wav);
+        await _processor.ConvertToWavAsync(webm, wav, TestContext.Current.CancellationToken);
+        var probe = await _processor.ProbeAsync(wav, TestContext.Current.CancellationToken);
 
         // Assert  Effmpeg mã hoá không chính xác tới mili-giây nên dùng khoảng thay vì bằng tuyệt đối.
         Assert.InRange(probe.DurationSec, 2.9m, 3.1m);
@@ -102,10 +102,10 @@ public sealed class FfmpegAudioProcessorTests : IDisposable
         // Arrange
         if (SkipIfNoFfmpeg()) return;
         var fake = Path.Combine(_workDir, "fake.webm");
-        await File.WriteAllTextAsync(fake, "đây chềElà chữ, không phải âm thanh");
+        await File.WriteAllTextAsync(fake, "đây chỉ là chữ, không phải âm thanh", TestContext.Current.CancellationToken);
 
         // Act  Ephải là AudioProcessingException chứ không phải lỗi chung chung,
-        // vì tầng Service dựa vào đúng loại này đềEtrả 422 thay vì 500.
+        // vì tầng Service dựa vào đúng loại này để trả 422 thay vì 500.
         var act = () => _processor.ConvertToWavAsync(fake, Path.Combine(_workDir, "fake.wav"));
 
         // Assert
@@ -144,7 +144,7 @@ public sealed class FfmpegAudioProcessorTests : IDisposable
 
     /// <summary>
     /// Chính thư mục dự án có dấu cách ("FPT-learning Materials"), nên đây không phải ca hiếm.
-    /// Kiểm rằng việc truyền từng tham sềEriêng qua ArgumentList không đềEđường dẫn phá câu lệnh.
+    /// Kiểm rằng việc truyền từng tham số riêng qua ArgumentList không để đường dẫn phá câu lệnh.
     /// </summary>
     [Fact]
     public async Task DuongDanCoDauCachVaTiengViet_VanXuLyDuoc()
@@ -158,11 +158,11 @@ public sealed class FfmpegAudioProcessorTests : IDisposable
         var wav = Path.Combine(dir, "kết quả.wav");
 
         // Act
-        await _processor.ConvertToWavAsync(webm, wav);
+        await _processor.ConvertToWavAsync(webm, wav, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(File.Exists(wav));
-        Assert.InRange((await _processor.ProbeAsync(wav)).DurationSec, 0.9m, 1.1m);
+        Assert.InRange((await _processor.ProbeAsync(wav, TestContext.Current.CancellationToken)).DurationSec, 0.9m, 1.1m);
     }
 
     [Fact]
@@ -173,8 +173,8 @@ public sealed class FfmpegAudioProcessorTests : IDisposable
         var wav = await GenerateSilenceToneSilenceWavAsync(leadSec: 1.5, toneSec: 2, trailSec: 1.2);
 
         // Act
-        var probe = await _processor.ProbeAsync(wav);
-        var metrics = await _processor.AnalyzeSignalAsync(wav, probe.DurationSec, -35m, 0.5m);
+        var probe = await _processor.ProbeAsync(wav, TestContext.Current.CancellationToken);
+        var metrics = await _processor.AnalyzeSignalAsync(wav, probe.DurationSec, -35m, 0.5m, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.InRange(metrics.LeadingSilenceSec, 1.35m, 1.65m);
@@ -192,13 +192,13 @@ public sealed class FfmpegAudioProcessorTests : IDisposable
         var webm = await GenerateBrowserLikeWebmAsync(seconds: 2);
         var wav = Path.Combine(_workDir, "tone.wav");
 
-        await _processor.ConvertToWavAsync(webm, wav);
+        await _processor.ConvertToWavAsync(webm, wav, TestContext.Current.CancellationToken);
 
         // Act
-        var probe = await _processor.ProbeAsync(wav);
-        var metrics = await _processor.AnalyzeSignalAsync(wav, probe.DurationSec, -35m, 0.5m);
+        var probe = await _processor.ProbeAsync(wav, TestContext.Current.CancellationToken);
+        var metrics = await _processor.AnalyzeSignalAsync(wav, probe.DurationSec, -35m, 0.5m, TestContext.Current.CancellationToken);
 
-        // Assert  Etiếng liên tục: hai mép không có khoảng lặng đáng kềE(chềEvài ms lúc bềElọc bắt đầu).
+        // Assert — tiếng liên tục: hai mép không có khoảng lặng đáng kể (chỉ vài ms lúc bộ lọc bắt đầu).
         Assert.InRange(metrics.LeadingSilenceSec, 0m, 0.2m);
         Assert.InRange(metrics.TrailingSilenceSec, 0m, 0.2m);
     }
@@ -226,7 +226,7 @@ public sealed class FfmpegAudioProcessorTests : IDisposable
 
     /// <summary>
     /// Sinh WAV đúng cấu trúc một lượt thu thật: im lặng đầu (bấm nút rồi mới nói),
-    /// tiếng ềEgiữa, im lặng cuối (nói xong chưa bấm dừng).
+    /// tiếng ở giữa, im lặng cuối (nói xong chưa bấm dừng).
     /// </summary>
     private async Task<string> GenerateSilenceToneSilenceWavAsync(double leadSec, double toneSec, double trailSec)
     {
@@ -246,8 +246,8 @@ public sealed class FfmpegAudioProcessorTests : IDisposable
         return path;
     }
 
-    /// <summary>Chạy ffmpeg với từng tham sềEriêng qua ArgumentList  Eđường dẫn có dấu cách vẫn an toàn.</summary>
-    /// <param name="stdoutToFile">Nếu có, chuyển stdout (pipe:1) ra file thay vì đọc vào bềEnhềE</param>
+    /// <summary>Chạy ffmpeg với từng tham số riêng qua ArgumentList — đường dẫn có dấu cách vẫn an toàn.</summary>
+    /// <param name="stdoutToFile">Nếu có, chuyển stdout (pipe:1) ra file thay vì đọc vào bộ nhớ.</param>
     private static async Task<int> RunFfmpegAsync(string[] arguments, string? stdoutToFile = null)
     {
         var startInfo = new ProcessStartInfo("ffmpeg")

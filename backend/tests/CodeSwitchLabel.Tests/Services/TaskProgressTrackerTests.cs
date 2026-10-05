@@ -41,7 +41,7 @@ public sealed class TaskProgressTrackerTests
         _tasks.Setup(t => t.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
 
         // Act
-        await Tracker.RefreshStatusAsync(7);
+        await Tracker.RefreshStatusAsync(7, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(WorkTaskStatus.Completed, task.Status);
@@ -58,7 +58,7 @@ public sealed class TaskProgressTrackerTests
             .ReturnsAsync(Row(started: 0, done: 0));
 
         // Act
-        await Tracker.RefreshStatusAsync(7);
+        await Tracker.RefreshStatusAsync(7, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(WorkTaskStatus.Open, task.Status);
@@ -73,7 +73,7 @@ public sealed class TaskProgressTrackerTests
         _tasks.Setup(t => t.GetRowAsync(7, It.IsAny<CancellationToken>())).ReturnsAsync((TaskRow?)null);
 
         // Act
-        await Tracker.RefreshStatusAsync(7);
+        await Tracker.RefreshStatusAsync(7, TestContext.Current.CancellationToken);
 
         // Assert
         _tasks.Verify(t => t.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
@@ -87,7 +87,7 @@ public sealed class TaskProgressTrackerTests
             .ReturnsAsync([]);
 
         // Act
-        await Tracker.OnScriptRejectedAsync("s_111000001");
+        await Tracker.OnScriptRejectedAsync("s_111000001", TestContext.Current.CancellationToken);
 
         // Assert
         _tasks.Verify(t => t.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
@@ -104,7 +104,7 @@ public sealed class TaskProgressTrackerTests
         _tasks.Setup(t => t.GetRowAsync(7, It.IsAny<CancellationToken>())).ReturnsAsync(Row(started: 0, done: 0));
 
         // Act — finalStatus còn chờ: không đụng tới hàng đợi, chỉ refresh task gọi tới.
-        await Tracker.OnReviewSubmittedAsync(recording, RecordingStatus.PendingReview, 7);
+        await Tracker.OnReviewSubmittedAsync(recording, RecordingStatus.PendingReview, 7, TestContext.Current.CancellationToken);
 
         // Assert
         _tasks.Verify(t => t.GetQueuedRecordingItemsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -133,7 +133,7 @@ public sealed class TaskProgressTrackerTests
         _tasks.Setup(t => t.GetRowAsync(It.IsAny<long>(), It.IsAny<CancellationToken>())).ReturnsAsync(Row());
 
         // Act
-        await Tracker.OnReviewSubmittedAsync(recording, RecordingStatus.Approved, 7);
+        await Tracker.OnReviewSubmittedAsync(recording, RecordingStatus.Approved, 7, TestContext.Current.CancellationToken);
 
         // Assert — mục chờ bị bỏ qua, mục câu xong, cả hai task đều được refresh.
         Assert.Equal(TaskRecordingStatus.Skipped, queued.Status);

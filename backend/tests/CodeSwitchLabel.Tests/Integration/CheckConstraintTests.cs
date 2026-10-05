@@ -17,11 +17,11 @@ public class CheckConstraintTests : IntegrationTestBase
 {
     public CheckConstraintTests(DatabaseFixture fixture) : base(fixture) { }
 
-    /// <summary>Mọi ca từ chối đều phải ném DbUpdateException lúc SaveChanges  Egom một chềEđềEmessage rõ.</summary>
+    /// <summary>Mọi ca từ chối đều phải ném DbUpdateException lúc SaveChanges — gom một chỗ để message rõ.</summary>
     private async Task AssertRejectedAsync(Func<Task> act) =>
         await Assert.ThrowsAsync<DbUpdateException>(act);
 
-    /// <summary>Biên hợp lềE đúng min/max thì database PHẢI nhận  Ekiểm cả hai chiều của ràng buộc.</summary>
+    /// <summary>Biên hợp lệ: đúng min/max thì database PHẢI nhận — kiểm cả hai chiều của ràng buộc.</summary>
     [Fact]
     public async Task Campaign_TargetQty_AtBoundaries_Accepted()
     {
@@ -303,7 +303,7 @@ public class CheckConstraintTests : IntegrationTestBase
                 new SpeakerProfile
                 {
                     BirthYear = 1800, // Below minimum 1900
-                    Province = "TP. HềEChí Minh",
+                    Province = "TP. Hồ Chí Minh",
                     EnglishLevel = 6.5m,
                     Occupation = Occupation.Student,
                     Major = "IT"
@@ -323,7 +323,7 @@ public class CheckConstraintTests : IntegrationTestBase
                 new SpeakerProfile
                 {
                     BirthYear = 2000,
-                    Province = "TP. HềEChí Minh",
+                    Province = "TP. Hồ Chí Minh",
                     EnglishLevel = 10.0m, // Above maximum 9.0
                     Occupation = Occupation.Student,
                     Major = "IT"
