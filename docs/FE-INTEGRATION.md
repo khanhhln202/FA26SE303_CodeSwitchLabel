@@ -147,7 +147,7 @@ Lỗi hệ thống trả 500 với `code: "internal_error"`. Gặp lỗi này th
 
 ### Mã lỗi cần xử lý riêng
 
-Đây là 74 mã hiện có. Mã nào không nằm trong nhóm "cần xử lý riêng" thì cứ hiện `title` là đủ.
+Đây là 75 mã hiện có. Mã nào không nằm trong nhóm "cần xử lý riêng" thì cứ hiện `title` là đủ.
 
 | Mã | HTTP | Khi nào | Frontend nên làm gì |
 |---|---|---|---|
@@ -176,6 +176,7 @@ Lỗi hệ thống trả 500 với `code: "internal_error"`. Gặp lỗi này th
 | `cannot_lock_self` / `cannot_change_own_role` | 409 | Admin khoá hoặc đổi vai chính mình | Ẩn hai nút này ở dòng tài khoản của chính mình |
 | `invalid_current_password` | 422 | Đổi mật khẩu mà nhập sai mật khẩu hiện tại | Hiện lỗi cạnh ô mật khẩu hiện tại |
 | `same_password` | 422 | Mật khẩu mới trùng mật khẩu hiện tại | Hiện lỗi cạnh ô mật khẩu mới |
+| `campaign_not_accepting_tasks` | 422 | Tạo task trong chiến dịch đã Huỷ hoặc đã Hoàn thành | Ẩn nút tạo task khi `status` của chiến dịch là `Cancelled` hoặc `Completed` |
 | `task_target_exceeds_campaign` | 422 | Chỉ tiêu task vượt phần còn lại của chiến dịch | Hiện `title` — trong đó có số đã chia và chỉ tiêu chiến dịch. Lấy `allocatedTaskQty` ở danh sách chiến dịch để chặn ngay trên form |
 | `task_deadline_outside_campaign` | 422 | Hạn của task nằm ngoài khoảng ngày của chiến dịch | Giới hạn ô chọn ngày theo `startDate` và `endDate` của chiến dịch |
 | `campaign_target_below_allocated` | 422 | Hạ chỉ tiêu chiến dịch xuống dưới phần đã chia cho task | Hiện `title`, có kèm con số đã chia |
