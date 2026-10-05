@@ -291,6 +291,11 @@ CREATE INDEX idx_recording_status  ON recording (status);
 CREATE UNIQUE INDEX uq_recording_approved_pair
     ON recording (script_id, sentence_variant) WHERE status = 'approved';
 
+-- at most ONE active (pending_review/approved) recording per (script, variant):
+-- blocks concurrent retakes racing HasActiveRecording + CountTakes checks.
+CREATE UNIQUE INDEX uq_recording_active_variant
+    ON recording (script_id, sentence_variant) WHERE status IN ('pending_review', 'approved');
+
 CREATE TABLE task_recording (
     task_id      BIGINT NOT NULL REFERENCES task(task_id) ON DELETE CASCADE,
     recording_id VARCHAR(20) NOT NULL REFERENCES recording(recording_id),
@@ -784,11 +789,14 @@ END $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_review_no_self BEFORE INSERT OR UPDATE ON review
     FOR EACH ROW EXECUTE FUNCTION fn_review_no_self_review();
 
--- [ERD] pair rule: one script pair = ONE speaker (same take, same session)
+-- [ERD] pair rule: one script pair = ONE speaker (same take, same session).
+-- qc_failed takes do not claim ownership: a failed take by another speaker must not
+-- permanently block reuse.
 CREATE OR REPLACE FUNCTION fn_recording_single_speaker() RETURNS trigger AS $$ BEGIN
     IF EXISTS (SELECT 1 FROM recording r
                WHERE r.script_id = NEW.script_id
-                 AND r.speaker_id <> NEW.speaker_id) THEN
+                 AND r.speaker_id <> NEW.speaker_id
+                 AND r.status <> 'qc_failed') THEN
         RAISE EXCEPTION 'script % must be recorded by a single speaker', NEW.script_id;
     END IF;
     RETURN NEW;
@@ -983,6 +991,8 @@ INSERT INTO system_config (config_key, config_value, value_type, description) VA
     ('recording.audio_format_default',      'wav',   'string', 'Default audio format'),
     ('recording.max_take',                  '99',    'int',    'Highest re-record take number'),
     ('import.max_scripts_per_batch',        '100000','int',    'Sanity cap per import batch'),
+    ('recording.min_mean_volume_db',        '-50',   'string', 'Min mean volume (dBFS); below fails auto-QC as too_quiet'),
+    ('recording.max_peak_db',               '-1',    'string', 'Max peak (dBFS); above fails auto-QC as clipping_detected'),
     -- anti-junk thresholds: PLACEHOLDER values, confirm with supervisor
     ('quality.speaker_min_approval_rate',        '60', 'int', 'Min approval rate (%) before a speaker is flagged'),
     ('quality.speaker_max_consecutive_qc_fail',  '5',  'int', 'Consecutive qc_failed recordings before warning/suspension'),

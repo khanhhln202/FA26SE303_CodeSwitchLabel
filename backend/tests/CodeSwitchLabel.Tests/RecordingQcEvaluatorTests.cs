@@ -96,6 +96,36 @@ public sealed class RecordingQcEvaluatorTests
     }
 
     [Fact]
+    public void Evaluate_WhenTooQuiet_ReportsTooQuiet()
+    {
+        var signal = Clean with { MeanVolumeDb = -60m };
+
+        var issues = RecordingQcEvaluator.Evaluate(5m, signal, Min, Max, MaxLead, MaxTrail, -50m, -1m);
+
+        var issue = Assert.Single(issues);
+        Assert.Equal("too_quiet", issue.Code);
+    }
+
+    [Fact]
+    public void Evaluate_WhenPeakExceedsMax_ReportsClipping()
+    {
+        var signal = Clean with { MaxVolumeDb = -0.2m };
+
+        var issues = RecordingQcEvaluator.Evaluate(5m, signal, Min, Max, MaxLead, MaxTrail, -50m, -1m);
+
+        var issue = Assert.Single(issues);
+        Assert.Equal("clipping_detected", issue.Code);
+    }
+
+    [Fact]
+    public void Evaluate_WhenVolumeWithinThresholds_Passes()
+    {
+        var issues = RecordingQcEvaluator.Evaluate(5m, Clean, Min, Max, MaxLead, MaxTrail, -50m, -1m);
+
+        Assert.Empty(issues);
+    }
+
+    [Fact]
     public void Serialize_UsesSnakeCaseKeys_AndDropsNullFields()
     {
         var report = new RecordingQcReport(true, 5.0m, 0.5m, null, -23m, null, false, []);

@@ -358,12 +358,29 @@ public class ReviewService(
     private async Task<TaskRecording?> ResolveTaskAsync(
         long? taskId, long reviewerId, string recordingId, CancellationToken ct)
     {
-        if (!taskId.HasValue) return null;
+        if (taskId.HasValue)
+        {
+            return await reviews.GetQueuedTaskRecordingAsync(taskId.Value, reviewerId, recordingId, ct)
+                   ?? throw new ForbiddenException(
+                       "task_not_reviewable",
+                       $"Task #{taskId} không phải task duyệt đang giao cho bạn, hoặc bản ghi {recordingId} không còn chờ trong task đó.");
+        }
 
-        return await reviews.GetQueuedTaskRecordingAsync(taskId.Value, reviewerId, recordingId, ct)
-               ?? throw new ForbiddenException(
-                   "task_not_reviewable",
-                   $"Task #{taskId} không phải task duyệt đang giao cho bạn, hoặc bản ghi {recordingId} không còn chờ trong task đó.");
+        // Không gửi taskId nhưng bản ghi đang Queued trong task của chính reviewer
+        // thì tự gắn vào task đó để tiến độ Done không bị lệch (spot-check chỉ khi
+        // bản ghi không nằm trong task nào của người này).
+        var queued = await reviews.GetQueuedItemsAsync(recordingId, ct);
+
+        foreach (var item in queued)
+        {
+            if (await reviews.IsActiveReviewTaskOfAsync(item.TaskId, reviewerId, ct))
+            {
+                var mine = await reviews.GetQueuedTaskRecordingAsync(item.TaskId, reviewerId, recordingId, ct);
+                if (mine is not null) return mine;
+            }
+        }
+
+        return null;
     }
 
     private async Task<List<RejectionReason>> LoadActiveReasonsAsync(string[] codes, CancellationToken ct)

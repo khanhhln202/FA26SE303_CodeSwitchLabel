@@ -11,16 +11,26 @@ public interface ITaskService
 
     Task<TaskDetailDto> GetAsync(long taskId, CancellationToken ct = default);
 
-    Task<TaskDetailDto> UpdateAsync(long taskId, UpdateTaskRequest request, CancellationToken ct = default);
+    Task<TaskDetailDto> UpdateAsync(
+        long taskId, UpdateTaskRequest request, CancellationToken ct = default,
+        long? callerId = null, bool isAdmin = false);
 
-    Task<AddTaskItemsResult> AddItemsAsync(long taskId, AddTaskItemsRequest request, CancellationToken ct = default);
+    Task<AddTaskItemsResult> AddItemsAsync(
+        long taskId, AddTaskItemsRequest request, CancellationToken ct = default,
+        long? callerId = null, bool isAdmin = false);
 
-    Task<TaskDetailDto> RemoveItemAsync(long taskId, string itemId, CancellationToken ct = default);
+    Task<TaskDetailDto> RemoveItemAsync(
+        long taskId, string itemId, CancellationToken ct = default,
+        long? callerId = null, bool isAdmin = false);
 
     /// <summary>Giao việc. Task đang có người nhận thì đây chính là điều phối lại.</summary>
-    Task<TaskDetailDto> AssignAsync(long taskId, long userId, CancellationToken ct = default);
+    Task<TaskDetailDto> AssignAsync(
+        long taskId, long userId, CancellationToken ct = default,
+        long? callerId = null, bool isAdmin = false);
 
-    Task<TaskDetailDto> CancelAsync(long taskId, CancellationToken ct = default);
+    Task<TaskDetailDto> CancelAsync(
+        long taskId, CancellationToken ct = default,
+        long? callerId = null, bool isAdmin = false);
 
     Task<IReadOnlyList<AssigneeSummaryDto>> GetAssigneeSummaryAsync(CancellationToken ct = default);
 

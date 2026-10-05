@@ -39,6 +39,12 @@ public static class ConfigKeys
 
     public const string RecordingMinDurationSec = "recording.min_duration_sec";
     public const string RecordingMaxDurationSec = "recording.max_duration_sec";
+
+    /// <summary>Âm lượng trung bình tối thiểu (dBFS). Thấp hơn là quá nhỏ, trượt QC.</summary>
+    public const string RecordingMinMeanVolumeDb = "recording.min_mean_volume_db";
+
+    /// <summary>Đỉnh tối đa cho phép (dBFS). Vượt là nghi ngờ vỡ tiếng, trượt QC.</summary>
+    public const string RecordingMaxPeakDb = "recording.max_peak_db";
 }
 
 /// <summary>

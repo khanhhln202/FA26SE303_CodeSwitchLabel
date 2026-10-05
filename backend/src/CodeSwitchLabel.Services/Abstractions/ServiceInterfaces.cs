@@ -21,9 +21,13 @@ public interface IScriptService
     /// <summary>Speaker đóng góp một cặp câu — nằm chờ duyệt nội dung.</summary>
     Task<ScriptDetailDto> ContributeAsync(CreateScriptRequest request, long contributorId, CancellationToken ct = default);
 
-    /// <summary>Nhập hàng loạt từ file input_text.json.</summary>
+    /// <summary>Nhập hàng loạt từ file input_text.json. Giữ partial-success: câu hỏng không làm hỏng cả file.</summary>
     Task<ImportResultDto> ImportAsync(
         Stream jsonFile, string fileName, long importedById, CancellationToken ct = default);
+
+    Task<PagedResult<ImportBatchDto>> ListBatchesAsync(PageRequest request, CancellationToken ct = default);
+
+    Task<ImportBatchDetailDto> GetBatchAsync(long batchId, CancellationToken ct = default);
 
     /// <summary>Duyệt nội dung: chấp nhận, sửa cả cặp, hoặc từ chối kèm lý do.</summary>
     Task<ScriptDetailDto> ReviewAsync(

@@ -239,7 +239,13 @@ public static class DatabaseSeeder
             (ConfigKeys.RecordingSilenceNoiseDb, "-35", ConfigValueType.Int,
                 "Ngưỡng dB coi là khoảng lặng khi phân tích tự động bản ghi"),
             (ConfigKeys.RecordingSilenceMinDurationSec, "0.5", ConfigValueType.String,
-                "Khoảng lặng ngắn hơn mức này (giây) bị bỏ qua khi phân tích tự động")
+                "Khoảng lặng ngắn hơn mức này (giây) bị bỏ qua khi phân tích tự động"),
+            (ConfigKeys.ImportMaxScriptsPerBatch, "100000", ConfigValueType.Int,
+                "Giới hạn số câu mỗi lần nhập"),
+            (ConfigKeys.RecordingMinMeanVolumeDb, "-50", ConfigValueType.String,
+                "Âm lượng trung bình tối thiểu (dBFS), thấp hơn là quá nhỏ và trượt QC"),
+            (ConfigKeys.RecordingMaxPeakDb, "-1", ConfigValueType.String,
+                "Đỉnh tối đa cho phép (dBFS), vượt là nghi vỡ tiếng và trượt QC")
         ];
 
         var existing = await db.SystemConfigs.Select(c => c.ConfigKey).ToListAsync(ct);

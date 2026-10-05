@@ -290,6 +290,13 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.Property(x => x.QcMetrics).HasColumnType("jsonb");
             e.HasIndex(x => x.CloudLink).IsUnique();
 
+            // Blocks concurrent retakes racing HasActiveRecording + CountTakes.
+            // Mirrors docs/codeswitchlabel.sql uq_recording_active_variant.
+            e.HasIndex(x => new { x.ScriptId, x.SentenceVariant })
+                .HasDatabaseName("uq_recording_active_variant")
+                .IsUnique()
+                .HasFilter("status IN ('pending_review', 'approved')");
+
             e.HasOne(x => x.Script).WithMany(s => s.Recordings).HasForeignKey(x => x.ScriptId);
             e.HasOne(x => x.Speaker).WithMany().HasForeignKey(x => x.SpeakerId);
             e.HasOne(x => x.Task).WithMany().HasForeignKey(x => x.TaskId);

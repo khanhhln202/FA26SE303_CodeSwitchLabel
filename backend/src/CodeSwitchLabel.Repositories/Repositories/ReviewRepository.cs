@@ -49,6 +49,8 @@ public interface IReviewRepository
     Task<TaskRecording?> GetQueuedTaskRecordingAsync(
         long taskId, long reviewerId, string recordingId, CancellationToken ct = default);
 
+    Task<List<TaskRecording>> GetQueuedItemsAsync(string recordingId, CancellationToken ct = default);
+
     /// <summary>
     /// Bản ghi tiếp theo người này được duyệt: còn chờ duyệt, không phải bản của chính mình,
     /// mình chưa duyệt lần nào, và chưa đủ số vòng yêu cầu.
@@ -129,6 +131,11 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
             tr.Task.TaskType == TaskType.Review &&
             (tr.Task.Status == WorkTaskStatus.Open || tr.Task.Status == WorkTaskStatus.InProgress) &&
             tr.Task.Assignments.Any(a => a.UserId == reviewerId && a.AssignmentStatus == AssignmentStatus.Active), ct);
+
+    public Task<List<TaskRecording>> GetQueuedItemsAsync(string recordingId, CancellationToken ct = default) =>
+        db.TaskRecordings
+            .Where(tr => tr.RecordingId == recordingId && tr.Status == TaskRecordingStatus.Queued)
+            .ToListAsync(ct);
 
     public Task<Recording?> GetNextForReviewerAsync(
         long reviewerId, long? taskId, long? speakerId, bool random,

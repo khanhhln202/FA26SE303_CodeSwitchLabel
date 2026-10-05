@@ -77,7 +77,7 @@ public class RecordingRepository(CodeSwitchLabelDbContext db) : IRecordingReposi
 
     public Task<long?> GetOwnerSpeakerIdAsync(string scriptId, CancellationToken ct = default) =>
         db.Recordings.AsNoTracking()
-            .Where(r => r.ScriptId == scriptId)
+            .Where(r => r.ScriptId == scriptId && r.Status != RecordingStatus.QcFailed)
             .Select(r => (long?)r.SpeakerId)
             .FirstOrDefaultAsync(ct);
 

@@ -7,8 +7,10 @@ using CodeSwitchLabel.Services.Audio;
 using CodeSwitchLabel.Services.Common;
 using CodeSwitchLabel.Services.Dtos;
 using CodeSwitchLabel.Services.WorkTasks;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Npgsql;
 
 namespace CodeSwitchLabel.Services.Implementations;
 
@@ -58,6 +60,9 @@ public class RecordingService(
                 await command.Audio.CopyToAsync(file, ct);
             }
 
+            // Kiểm lại byte thực tế đã ghi, không chỉ tin IFormFile.Length do client khai báo.
+            EnsureSizeWithinLimit(new FileInfo(inputPath).Length);
+
             var probe = await ConvertAndMeasureAsync(inputPath, wavPath, ct);
 
             // TEAM_001: QC giờ đo thêm khoảng lặng/âm lượng và ghi lại toàn bộ kết quả vào qc_metrics.
@@ -100,7 +105,16 @@ public class RecordingService(
                 await using var transaction = await recordings.BeginTransactionAsync(ct);
 
                 recordings.Add(recording);
-                await recordings.SaveChangesAsync(ct);
+                try
+                {
+                    await recordings.SaveChangesAsync(ct);
+                }
+                catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+                {
+                    throw new ConflictException(
+                        "recording_already_exists",
+                        $"Bạn đã có bản {command.SentenceVariant} đang chờ duyệt hoặc đã được duyệt cho cặp câu {command.ScriptId}.");
+                }
 
                 if (taskId.HasValue)
                 {
@@ -273,9 +287,12 @@ public class RecordingService(
         var maxTrailing = await config.GetDecimalAsync(ConfigKeys.RecordingMaxTrailingSilenceSec, 1m, ct);
         var silenceNoiseDb = await config.GetDecimalAsync(ConfigKeys.RecordingSilenceNoiseDb, -35m, ct);
         var silenceMinSec = await config.GetDecimalAsync(ConfigKeys.RecordingSilenceMinDurationSec, 0.5m, ct);
+        var minMeanDb = await config.GetDecimalAsync(ConfigKeys.RecordingMinMeanVolumeDb, -50m, ct);
+        var maxPeakDb = await config.GetDecimalAsync(ConfigKeys.RecordingMaxPeakDb, -1m, ct);
 
         var signal = await audio.AnalyzeSignalAsync(wavPath, probe.DurationSec, silenceNoiseDb, silenceMinSec, ct);
-        var issues = RecordingQcEvaluator.Evaluate(probe.DurationSec, signal, min, max, maxLeading, maxTrailing);
+        var issues = RecordingQcEvaluator.Evaluate(
+            probe.DurationSec, signal, min, max, maxLeading, maxTrailing, minMeanDb, maxPeakDb);
 
         var report = new RecordingQcReport(
             issues.Count == 0,
@@ -342,6 +359,42 @@ public class RecordingService(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Không dọn được file mồ côi {Key} trong kho lưu trữ", key);
+        }
+    }
+
+    /// <summary>
+    /// Vi phạm unique index (23505): hai lượt thu cùng (script, variant) đua nhau qua
+    /// HasActiveRecording. Khác với lỗi DB thật — ca này dịch thành 409 để client thu lại.
+    /// </summary>
+    private static bool IsUniqueViolation(DbUpdateException ex)
+    {
+        return ex.InnerException is PostgresException pg && pg.SqlState == PostgresErrorCodes.UniqueViolation;
+    }
+
+    /// <summary>
+    /// Dọn file tạm quá 24h còn sót sau crash. Gọi lúc khởi động để thư mục tạm không phình.
+    /// </summary>
+    public static void CleanupStaleTempFiles(ILogger? fileLogger = null)
+    {
+        try
+        {
+            var workDir = Path.Combine(Path.GetTempPath(), "csl-audio");
+            if (!Directory.Exists(workDir)) return;
+
+            var cutoff = DateTime.UtcNow.AddHours(-24);
+            foreach (var file in Directory.GetFiles(workDir))
+            {
+                try
+                {
+                    if (File.GetLastWriteTimeUtc(file) < cutoff) File.Delete(file);
+                }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
+        }
+        catch (Exception ex)
+        {
+            fileLogger?.LogWarning(ex, "Không dọn được thư mục âm thanh tạm");
         }
     }
 }

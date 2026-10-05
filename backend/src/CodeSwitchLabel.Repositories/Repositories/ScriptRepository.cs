@@ -17,6 +17,15 @@ public interface IScriptRepository
 
     Task<bool> ContentExistsAsync(string csContent, CancellationToken ct = default);
 
+    Task<HashSet<string>> FindExistingContentsAsync(IEnumerable<string> csContents, CancellationToken ct = default);
+
+    Task<ImportBatch?> GetBatchAsync(long batchId, CancellationToken ct = default);
+
+    Task<(IReadOnlyList<ImportBatch> Items, int Total)> ListBatchesAsync(
+        int page, int pageSize, CancellationToken ct = default);
+
+    Task<IReadOnlyList<string>> GetScriptIdsByBatchAsync(long batchId, CancellationToken ct = default);
+
     /// <summary>
     /// Cặp câu tiếp theo người này nên thu: đã được duyệt nội dung, CHƯA ai khác thu,
     /// và bản thân người này còn thiếu ít nhất một trong hai biến thể cs/vi.
@@ -36,6 +45,7 @@ public interface IScriptRepository
     void AddBatch(ImportBatch batch);
     void AddWords(IEnumerable<ScriptWord> words);
     void RemoveWords(IEnumerable<ScriptWord> words);
+    void ClearTracked();
 
     Task<int> SaveChangesAsync(CancellationToken ct = default);
 }
@@ -90,6 +100,44 @@ public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
     public Task<bool> ContentExistsAsync(string csContent, CancellationToken ct = default) =>
         db.Scripts.AsNoTracking().AnyAsync(s => s.CsContent == csContent, ct);
 
+    public async Task<HashSet<string>> FindExistingContentsAsync(
+        IEnumerable<string> csContents, CancellationToken ct = default)
+    {
+        var distinct = csContents.Distinct().ToArray();
+        if (distinct.Length == 0) return [];
+
+        var found = await db.Scripts.AsNoTracking()
+            .Where(s => distinct.Contains(s.CsContent))
+            .Select(s => s.CsContent)
+            .ToListAsync(ct);
+
+        return [.. found];
+    }
+
+    public Task<ImportBatch?> GetBatchAsync(long batchId, CancellationToken ct = default) =>
+        db.ImportBatches.AsNoTracking().FirstOrDefaultAsync(b => b.BatchId == batchId, ct);
+
+    public async Task<(IReadOnlyList<ImportBatch> Items, int Total)> ListBatchesAsync(
+        int page, int pageSize, CancellationToken ct = default)
+    {
+        var query = db.ImportBatches.AsNoTracking();
+        var total = await query.CountAsync(ct);
+        var items = await query
+            .OrderByDescending(b => b.BatchId)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        return (items, total);
+    }
+
+    public async Task<IReadOnlyList<string>> GetScriptIdsByBatchAsync(long batchId, CancellationToken ct = default) =>
+        await db.Scripts.AsNoTracking()
+            .Where(s => s.ImportBatchId == batchId)
+            .OrderBy(s => s.ScriptId)
+            .Select(s => s.ScriptId)
+            .ToListAsync(ct);
+
     public Task<Script?> GetNextForSpeakerAsync(
         long speakerId, long? taskId, CancellationToken ct = default)
     {
@@ -99,8 +147,8 @@ public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
             .Where(s => s.Status == ScriptStatus.Validated)
 
             // Luật của lược đồ: một cặp câu chỉ một người đọc. Câu người khác đã đụng vào
-            // thì trigger sẽ chặn, nên đừng phát ra nữa.
-            .Where(s => !s.Recordings.Any(r => r.SpeakerId != speakerId))
+            // thì trigger sẽ chặn, nên đừng phát ra nữa. Bản trượt QC không giữ chỗ.
+            .Where(s => !s.Recordings.Any(r => r.SpeakerId != speakerId && r.Status != RecordingStatus.QcFailed))
 
             // Còn thiếu ít nhất một biến thể. Bản bị từ chối hay trượt QC không tính là đã có.
             .Where(s =>
@@ -145,6 +193,7 @@ public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
     public void AddBatch(ImportBatch batch) => db.ImportBatches.Add(batch);
     public void AddWords(IEnumerable<ScriptWord> words) => db.ScriptWords.AddRange(words);
     public void RemoveWords(IEnumerable<ScriptWord> words) => db.ScriptWords.RemoveRange(words);
+    public void ClearTracked() => db.ChangeTracker.Clear();
 
     public Task<int> SaveChangesAsync(CancellationToken ct = default) => db.SaveChangesAsync(ct);
 }

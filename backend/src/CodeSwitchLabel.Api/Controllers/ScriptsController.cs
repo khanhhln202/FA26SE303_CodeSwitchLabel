@@ -72,10 +72,49 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
     public async Task<ActionResult<ImportResultDto>> Import(
         [FromForm] ImportScriptsForm form, CancellationToken ct)
     {
+        var ext = Path.GetExtension(form.File!.FileName ?? string.Empty).ToLowerInvariant();
+        if (ext is not (".json" or ""))
+        {
+            return UnprocessableEntity(new ProblemDetails
+            {
+                Status = StatusCodes.Status422UnprocessableEntity,
+                Title = $"File {form.File.FileName} không phải JSON.",
+                Type = "https://codeswitchlabel.local/errors/invalid_file_type",
+                Extensions = { ["code"] = "invalid_file_type" }
+            });
+        }
+
+        if (form.File.Length == 0)
+        {
+            return UnprocessableEntity(new ProblemDetails
+            {
+                Status = StatusCodes.Status422UnprocessableEntity,
+                Title = "File rỗng, không có gì để nhập.",
+                Type = "https://codeswitchlabel.local/errors/empty_file",
+                Extensions = { ["code"] = "empty_file" }
+            });
+        }
+
         await using var stream = form.File!.OpenReadStream();
 
         return Ok(await scriptService.ImportAsync(stream, form.File.FileName, User.GetUserId(), ct));
     }
+
+    /// <summary>Danh sách batch đã nhập, mới nhất trước.</summary>
+    [HttpGet("import/batches")]
+    [Authorize(Roles = "Admin")]
+    [ProducesResponseType(typeof(PagedResult<ImportBatchDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResult<ImportBatchDto>>> ListBatches(
+        [FromQuery] PageRequest request, CancellationToken ct)
+        => Ok(await scriptService.ListBatchesAsync(request, ct));
+
+    /// <summary>Chi tiết một batch: file, số câu nhập được, danh sách mã câu.</summary>
+    [HttpGet("import/batches/{batchId:long}")]
+    [Authorize(Roles = "Admin")]
+    [ProducesResponseType(typeof(ImportBatchDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ImportBatchDetailDto>> GetBatch(long batchId, CancellationToken ct)
+        => Ok(await scriptService.GetBatchAsync(batchId, ct));
 
     /// <summary>Duyệt nội dung một cặp câu: chấp nhận, sửa, hoặc từ chối.</summary>
     /// <remarks>

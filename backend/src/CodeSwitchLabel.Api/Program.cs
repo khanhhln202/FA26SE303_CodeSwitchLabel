@@ -183,6 +183,8 @@ if (!string.IsNullOrWhiteSpace(seedPassword))
     await DatabaseSeeder.SeedAsync(app.Services, seedPassword);
 }
 
+CodeSwitchLabel.Services.Implementations.RecordingService.CleanupStaleTempFiles(app.Logger);
+
 try
 {
     // Luôn thử tạo bucket: máy chủ mới dựng thì chưa có, thiếu nó là mọi endpoint bản ghi âm hỏng.

@@ -46,7 +46,7 @@ public record AlignmentItem
     public string Relation { get; init; } = "semantic_equivalent";
 }
 
-public record ImportSkippedDto(string? Id, string Reason);
+public record ImportSkippedDto(string? Id, string Code, string Reason);
 
 public record ImportResultDto(
     long BatchId,
@@ -54,6 +54,21 @@ public record ImportResultDto(
     int Imported,
     IReadOnlyList<string> ScriptIds,
     IReadOnlyList<ImportSkippedDto> Skipped);
+
+public record ImportBatchDto(
+    long BatchId,
+    string FileName,
+    int ScriptCount,
+    long ImportedBy,
+    DateTimeOffset CreatedAt);
+
+public record ImportBatchDetailDto(
+    long BatchId,
+    string FileName,
+    int ScriptCount,
+    long ImportedBy,
+    DateTimeOffset CreatedAt,
+    IReadOnlyList<string> ScriptIds);
 
 public record ScriptListItemDto(
     string ScriptId,
