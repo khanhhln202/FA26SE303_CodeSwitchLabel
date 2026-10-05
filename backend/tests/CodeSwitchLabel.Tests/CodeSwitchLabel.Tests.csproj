@@ -5,7 +5,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
-    <TestingPlatformDotnetTestSupport>false</TestingPlatformDotnetTestSupport>
+    <!-- global.json chọn runner Microsoft.Testing.Platform; để false thì `dotnet test` báo
+         "Zero tests ran" và phải chạy tay file .exe. -->
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
   </PropertyGroup>
 
   <ItemGroup>
@@ -38,11 +40,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="..\..\..\..\docs\codeswitchlabel.sql">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Link>codeswitchlabel.sql</Link>
-    </None>
-    <None Update="..\..\..\..\..\docs\codeswitchlabel.sql">
+    <!-- docs/ nằm ở gốc repo, tức lên ba cấp từ thư mục project này. -->
+    <None Include="..\..\..\docs\codeswitchlabel.sql">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>codeswitchlabel.sql</Link>
     </None>
