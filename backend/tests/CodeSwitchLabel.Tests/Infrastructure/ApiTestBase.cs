@@ -75,6 +75,12 @@ public abstract class ApiTestBase
         return await client.PutAsJsonAsync(url, payload, JsonOptions);
     }
 
+    protected async Task<HttpResponseMessage> PatchAsync<T>(string url, T payload, string? accessToken = null)
+    {
+        using var client = accessToken != null ? CreateAuthenticatedClient(accessToken) : Client;
+        return await client.PatchAsJsonAsync(url, payload, JsonOptions);
+    }
+
     protected async Task<HttpResponseMessage> DeleteAsync(string url, string? accessToken = null)
     {
         using var client = accessToken != null ? CreateAuthenticatedClient(accessToken) : Client;

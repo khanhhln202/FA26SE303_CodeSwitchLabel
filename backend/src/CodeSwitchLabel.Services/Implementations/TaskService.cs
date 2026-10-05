@@ -64,6 +64,16 @@ public class TaskService(
                     : $"Chiến dịch #{campaignId} đang giao cho người khác — bạn chỉ tạo được task trong chiến dịch của mình.");
         }
 
+        // Chiến dịch đã huỷ hoặc đã hoàn thành thì không nhận thêm việc nữa: đóng chiến dịch mà task vẫn
+        // chui vào được thì con số chỉ tiêu và báo cáo cuối đợt không còn đúng. Task đã tạo trước đó vẫn chạy.
+        if (campaign.Status is CampaignStatus.Completed or CampaignStatus.Cancelled)
+        {
+            throw new UnprocessableException(
+                "campaign_not_accepting_tasks",
+                $"Chiến dịch #{campaignId} đang ở trạng thái {campaign.Status} nên không nhận thêm task. " +
+                "Mở lại chiến dịch hoặc chọn chiến dịch khác.");
+        }
+
         var targetQty = request.TargetQty!.Value;
         var deadline = ToUtcFuture(request.Deadline!.Value, now);
 

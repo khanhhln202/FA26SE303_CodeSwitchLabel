@@ -125,7 +125,9 @@ public class CampaignService(
             var isTaskManager = await campaigns.IsTaskManagerAsync(assignedToUserId.Value, ct);
             if (!isTaskManager)
             {
-                throw new UnprocessableException("assigned_to_invalid_role", "assigned_to user must have task_manager role");
+                throw new UnprocessableException(
+                    "assigned_to_invalid_role",
+                    "Chỉ giao được chiến dịch cho Task Manager. Người bạn chọn đang giữ vai khác.");
             }
         }
 
