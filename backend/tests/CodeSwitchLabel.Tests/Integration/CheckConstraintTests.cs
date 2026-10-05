@@ -12,16 +12,40 @@ namespace CodeSwitchLabel.Tests.Integration;
 /// They FAIL if invalid data is accepted (constraint broken/missing).
 /// </summary>
 [Collection("Database")]
+[Trait("Category", "Integration")]
 public class CheckConstraintTests : IntegrationTestBase
 {
     public CheckConstraintTests(DatabaseFixture fixture) : base(fixture) { }
+
+    /// <summary>Mọi ca từ chối đều phải ném DbUpdateException lúc SaveChanges  Egom một chềEđềEmessage rõ.</summary>
+    private async Task AssertRejectedAsync(Func<Task> act) =>
+        await Assert.ThrowsAsync<DbUpdateException>(act);
+
+    /// <summary>Biên hợp lềE đúng min/max thì database PHẢI nhận  Ekiểm cả hai chiều của ràng buộc.</summary>
+    [Fact]
+    public async Task Campaign_TargetQty_AtBoundaries_Accepted()
+    {
+        // Arrange
+        var min = await CreateCampaignAsync(
+            $"Boundary min {Guid.NewGuid():N}", 2000,
+            DateOnly.FromDateTime(DateTime.Today), DateOnly.FromDateTime(DateTime.Today.AddDays(30)),
+            AdminUserId, CampaignStatus.Draft);
+        var max = await CreateCampaignAsync(
+            $"Boundary max {Guid.NewGuid():N}", 5000,
+            DateOnly.FromDateTime(DateTime.Today), DateOnly.FromDateTime(DateTime.Today.AddDays(30)),
+            AdminUserId, CampaignStatus.Draft);
+
+        // Act + Assert
+        Assert.NotEqual(0, min.CampaignId);
+        Assert.NotEqual(0, max.CampaignId);
+    }
 
     // ---------- Campaign constraints ----------
 
     [Fact]
     public async Task Campaign_TargetQty_BelowMinimum_Rejected()
     {
-        await Assert.ThrowsAsync<DbUpdateException>(async () =>
+        await AssertRejectedAsync(async () =>
         {
             var campaign = new Campaign
             {
@@ -42,7 +66,7 @@ public class CheckConstraintTests : IntegrationTestBase
     [Fact]
     public async Task Campaign_TargetQty_AboveMaximum_Rejected()
     {
-        await Assert.ThrowsAsync<DbUpdateException>(async () =>
+        await AssertRejectedAsync(async () =>
         {
             var campaign = new Campaign
             {
@@ -63,7 +87,7 @@ public class CheckConstraintTests : IntegrationTestBase
     [Fact]
     public async Task Campaign_StartDateAfterEndDate_Rejected()
     {
-        await Assert.ThrowsAsync<DbUpdateException>(async () =>
+        await AssertRejectedAsync(async () =>
         {
             var campaign = new Campaign
             {
@@ -86,7 +110,7 @@ public class CheckConstraintTests : IntegrationTestBase
     [Fact]
     public async Task Script_InvalidScriptIdFormat_Rejected()
     {
-        await Assert.ThrowsAsync<DbUpdateException>(async () =>
+        await AssertRejectedAsync(async () =>
         {
             var script = new Script
             {
@@ -110,7 +134,7 @@ public class CheckConstraintTests : IntegrationTestBase
     [Fact]
     public async Task Script_EnWordCountExceedsWordCount_Rejected()
     {
-        await Assert.ThrowsAsync<DbUpdateException>(async () =>
+        await AssertRejectedAsync(async () =>
         {
             var script = new Script
             {
@@ -134,7 +158,7 @@ public class CheckConstraintTests : IntegrationTestBase
     [Fact]
     public async Task Script_NegativeWordCount_Rejected()
     {
-        await Assert.ThrowsAsync<DbUpdateException>(async () =>
+        await AssertRejectedAsync(async () =>
         {
             var script = new Script
             {
@@ -160,7 +184,7 @@ public class CheckConstraintTests : IntegrationTestBase
     [Fact]
     public async Task Recording_InvalidRecordingIdFormat_Rejected()
     {
-        await Assert.ThrowsAsync<DbUpdateException>(async () =>
+        await AssertRejectedAsync(async () =>
         {
             var script = await CreateScriptAsync(
                 "[vi]Test [en]script",
@@ -189,7 +213,7 @@ public class CheckConstraintTests : IntegrationTestBase
     [Fact]
     public async Task Recording_VariantMismatchWithIdPrefix_Rejected()
     {
-        await Assert.ThrowsAsync<DbUpdateException>(async () =>
+        await AssertRejectedAsync(async () =>
         {
             var script = await CreateScriptAsync(
                 "[vi]Test [en]script",
@@ -219,7 +243,7 @@ public class CheckConstraintTests : IntegrationTestBase
     [Fact]
     public async Task Recording_NonPositiveDuration_Rejected()
     {
-        await Assert.ThrowsAsync<DbUpdateException>(async () =>
+        await AssertRejectedAsync(async () =>
         {
             var script = await CreateScriptAsync(
                 "[vi]Test [en]script",
@@ -250,7 +274,7 @@ public class CheckConstraintTests : IntegrationTestBase
     [Fact]
     public async Task ImportBatch_NegativeScriptCount_Rejected()
     {
-        await Assert.ThrowsAsync<DbUpdateException>(async () =>
+        await AssertRejectedAsync(async () =>
         {
             var batch = new ImportBatch
             {
@@ -270,7 +294,7 @@ public class CheckConstraintTests : IntegrationTestBase
     [Fact]
     public async Task SpeakerProfile_BirthYearOutOfRange_Rejected()
     {
-        await Assert.ThrowsAsync<DbUpdateException>(async () =>
+        await AssertRejectedAsync(async () =>
         {
             var user = await CreateUserAsync(
                 $"speaker{Guid.NewGuid():N}@test.local",
@@ -279,7 +303,7 @@ public class CheckConstraintTests : IntegrationTestBase
                 new SpeakerProfile
                 {
                     BirthYear = 1800, // Below minimum 1900
-                    Province = "TP. Hồ Chí Minh",
+                    Province = "TP. HềEChí Minh",
                     EnglishLevel = 6.5m,
                     Occupation = Occupation.Student,
                     Major = "IT"
@@ -290,7 +314,7 @@ public class CheckConstraintTests : IntegrationTestBase
     [Fact]
     public async Task SpeakerProfile_EnglishLevelOutOfRange_Rejected()
     {
-        await Assert.ThrowsAsync<DbUpdateException>(async () =>
+        await AssertRejectedAsync(async () =>
         {
             var user = await CreateUserAsync(
                 $"speaker{Guid.NewGuid():N}@test.local",
@@ -299,7 +323,7 @@ public class CheckConstraintTests : IntegrationTestBase
                 new SpeakerProfile
                 {
                     BirthYear = 2000,
-                    Province = "TP. Hồ Chí Minh",
+                    Province = "TP. HềEChí Minh",
                     EnglishLevel = 10.0m, // Above maximum 9.0
                     Occupation = Occupation.Student,
                     Major = "IT"
@@ -312,7 +336,7 @@ public class CheckConstraintTests : IntegrationTestBase
     [Fact]
     public async Task Task_NonPositiveTargetQty_Rejected()
     {
-        await Assert.ThrowsAsync<DbUpdateException>(async () =>
+        await AssertRejectedAsync(async () =>
         {
             var task = new WorkTask
             {
@@ -334,7 +358,7 @@ public class CheckConstraintTests : IntegrationTestBase
     [Fact]
     public async Task Review_ReviewRoundOutOfRange_Rejected()
     {
-        await Assert.ThrowsAsync<DbUpdateException>(async () =>
+        await AssertRejectedAsync(async () =>
         {
             var script = await CreateScriptAsync(
                 "[vi]Test [en]script",
@@ -364,7 +388,7 @@ public class CheckConstraintTests : IntegrationTestBase
     [Fact]
     public async Task Dataset_NegativeRecordingCount_Rejected()
     {
-        await Assert.ThrowsAsync<DbUpdateException>(async () =>
+        await AssertRejectedAsync(async () =>
         {
             var dataset = new Dataset
             {

@@ -40,12 +40,22 @@ public interface IScriptRepository
     Task<string> GenerateIdAsync(
         int enWordCount, ScriptDomain domain, ScriptRelation relation, CancellationToken ct = default);
 
+    Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction> BeginTransactionAsync(
+        CancellationToken ct = default);
+
     void Add(Script script);
     void AddReview(ScriptReview review);
     void AddBatch(ImportBatch batch);
+    void RemoveBatch(ImportBatch batch);
     void AddWords(IEnumerable<ScriptWord> words);
     void RemoveWords(IEnumerable<ScriptWord> words);
     void ClearTracked();
+
+    /// <summary>
+    /// Chuyển hàng loạt sang Validated sau khi các lượt duyệt tự động đã nằm sẵn trong DB
+    /// (trigger trg_script_validated_domain kiểm tra từng hàng lúc UPDATE).
+    /// </summary>
+    Task<int> MarkValidatedAsync(IEnumerable<string> scriptIds, CancellationToken ct = default);
 
     Task<int> SaveChangesAsync(CancellationToken ct = default);
 }
@@ -106,12 +116,23 @@ public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
         var distinct = csContents.Distinct().ToArray();
         if (distinct.Length == 0) return [];
 
-        var found = await db.Scripts.AsNoTracking()
-            .Where(s => distinct.Contains(s.CsContent))
-            .Select(s => s.CsContent)
-            .ToListAsync(ct);
+        // Chia nhỏ mệnh đề IN để tránh vượt giới hạn tham số Postgres với batch lớn.
+        const int chunkSize = 1000;
+        var found = new HashSet<string>(StringComparer.Ordinal);
 
-        return [.. found];
+        for (var i = 0; i < distinct.Length; i += chunkSize)
+        {
+            var chunk = distinct.Skip(i).Take(chunkSize).ToArray();
+
+            var rows = await db.Scripts.AsNoTracking()
+                .Where(s => chunk.Contains(s.CsContent))
+                .Select(s => s.CsContent)
+                .ToListAsync(ct);
+
+            foreach (var row in rows) found.Add(row);
+        }
+
+        return found;
     }
 
     public Task<ImportBatch?> GetBatchAsync(long batchId, CancellationToken ct = default) =>
@@ -191,9 +212,18 @@ public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
     public void Add(Script script) => db.Scripts.Add(script);
     public void AddReview(ScriptReview review) => db.ScriptReviews.Add(review);
     public void AddBatch(ImportBatch batch) => db.ImportBatches.Add(batch);
+    public void RemoveBatch(ImportBatch batch) => db.ImportBatches.Remove(batch);
     public void AddWords(IEnumerable<ScriptWord> words) => db.ScriptWords.AddRange(words);
     public void RemoveWords(IEnumerable<ScriptWord> words) => db.ScriptWords.RemoveRange(words);
     public void ClearTracked() => db.ChangeTracker.Clear();
+
+    public Task<int> MarkValidatedAsync(IEnumerable<string> scriptIds, CancellationToken ct = default) =>
+        db.Scripts.Where(s => scriptIds.Contains(s.ScriptId)).ExecuteUpdateAsync(
+            s => s.SetProperty(x => x.Status, ScriptStatus.Validated), ct);
+
+    public Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction> BeginTransactionAsync(
+        CancellationToken ct = default) =>
+        db.Database.BeginTransactionAsync(ct);
 
     public Task<int> SaveChangesAsync(CancellationToken ct = default) => db.SaveChangesAsync(ct);
 }

@@ -127,15 +127,47 @@ public class TaskService(
         long taskId, UpdateTaskRequest request, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false)
     {
+        await using var transaction = await tasks.BeginTransactionAsync(ct);
         var task = await LoadEditableAsync(taskId, ct);
         await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
 
         if (request.Description is not null) task.Description = Clean(request.Description);
 
-        if (request.Deadline.HasValue) task.Deadline = ToUtcFuture(request.Deadline.Value, clock.GetUtcNow());
+        if (request.Deadline.HasValue)
+        {
+            var deadline = ToUtcFuture(request.Deadline.Value, clock.GetUtcNow());
+            var campaign = await campaigns.GetAsync(task.CampaignId, ct);
+            if (campaign is not null)
+            {
+                var deadlineDate = DateOnly.FromDateTime(deadline.UtcDateTime);
+                if (deadlineDate < campaign.StartDate || deadlineDate > campaign.EndDate)
+                {
+                    throw new UnprocessableException(
+                        "task_deadline_outside_campaign",
+                        $"Hạn {deadlineDate:yyyy-MM-dd} phải nằm trong khoảng ngày của chiến dịch " +
+                        $"{campaign.StartDate:yyyy-MM-dd} đến {campaign.EndDate:yyyy-MM-dd}.");
+                }
+            }
+            task.Deadline = deadline;
+        }
 
         if (request.TargetQty.HasValue)
         {
+            // Giữ quota chiến dịch như lúc Create: tổng đã chia (trừ task này) + chỉ tiêu mới <= target.
+            var campaign = await campaigns.GetAsync(task.CampaignId, ct);
+            if (campaign is not null)
+            {
+                var allocated = await campaigns.SumAllocatedAsync(task.CampaignId, ct);
+                var withoutThis = allocated - task.TargetQty;
+                if (withoutThis + request.TargetQty.Value > campaign.TargetQty)
+                {
+                    throw new UnprocessableException(
+                        "task_target_exceeds_campaign",
+                        $"Chiến dịch #{campaign.CampaignId} đã chia {allocated}/{campaign.TargetQty} cặp câu; " +
+                        $"đổi task này thành {request.TargetQty.Value} là vượt chỉ tiêu.");
+                }
+            }
+
             // Task còn nháp thì cứ để Task Manager đặt chỉ tiêu trước, thêm mục sau.
             if (task.Status != WorkTaskStatus.Draft)
             {
@@ -157,6 +189,7 @@ public class TaskService(
 
         // Đổi chỉ tiêu có thể làm task xong ngay, hoặc mở lại một task đã xong.
         await tracker.RefreshStatusAsync(taskId, ct);
+        await transaction.CommitAsync(ct);
 
         return await LoadDetailAsync(taskId, ct);
     }
@@ -165,6 +198,7 @@ public class TaskService(
         long taskId, AddTaskItemsRequest request, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false)
     {
+        await using var transaction = await tasks.BeginTransactionAsync(ct);
         var task = await LoadMutableAsync(taskId, ct);
         await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
 
@@ -222,6 +256,7 @@ public class TaskService(
 
         await tasks.SaveChangesAsync(ct);
         await tracker.RefreshStatusAsync(taskId, ct);
+        await transaction.CommitAsync(ct);
 
         return new AddTaskItemsResult(accepted.Count, skipped, await LoadDetailAsync(taskId, ct));
     }
@@ -230,6 +265,7 @@ public class TaskService(
         long taskId, string itemId, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false)
     {
+        await using var transaction = await tasks.BeginTransactionAsync(ct);
         var task = await LoadMutableAsync(taskId, ct);
         await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
 
@@ -269,6 +305,7 @@ public class TaskService(
         }
 
         await tasks.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
         return await LoadDetailAsync(taskId, ct);
     }
 
@@ -408,6 +445,7 @@ public class TaskService(
     {
         var existing = (await tasks.GetScriptItemsAsync(taskId, ct)).Select(i => i.ScriptId).ToHashSet();
         var found = (await tasks.GetScriptsAsync(ids, ct)).ToDictionary(s => s.ScriptId);
+        var queuedElsewhere = await tasks.FindScriptsQueuedInOtherActiveTasksAsync(ids, taskId, assigneeId, ct);
         var accepted = new List<string>();
 
         foreach (var id in ids)
@@ -420,6 +458,8 @@ public class TaskService(
                 skipped.Add(new SkippedItemDto(id, $"Đang ở trạng thái {script.Status}, chỉ nhận câu đã duyệt nội dung."));
             else if (assigneeId.HasValue && script.Recordings.Any(r => r.SpeakerId != assigneeId.Value && r.Status != RecordingStatus.QcFailed))
                 skipped.Add(new SkippedItemDto(id, "Cặp câu này do người đọc khác thu."));
+            else if (queuedElsewhere.Contains(id))
+                skipped.Add(new SkippedItemDto(id, "Cặp câu đang nằm trong một task khác đang chạy."));
             else
                 accepted.Add(id);
         }
@@ -433,6 +473,7 @@ public class TaskService(
     {
         var existing = (await tasks.GetRecordingItemsAsync(taskId, ct)).Select(i => i.RecordingId).ToHashSet();
         var found = (await tasks.GetRecordingsWithReviewsAsync(ids, ct)).ToDictionary(r => r.RecordingId);
+        var queuedElsewhere = await tasks.FindRecordingsQueuedInOtherActiveTasksAsync(ids, taskId, ct);
         var accepted = new List<string>();
 
         foreach (var id in ids)
@@ -449,6 +490,8 @@ public class TaskService(
                 skipped.Add(new SkippedItemDto(id, "Người nhận task chính là người thu bản ghi này."));
             else if (assigneeId.HasValue && recording.Reviews.Any(v => v.ReviewerId == assigneeId.Value))
                 skipped.Add(new SkippedItemDto(id, "Người nhận task đã duyệt bản ghi này rồi."));
+            else if (queuedElsewhere.Contains(id))
+                skipped.Add(new SkippedItemDto(id, "Bản ghi đang nằm trong một task duyệt khác đang chạy."));
             else
                 accepted.Add(id);
         }

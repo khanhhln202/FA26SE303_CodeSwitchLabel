@@ -71,6 +71,18 @@ public interface ITaskRepository
     Task<AppUser?> GetUserWithRoleAsync(long userId, CancellationToken ct = default);
     Task<bool> IsActiveTaskOfAsync(long taskId, long userId, TaskType type, CancellationToken ct = default);
 
+    Task<bool> IsScriptQueuedInOtherActiveTaskAsync(
+        string scriptId, long excludeTaskId, long? assigneeId, CancellationToken ct = default);
+
+    Task<bool> IsRecordingQueuedInOtherActiveTaskAsync(
+        string recordingId, long excludeTaskId, CancellationToken ct = default);
+
+    Task<HashSet<string>> FindScriptsQueuedInOtherActiveTasksAsync(
+        string[] scriptIds, long excludeTaskId, long? assigneeId, CancellationToken ct = default);
+
+    Task<HashSet<string>> FindRecordingsQueuedInOtherActiveTasksAsync(
+        string[] recordingIds, long excludeTaskId, CancellationToken ct = default);
+
     /// <summary>Người đang hoạt động có đúng vai, kèm số task và tổng chỉ tiêu đang chạy.</summary>
     Task<List<AssignableUserRow>> GetAssignableUsersAsync(RoleName role, CancellationToken ct = default);
 
@@ -112,7 +124,8 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
     public void Remove(TaskRecording item) => db.TaskRecordings.Remove(item);
 
     public Task<WorkTask?> GetForUpdateAsync(long taskId, CancellationToken ct = default) =>
-        db.WorkTasks.FirstOrDefaultAsync(t => t.TaskId == taskId, ct);
+        db.WorkTasks.FromSqlInterpolated($"SELECT * FROM task WHERE task_id = {taskId} FOR UPDATE")
+            .FirstOrDefaultAsync(ct);
 
     public Task<TaskAssignment?> GetActiveAssignmentAsync(long taskId, CancellationToken ct = default) =>
         db.TaskAssignments.FirstOrDefaultAsync(
@@ -281,6 +294,76 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
             (t.Status == WorkTaskStatus.Open || t.Status == WorkTaskStatus.InProgress) &&
             t.Assignments.Any(a => a.UserId == userId && a.AssignmentStatus == AssignmentStatus.Active), ct);
 
+    public Task<bool> IsScriptQueuedInOtherActiveTaskAsync(
+        string scriptId, long excludeTaskId, long? assigneeId, CancellationToken ct = default)
+    {
+        var query = db.TaskScripts.AsNoTracking()
+            .Where(ts => ts.ScriptId == scriptId && ts.TaskId != excludeTaskId &&
+                         ts.Status == TaskScriptStatus.Pending &&
+                         (ts.Task.Status == WorkTaskStatus.Draft ||
+                          ts.Task.Status == WorkTaskStatus.Open ||
+                          ts.Task.Status == WorkTaskStatus.InProgress));
+
+        if (assigneeId.HasValue)
+        {
+            var uid = assigneeId.Value;
+            query = query.Where(ts => ts.Task.Assignments.Any(a =>
+                a.UserId == uid && a.AssignmentStatus == AssignmentStatus.Active));
+        }
+
+        return query.AnyAsync(ct);
+    }
+
+    public Task<bool> IsRecordingQueuedInOtherActiveTaskAsync(
+        string recordingId, long excludeTaskId, CancellationToken ct = default) =>
+        db.TaskRecordings.AsNoTracking().AnyAsync(tr =>
+            tr.RecordingId == recordingId && tr.TaskId != excludeTaskId &&
+            tr.Status == TaskRecordingStatus.Queued &&
+            (tr.Task.Status == WorkTaskStatus.Draft ||
+             tr.Task.Status == WorkTaskStatus.Open ||
+             tr.Task.Status == WorkTaskStatus.InProgress), ct);
+
+    public async Task<HashSet<string>> FindScriptsQueuedInOtherActiveTasksAsync(
+        string[] scriptIds, long excludeTaskId, long? assigneeId, CancellationToken ct = default)
+    {
+        if (scriptIds.Length == 0) return [];
+
+        var query = db.TaskScripts.AsNoTracking()
+            .Where(ts => scriptIds.Contains(ts.ScriptId) && ts.TaskId != excludeTaskId &&
+                         ts.Status == TaskScriptStatus.Pending &&
+                         (ts.Task.Status == WorkTaskStatus.Draft ||
+                          ts.Task.Status == WorkTaskStatus.Open ||
+                          ts.Task.Status == WorkTaskStatus.InProgress));
+
+        if (assigneeId.HasValue)
+        {
+            var uid = assigneeId.Value;
+            query = query.Where(ts => ts.Task.Assignments.Any(a =>
+                a.UserId == uid && a.AssignmentStatus == AssignmentStatus.Active));
+        }
+
+        var rows = await query.Select(ts => ts.ScriptId).Distinct().ToListAsync(ct);
+        return [.. rows];
+    }
+
+    public async Task<HashSet<string>> FindRecordingsQueuedInOtherActiveTasksAsync(
+        string[] recordingIds, long excludeTaskId, CancellationToken ct = default)
+    {
+        if (recordingIds.Length == 0) return [];
+
+        var rows = await db.TaskRecordings.AsNoTracking()
+            .Where(tr => recordingIds.Contains(tr.RecordingId) && tr.TaskId != excludeTaskId &&
+                         tr.Status == TaskRecordingStatus.Queued &&
+                         (tr.Task.Status == WorkTaskStatus.Draft ||
+                          tr.Task.Status == WorkTaskStatus.Open ||
+                          tr.Task.Status == WorkTaskStatus.InProgress))
+            .Select(tr => tr.RecordingId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        return [.. rows];
+    }
+
     public Task<List<Script>> GetScriptsAsync(string[] ids, CancellationToken ct = default) =>
         db.Scripts.AsNoTracking()
             .Include(s => s.Recordings)
@@ -373,19 +456,12 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
             .ToListAsync(ct);
     }
 
-    public Task<List<string>> GetBlockedItemIdsAsync(
-        long taskId, long userId, TaskType type, CancellationToken ct = default) =>
-        type == TaskType.Recording
-            ? db.TaskScripts
-                .AsNoTracking()
-                .Where(ts => ts.TaskId == taskId && ts.Status == TaskScriptStatus.Pending)
-                // Cặp câu đã thuộc về người đọc khác thì người nhận task không đụng vào được.
-                // Bản trượt QC không giữ chỗ.
-                .Where(ts => ts.Script.Recordings.Any(r => r.SpeakerId != userId && r.Status != RecordingStatus.QcFailed))
-                .OrderBy(ts => ts.ScriptId)
-                .Select(ts => ts.ScriptId)
-                .ToListAsync(ct)
-            : db.TaskRecordings
+    public async Task<List<string>> GetBlockedItemIdsAsync(
+        long taskId, long userId, TaskType type, CancellationToken ct = default)
+    {
+        if (type != TaskType.Recording)
+        {
+            return await db.TaskRecordings
                 .AsNoTracking()
                 .Where(tr => tr.TaskId == taskId && tr.Status == TaskRecordingStatus.Queued)
                 // Bản của chính mình, hoặc mình đã duyệt rồi, thì không duyệt (lại) được.
@@ -394,6 +470,31 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
                 .OrderBy(tr => tr.RecordingId)
                 .Select(tr => tr.RecordingId)
                 .ToListAsync(ct);
+        }
+
+        // Cặp câu đã thuộc về người đọc khác thì người nhận task không đụng vào được.
+        var ownedByOther = await db.TaskScripts
+            .AsNoTracking()
+            .Where(ts => ts.TaskId == taskId && ts.Status == TaskScriptStatus.Pending)
+            .Where(ts => ts.Script.Recordings.Any(r => r.SpeakerId != userId && r.Status != RecordingStatus.QcFailed))
+            .Select(ts => ts.ScriptId)
+            .ToListAsync(ct);
+
+        // Người này đã nộp đủ cả hai biến thể (chờ duyệt/đạt) thì không còn việc để làm.
+        var fullyDone = await db.TaskScripts
+            .AsNoTracking()
+            .Where(ts => ts.TaskId == taskId && ts.Status == TaskScriptStatus.Pending)
+            .Where(ts => ts.Script.Recordings.Any(r => r.SpeakerId == userId &&
+                         r.SentenceVariant == SentenceVariant.CodeSwitching &&
+                         (r.Status == RecordingStatus.PendingReview || r.Status == RecordingStatus.Approved)) &&
+                         ts.Script.Recordings.Any(r => r.SpeakerId == userId &&
+                         r.SentenceVariant == SentenceVariant.PureVietnamese &&
+                         (r.Status == RecordingStatus.PendingReview || r.Status == RecordingStatus.Approved)))
+            .Select(ts => ts.ScriptId)
+            .ToListAsync(ct);
+
+        return [.. ownedByOther.Union(fullyDone).OrderBy(id => id)];
+    }
 
     public Task<bool> HasSubmittedRecordingAsync(string scriptId, CancellationToken ct = default) =>
         db.Recordings.AsNoTracking().AnyAsync(r =>

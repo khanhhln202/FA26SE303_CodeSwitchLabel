@@ -12,7 +12,8 @@ public record RecordingDto(
     RecordingStatus Status,
     string AudioFormat,
     decimal DurationSec,
-    DateTimeOffset RecordedAt);
+    DateTimeOffset RecordedAt,
+    string? QcMetrics = null);
 
 /// <summary>Một lỗi của bước kiểm tra tự động; trả trong response và nằm trong qc_metrics đã lưu.</summary>
 public record QcIssueDto(string Code, string Message);

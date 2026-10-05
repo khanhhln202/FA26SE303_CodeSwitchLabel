@@ -70,12 +70,13 @@ public class ScriptService(
     }
 
     /// <summary>
-    /// Admin thêm tay một cặp câu. Lược đồ bắt buộc mọi cặp câu phải qua một lượt duyệt của
-    /// người đủ trình độ đúng chủ đề mới chuyển sang đã duyệt, nên câu thêm tay cũng nằm CHỜ DUYỆT.
+    /// Admin thêm tay một cặp câu — vào thẳng trạng thái đã duyệt kèm lượt duyệt
+    /// tự động (Accepted) của chính người tạo, để trigger trg_script_validated_domain
+    /// thấy hàng duyệt đã nằm sẵn trong database.
     /// </summary>
     public Task<ScriptDetailDto> CreateAsync(
         CreateScriptRequest request, long createdById, CancellationToken ct = default) =>
-        CreateInternalAsync(request, createdById, ScriptStatus.PendingValidation, null, ct);
+        CreateInternalAsync(request, createdById, ScriptStatus.Validated, null, ct);
 
     public Task<ScriptDetailDto> ContributeAsync(
         CreateScriptRequest request, long contributorId, CancellationToken ct = default) =>
@@ -94,6 +95,8 @@ public class ScriptService(
 
         var safeName = SanitizeFileName(fileName);
 
+        await using var transaction = await repository.BeginTransactionAsync(ct);
+
         var batch = new ImportBatch
         {
             ImportedBy = importedById,
@@ -105,7 +108,7 @@ public class ScriptService(
         repository.AddBatch(batch);
         await repository.SaveChangesAsync(ct);
 
-        // Dedupe trong file + so với DB bằng một câu truy vấn duy nhất.
+        // Dedupe trong file + so với DB bằng một câu truy vấn duy nhất (đã chia chunk trong repo).
         var trimmedCs = items.Select(i => (i.CsTranscript ?? string.Empty).Trim()).Distinct().ToArray();
         var existing = await repository.FindExistingContentsAsync(trimmedCs, ct);
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -114,6 +117,7 @@ public class ScriptService(
         var pendingScripts = new List<Script>();
         var pendingWords = new List<ScriptWord>();
         var imported = new List<string>();
+        var fileIdByScriptId = new Dictionary<string, string?>(StringComparer.Ordinal);
 
         foreach (var item in items)
         {
@@ -164,6 +168,7 @@ public class ScriptService(
                 pendingScripts.Add(script);
                 pendingWords.AddRange(words);
                 imported.Add(scriptId);
+                fileIdByScriptId[scriptId] = item.Id;
             }
             catch (AppException ex)
             {
@@ -174,6 +179,13 @@ public class ScriptService(
 
         if (pendingScripts.Count > 0)
         {
+            // Fail-fast: Admin nhập là vào thẳng Validated nên phải đủ trình độ mọi chủ đề
+            // có trong file, thay vì nhập xong mới phát hiện từng câu thiếu quyền.
+            foreach (var domain in pendingScripts.Select(s => s.Domain).Distinct())
+            {
+                await EnsureDomainQualifiedAsync(importedById, domain, ct);
+            }
+
             try
             {
                 foreach (var script in pendingScripts) repository.Add(script);
@@ -199,20 +211,57 @@ public class ScriptService(
                     catch (DbUpdateException dbEx)
                     {
                         repository.ClearTracked();
-                        skipped.Add(new ImportSkippedDto(null, IsUniqueViolation(dbEx) ? "duplicate_content" : "db_error",
+                        fileIdByScriptId.TryGetValue(script.ScriptId, out var fileId);
+                        skipped.Add(new ImportSkippedDto(fileId, IsUniqueViolation(dbEx) ? "duplicate_content" : "db_error",
                             IsUniqueViolation(dbEx) ? "Câu này đã tồn tại trong kho." : "Không lưu được câu này."));
                     }
                     catch (AppException ex)
                     {
                         repository.ClearTracked();
-                        skipped.Add(new ImportSkippedDto(null, ex.Code, ex.Message));
+                        fileIdByScriptId.TryGetValue(script.ScriptId, out var fileId);
+                        skipped.Add(new ImportSkippedDto(fileId, ex.Code, ex.Message));
                     }
                 }
             }
+
+            if (imported.Count > 0)
+            {
+                // Hai pha như ReviewAsync: lượt duyệt phải nằm sẵn trong DB trước khi status
+                // chuyển sang Validated, vì trigger trg_script_validated_domain không phải defer.
+                var reviewAt = clock.GetUtcNow();
+                foreach (var scriptId in imported)
+                {
+                    repository.AddReview(new ScriptReview
+                    {
+                        ScriptId = scriptId,
+                        UserId = importedById,
+                        Action = ScriptReviewAction.Accepted,
+                        Comment = $"Tự động duyệt khi Admin nhập file {safeName}.",
+                        ReviewedAt = reviewAt
+                    });
+                }
+                await repository.SaveChangesAsync(ct);
+
+                await repository.MarkValidatedAsync(imported, ct);
+            }
+        }
+
+        if (imported.Count == 0)
+        {
+            // Không nhập được câu nào thì xoá batch rỗng để khỏi để lại hàng ScriptCount=0.
+            // Vẫn trả skipped để client biết vì sao từng câu rớt.
+            repository.ClearTracked();
+            // Xoá bằng stub có cùng key vì entity hiện không được track trong transaction này.
+            repository.RemoveBatch(new ImportBatch { BatchId = batch.BatchId });
+            await repository.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+
+            return new ImportResultDto(batch.BatchId, safeName, 0, imported, skipped);
         }
 
         batch.ScriptCount = imported.Count;
         await repository.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
 
         return new ImportResultDto(batch.BatchId, safeName, imported.Count, imported, skipped);
     }
@@ -241,7 +290,13 @@ public class ScriptService(
         var name = Path.GetFileName(fileName ?? string.Empty).Trim();
 
         if (string.IsNullOrWhiteSpace(name)) return "input_text.json";
-        if (name.Length > 255) name = name[^255..];
+        if (name.Length > 255)
+        {
+            var ext = Path.GetExtension(name);
+            if (ext.Length > 10) ext = string.Empty;
+            var stemMax = 255 - ext.Length;
+            name = name[..Math.Min(stemMax, name.Length - ext.Length)] + ext;
+        }
 
         return name;
     }
@@ -297,15 +352,18 @@ public class ScriptService(
 
         repository.AddReview(review);
 
-        // Lưu lượt duyệt TRƯỚC khi chốt trạng thái validated: trigger trg_script_validated_domain
-        // đòi hỏi đã có lượt duyệt của người đủ trình độ đúng chủ đề ngay lúc status đổi, mà trigger
-        // không phải loại defer, nên lượt duyệt phải nằm sẵn trong database trước.
+        // Kiểm tra trình độ đúng chủ đề TRƯỚC lần lưu đầu để khỏi để lại lượt duyệt mồ côi
+        // khi EnsureDomainQualified ném lỗi. Vẫn lưu lượt duyệt trước khi chốt validated để
+        // trigger trg_script_validated_domain (non-defer) thấy hàng duyệt đã nằm sẵn trong DB.
+        if (action is ScriptReviewAction.Accepted or ScriptReviewAction.Edited)
+        {
+            await EnsureDomainQualifiedAsync(userId, script.Domain, ct);
+        }
+
         await repository.SaveChangesAsync(ct);
 
         if (action is ScriptReviewAction.Accepted or ScriptReviewAction.Edited)
         {
-            await EnsureDomainQualifiedAsync(userId, script.Domain, ct);
-
             script.Status = ScriptStatus.Validated;
 
             // updated_at do trigger trg_script_touch của database tự đặt.
@@ -351,12 +409,16 @@ public class ScriptService(
         var scriptId = await repository.GenerateIdAsync(enWordCount, domain, relation, ct);
         var now = clock.GetUtcNow();
 
+        var autoValidate = status == ScriptStatus.Validated;
+
+        // Trigger trg_script_validated_domain (non-defer) chặn INSERT thẳng Validated khi chưa
+        // có lượt duyệt — nên luôn chèn Pending trước, rồi chèn review + chốt Validated sau.
         var script = new Script
         {
             ScriptId = scriptId,
             CsContent = cs,
             ViContent = ve,
-            Status = status,
+            Status = ScriptStatus.PendingValidation,
             WordCount = wordCount,
             EnWordCount = enWordCount,
             Domain = domain,
@@ -368,9 +430,30 @@ public class ScriptService(
 
         foreach (var word in words) word.ScriptId = scriptId;
 
+        if (autoValidate)
+        {
+            await EnsureDomainQualifiedAsync(userId, domain, ct);
+        }
+
         repository.Add(script);
         repository.AddWords(words);
         await repository.SaveChangesAsync(ct);
+
+        if (autoValidate)
+        {
+            repository.AddReview(new ScriptReview
+            {
+                ScriptId = scriptId,
+                UserId = userId,
+                Action = ScriptReviewAction.Accepted,
+                Comment = "Tự động duyệt khi Admin tạo câu.",
+                ReviewedAt = clock.GetUtcNow()
+            });
+            await repository.SaveChangesAsync(ct);
+
+            script.Status = ScriptStatus.Validated;
+            await repository.SaveChangesAsync(ct);
+        }
 
         return (await repository.GetWithReviewsAsync(scriptId, ct))!.ToDetail();
     }
@@ -549,9 +632,16 @@ public class ScriptService(
 
     private static bool IsJsonArray(byte[] bytes)
     {
-        foreach (var b in bytes)
+        var i = 0;
+
+        // Bỏ BOM UTF-8 nếu có.
+        if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
+            i = 3;
+
+        for (; i < bytes.Length; i++)
         {
-            if (b == (byte)' ' || b == (byte)'\t' || b == (byte)'\r' || b == (byte)'\n' || b == 0xEF || b == 0xBB || b == 0xBF)
+            var b = bytes[i];
+            if (b == (byte)' ' || b == (byte)'\t' || b == (byte)'\r' || b == (byte)'\n' || b == (byte)'\f')
                 continue;
             return b == (byte)'[';
         }
@@ -608,7 +698,7 @@ public class ScriptService(
         for (var i = 0; i < alignment.Count; i++)
         {
             var item = alignment[i];
-            var en = item.Source.Trim();
+            var en = (item.Source ?? string.Empty).Trim();
 
             if (en.Length == 0)
             {
@@ -616,10 +706,10 @@ public class ScriptService(
                     "alignment_word_missing", $"Mục alignment thứ {i + 1} thiếu từ tiếng Anh.");
             }
 
-            var isProper = item.Relation.Contains("proper", StringComparison.OrdinalIgnoreCase);
+            var isProper = (item.Relation ?? string.Empty).Contains("proper", StringComparison.OrdinalIgnoreCase);
 
             // Danh từ riêng giữ nguyên, không dịch: lược đồ bắt buộc vi_word = en_word.
-            var vi = isProper ? en : item.Target.Trim();
+            var vi = isProper ? en : (item.Target ?? string.Empty).Trim();
 
             if (vi.Length == 0)
             {

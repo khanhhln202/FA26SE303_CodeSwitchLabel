@@ -18,7 +18,7 @@ internal static class RecordingMapper
 {
     public static RecordingDto ToDto(this Recording r) =>
         new(r.RecordingId, r.ScriptId, r.SentenceVariant, r.SpeakerId, r.TaskId,
-            r.Status, r.AudioFormat, r.DurationSec, r.RecordedAt);
+            r.Status, r.AudioFormat, r.DurationSec, r.RecordedAt, r.QcMetrics);
 }
 
 public class RecordingService(
@@ -42,6 +42,9 @@ public class RecordingService(
         // Kiểm quyền và trùng lặp TRƯỚC khi đụng tới file — không bắt ffmpeg làm việc
         // cho một request đằng nào cũng bị từ chối.
         var taskId = await EnsureCanRecordAsync(command, ct);
+
+        // Chặn sớm quá số lần thu trước khi ghi file + chạy ffmpeg tốn kém.
+        await EnsureTakeAvailableAsync(command, ct);
 
         var workDir = Path.Combine(Path.GetTempPath(), "csl-audio");
         Directory.CreateDirectory(workDir);
@@ -75,8 +78,9 @@ public class RecordingService(
             var recordingId = await recordings.GenerateIdAsync(
                 command.ScriptId, command.SentenceVariant, take, ct);
 
-            // Đặt tên file theo đúng mã bản ghi: nhìn file trong kho là biết của câu nào, lần thu thứ mấy.
-            var key = $"recordings/{now:yyyy}/{now:MM}/{recordingId}.wav";
+            // Thêm hậu tố fileId để hai lượt thu đua nhau cùng take không ghi đè S3 của nhau:
+            // key cũ xác định theo recordingId nên lượt thua 409 xoá nhầm file của lượt thắng.
+            var key = $"recordings/{now:yyyy}/{now:MM}/{recordingId}-{fileId[..8]}.wav";
 
             await storage.UploadAsync(key, wavPath, "audio/wav", ct);
 
@@ -114,6 +118,12 @@ public class RecordingService(
                     throw new ConflictException(
                         "recording_already_exists",
                         $"Bạn đã có bản {command.SentenceVariant} đang chờ duyệt hoặc đã được duyệt cho cặp câu {command.ScriptId}.");
+                }
+                catch (DbUpdateException ex) when (IsSingleSpeakerViolation(ex))
+                {
+                    throw new ConflictException(
+                        "script_owned_by_other_speaker",
+                        $"Cặp câu {command.ScriptId} đã do người đọc khác thu. Mỗi cặp câu chỉ một người đọc.");
                 }
 
                 if (taskId.HasValue)
@@ -246,6 +256,12 @@ public class RecordingService(
         return take;
     }
 
+    private async Task EnsureTakeAvailableAsync(UploadRecordingCommand command, CancellationToken ct)
+    {
+        // Chỉ kiểm tra chặn sớm, số take cuối cùng vẫn tính lại sau QC để khỏi lệch khi đua nhau.
+        _ = await NextTakeAsync(command, ct);
+    }
+
     private async Task<AudioProbeResult> ConvertAndMeasureAsync(
         string inputPath, string wavPath, CancellationToken ct)
     {
@@ -290,7 +306,16 @@ public class RecordingService(
         var minMeanDb = await config.GetDecimalAsync(ConfigKeys.RecordingMinMeanVolumeDb, -50m, ct);
         var maxPeakDb = await config.GetDecimalAsync(ConfigKeys.RecordingMaxPeakDb, -1m, ct);
 
-        var signal = await audio.AnalyzeSignalAsync(wavPath, probe.DurationSec, silenceNoiseDb, silenceMinSec, ct);
+        AudioSignalMetrics signal;
+        try
+        {
+            signal = await audio.AnalyzeSignalAsync(wavPath, probe.DurationSec, silenceNoiseDb, silenceMinSec, ct);
+        }
+        catch (AudioProcessingException ex)
+        {
+            throw new UnprocessableException("invalid_audio", $"Không phân tích được file âm thanh: {ex.Message}");
+        }
+
         var issues = RecordingQcEvaluator.Evaluate(
             probe.DurationSec, signal, min, max, maxLeading, maxTrailing, minMeanDb, maxPeakDb);
 
@@ -369,6 +394,14 @@ public class RecordingService(
     private static bool IsUniqueViolation(DbUpdateException ex)
     {
         return ex.InnerException is PostgresException pg && pg.SqlState == PostgresErrorCodes.UniqueViolation;
+    }
+
+    private static bool IsSingleSpeakerViolation(DbUpdateException ex)
+    {
+        return ex.InnerException is PostgresException pg &&
+            pg.SqlState == PostgresErrorCodes.RaiseException &&
+            (pg.MessageText?.Contains("single speaker", StringComparison.OrdinalIgnoreCase) == true ||
+             ex.InnerException?.Message.Contains("single speaker", StringComparison.OrdinalIgnoreCase) == true);
     }
 
     /// <summary>
