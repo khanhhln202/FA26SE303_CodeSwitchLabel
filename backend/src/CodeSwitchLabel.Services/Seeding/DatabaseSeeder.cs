@@ -28,7 +28,7 @@ public static class DatabaseSeeder
         var hasher = sp.GetRequiredService<IPasswordHasher>();
         var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger(nameof(DatabaseSeeder));
 
-        await EnsureSchemaAsync(db, ct);
+        await EnsureSchemaAsync(db, logger, ct);
 
         var adminId = await SeedUsersAsync(db, hasher, defaultPassword, ct);
         await SeedReviewerDomainsAsync(db, ct);
@@ -48,8 +48,13 @@ public static class DatabaseSeeder
     /// <summary>
     /// Dự án không dùng migration: lược đồ do PostgreSQL chạy từ file .sql lúc tạo database.
     /// Thiếu lược đồ thì báo đúng việc phải làm, thay vì để EF ném lỗi khó hiểu ở request đầu tiên.
+    /// Các bảng thêm sau (ví dụ campaign_registration) được tự vá idempotent cho volume cũ.
     /// </summary>
     public static async Task EnsureSchemaAsync(CodeSwitchLabelDbContext db, CancellationToken ct = default)
+        => await EnsureSchemaAsync(db, logger: null, ct);
+
+    public static async Task EnsureSchemaAsync(
+        CodeSwitchLabelDbContext db, Microsoft.Extensions.Logging.ILogger? logger, CancellationToken ct = default)
     {
         // Container postgres nhận kết nối TRƯỚC khi chạy xong file lược đồ, nên chờ vài giây:
         // `docker compose up -d && dotnet run` liền tay vẫn phải chạy được.
@@ -61,7 +66,19 @@ public static class DatabaseSeeder
                     .SqlQuery<bool>($"""SELECT to_regclass('public.script') IS NOT NULL AS "Value" """)
                     .SingleAsync(ct);
 
-                if (hasSchema) return;
+                if (hasSchema) break;
+
+                if (attempt == 30)
+                {
+                    throw new InvalidOperationException(
+                        "Database chưa có lược đồ của docs/codeswitchlabel.sql. " +
+                        "PostgreSQL chỉ chạy file này khi database còn rỗng — hãy chạy: " +
+                        "docker compose down -v && docker compose up -d postgres minio");
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                throw;
             }
             catch (Exception) when (attempt < 30)
             {
@@ -71,10 +88,51 @@ public static class DatabaseSeeder
             await Task.Delay(TimeSpan.FromSeconds(1), ct);
         }
 
-        throw new InvalidOperationException(
-            "Database chưa có lược đồ của docs/codeswitchlabel.sql. " +
-            "PostgreSQL chỉ chạy file này khi database còn rỗng — hãy chạy: " +
-            "docker compose down -v && docker compose up -d postgres minio");
+        await EnsureIncrementalTablesAsync(db, logger, ct);
+    }
+
+    /// <summary>
+    /// Tự vá các bảng được thêm sau khi volume đã tồn tại. Mirror từ docs/codeswitchlabel.sql,
+    /// dùng IF NOT EXISTS nên chạy lại an toàn và chịu được nhiều replica khởi động cùng lúc.
+    /// Sửa lược đồ thì sửa file .sql trước, rồi bổ sung vào đây.
+    /// </summary>
+    private static async Task EnsureIncrementalTablesAsync(
+        CodeSwitchLabelDbContext db, Microsoft.Extensions.Logging.ILogger? logger, CancellationToken ct)
+    {
+        var hasRegistration = await db.Database
+            .SqlQuery<bool>($"""SELECT to_regclass('public.campaign_registration') IS NOT NULL AS "Value" """)
+            .SingleAsync(ct);
+
+        if (!hasRegistration)
+        {
+            logger?.LogWarning("Thiếu bảng public.campaign_registration (volume tạo trước khi có bảng này) — tự tạo bổ sung.");
+
+            try
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    """
+                    CREATE TABLE IF NOT EXISTS campaign_registration (
+                        campaign_id   BIGINT NOT NULL REFERENCES campaign(campaign_id) ON DELETE CASCADE,
+                        speaker_id    BIGINT NOT NULL REFERENCES app_user(user_id) ON DELETE CASCADE,
+                        registered_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                        PRIMARY KEY (campaign_id, speaker_id)
+                    )
+                    """, ct);
+
+                await db.Database.ExecuteSqlRawAsync(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_campaign_registration_speaker
+                        ON campaign_registration (speaker_id)
+                    """, ct);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    "Database thiếu bảng campaign_registration và tài khoản hiện tại không đủ quyền tự tạo. " +
+                    "Hãy chạy: docker compose down -v && docker compose up -d postgres minio " +
+                    "(xóa dữ liệu dev), hoặc chạy tay đoạn CREATE TABLE trong docs/codeswitchlabel.sql.", ex);
+            }
+        }
     }
 
     private static async Task<long> SeedUsersAsync(

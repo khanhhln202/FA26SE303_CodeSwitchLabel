@@ -6,6 +6,7 @@ namespace CodeSwitchLabel.Services.Abstractions;
 public interface IAuthService
 {
     Task<LoginResponse> LoginAsync(LoginRequest request, CancellationToken ct = default);
+    Task<LoginResponse> RegisterSpeakerAsync(RegisterSpeakerRequest request, CancellationToken ct = default);
     Task<CurrentUserDto> GetCurrentUserAsync(long userId, CancellationToken ct = default);
 }
 

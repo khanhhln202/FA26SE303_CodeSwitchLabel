@@ -49,15 +49,18 @@ public abstract class ApiTestBase
     protected async Task<string> GetReviewer3TokenAsync() => await LoginAsync("reviewer3@codeswitchlabel.local", "Codeswitch@2026");
     protected async Task<string> GetSpeakerTokenAsync() => await LoginAsync("speaker1@codeswitchlabel.local", "Codeswitch@2026");
 
+    // Client dùng chung của fixture KHÔNG được dispose — chỉ dispose client tạo riêng cho token.
     protected async Task<HttpResponseMessage> GetAsync(string url, string? accessToken = null)
     {
-        using var client = accessToken != null ? CreateAuthenticatedClient(accessToken) : Client;
+        if (accessToken is null) return await Client.GetAsync(url);
+        using var client = CreateAuthenticatedClient(accessToken);
         return await client.GetAsync(url);
     }
 
     protected async Task<HttpResponseMessage> PostAsync<T>(string url, T payload, string? accessToken = null)
     {
-        using var client = accessToken != null ? CreateAuthenticatedClient(accessToken) : Client;
+        if (accessToken is null) return await Client.PostAsJsonAsync(url, payload, JsonOptions);
+        using var client = CreateAuthenticatedClient(accessToken);
         return await client.PostAsJsonAsync(url, payload, JsonOptions);
     }
 
@@ -65,25 +68,29 @@ public abstract class ApiTestBase
     protected async Task<HttpResponseMessage> PostMultipartAsync(
         string url, MultipartFormDataContent content, string? accessToken = null)
     {
-        using var client = accessToken != null ? CreateAuthenticatedClient(accessToken) : Client;
+        if (accessToken is null) return await Client.PostAsync(url, content);
+        using var client = CreateAuthenticatedClient(accessToken);
         return await client.PostAsync(url, content);
     }
 
     protected async Task<HttpResponseMessage> PutAsync<T>(string url, T payload, string? accessToken = null)
     {
-        using var client = accessToken != null ? CreateAuthenticatedClient(accessToken) : Client;
+        if (accessToken is null) return await Client.PutAsJsonAsync(url, payload, JsonOptions);
+        using var client = CreateAuthenticatedClient(accessToken);
         return await client.PutAsJsonAsync(url, payload, JsonOptions);
     }
 
     protected async Task<HttpResponseMessage> PatchAsync<T>(string url, T payload, string? accessToken = null)
     {
-        using var client = accessToken != null ? CreateAuthenticatedClient(accessToken) : Client;
+        if (accessToken is null) return await Client.PatchAsJsonAsync(url, payload, JsonOptions);
+        using var client = CreateAuthenticatedClient(accessToken);
         return await client.PatchAsJsonAsync(url, payload, JsonOptions);
     }
 
     protected async Task<HttpResponseMessage> DeleteAsync(string url, string? accessToken = null)
     {
-        using var client = accessToken != null ? CreateAuthenticatedClient(accessToken) : Client;
+        if (accessToken is null) return await Client.DeleteAsync(url);
+        using var client = CreateAuthenticatedClient(accessToken);
         return await client.DeleteAsync(url);
     }
 

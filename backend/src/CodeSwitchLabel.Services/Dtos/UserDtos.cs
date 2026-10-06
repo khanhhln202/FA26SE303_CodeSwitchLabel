@@ -43,7 +43,7 @@ public record CreateUserResult(UserDetailDto User, string TemporaryPassword);
 
 public record ResetPasswordResult(long UserId, string TemporaryPassword);
 
-public record AssignableUserDto(long UserId, string FullName, RoleName Role, int ActiveTasks, int TotalTarget);
+public record AssignableUserDto(long UserId, string FullName, RoleName Role, int ActiveTasks, int TotalTarget, decimal? ApprovalRatePct, int OverdueTasks);
 
 public record UserSearchRequest : PageRequest
 {

@@ -443,9 +443,12 @@ public class TaskService(
         TaskType taskType, CancellationToken ct = default)
     {
         var role = taskType == TaskType.Recording ? RoleName.Speaker : RoleName.Reviewer;
-        var rows = await tasks.GetAssignableUsersAsync(role, ct);
 
-        return [.. rows.Select(r => new AssignableUserDto(r.UserId, r.FullName, r.Role, r.ActiveTasks, r.TotalTarget))];
+        // TEAM_002: rows arrive ranked-first from repository
+        // (approval DESC, overdue ASC, load ASC); keep that order for Task Manager UI.
+        var rows = await tasks.GetAssignableUsersAsync(role, clock.GetUtcNow(), ct);
+
+        return [.. rows.Select(r => new AssignableUserDto(r.UserId, r.FullName, r.Role, r.ActiveTasks, r.TotalTarget, r.ApprovalRatePct, r.OverdueTasks))];
     }
 
     public async Task<TaskManagerOverviewDto> GetManagerOverviewAsync(
@@ -479,7 +482,6 @@ public class TaskService(
 
         return new TaskManagerOverviewDto(mine, byAssignee, openRec + progRec, openRev + progRev, overdue);
     }
-
 
     // ----------------------------------------------------------------- nội bộ
 

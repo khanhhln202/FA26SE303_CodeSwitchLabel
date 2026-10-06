@@ -418,6 +418,35 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         return script;
     }
 
+    /// <summary>
+    /// TEAM_002: tạo cặp câu đã duyệt đúng luồng trigger trg_script_validated_domain —
+    /// chèn ở chờ duyệt, ghi lượt Accepted của Reviewer đủ chủ đề, rồi mới chốt Validated.
+    /// Chèn thẳng Validated sẽ bị trigger từ chối vì thiếu lượt duyệt hợp lệ.
+    /// </summary>
+    protected async Task<Script> CreateValidatedScriptAsync(
+        string csContent,
+        string viContent,
+        ScriptDomain domain,
+        long createdBy,
+        int enWordCount = 1)
+    {
+        var script = await CreateScriptAsync(csContent, viContent, domain, createdBy, enWordCount);
+
+        Db.ScriptReviews.Add(new ScriptReview
+        {
+            ScriptId = script.ScriptId,
+            UserId = ReviewerUserId,
+            Action = ScriptReviewAction.Accepted,
+            Comment = "Test — tự động chấp nhận.",
+            ReviewedAt = DateTimeOffset.UtcNow
+        });
+        await Db.SaveChangesAsync();
+
+        script.Status = ScriptStatus.Validated;
+        await Db.SaveChangesAsync();
+        return script;
+    }
+
     protected async Task<Recording> CreateRecordingAsync(
         string scriptId,
         long speakerId,

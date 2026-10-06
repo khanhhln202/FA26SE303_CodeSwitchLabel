@@ -1,16 +1,20 @@
 using System.Globalization;
+using CodeSwitchLabel.Repositories.Entities;
 using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Repositories.Repositories;
 using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Common;
 using CodeSwitchLabel.Services.Dtos;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace CodeSwitchLabel.Services.Implementations;
 
 public class AuthService(
     IUserRepository users,
     IPasswordHasher hasher,
-    IAccessTokenIssuer tokens) : IAuthService
+    IAccessTokenIssuer tokens,
+    TimeProvider clock) : IAuthService
 {
     public async Task<LoginResponse> LoginAsync(LoginRequest request, CancellationToken ct = default)
     {
@@ -30,6 +34,57 @@ public class AuthService(
 
         return user.ToLoginResponse(tokens.Issue(user));
     }
+
+    public async Task<LoginResponse> RegisterSpeakerAsync(
+        RegisterSpeakerRequest request, CancellationToken ct = default)
+    {
+        var email = request.Email.Trim().ToLowerInvariant();
+
+        if (await users.EmailExistsAsync(email, ct))
+        {
+            throw new ConflictException("email_taken", "Email đã được đăng ký.");
+        }
+
+        var profile = request.SpeakerProfile;
+        var user = new AppUser
+        {
+            RoleId = await users.GetRoleIdAsync(RoleName.Speaker, ct),
+            FullName = request.FullName.Trim(),
+            Email = email,
+            Phone = Clean(request.Phone),
+            PasswordHash = hasher.Hash(request.Password),
+            Status = UserStatus.Active,
+            CreatedAt = clock.GetUtcNow(),
+            SpeakerProfile = new SpeakerProfile
+            {
+                BirthYear = profile?.BirthYear,
+                Province = Clean(profile?.Province),
+                EnglishLevel = profile?.EnglishLevel,
+                Occupation = profile?.Occupation,
+                Major = Clean(profile?.Major)
+            }
+        };
+
+        users.Add(user);
+
+        try
+        {
+            await users.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when
+            (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            throw new ConflictException("email_taken", "Email đã được đăng ký.");
+        }
+
+        var createdUser = await users.GetByIdAsync(user.UserId, ct)
+            ?? throw new NotFoundException("user_not_found", "Không tìm thấy tài khoản vừa tạo.");
+
+        return createdUser.ToLoginResponse(tokens.Issue(createdUser));
+    }
+
+    private static string? Clean(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     public async Task<CurrentUserDto> GetCurrentUserAsync(long userId, CancellationToken ct = default)
     {
