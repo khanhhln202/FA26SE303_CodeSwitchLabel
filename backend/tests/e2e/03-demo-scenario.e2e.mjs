@@ -104,26 +104,39 @@ console.log('\n== Màn 3 · Duyệt câu trước khi thu');
 S('3.2', 'speaker1', 'POST', '/api/scripts/s_131000010/review', await call(T.speaker1, 'POST', '/api/scripts/s_131000010/review', { action: 'Rejected' }), 422);
 S('3.3', 'speaker1', 'POST', '/api/scripts/s_131000010/review', await call(T.speaker1, 'POST', '/api/scripts/s_131000010/review',
   { action: 'Rejected', errorReasonCode: 'unnatural', comment: 'Người Việt không chêm "very" vào giữa câu như vậy' }), 200, (b) => ({ status: b.status }));
-S('3.4', 'speaker1', 'POST', '/api/scripts/s_121000008/review', await call(T.speaker1, 'POST', '/api/scripts/s_121000008/review', {
+S('3.4', 'reviewer', 'POST', '/api/scripts/s_121000008/review', await call(T.reviewer, 'POST', '/api/scripts/s_121000008/review', {
   action: 'Edited',
   editedCsContent: '[vi]Cô vừa đăng [en]quiz [vi]mới lên hệ thống, cả lớp làm trước tối nay nhé.',
   editedVeContent: '[vi]Cô vừa đăng bài kiểm tra ngắn mới lên hệ thống, cả lớp làm trước tối nay nhé.',
   comment: 'Thêm "lên hệ thống" cho rõ nghĩa'
 }), 200, (b) => ({ status: b.status }));
-S('3.5', 'speaker1', 'POST', '/api/scripts/s_211000007/review', await call(T.speaker1, 'POST', '/api/scripts/s_211000007/review',
+S('3.5', 'reviewer', 'POST', '/api/scripts/s_211000007/review', await call(T.reviewer, 'POST', '/api/scripts/s_211000007/review',
   { action: 'Accepted', comment: 'Câu tự nhiên, đúng kiểu nói hằng ngày' }), 200, (b) => ({ status: b.status }));
 S('3.6', 'speaker1', 'POST', '/api/speaker/scripts/contribute', await call(T.speaker1, 'POST', '/api/speaker/scripts/contribute', {
   csContent: '[vi]Tối nay mình phải [en]fix bug [vi]gấp cho khách.',
   veContent: '[vi]Tối nay mình phải sửa lỗi gấp cho khách.',
   domain: 'ItTechnology',
-  alignment: [{ source: 'fix bug', source_lang: 'en', target: 'sửa lỗi', target_lang: 'vi', relation: 'semantic_equivalent' }]
+  alignment: [
+    { source: 'fix', source_lang: 'en', target: 'sửa', target_lang: 'vi', relation: 'semantic_equivalent' },
+    { source: 'bug', source_lang: 'en', target: 'lỗi', target_lang: 'vi', relation: 'semantic_equivalent' }
+  ]
 }), 201, (b) => ({ scriptId: b.scriptId, status: b.status }));
 Q('3a', 'select sr.script_id, sr.action, e.reason_code, sr.user_id, s.status from script_review sr left join script_error_reason e on e.reason_id = sr.error_reason_id join script s on s.script_id = sr.script_id order by sr.script_review_id;');
 Q('3b', "select script_id, cs_content from script where script_id = 's_121000008';");
 Q('3c', "select script_id, status, created_by from script where script_id = 's_211000011';");
 
 console.log('\n== Màn 4 · Giao việc');
-r = S('4.2', 'manager', 'POST', '/api/tasks', await call(T.manager, 'POST', '/api/tasks', { taskType: 'Recording', description: 'Thu âm câu chủ đề IT', targetQty: 1, deadline: DEADLINE }), 201, (b) => ({ taskId: b.summary.taskId }));
+const batDau = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+const ketThuc = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
+r = S('4.0a', 'admin', 'POST', '/api/campaigns', await call(T.admin, 'POST', '/api/campaigns',
+  { campaignName: 'Đợt thu thập demo ' + batDau, targetQty: 2000, startDate: batDau, endDate: ketThuc }), 201,
+  (b) => ({ campaignId: b.campaignId, status: b.status, targetQty: b.targetQty }));
+const campaignId = r.body.campaignId;
+S('4.0b', 'manager', 'POST', '/api/tasks', await call(T.manager, 'POST', '/api/tasks',
+  { campaignId, taskType: 'Recording', description: 'Chiến dịch chưa giao', targetQty: 1, deadline: DEADLINE }), 422);
+S('4.0c', 'admin', 'POST', '/api/campaigns/' + campaignId + '/assign',
+  await call(T.admin, 'POST', '/api/campaigns/' + campaignId + '/assign', { assignedToUserId: 2 }), 200, (b) => ({ assignedTo: b.assignedTo }));
+r = S('4.2', 'manager', 'POST', '/api/tasks', await call(T.manager, 'POST', '/api/tasks', { campaignId, taskType: 'Recording', description: 'Thu âm câu chủ đề IT', targetQty: 1, deadline: DEADLINE }), 201, (b) => ({ taskId: b.summary.taskId }));
 const taskId = r.body.summary.taskId;
 S('4.3', 'manager', 'POST', `/api/tasks/${taskId}/items`, await call(T.manager, 'POST', `/api/tasks/${taskId}/items`, { autoFill: { count: 2, domain: 'ItTechnology' } }), 200, (b) => ({ added: b.added }));
 S('4.5', 'manager', 'POST', `/api/tasks/${taskId}/assign`, await call(T.manager, 'POST', `/api/tasks/${taskId}/assign`, { userId: 6 }), 200, (b) => ({ status: b.summary.status }));
@@ -196,7 +209,8 @@ let before = batchCount();
 S('A.3', 'admin', 'POST', '/api/scripts/import', await call(T.admin, 'POST', '/api/scripts/import', fileForm('File', EXTRA + 'import-3-sai-cu-phap.json', 'application/json')), 422);
 console.log(`  so lo nhap truoc/sau A.3: ${before} / ${batchCount()}`);
 before = batchCount();
-S('A.4', 'admin', 'POST', '/api/scripts/import', await call(T.admin, 'POST', '/api/scripts/import', fileForm('File', EXTRA + 'import-4-mang-rong.json', 'application/json')), 200, (b) => b);
+// File rỗng giờ bị từ chối hẳn (empty_file), không còn nhận rồi tạo một lô nhập 0 câu như trước.
+S('A.4', 'admin', 'POST', '/api/scripts/import', await call(T.admin, 'POST', '/api/scripts/import', fileForm('File', EXTRA + 'import-4-mang-rong.json', 'application/json')), 422);
 console.log(`  so lo nhap truoc/sau A.4: ${before} / ${batchCount()}`);
 before = batchCount();
 S('A.5', 'admin', 'POST', '/api/scripts/import', await call(T.admin, 'POST', '/api/scripts/import', fileForm('File', EXTRA + 'import-5-van-ban.txt', 'text/plain')), 422);
