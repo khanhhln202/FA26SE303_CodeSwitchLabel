@@ -12,8 +12,8 @@ export default function AdminTemplate() {
   usePageTitle();
 
   return (
-    <div className="h-screen w-screen overflow-hidden relative bg-slate-50 dark:bg-[#0F172A] text-slate-800 dark:text-slate-100 font-sans selection:bg-[#1DB954] selection:text-white transition-colors duration-300">
-      
+    <div className="h-screen w-screen overflow-hidden relative bg-[#f8f7f0] dark:bg-[#0F172A] text-slate-800 dark:text-slate-100 font-sans selection:bg-[#1DB954] selection:text-white transition-colors duration-300">
+
       {/* Dynamic Moving Background Effect (Chuẩn 100% LandingPage) */}
       <style>{`
         @keyframes dynamicGlow {
@@ -60,14 +60,14 @@ export default function AdminTemplate() {
         <Sidebar role="admin" isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
         {/* Main Layout */}
-        <main className="flex-1 lg:ml-64 h-full flex flex-col overflow-hidden bg-transparent pt-16 lg:pt-0 transition-colors">
+        <main className="flex-1 lg:ml-64 h-full flex flex-col overflow-hidden bg-[#f8f7f0] dark:bg-[#0F172A] pt-16 lg:pt-0 transition-colors">
           {/* Header dành cho Desktop */}
           <div className="hidden lg:block">
             <AdminHeader />
           </div>
 
           {/* Nơi chứa nội dung các trang con */}
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-[#f8f7f0] dark:bg-[#0F172A]">
             <Outlet />
           </div>
         </main>
