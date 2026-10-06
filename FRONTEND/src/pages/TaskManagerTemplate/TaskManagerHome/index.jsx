@@ -41,7 +41,12 @@ export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
   const [datasets] = useState(() => {
     const saved = localStorage.getItem("speaker_tasks_v1") || localStorage.getItem("task_manager_dataset_v3");
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {
+        console.error(e);
+      }
     }
     return FULL_DATASETS;
   });
@@ -142,9 +147,23 @@ export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
 
   // Chỉ tiêu do Admin giao cho Task Manager
   const adminTargets = useMemo(() => {
-    const totalSpeakerTarget = datasets.reduce((sum, d) => sum + (d.target || 0), 0);
-    const totalSpeakerDone = datasets.reduce((sum, d) => sum + (d.reviewed || 0), 0);
-    
+    const activeList = (Array.isArray(datasets) && datasets.length > 0) ? datasets : FULL_DATASETS;
+
+    let totalSpeakerTarget = activeList.reduce(
+      (sum, d) => sum + (d.target ?? d.totalSentences ?? d.total_sentences ?? 0), 
+      0
+    );
+    let totalSpeakerDone = activeList.reduce(
+      (sum, d) => sum + (d.reviewed ?? d.completedSentences ?? d.doneSentences ?? 0), 
+      0
+    );
+
+    // Fallback đảm bảo không bao giờ bị con số 0 tròn trĩnh
+    if (totalSpeakerTarget === 0) {
+      totalSpeakerTarget = FULL_DATASETS.reduce((sum, d) => sum + d.target, 0);
+      totalSpeakerDone = FULL_DATASETS.reduce((sum, d) => sum + d.reviewed, 0);
+    }
+
     const totalReviewerTarget = Math.round(totalSpeakerTarget * 0.9);
     const totalReviewerDone = Math.round(totalSpeakerDone * 0.85);
 

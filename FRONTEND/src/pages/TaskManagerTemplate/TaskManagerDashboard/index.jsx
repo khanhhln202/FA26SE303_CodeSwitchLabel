@@ -91,14 +91,33 @@ export default function TaskManagerDashboard() {
   const speakerColor = SPEAKER_ACCENT || "#FF4B2E";
   const reviewerColor = REVIEWER_ACCENT || "#0052CC";
 
-  // Đếm chính xác số nhiệm vụ đã phân công cho Speaker và Reviewer
-  const assignedSpeakerCount = assignments.filter(
-    (a) => a.role === "Speaker" && Array.isArray(a.assignedUsers) && a.assignedUsers.length > 0
-  ).length;
+  // Lấy danh sách các ID nhiệm vụ Speaker hợp lệ (tập hợp không lặp)
+  const assignedSpeakerTaskIds = new Set(
+    assignments
+      .filter(
+        (a) =>
+          a.role === "Speaker" &&
+          Array.isArray(a.assignedUsers) &&
+          a.assignedUsers.length > 0 &&
+          a.taskId
+      )
+      .map((a) => a.taskId)
+  );
+  const assignedSpeakerCount = assignedSpeakerTaskIds.size;
 
-  const assignedReviewerCount = assignments.filter(
-    (a) => a.role === "Reviewer" && Array.isArray(a.assignedUsers) && a.assignedUsers.length > 0
-  ).length;
+  // Lấy danh sách các ID nhiệm vụ Reviewer hợp lệ (tập hợp không lặp)
+  const assignedReviewerTaskIds = new Set(
+    assignments
+      .filter(
+        (a) =>
+          a.role === "Reviewer" &&
+          Array.isArray(a.assignedUsers) &&
+          a.assignedUsers.length > 0 &&
+          a.taskId
+      )
+      .map((a) => a.taskId)
+  );
+  const assignedReviewerCount = assignedReviewerTaskIds.size;
 
   const countTasksByTopic = (topicName, altName) => {
     const speakerMatch = speakerTasks.filter((t) => t.topic === topicName || t.topic === altName).length;
