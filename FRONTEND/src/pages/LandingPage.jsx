@@ -18,26 +18,6 @@ import Logo from '../components/Logo/Logo';
 export default function LandingPage() {
   const navigate = useNavigate();
 
-  // Trạng thái điều khiển SplashScreen & hiệu ứng mờ dần (fade-out)
-  const [isLoading, setIsLoading] = useState(true);
-  const [isFadingOut, setIsFadingOut] = useState(false);
-
-  // Điều khiển thời gian loading và chuyển cảnh mượt
-  useEffect(() => {
-    const fadeTimer = setTimeout(() => {
-      setIsFadingOut(true);
-    }, 2000);
-
-    const removeTimer = setTimeout(() => {
-      setIsLoading(false);
-    }, 2400);
-
-    return () => {
-      clearTimeout(fadeTimer);
-      clearTimeout(removeTimer);
-    };
-  }, []);
-
   // Khởi tạo trạng thái dark mode đồng bộ từ localStorage hoặc class trên html
   const [darkMode, setDarkMode] = useState(() => {
     if (typeof window !== "undefined") {
@@ -79,7 +59,7 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#0F172A] text-slate-800 dark:text-white font-sans selection:bg-[#1DB954] selection:text-white flex flex-col justify-between transition-colors duration-300 relative">
       
-      {/* Dynamic Moving Background Effect & Loading Animation */}
+      {/* Dynamic Moving Background Effect */}
       <style>{`
         @keyframes dynamicGlow {
           0% { transform: translate(0px, 0px) scale(1); }
@@ -95,34 +75,7 @@ export default function LandingPage() {
         }
         .animate-blob-1 { animation: dynamicGlow 12s infinite ease-in-out; }
         .animate-blob-2 { animation: dynamicGlowReverse 15s infinite ease-in-out; }
-
-        @keyframes fastLoadingBar {
-          0% { width: 0%; }
-          100% { width: 100%; }
-        }
-        .animate-fast-loader {
-          animation: fastLoadingBar 1.95s cubic-bezier(0.25, 1, 0.5, 1) forwards;
-        }
       `}</style>
-
-      {/* SPLASH SCREEN LOADING */}
-      {isLoading && (
-        <div 
-          className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#0F172A] text-white transition-opacity duration-400 ease-in-out pointer-events-none ${
-            isFadingOut ? 'opacity-0' : 'opacity-100'
-          }`}
-        >
-          <div className="absolute w-[400px] h-[400px] bg-[#1DB954]/20 blur-[100px] rounded-full pointer-events-none" />
-
-          <div className="relative z-10 mb-8">
-            <Logo variant="light" size={60} />
-          </div>
-
-          <div className="relative z-10 w-52 h-1.5 bg-slate-800/80 border border-slate-700/50 rounded-full overflow-hidden shadow-inner">
-            <div className="h-full bg-gradient-to-r from-[#1DB954] to-emerald-400 rounded-full animate-fast-loader shadow-[0_0_12px_#1DB954]" />
-          </div>
-        </div>
-      )}
 
       {/* BACKGROUND MOVING BLOBS */}
       <div className="fixed top-[-10%] left-[-10%] w-[500px] sm:w-[700px] h-[500px] sm:h-[700px] bg-[#1DB954]/20 dark:bg-[#1DB954]/25 blur-[130px] rounded-full pointer-events-none animate-blob-1 z-0" />
@@ -132,10 +85,10 @@ export default function LandingPage() {
       <header className="fixed top-0 left-0 w-full z-50 bg-white/80 dark:bg-[#0F172A]/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/60 transition-colors shadow-sm">
         <div className="max-w-7xl mx-auto px-6 h-20 grid grid-cols-3 items-center">
           
-          {/* CỘT 1 (BÊN TRÁI): Logo LandingPage */}
+          {/* CỘT 1 (BÊN TRÁI): Logo LandingPage (Cố định size khi hover) */}
           <div className="flex justify-start">
             <div 
-              className="inline-flex cursor-pointer transition-transform hover:scale-105 active:scale-95" 
+              className="inline-flex cursor-pointer" 
               onClick={scrollToTop}
               title="Cuộn về đầu trang"
             >
@@ -161,8 +114,8 @@ export default function LandingPage() {
             </button>
           </nav>
 
-          {/* CỘT 3 (BÊN PHẢI): Switch Gạt Sáng/Tối */}
-          <div className="flex justify-end items-center">
+          {/* CỘT 3 (BÊN PHẢI): Switch Gạt Sáng/Tối bên trái -> Nút Đăng nhập bên phải */}
+          <div className="flex justify-end items-center gap-4">
             <button
               onClick={toggleDarkMode}
               type="button"
@@ -183,6 +136,14 @@ export default function LandingPage() {
                 )}
               </div>
             </button>
+
+            <button
+              type="button"
+              onClick={() => navigate('/login')}
+              className="px-5 py-2 bg-[#1DB954] hover:bg-[#1AA34A] text-white rounded-xl text-sm font-bold shadow-md shadow-[#1DB954]/20 hover:shadow-[#1DB954]/40 active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+            >
+              Đăng nhập
+            </button>
           </div>
 
         </div>
@@ -196,13 +157,13 @@ export default function LandingPage() {
           <div className="max-w-5xl mx-auto text-center space-y-5 relative z-10">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-200/80 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700/60 text-slate-700 dark:text-slate-300 text-xs font-semibold backdrop-blur-sm">
               <Sparkles className="w-4 h-4 text-[#1DB954]" />
-              <span>Nền tảng thu thập & kiểm soát chất lượng dữ liệu tiếng nói</span>
+              <span>Nền tảng thu thập và kiểm soát chất lượng dữ liệu tiếng nói</span>
             </div>
 
             <h1 className="text-4xl sm:text-6xl font-black tracking-tight leading-tight text-slate-900 dark:text-white">
               CodeSwitchLabel
-              <span className="block py-2 leading-relaxed text-2xl sm:text-4xl md:text-5xl bg-clip-text text-transparent bg-gradient-to-r from-[#15803D] via-emerald-600 to-teal-700 dark:from-[#1DB954] dark:via-emerald-400 dark:to-green-300">
-                Hệ thống thu thập và kiểm soát chất lượng dữ liệu tiếng nói
+              <span className="block px-2 py-3 leading-[1.3] text-2xl sm:text-4xl md:text-5xl bg-clip-text text-transparent bg-gradient-to-r from-[#15803D] via-emerald-600 to-teal-700 dark:from-[#1DB954] dark:via-emerald-400 dark:to-green-300">
+                Hệ thống thu thập và kiểm soát chất lượng <span className="whitespace-nowrap">dữ liệu</span> tiếng nói
               </span>
             </h1>
 
@@ -245,7 +206,7 @@ export default function LandingPage() {
           <div className="max-w-6xl mx-auto space-y-12">
             <div className="text-center space-y-3">
               <h2 className="text-2xl sm:text-4xl font-extrabold text-slate-900 dark:text-white">
-                Bối cảnh & giải pháp của CodeSwitchLabel
+                Bối cảnh và giải pháp của CodeSwitchLabel
               </h2>
               <p className="text-slate-500 dark:text-slate-400 text-sm sm:text-base max-w-3xl mx-auto">
                 Giải quyết các thách thức cốt lõi trong gán nhãn và kiểm soát chất lượng dữ liệu tiếng nói trộn ngôn ngữ tiếng Việt - tiếng Anh cho các mô hình nhận dạng giọng nói tự động (ASR).
@@ -257,7 +218,7 @@ export default function LandingPage() {
                 <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
                   <Volume2 className="w-6 h-6" />
                 </div>
-                <h3 className="text-xl font-bold text-slate-900 dark:text-white">Bối cảnh & thách thức</h3>
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white">Bối cảnh và thách thức</h3>
                 <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
                   Trong các phát ngôn tiếng Việt thực tế như <i>"Em nhớ upload tài liệu trước deadline nhé"</i>, sự xuất hiện của các từ tiếng Anh khiến hiệu suất của mô hình ASR bị giảm đáng kể. Các bản ghi âm thô chỉ hữu ích khi được chuyển bản chính xác ở cấp độ từ, gán nhãn ngôn ngữ (Việt/Anh) và khớp thời gian với âm thanh.
                 </p>
@@ -284,7 +245,7 @@ export default function LandingPage() {
               </div>
             </div>
 
-            {/* CỤM QUY TRÌNH XỬ LÝ (Có scroll-mt-28 để khi bấm nút 'Quy trình' sẽ cuộn đến cực đẹp) */}
+            {/* CỤM QUY TRÌNH XỬ LÝ */}
             <div id="workflow" className="scroll-mt-28 pt-8 border-t border-slate-200 dark:border-slate-800/80">
               <h3 className="text-center text-xl sm:text-2xl font-bold text-slate-900 dark:text-white mb-8">
                 Quy trình xử lý dữ liệu thống nhất
@@ -296,7 +257,7 @@ export default function LandingPage() {
                   </div>
                   <div>
                     <div className="text-xs text-slate-400 font-semibold uppercase">Bước 1</div>
-                    <div className="text-sm font-bold text-slate-800 dark:text-white">Duyệt & thẩm định văn bản</div>
+                    <div className="text-sm font-bold text-slate-800 dark:text-white">Duyệt và thẩm định văn bản</div>
                   </div>
                 </div>
 
@@ -316,7 +277,7 @@ export default function LandingPage() {
                   </div>
                   <div>
                     <div className="text-xs text-slate-400 font-semibold uppercase">Bước 3</div>
-                    <div className="text-sm font-bold text-slate-800 dark:text-white">Đánh giá & thẩm định chất lượng</div>
+                    <div className="text-sm font-bold text-slate-800 dark:text-white">Đánh giá và thẩm định chất lượng</div>
                   </div>
                 </div>
 
@@ -326,7 +287,7 @@ export default function LandingPage() {
                   </div>
                   <div>
                     <div className="text-xs text-slate-400 font-semibold uppercase">Bước 4</div>
-                    <div className="text-sm font-bold text-slate-800 dark:text-white">Quản lý & xuất bộ dữ liệu</div>
+                    <div className="text-sm font-bold text-slate-800 dark:text-white">Quản lý và xuất bộ dữ liệu</div>
                   </div>
                 </div>
               </div>
