@@ -37,14 +37,14 @@ public sealed class RegisterSpeakerTests(DatabaseFixture fixture) : ApiTestBase(
 
         // Assert — 200 with a usable token (Active immediately, no approval step).
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         var accessToken = doc.RootElement.GetProperty("accessToken").GetString();
         Assert.False(string.IsNullOrWhiteSpace(accessToken));
 
         // The new speaker can call a Speaker-only endpoint straight away.
         var me = await GetAsync("/api/auth/me", accessToken);
         Assert.Equal(HttpStatusCode.OK, me.StatusCode);
-        using var meDoc = JsonDocument.Parse(await me.Content.ReadAsStringAsync());
+        using var meDoc = JsonDocument.Parse(await me.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         Assert.Equal("Speaker", meDoc.RootElement.GetProperty("role").GetString());
         Assert.Equal(email, meDoc.RootElement.GetProperty("email").GetString());
     }

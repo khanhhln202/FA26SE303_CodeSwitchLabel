@@ -71,7 +71,7 @@ public sealed class FfmpegAudioProcessorTests : IDisposable
         var webm = await GenerateBrowserLikeWebmAsync(seconds: 3);
 
         // Act
-        var act = () => _processor.ProbeAsync(webm);
+        var act = () => _processor.ProbeAsync(webm, TestContext.Current.CancellationToken);
 
         // Assert
         await Assert.ThrowsAsync<AudioProcessingException>(act);
@@ -106,7 +106,7 @@ public sealed class FfmpegAudioProcessorTests : IDisposable
 
         // Act  Ephải là AudioProcessingException chứ không phải lỗi chung chung,
         // vì tầng Service dựa vào đúng loại này để trả 422 thay vì 500.
-        var act = () => _processor.ConvertToWavAsync(fake, Path.Combine(_workDir, "fake.wav"));
+        var act = () => _processor.ConvertToWavAsync(fake, Path.Combine(_workDir, "fake.wav"), TestContext.Current.CancellationToken);
 
         // Assert
         await Assert.ThrowsAsync<AudioProcessingException>(act);
@@ -120,7 +120,7 @@ public sealed class FfmpegAudioProcessorTests : IDisposable
         var missing = Path.Combine(_workDir, "khong-ton-tai.webm");
 
         // Act
-        var act = () => _processor.ProbeAsync(missing);
+        var act = () => _processor.ProbeAsync(missing, TestContext.Current.CancellationToken);
 
         // Assert
         await Assert.ThrowsAsync<AudioProcessingException>(act);
@@ -261,15 +261,15 @@ public sealed class FfmpegAudioProcessorTests : IDisposable
         foreach (var argument in arguments) startInfo.ArgumentList.Add(argument);
 
         using var process = Process.Start(startInfo)!;
-        var stderrTask = process.StandardError.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync(TestContext.Current.CancellationToken);
 
         if (stdoutToFile is not null)
         {
             await using var file = File.Create(stdoutToFile);
-            await process.StandardOutput.BaseStream.CopyToAsync(file);
+            await process.StandardOutput.BaseStream.CopyToAsync(file, TestContext.Current.CancellationToken);
         }
 
-        await process.WaitForExitAsync();
+        await process.WaitForExitAsync(TestContext.Current.CancellationToken);
 
         var stderr = await stderrTask;
         Assert.True(process.ExitCode == 0, $"ffmpeg thoát mã {process.ExitCode}: {stderr}");

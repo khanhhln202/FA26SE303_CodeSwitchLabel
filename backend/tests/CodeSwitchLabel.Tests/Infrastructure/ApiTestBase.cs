@@ -35,10 +35,10 @@ public abstract class ApiTestBase
 
     protected async Task<string> LoginAsync(string email, string password)
     {
-        var response = await Client.PostAsJsonAsync("/api/auth/login", new { email, password }, JsonOptions);
+        var response = await Client.PostAsJsonAsync("/api/auth/login", new { email, password }, JsonOptions, TestContext.Current.CancellationToken);
         response.EnsureSuccessStatusCode();
 
-        var result = await response.Content.ReadFromJsonAsync<LoginResponse>(JsonOptions);
+        var result = await response.Content.ReadFromJsonAsync<LoginResponse>(JsonOptions, TestContext.Current.CancellationToken);
         return result!.AccessToken;
     }
 
@@ -52,51 +52,51 @@ public abstract class ApiTestBase
     // Client dùng chung của fixture KHÔNG được dispose — chỉ dispose client tạo riêng cho token.
     protected async Task<HttpResponseMessage> GetAsync(string url, string? accessToken = null)
     {
-        if (accessToken is null) return await Client.GetAsync(url);
+        if (accessToken is null) return await Client.GetAsync(url, TestContext.Current.CancellationToken);
         using var client = CreateAuthenticatedClient(accessToken);
-        return await client.GetAsync(url);
+        return await client.GetAsync(url, TestContext.Current.CancellationToken);
     }
 
     protected async Task<HttpResponseMessage> PostAsync<T>(string url, T payload, string? accessToken = null)
     {
-        if (accessToken is null) return await Client.PostAsJsonAsync(url, payload, JsonOptions);
+        if (accessToken is null) return await Client.PostAsJsonAsync(url, payload, JsonOptions, TestContext.Current.CancellationToken);
         using var client = CreateAuthenticatedClient(accessToken);
-        return await client.PostAsJsonAsync(url, payload, JsonOptions);
+        return await client.PostAsJsonAsync(url, payload, JsonOptions, TestContext.Current.CancellationToken);
     }
 
     /// <summary>Gửi form nhiều phần (nhập file câu, nộp bản ghi âm) kèm token.</summary>
     protected async Task<HttpResponseMessage> PostMultipartAsync(
         string url, MultipartFormDataContent content, string? accessToken = null)
     {
-        if (accessToken is null) return await Client.PostAsync(url, content);
+        if (accessToken is null) return await Client.PostAsync(url, content, TestContext.Current.CancellationToken);
         using var client = CreateAuthenticatedClient(accessToken);
-        return await client.PostAsync(url, content);
+        return await client.PostAsync(url, content, TestContext.Current.CancellationToken);
     }
 
     protected async Task<HttpResponseMessage> PutAsync<T>(string url, T payload, string? accessToken = null)
     {
-        if (accessToken is null) return await Client.PutAsJsonAsync(url, payload, JsonOptions);
+        if (accessToken is null) return await Client.PutAsJsonAsync(url, payload, JsonOptions, TestContext.Current.CancellationToken);
         using var client = CreateAuthenticatedClient(accessToken);
-        return await client.PutAsJsonAsync(url, payload, JsonOptions);
+        return await client.PutAsJsonAsync(url, payload, JsonOptions, TestContext.Current.CancellationToken);
     }
 
     protected async Task<HttpResponseMessage> PatchAsync<T>(string url, T payload, string? accessToken = null)
     {
-        if (accessToken is null) return await Client.PatchAsJsonAsync(url, payload, JsonOptions);
+        if (accessToken is null) return await Client.PatchAsJsonAsync(url, payload, JsonOptions, TestContext.Current.CancellationToken);
         using var client = CreateAuthenticatedClient(accessToken);
-        return await client.PatchAsJsonAsync(url, payload, JsonOptions);
+        return await client.PatchAsJsonAsync(url, payload, JsonOptions, TestContext.Current.CancellationToken);
     }
 
     protected async Task<HttpResponseMessage> DeleteAsync(string url, string? accessToken = null)
     {
-        if (accessToken is null) return await Client.DeleteAsync(url);
+        if (accessToken is null) return await Client.DeleteAsync(url, TestContext.Current.CancellationToken);
         using var client = CreateAuthenticatedClient(accessToken);
-        return await client.DeleteAsync(url);
+        return await client.DeleteAsync(url, TestContext.Current.CancellationToken);
     }
 
     protected async Task<T?> DeserializeAsync<T>(HttpResponseMessage response)
     {
-        var content = await response.Content.ReadAsStringAsync();
+        var content = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         if (string.IsNullOrWhiteSpace(content)) return default;
         return JsonSerializer.Deserialize<T>(content, JsonOptions);
     }

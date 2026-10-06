@@ -25,7 +25,7 @@ public class RecordingRepositoryTests : IntegrationTestBase
         var recording = await CreateRecordingAsync(script.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching);
 
         // Act
-        var result = await Recordings.GetAsync(recording.RecordingId, CancellationToken.None);
+        var result = await Recordings.GetAsync(recording.RecordingId, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(result);
@@ -45,7 +45,7 @@ public class RecordingRepositoryTests : IntegrationTestBase
         await CreateRecordingAsync(script.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching, 7.5m);
 
         // Act
-        var (items, total) = await Recordings.SearchAsync(null, null, null, 1, 10, CancellationToken.None);
+        var (items, total) = await Recordings.SearchAsync(null, null, null, 1, 10, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(total >= 1);
@@ -62,7 +62,7 @@ public class RecordingRepositoryTests : IntegrationTestBase
             AdminUserId);
 
         // Act
-        var hasActive = await Recordings.HasActiveRecordingAsync(script.ScriptId, SentenceVariant.CodeSwitching, CancellationToken.None);
+        var hasActive = await Recordings.HasActiveRecordingAsync(script.ScriptId, SentenceVariant.CodeSwitching, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(hasActive);
@@ -81,7 +81,7 @@ public class RecordingRepositoryTests : IntegrationTestBase
         await CreateRecordingAsync(script.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching);
 
         // Act
-        var hasActive = await Recordings.HasActiveRecordingAsync(script.ScriptId, SentenceVariant.CodeSwitching, CancellationToken.None);
+        var hasActive = await Recordings.HasActiveRecordingAsync(script.ScriptId, SentenceVariant.CodeSwitching, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(hasActive);
@@ -100,7 +100,7 @@ public class RecordingRepositoryTests : IntegrationTestBase
         await CreateRecordingAsync(script.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching);
 
         // Act
-        var ownerId = await Recordings.GetOwnerSpeakerIdAsync(script.ScriptId, CancellationToken.None);
+        var ownerId = await Recordings.GetOwnerSpeakerIdAsync(script.ScriptId, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(SpeakerUserId, ownerId);
@@ -119,7 +119,7 @@ public class RecordingRepositoryTests : IntegrationTestBase
         await CreateRecordingAsync(script.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching);
 
         // Act
-        var count = await Recordings.CountTakesAsync(script.ScriptId, SentenceVariant.CodeSwitching, CancellationToken.None);
+        var count = await Recordings.CountTakesAsync(script.ScriptId, SentenceVariant.CodeSwitching, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(1, count);

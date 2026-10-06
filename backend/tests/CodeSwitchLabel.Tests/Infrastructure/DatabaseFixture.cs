@@ -84,7 +84,7 @@ public sealed class DatabaseFixture : IAsyncLifetime
     public async ValueTask InitializeAsync()
     {
         _logger.LogInformation("Starting PostgreSQL Testcontainer...");
-        await _container.StartAsync();
+        await _container.StartAsync(TestContext.Current.CancellationToken);
 
         _logger.LogInformation("Running database schema initialization (docs/codeswitchlabel.sql)...");
         await InitializeDatabaseAsync();
@@ -127,7 +127,7 @@ public sealed class DatabaseFixture : IAsyncLifetime
         var db = sp.GetRequiredService<CodeSwitchLabelDbContext>();
         var issuer = sp.GetRequiredService<IAccessTokenIssuer>();
 
-        var user = await db.AppUsers.Include(u => u.Role).FirstAsync(u => u.Email == email);
+        var user = await db.AppUsers.Include(u => u.Role).FirstAsync(u => u.Email == email, TestContext.Current.CancellationToken);
         var token = issuer.Issue(user);
         return token.AccessToken;
     }
@@ -224,13 +224,13 @@ public sealed class DatabaseFixture : IAsyncLifetime
     private async Task InitializeDatabaseAsync()
     {
         var sqlPath = FindSchemaFile();
-        var sql = await File.ReadAllTextAsync(sqlPath);
+        var sql = await File.ReadAllTextAsync(sqlPath, TestContext.Current.CancellationToken);
 
         await using var connection = new NpgsqlConnection(ConnectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
 
         await using var command = new NpgsqlCommand(sql, connection);
-        await command.ExecuteNonQueryAsync();
+        await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
     }
 
 private async Task SeedTestDataAsync()
@@ -241,13 +241,13 @@ private async Task SeedTestDataAsync()
             var db = sp.GetRequiredService<CodeSwitchLabelDbContext>();
             var hasher = sp.GetRequiredService<IPasswordHasher>();
 
-            var adminRole = await db.Roles.FirstAsync(r => r.RoleName == RoleName.Admin);
-            var managerRole = await db.Roles.FirstAsync(r => r.RoleName == RoleName.TaskManager);
-            var reviewerRole = await db.Roles.FirstAsync(r => r.RoleName == RoleName.Reviewer);
-            var speakerRole = await db.Roles.FirstAsync(r => r.RoleName == RoleName.Speaker);
+            var adminRole = await db.Roles.FirstAsync(r => r.RoleName == RoleName.Admin, TestContext.Current.CancellationToken);
+            var managerRole = await db.Roles.FirstAsync(r => r.RoleName == RoleName.TaskManager, TestContext.Current.CancellationToken);
+            var reviewerRole = await db.Roles.FirstAsync(r => r.RoleName == RoleName.Reviewer, TestContext.Current.CancellationToken);
+            var speakerRole = await db.Roles.FirstAsync(r => r.RoleName == RoleName.Speaker, TestContext.Current.CancellationToken);
 
             // Test users (@test.local) - for integration tests using IntegrationTestBase
-            var admin = await db.AppUsers.FirstOrDefaultAsync(u => u.Email == "admin@test.local");
+            var admin = await db.AppUsers.FirstOrDefaultAsync(u => u.Email == "admin@test.local", TestContext.Current.CancellationToken);
             if (admin == null)
             {
                 admin = new AppUser
@@ -262,7 +262,7 @@ private async Task SeedTestDataAsync()
                 db.AppUsers.Add(admin);
             }
 
-            var manager = await db.AppUsers.FirstOrDefaultAsync(u => u.Email == "manager@test.local");
+            var manager = await db.AppUsers.FirstOrDefaultAsync(u => u.Email == "manager@test.local", TestContext.Current.CancellationToken);
             if (manager == null)
             {
                 manager = new AppUser
@@ -277,7 +277,7 @@ private async Task SeedTestDataAsync()
                 db.AppUsers.Add(manager);
             }
 
-            var reviewer = await db.AppUsers.FirstOrDefaultAsync(u => u.Email == "reviewer@test.local");
+            var reviewer = await db.AppUsers.FirstOrDefaultAsync(u => u.Email == "reviewer@test.local", TestContext.Current.CancellationToken);
             if (reviewer == null)
             {
                 reviewer = new AppUser
@@ -292,7 +292,7 @@ private async Task SeedTestDataAsync()
                 db.AppUsers.Add(reviewer);
             }
 
-            var reviewer2 = await db.AppUsers.FirstOrDefaultAsync(u => u.Email == "reviewer2@test.local");
+            var reviewer2 = await db.AppUsers.FirstOrDefaultAsync(u => u.Email == "reviewer2@test.local", TestContext.Current.CancellationToken);
             if (reviewer2 == null)
             {
                 reviewer2 = new AppUser
@@ -307,7 +307,7 @@ private async Task SeedTestDataAsync()
                 db.AppUsers.Add(reviewer2);
             }
 
-            var reviewer3 = await db.AppUsers.FirstOrDefaultAsync(u => u.Email == "reviewer3@test.local");
+            var reviewer3 = await db.AppUsers.FirstOrDefaultAsync(u => u.Email == "reviewer3@test.local", TestContext.Current.CancellationToken);
             if (reviewer3 == null)
             {
                 reviewer3 = new AppUser
@@ -322,7 +322,7 @@ private async Task SeedTestDataAsync()
                 db.AppUsers.Add(reviewer3);
             }
 
-            var speaker = await db.AppUsers.FirstOrDefaultAsync(u => u.Email == "speaker@test.local");
+            var speaker = await db.AppUsers.FirstOrDefaultAsync(u => u.Email == "speaker@test.local", TestContext.Current.CancellationToken);
             if (speaker == null)
             {
                 speaker = new AppUser
@@ -347,7 +347,7 @@ private async Task SeedTestDataAsync()
 
             // Production seed users (@codeswitchlabel.local) - for WebApplicationFactory e2e tests
             // Matches appsettings.Development.json Seed:DefaultPassword = "Codeswitch@2026"
-            var prodAdmin = await db.AppUsers.FirstOrDefaultAsync(u => u.Email == "admin@codeswitchlabel.local");
+            var prodAdmin = await db.AppUsers.FirstOrDefaultAsync(u => u.Email == "admin@codeswitchlabel.local", TestContext.Current.CancellationToken);
             if (prodAdmin == null)
             {
                 prodAdmin = new AppUser
@@ -362,7 +362,7 @@ private async Task SeedTestDataAsync()
                 db.AppUsers.Add(prodAdmin);
             }
 
-            var prodManager = await db.AppUsers.FirstOrDefaultAsync(u => u.Email == "manager@codeswitchlabel.local");
+            var prodManager = await db.AppUsers.FirstOrDefaultAsync(u => u.Email == "manager@codeswitchlabel.local", TestContext.Current.CancellationToken);
             if (prodManager == null)
             {
                 prodManager = new AppUser
@@ -377,7 +377,7 @@ private async Task SeedTestDataAsync()
                 db.AppUsers.Add(prodManager);
             }
 
-            var prodReviewer = await db.AppUsers.FirstOrDefaultAsync(u => u.Email == "reviewer@codeswitchlabel.local");
+            var prodReviewer = await db.AppUsers.FirstOrDefaultAsync(u => u.Email == "reviewer@codeswitchlabel.local", TestContext.Current.CancellationToken);
             if (prodReviewer == null)
             {
                 prodReviewer = new AppUser
@@ -392,7 +392,7 @@ private async Task SeedTestDataAsync()
                 db.AppUsers.Add(prodReviewer);
             }
 
-            var prodReviewer2 = await db.AppUsers.FirstOrDefaultAsync(u => u.Email == "reviewer2@codeswitchlabel.local");
+            var prodReviewer2 = await db.AppUsers.FirstOrDefaultAsync(u => u.Email == "reviewer2@codeswitchlabel.local", TestContext.Current.CancellationToken);
             if (prodReviewer2 == null)
             {
                 prodReviewer2 = new AppUser
@@ -407,7 +407,7 @@ private async Task SeedTestDataAsync()
                 db.AppUsers.Add(prodReviewer2);
             }
 
-            var prodReviewer3 = await db.AppUsers.FirstOrDefaultAsync(u => u.Email == "reviewer3@codeswitchlabel.local");
+            var prodReviewer3 = await db.AppUsers.FirstOrDefaultAsync(u => u.Email == "reviewer3@codeswitchlabel.local", TestContext.Current.CancellationToken);
             if (prodReviewer3 == null)
             {
                 prodReviewer3 = new AppUser
@@ -422,7 +422,7 @@ private async Task SeedTestDataAsync()
                 db.AppUsers.Add(prodReviewer3);
             }
 
-            var prodSpeaker1 = await db.AppUsers.FirstOrDefaultAsync(u => u.Email == "speaker1@codeswitchlabel.local");
+            var prodSpeaker1 = await db.AppUsers.FirstOrDefaultAsync(u => u.Email == "speaker1@codeswitchlabel.local", TestContext.Current.CancellationToken);
             if (prodSpeaker1 == null)
             {
                 prodSpeaker1 = new AppUser
@@ -445,7 +445,7 @@ private async Task SeedTestDataAsync()
                 db.AppUsers.Add(prodSpeaker1);
             }
 
-            var prodSpeaker2 = await db.AppUsers.FirstOrDefaultAsync(u => u.Email == "speaker2@codeswitchlabel.local");
+            var prodSpeaker2 = await db.AppUsers.FirstOrDefaultAsync(u => u.Email == "speaker2@codeswitchlabel.local", TestContext.Current.CancellationToken);
             if (prodSpeaker2 == null)
             {
                 prodSpeaker2 = new AppUser
@@ -468,16 +468,16 @@ private async Task SeedTestDataAsync()
                 db.AppUsers.Add(prodSpeaker2);
             }
 
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-            admin = await db.AppUsers.FirstAsync(u => u.Email == "admin@test.local");
-            manager = await db.AppUsers.FirstAsync(u => u.Email == "manager@test.local");
-            reviewer = await db.AppUsers.FirstAsync(u => u.Email == "reviewer@test.local");
-            speaker = await db.AppUsers.FirstAsync(u => u.Email == "speaker@test.local");
+            admin = await db.AppUsers.FirstAsync(u => u.Email == "admin@test.local", TestContext.Current.CancellationToken);
+            manager = await db.AppUsers.FirstAsync(u => u.Email == "manager@test.local", TestContext.Current.CancellationToken);
+            reviewer = await db.AppUsers.FirstAsync(u => u.Email == "reviewer@test.local", TestContext.Current.CancellationToken);
+            speaker = await db.AppUsers.FirstAsync(u => u.Email == "speaker@test.local", TestContext.Current.CancellationToken);
 
             foreach (var domain in Enum.GetValues<ScriptDomain>())
             {
-                var exists = await db.UserDomains.AnyAsync(d => d.UserId == reviewer.UserId && d.Domain == domain);
+                var exists = await db.UserDomains.AnyAsync(d => d.UserId == reviewer.UserId && d.Domain == domain, TestContext.Current.CancellationToken);
                 if (!exists)
                 {
                     db.UserDomains.Add(new UserDomain
@@ -493,13 +493,13 @@ private async Task SeedTestDataAsync()
             var prodReviewers = await db.AppUsers
                 .Where(u => u.Email.StartsWith("reviewer@codeswitchlabel"))
                 .Select(u => u.UserId)
-                .ToListAsync();
+                .ToListAsync(TestContext.Current.CancellationToken);
 
             foreach (var userId in prodReviewers)
             {
                 foreach (var domain in Enum.GetValues<ScriptDomain>())
                 {
-                    var exists = await db.UserDomains.AnyAsync(d => d.UserId == userId && d.Domain == domain);
+                    var exists = await db.UserDomains.AnyAsync(d => d.UserId == userId && d.Domain == domain, TestContext.Current.CancellationToken);
                     if (!exists)
                     {
                         db.UserDomains.Add(new UserDomain
@@ -512,7 +512,7 @@ private async Task SeedTestDataAsync()
                 }
             }
 
-            var campaign = await db.Campaigns.FirstOrDefaultAsync(c => c.CampaignName == "Test Campaign");
+            var campaign = await db.Campaigns.FirstOrDefaultAsync(c => c.CampaignName == "Test Campaign", TestContext.Current.CancellationToken);
             if (campaign == null)
             {
                 campaign = new Campaign
@@ -529,7 +529,7 @@ private async Task SeedTestDataAsync()
                 db.Campaigns.Add(campaign);
             }
 
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
     private static IServiceProvider BuildServiceProvider(string connectionString)

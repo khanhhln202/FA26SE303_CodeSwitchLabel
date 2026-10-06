@@ -46,7 +46,7 @@ public sealed class GlobalExceptionHandlerTests
         };
 
         // Act
-        var handled = await handler.TryHandleAsync(context, ex, CancellationToken.None);
+        var handled = await handler.TryHandleAsync(context, ex, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(handled);
@@ -61,7 +61,7 @@ public sealed class GlobalExceptionHandlerTests
         var (handler, context) = Create(isDevelopment: false);
 
         // Act
-        var handled = await handler.TryHandleAsync(context, new InvalidOperationException("Bug nội bộ"), CancellationToken.None);
+        var handled = await handler.TryHandleAsync(context, new InvalidOperationException("Bug nội bộ"), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(handled);
@@ -78,7 +78,7 @@ public sealed class GlobalExceptionHandlerTests
         var (handler, context) = Create(isDevelopment: true);
 
         // Act
-        await handler.TryHandleAsync(context, new InvalidOperationException("Bug nội bộ"), CancellationToken.None);
+        await handler.TryHandleAsync(context, new InvalidOperationException("Bug nội bộ"), TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Contains("Bug nội bộ", ReadBody(context));

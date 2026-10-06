@@ -21,7 +21,7 @@ public class TaskRepositoryTests : IntegrationTestBase
         var task = await CreateTaskAsync(CampaignId, TaskType.Recording, 50, ManagerUserId);
 
         // Act
-        var result = await Tasks.GetForUpdateAsync(task.TaskId, CancellationToken.None);
+        var result = await Tasks.GetForUpdateAsync(task.TaskId, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(result);
@@ -36,7 +36,7 @@ public class TaskRepositoryTests : IntegrationTestBase
         var task = await CreateTaskAsync(CampaignId, TaskType.Recording, 50, ManagerUserId);
 
         // Act
-        var result = await Tasks.GetRowAsync(task.TaskId, CancellationToken.None);
+        var result = await Tasks.GetRowAsync(task.TaskId, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(result);
@@ -53,7 +53,7 @@ public class TaskRepositoryTests : IntegrationTestBase
         await CreateTaskAsync(CampaignId, TaskType.Review, 30, ManagerUserId);
 
         // Act
-        var (items, total) = await Tasks.SearchAsync(null, null, null, null, DateTimeOffset.UtcNow, 1, 10, CancellationToken.None);
+        var (items, total) = await Tasks.SearchAsync(null, null, null, null, DateTimeOffset.UtcNow, 1, 10, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(total >= 2);
@@ -63,7 +63,7 @@ public class TaskRepositoryTests : IntegrationTestBase
     public async Task GetActiveRowsForAssigneeAsync_ReturnsEmpty_WhenNoAssignments()
     {
         // Act
-        var items = await Tasks.GetActiveRowsForAssigneeAsync(ManagerUserId, TaskType.Recording, CancellationToken.None);
+        var items = await Tasks.GetActiveRowsForAssigneeAsync(ManagerUserId, TaskType.Recording, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(items);
@@ -77,7 +77,7 @@ public class TaskRepositoryTests : IntegrationTestBase
         var task = await CreateTaskAsync(CampaignId, TaskType.Recording, 50, ManagerUserId);
 
         // Act
-        var result = await Tasks.IsActiveTaskOfAsync(task.TaskId, ReviewerUserId, TaskType.Recording, CancellationToken.None);
+        var result = await Tasks.IsActiveTaskOfAsync(task.TaskId, ReviewerUserId, TaskType.Recording, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(result);
@@ -105,15 +105,15 @@ public class TaskRepositoryTests : IntegrationTestBase
         goodRec.Status = RecordingStatus.Approved;
         var badRec = await CreateRecordingAsync(badScript.ScriptId, bad.UserId, SentenceVariant.CodeSwitching);
         badRec.Status = RecordingStatus.Rejected;
-        await Db.SaveChangesAsync();
+        await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         // Overdue active task on good speaker — approval still wins, but overdue is
         // visible for Task Manager triage. The deadline trigger requires the date
         // inside the campaign window, so pull the campaign start back first
         // (per-test transaction rolls this back).
-        var campaign = await Db.Campaigns.FirstAsync(c => c.CampaignId == CampaignId);
+        var campaign = await Db.Campaigns.FirstAsync(c => c.CampaignId == CampaignId, TestContext.Current.CancellationToken);
         campaign.StartDate = DateOnly.FromDateTime(DateTime.Today.AddDays(-10));
-        await Db.SaveChangesAsync();
+        await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var overdue = await CreateTaskAsync(CampaignId, TaskType.Recording, 1, ManagerUserId,
             deadline: DateTimeOffset.UtcNow.AddDays(-1), status: WorkTaskStatus.Open);
@@ -124,10 +124,10 @@ public class TaskRepositoryTests : IntegrationTestBase
             AssignedAt = DateTimeOffset.UtcNow,
             AssignmentStatus = AssignmentStatus.Active
         });
-        await Db.SaveChangesAsync();
+        await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         // Act
-        var rows = await Tasks.GetAssignableUsersAsync(RoleName.Speaker, DateTimeOffset.UtcNow, CancellationToken.None);
+        var rows = await Tasks.GetAssignableUsersAsync(RoleName.Speaker, DateTimeOffset.UtcNow, TestContext.Current.CancellationToken);
         var ids = rows.Where(r => r.UserId == good.UserId || r.UserId == bad.UserId || r.UserId == fresh.UserId)
             .Select(r => r.UserId).ToList();
 

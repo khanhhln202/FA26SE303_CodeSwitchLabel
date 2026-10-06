@@ -23,7 +23,7 @@ public class ScriptRepositoryTests : IntegrationTestBase
             AdminUserId);
 
         // Act
-        var result = await Scripts.GetAsync(script.ScriptId, CancellationToken.None);
+        var result = await Scripts.GetAsync(script.ScriptId, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(result);
@@ -41,7 +41,7 @@ public class ScriptRepositoryTests : IntegrationTestBase
             AdminUserId);
 
         // Act
-        var result = await Scripts.GetForUpdateAsync(script.ScriptId, CancellationToken.None);
+        var result = await Scripts.GetForUpdateAsync(script.ScriptId, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(result);
@@ -59,7 +59,7 @@ public class ScriptRepositoryTests : IntegrationTestBase
             AdminUserId);
 
         // Act
-        var result = await Scripts.GetWithReviewsAsync(script.ScriptId, CancellationToken.None);
+        var result = await Scripts.GetWithReviewsAsync(script.ScriptId, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(result);
@@ -82,7 +82,7 @@ public class ScriptRepositoryTests : IntegrationTestBase
             AdminUserId);
 
         // Act
-        var (items, total) = await Scripts.SearchAsync(null, null, "test", 1, 10, CancellationToken.None);
+        var (items, total) = await Scripts.SearchAsync(null, null, "test", 1, 10, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(total >= 2);
@@ -100,7 +100,7 @@ public class ScriptRepositoryTests : IntegrationTestBase
             AdminUserId);
 
         // Act
-        var exists = await Scripts.ContentExistsAsync("[vi]Unique [en]content [vi]here", CancellationToken.None);
+        var exists = await Scripts.ContentExistsAsync("[vi]Unique [en]content [vi]here", TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(exists);
@@ -110,7 +110,7 @@ public class ScriptRepositoryTests : IntegrationTestBase
     public async Task ContentExistsAsync_ReturnsFalse_WhenContentDoesNotExist()
     {
         // Act
-        var exists = await Scripts.ContentExistsAsync("[vi]Non [en]existent [vi]content", CancellationToken.None);
+        var exists = await Scripts.ContentExistsAsync("[vi]Non [en]existent [vi]content", TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(exists);
@@ -127,7 +127,7 @@ public class ScriptRepositoryTests : IntegrationTestBase
             AdminUserId);
 
         // Act
-        var hasRecordings = await Scripts.HasRecordingsAsync(script.ScriptId, CancellationToken.None);
+        var hasRecordings = await Scripts.HasRecordingsAsync(script.ScriptId, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(hasRecordings);
@@ -150,10 +150,10 @@ public class ScriptRepositoryTests : IntegrationTestBase
 
         var recording = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
         recording.Status = RecordingStatus.Rejected;
-        await Db.SaveChangesAsync();
+        await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         // Act — same speaker must still be offered the pair to finish the missing variant.
-        var next = await Scripts.GetNextForSpeakerAsync(speaker.UserId, null, CancellationToken.None);
+        var next = await Scripts.GetNextForSpeakerAsync(speaker.UserId, null, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(next);
