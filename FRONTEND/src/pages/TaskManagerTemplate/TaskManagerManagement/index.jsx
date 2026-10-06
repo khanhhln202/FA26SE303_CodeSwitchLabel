@@ -17,7 +17,9 @@ import {
   UserCheck,
   Calendar,
   Target,
-  Tag
+  Tag,
+  Award,
+  AlertCircle
 } from "lucide-react";
 import Pagination from "../../../components/Pagination/Pagination";
 import { 
@@ -125,16 +127,16 @@ const DEFAULT_USERS = [
   { id: "USR-011", name: "Đặng Văn Giang", email: "giang.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "12/02/2026" },
   { id: "USR-012", name: "Bùi Thị Hải", email: "hai.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "13/02/2026" },
   { id: "USR-013", name: "Đinh Văn Hùng", email: "hung.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "14/02/2026" },
-  { id: "USR-003", name: "Phạm Thu Thảo", email: "thao.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "01/02/2026" },
-  { id: "USR-004", name: "Lê Hoàng Nam", email: "nam.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "05/02/2026" },
-  { id: "USR-014", name: "Đỗ Thị Khánh", email: "khanh.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "15/02/2026" },
-  { id: "USR-015", name: "Hoàng Văn Lâm", email: "lam.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "16/02/2026" },
-  { id: "USR-016", name: "Ngô Thị Minh", email: "minh.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "17/02/2026" },
-  { id: "USR-017", name: "Dương Văn Nghĩa", email: "nghia.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "18/02/2026" },
-  { id: "USR-018", name: "Lý Thị Oanh", email: "oanh.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "19/02/2026" },
-  { id: "USR-019", name: "Võ Văn Phong", email: "phong.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "20/02/2026" },
-  { id: "USR-020", name: "Đoàn Thị Quỳnh", email: "quynh.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "21/02/2026" },
-  { id: "USR-021", name: "Trịnh Văn Rồng", email: "rong.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "22/02/2026" },
+  { id: "USR-003", name: "Phạm Thu Thảo", email: "thao.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "01/02/2026", performanceTag: "GOOD", performanceReason: "Thành tích tốt, ghi âm chất lượng" },
+  { id: "USR-004", name: "Lê Hoàng Nam", email: "nam.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "05/02/2026", performanceTag: "BAD", performanceReason: "Trễ deadline, micro kém" },
+  { id: "USR-014", name: "Đỗ Thị Khánh", email: "khanh.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "15/02/2026", performanceTag: "GOOD", performanceReason: "Thành tích tốt, âm thanh rõ" },
+  { id: "USR-015", name: "Hoàng Văn Lâm", email: "lam.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "16/02/2026", performanceTag: "NORMAL", performanceReason: "Bình thường" },
+  { id: "USR-016", name: "Ngô Thị Minh", email: "minh.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "17/02/2026", performanceTag: "BAD", performanceReason: "Giọng yếu, trễ deadline" },
+  { id: "USR-017", name: "Dương Văn Nghĩa", email: "nghia.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "18/02/2026", performanceTag: "GOOD", performanceReason: "Chất lượng ghi âm cao" },
+  { id: "USR-018", name: "Lý Thị Oanh", email: "oanh.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "19/02/2026", performanceTag: "NORMAL", performanceReason: "Bình thường" },
+  { id: "USR-019", name: "Võ Văn Phong", email: "phong.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "20/02/2026", performanceTag: "BAD", performanceReason: "Micro rè, trễ hạn" },
+  { id: "USR-020", name: "Đoàn Thị Quỳnh", email: "quynh.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "21/02/2026", performanceTag: "GOOD", performanceReason: "Chuẩn giọng, hoàn thành xuất sắc" },
+  { id: "USR-021", name: "Trịnh Văn Rồng", email: "rong.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "22/02/2026", performanceTag: "NORMAL", performanceReason: "Bình thường" },
 ];
 
 const FULL_SPEAKER_TASKS = [
@@ -203,7 +205,7 @@ export default function TaskManagerManagement() {
   const [viewingAssignedTask, setViewingAssignedTask] = useState(null);
   const [deletingBatch, setDeletingBatch] = useState(null);
 
-  // 3. Modal SỬA / XÓA NHIỆM VỤ TRONG BẢNG (MỚI THÊM)
+  // 3. Modal SỬA / XÓA NHIỆM VỤ TRONG BẢNG
   const [isEditTaskModalOpen, setIsEditTaskModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [editTaskFormData, setEditTaskFormData] = useState({
@@ -354,9 +356,15 @@ export default function TaskManagerManagement() {
     showNotification(`Đã cập nhật trạng thái thành "${newStatus}"`);
   };
 
-  // Lấy danh sách Speaker & Reviewer Active
+  // Lấy danh sách Speaker & Reviewer Active (Đã sắp xếp ưu tiên Speaker thành tích tốt lên trên)
   const activeSpeakers = useMemo(() => {
-    return allAdminUsers.filter(u => u.role === "Speaker" && u.status === "Active");
+    const speakers = allAdminUsers.filter(u => u.role === "Speaker" && u.status === "Active");
+    return [...speakers].sort((a, b) => {
+      const order = { GOOD: 1, NORMAL: 2, BAD: 3 };
+      const rankA = order[a.performanceTag] || 2;
+      const rankB = order[b.performanceTag] || 2;
+      return rankA - rankB;
+    });
   }, [allAdminUsers]);
 
   const activeReviewers = useMemo(() => {
@@ -406,7 +414,7 @@ export default function TaskManagerManagement() {
       : Number(assignModalSelectedBatch.reviewerCount || 0);
   }, [assignModalSelectedBatch, currentSelectedTask]);
 
-  // Mở Modal PHÂN CÔNG NHIỆM VỤ MỚI (Đã thêm kiểm tra đợt trước khi vào phân công)
+  // Mở Modal PHÂN CÔNG NHIỆM VỤ MỚI
   const handleOpenAssignModal = () => {
     if (batches.length === 0) {
       showNotification("Vui lòng tạo đợt trước khi thực hiện phân công nhiệm vụ!");
@@ -652,7 +660,7 @@ export default function TaskManagerManagement() {
   };
 
   // -------------------------------------------------------------
-  // THAO TÁC XÓA & SỬA NHIỆM VỤ TRONG TABLE
+  // THAO TÁC XÓA & SỬA NHIỆM VỤ TRONG TABLE (Y CHANG MODAL TẠO PHÂN CÔNG)
   // -------------------------------------------------------------
   const handleOpenEditTaskModal = (task) => {
     reloadAdminUsers();
@@ -663,14 +671,6 @@ export default function TaskManagerManagement() {
       assignedUsers: task.assignedUsers || []
     });
     setIsEditTaskModalOpen(true);
-  };
-
-  const handleRoleChangeInEditTask = (newRole) => {
-    setEditTaskFormData((prev) => ({
-      ...prev,
-      role: newRole,
-      assignedUsers: [] // Reset danh sách nếu đổi vai trò
-    }));
   };
 
   const handleToggleUserInEditTask = (userName) => {
@@ -885,7 +885,7 @@ export default function TaskManagerManagement() {
                 </div>
               </div>
 
-              {/* Ô NHẬP SỐ LƯỢNG SPEAKERS VÀ REVIEWERS */}
+              {/* SỐ LƯỢNG SPEAKERS VÀ REVIEWERS */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">
@@ -988,7 +988,7 @@ export default function TaskManagerManagement() {
                 </div>
               </div>
               
-              {/* Select Chọn Nhiệm Vụ (đã lọc theo Topic của Đợt) */}
+              {/* Select Chọn Nhiệm Vụ */}
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-[10px] font-bold uppercase text-gray-500 dark:text-gray-400">
@@ -1017,7 +1017,7 @@ export default function TaskManagerManagement() {
                 </div>
               </div>
 
-              {/* Danh sách SPEAKER / REVIEWER */}
+              {/* DANH SÁCH SPEAKER / REVIEWER CHỌN */}
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-[10px] font-bold uppercase text-gray-500 dark:text-gray-400">
@@ -1031,38 +1031,84 @@ export default function TaskManagerManagement() {
                   </span>
                 </div>
 
-                <div className="max-h-48 overflow-y-auto border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#25272E] rounded-lg p-2 space-y-1">
+                <div className="max-h-52 overflow-y-auto border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#25272E] rounded-lg p-2 space-y-1.5">
                   {targetUserList.length > 0 ? (
                     targetUserList.map((u) => {
                       const isChecked = assignFormData.assignedUsers.includes(u.name);
                       const isDisableUnchecked = !isChecked && assignFormData.assignedUsers.length >= maxAllowedUsers;
+                      const hasPreferenceReason = currentSelectedTask?.role === "Speaker" && 
+                                                  u.performanceReason && 
+                                                  (u.performanceTag === "GOOD" || u.performanceTag === "BAD");
 
                       return (
                         <label 
                           key={u.id} 
-                          className={`flex items-center justify-between p-1.5 rounded-md text-xs transition-colors ${
+                          className={`flex items-start justify-between p-2 rounded-lg text-xs transition-all border ${
                             isDisableUnchecked 
-                              ? "opacity-50 cursor-not-allowed text-gray-400 dark:text-gray-500" 
+                              ? "opacity-50 cursor-not-allowed text-gray-400 dark:text-gray-500 border-transparent" 
                               : "cursor-pointer"
                           } ${
                             isChecked 
-                              ? "bg-white dark:bg-[#1C1D22] shadow-2xs font-bold text-gray-900 dark:text-white" 
-                              : "hover:bg-black/5 dark:hover:bg-white/5 text-gray-600 dark:text-gray-300"
+                              ? "bg-white dark:bg-[#1C1D22] border-gray-400 dark:border-gray-500 shadow-xs font-bold text-gray-900 dark:text-white" 
+                              : "bg-white/50 dark:bg-[#1C1D22]/50 border-gray-200 dark:border-gray-700 hover:bg-black/5 dark:hover:bg-white/5 text-gray-600 dark:text-gray-300"
                           }`}
                         >
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-start gap-2 min-w-0 flex-1">
                             <input
                               type="checkbox"
                               checked={isChecked}
                               disabled={isDisableUnchecked}
                               onChange={() => handleUserCheckboxToggle(u.name)}
-                              className="rounded text-gray-900 focus:ring-0 cursor-pointer disabled:cursor-not-allowed"
+                              style={{ accentColor: TASK_MANAGER_ACCENT }}
+                              className="rounded focus:ring-0 cursor-pointer disabled:cursor-not-allowed shrink-0 mt-0.5"
                             />
-                            <span>{u.name}</span>
+                            <div className="flex flex-col min-w-0 pr-1">
+                              <span className="truncate leading-tight">{u.name}</span>
+                              <span className="text-[10px] font-normal text-gray-400 dark:text-gray-400 truncate">
+                                {u.email}
+                              </span>
+                              
+                              {/* Hiển thị lý do ưu tiên / hạn chế (chỉ hiện với GOOD hoặc BAD, chữ thẳng) */}
+                              {hasPreferenceReason && (
+                                <span className="text-[9.5px] font-semibold mt-0.5  text-gray-500 dark:text-gray-400 line-clamp-1">
+                                  Lý do: {u.performanceReason}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <span className="text-[10px] font-normal text-gray-400 dark:text-gray-400">
-                            {u.email}
-                          </span>
+
+                          {/* BADGES ƯU TIÊN / HẠN CHẾ VỚI MÀU CHUẨN THEME */}
+                          {currentSelectedTask?.role === "Speaker" && (
+                            <div className="flex items-center gap-1 shrink-0 ml-1 mt-0.5">
+                              {u.performanceTag === "GOOD" && (
+                                <span 
+                                  style={{
+                                    backgroundColor: CHIP_SUCCESS_BG,
+                                    borderColor: CHIP_SUCCESS_BORDER,
+                                    color: CHIP_SUCCESS_TEXT
+                                  }}
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold border"
+                                >
+                                  <Award className="w-2.5 h-2.5 shrink-0" />
+                                  <span>Ưu tiên</span>
+                                </span>
+                              )}
+
+                              {u.performanceTag === "BAD" && (
+                                <span 
+                                  style={{
+                                    backgroundColor: "rgba(243, 114, 127, 0.15)",
+                                    borderColor: "rgba(243, 114, 127, 0.4)",
+                                    color: DANGER
+                                  }}
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold border"
+                                >
+                                  <AlertCircle className="w-2.5 h-2.5 shrink-0" />
+                                  <span>Hạn chế</span>
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </label>
                       );
                     })
@@ -1139,7 +1185,7 @@ export default function TaskManagerManagement() {
         </div>
       )}
 
-      {/* MODAL SỬA NHIỆM VỤ */}
+      {/* MODAL SỬA NHIỆM VỤ (ĐỒNG BỘ Y CHANG MODAL PHÂN CÔNG) */}
       {isEditTaskModalOpen && editingTask && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 dark:bg-black/60 backdrop-blur-[2px]" onClick={() => setIsEditTaskModalOpen(false)}>
           <div 
@@ -1151,7 +1197,7 @@ export default function TaskManagerManagement() {
             <form onSubmit={handleSaveEditTask} className="p-5 space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                  Chỉnh sửa nhiệm vụ
+                  Chỉnh sửa phân công nhiệm vụ
                 </h3>
                 <button 
                   type="button"
@@ -1190,7 +1236,7 @@ export default function TaskManagerManagement() {
                 </select>
               </div>
 
-              {/* Danh sách người thực hiện */}
+              {/* Danh sách người thực hiện (Y CHANG MODAL PHÂN CÔNG) */}
               <div>
                 {(() => {
                   const editBatch = batches.find(b => b.id === selectedBatchId);
@@ -1198,11 +1244,13 @@ export default function TaskManagerManagement() {
                     ? Number(editBatch?.speakerCount || 999) 
                     : Number(editBatch?.reviewerCount || 999);
 
+                  const userList = editTaskFormData.role === "Speaker" ? activeSpeakers : activeReviewers;
+
                   return (
                     <>
                       <div className="flex items-center justify-between mb-1">
                         <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase">
-                          Danh sách người thực hiện ({editTaskFormData.assignedUsers.length}/{maxUsers} tối đa)
+                          {editTaskFormData.role} đang hoạt động ({editTaskFormData.assignedUsers.length}/{maxUsers} tối đa)
                         </label>
                         <span 
                           style={{ backgroundColor: editTaskFormData.role === "Speaker" ? SPEAKER_ACCENT : REVIEWER_ACCENT }}
@@ -1212,35 +1260,83 @@ export default function TaskManagerManagement() {
                         </span>
                       </div>
 
-                      <div className="max-h-44 overflow-y-auto border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#25272E] rounded-lg p-2 space-y-1">
-                        {(editTaskFormData.role === "Speaker" ? activeSpeakers : activeReviewers).map((u) => {
+                      <div className="max-h-52 overflow-y-auto border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#25272E] rounded-lg p-2 space-y-1.5">
+                        {userList.map((u) => {
                           const isChecked = editTaskFormData.assignedUsers.includes(u.name);
                           const isDisableUnchecked = !isChecked && editTaskFormData.assignedUsers.length >= maxUsers;
+                          const hasPreferenceReason = editTaskFormData.role === "Speaker" && 
+                                                      u.performanceReason && 
+                                                      (u.performanceTag === "GOOD" || u.performanceTag === "BAD");
 
                           return (
                             <label 
                               key={u.id}
-                              className={`flex items-center justify-between p-1.5 rounded-md text-xs transition-colors ${
+                              className={`flex items-start justify-between p-2 rounded-lg text-xs transition-all border ${
                                 isDisableUnchecked 
-                                  ? "opacity-50 cursor-not-allowed text-gray-400 dark:text-gray-500" 
+                                  ? "opacity-50 cursor-not-allowed text-gray-400 dark:text-gray-500 border-transparent" 
                                   : "cursor-pointer"
                               } ${
                                 isChecked 
-                                  ? "bg-white dark:bg-[#1C1D22] shadow-2xs font-bold text-gray-900 dark:text-white" 
-                                  : "hover:bg-black/5 dark:hover:bg-white/5 text-gray-600 dark:text-gray-300"
+                                  ? "bg-white dark:bg-[#1C1D22] border-gray-400 dark:border-gray-500 shadow-xs font-bold text-gray-900 dark:text-white" 
+                                  : "bg-white/50 dark:bg-[#1C1D22]/50 border-gray-200 dark:border-gray-700 hover:bg-black/5 dark:hover:bg-white/5 text-gray-600 dark:text-gray-300"
                               }`}
                             >
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-start gap-2 min-w-0 flex-1">
                                 <input
                                   type="checkbox"
                                   checked={isChecked}
                                   disabled={isDisableUnchecked}
                                   onChange={() => handleToggleUserInEditTask(u.name)}
-                                  className="rounded text-gray-900 focus:ring-0 cursor-pointer disabled:cursor-not-allowed"
+                                  style={{ accentColor: TASK_MANAGER_ACCENT }}
+                                  className="rounded focus:ring-0 cursor-pointer disabled:cursor-not-allowed shrink-0 mt-0.5"
                                 />
-                                <span>{u.name}</span>
+                                <div className="flex flex-col min-w-0 pr-1">
+                                  <span className="truncate leading-tight">{u.name}</span>
+                                  <span className="text-[10px] font-normal text-gray-400 dark:text-gray-400 truncate">
+                                    {u.email}
+                                  </span>
+
+                                  {/* Hiển thị lý do ưu tiên / hạn chế (chỉ hiện với GOOD hoặc BAD, chữ thẳng) */}
+                                  {hasPreferenceReason && (
+                                    <span className="text-[9.5px] font-semibold mt-0.5  text-gray-500 dark:text-gray-400 line-clamp-1">
+                                      Lý do: {u.performanceReason}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
-                              <span className="text-[10px] font-normal text-gray-400">{u.email}</span>
+
+                              {/* BADGES ƯU TIÊN / HẠN CHẾ VỚI MÀU CHUẨN THEME */}
+                              {editTaskFormData.role === "Speaker" && (
+                                <div className="flex items-center gap-1 shrink-0 ml-1 mt-0.5">
+                                  {u.performanceTag === "GOOD" && (
+                                    <span 
+                                      style={{
+                                        backgroundColor: CHIP_SUCCESS_BG,
+                                        borderColor: CHIP_SUCCESS_BORDER,
+                                        color: CHIP_SUCCESS_TEXT
+                                      }}
+                                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold border"
+                                    >
+                                      <Award className="w-2.5 h-2.5 shrink-0" />
+                                      <span>Ưu tiên</span>
+                                    </span>
+                                  )}
+
+                                  {u.performanceTag === "BAD" && (
+                                    <span 
+                                      style={{
+                                        backgroundColor: "rgba(243, 114, 127, 0.15)",
+                                        borderColor: "rgba(243, 114, 127, 0.4)",
+                                        color: DANGER
+                                      }}
+                                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold border"
+                                    >
+                                      <AlertCircle className="w-2.5 h-2.5 shrink-0" />
+                                      <span>Hạn chế</span>
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                             </label>
                           );
                         })}
