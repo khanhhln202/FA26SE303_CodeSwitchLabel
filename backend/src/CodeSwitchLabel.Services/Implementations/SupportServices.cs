@@ -85,6 +85,15 @@ public class SystemConfigService(ISystemConfigRepository repository) : ISystemCo
             c.ConfigKey, c.ConfigValue, c.ValueType.ToString(), c.Description, c.UpdatedAt))];
     }
 
+    public async Task<SystemConfigDto> GetAsync(string key, CancellationToken ct = default)
+    {
+        var c = await repository.GetAsync(key, ct)
+            ?? throw new NotFoundException("config_not_found", $"Không có tham số cấu hình \"{key}\".");
+
+        return new SystemConfigDto(
+            c.ConfigKey, c.ConfigValue, c.ValueType.ToString(), c.Description, c.UpdatedAt);
+    }
+
     public async Task UpdateAsync(string key, string value, long updatedById, CancellationToken ct = default)
     {
         if (!await repository.UpdateValueAsync(key, value, updatedById, ct))

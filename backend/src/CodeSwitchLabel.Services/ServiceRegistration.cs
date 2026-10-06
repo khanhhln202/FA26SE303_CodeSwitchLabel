@@ -89,6 +89,9 @@ public static class ServiceRegistration
         services.AddScoped<ISystemConfigService, SystemConfigService>();
         services.AddScoped<IReasonService, ReasonService>();
         services.AddScoped<IStatisticsService, StatisticsService>();
+        services.AddScoped<ISpeakerRoundsService, SpeakerRoundsService>();
+        services.AddScoped<IReviewerStatsService, ReviewerStatsService>();
+        services.AddScoped<IDatasetService, DatasetService>();
 
         return services;
     }

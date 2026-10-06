@@ -32,6 +32,9 @@ public interface IScriptService
     /// <summary>Duyệt nội dung: chấp nhận, sửa cả cặp, hoặc từ chối kèm lý do.</summary>
     Task<ScriptDetailDto> ReviewAsync(
         string scriptId, long userId, ReviewScriptRequest request, CancellationToken ct = default);
+
+    /// <summary>Khôi phục câu đã bị loại (Rejected/Deactivated) về chờ duyệt.</summary>
+    Task<ScriptDetailDto> RestoreAsync(string scriptId, CancellationToken ct = default);
 }
 
 public interface IScriptAssignmentService
@@ -46,6 +49,7 @@ public interface ISystemConfigService
     Task<bool> GetBoolAsync(string key, bool fallback, CancellationToken ct = default);
     Task<decimal> GetDecimalAsync(string key, decimal fallback, CancellationToken ct = default);
     Task<IReadOnlyList<SystemConfigDto>> GetAllAsync(CancellationToken ct = default);
+    Task<SystemConfigDto> GetAsync(string key, CancellationToken ct = default);
     Task UpdateAsync(string key, string value, long updatedById, CancellationToken ct = default);
 }
 
