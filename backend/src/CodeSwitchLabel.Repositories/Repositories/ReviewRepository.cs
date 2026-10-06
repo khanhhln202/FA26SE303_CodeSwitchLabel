@@ -46,6 +46,9 @@ public interface IReviewRepository
 
     Task<bool> IsActiveReviewTaskOfAsync(long taskId, long reviewerId, CancellationToken ct = default);
 
+    /// <summary>Task duyệt từng giao cho người này (kể cả đã đóng) — dùng cho xem lại read-only.</summary>
+    Task<bool> IsReviewTaskOfAsync(long taskId, long reviewerId, CancellationToken ct = default);
+
     Task<TaskRecording?> GetQueuedTaskRecordingAsync(
         long taskId, long reviewerId, string recordingId, CancellationToken ct = default);
 
@@ -121,6 +124,13 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
             t.TaskType == TaskType.Review &&
             (t.Status == WorkTaskStatus.Open || t.Status == WorkTaskStatus.InProgress) &&
             t.Assignments.Any(a => a.UserId == reviewerId && a.AssignmentStatus == AssignmentStatus.Active), ct);
+
+    public Task<bool> IsReviewTaskOfAsync(
+        long taskId, long reviewerId, CancellationToken ct = default) =>
+        db.WorkTasks.AsNoTracking().AnyAsync(t =>
+            t.TaskId == taskId &&
+            t.TaskType == TaskType.Review &&
+            t.Assignments.Any(a => a.UserId == reviewerId), ct);
 
     public Task<TaskRecording?> GetQueuedTaskRecordingAsync(
         long taskId, long reviewerId, string recordingId, CancellationToken ct = default) =>

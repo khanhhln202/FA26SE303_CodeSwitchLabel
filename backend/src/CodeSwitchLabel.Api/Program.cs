@@ -154,11 +154,14 @@ var app = builder.Build();
 
 // Dự án KHÔNG dùng migration: lược đồ do PostgreSQL chạy từ docs/codeswitchlabel.sql lúc tạo
 // database rỗng. Kiểm ngay lúc khởi động để báo rõ việc phải làm, thay vì để EF ném lỗi khó hiểu
-// ở request đầu tiên.
+// ở request đầu tiên. Các bảng thêm sau (campaign_registration) được tự vá IF NOT EXISTS
+// cho volume cũ — xem DatabaseSeeder.EnsureSchemaAsync.
 using (var scope = app.Services.CreateScope())
 {
-    await DatabaseSeeder.EnsureSchemaAsync(
-        scope.ServiceProvider.GetRequiredService<CodeSwitchLabelDbContext>());
+    var db = scope.ServiceProvider.GetRequiredService<CodeSwitchLabelDbContext>();
+    var seederLogger = scope.ServiceProvider
+        .GetRequiredService<ILoggerFactory>().CreateLogger("DatabaseSeeder");
+    await DatabaseSeeder.EnsureSchemaAsync(db, seederLogger);
 }
 
 app.UseExceptionHandler();

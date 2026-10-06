@@ -36,6 +36,10 @@ desktop.ini
 ~$*.docx
 ~$*.xlsx
 *.tmp
+test-out.txt
+
+# ---- Ghi chú làm việc nội bộ của các team (không đưa lên repo) ----
+.teams/
 
 # ---- Tài liệu đề tài: chứa số điện thoại, MSSV, email của nhóm và giảng viên ----
 # Để ngoài lịch sử git — đẩy repo lên GitHub sẽ không lộ dữ liệu cá nhân.

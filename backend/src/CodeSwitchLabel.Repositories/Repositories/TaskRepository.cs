@@ -33,7 +33,7 @@ public record AssigneeSummaryRow(
     long UserId, string FullName, RoleName Role, int ActiveTasks, int TotalTarget, int TotalDone, int OverdueTasks);
 
 /// <summary>Một người giao được việc, kèm khối lượng đang gánh để chia việc cho đều.</summary>
-public record AssignableUserRow(long UserId, string FullName, RoleName Role, int ActiveTasks, int TotalTarget);
+public record AssignableUserRow(long UserId, string FullName, RoleName Role, int ActiveTasks, int TotalTarget, decimal? ApprovalRatePct, int OverdueTasks);
 
 public interface ITaskRepository
 {
@@ -84,7 +84,7 @@ public interface ITaskRepository
         string[] recordingIds, long excludeTaskId, CancellationToken ct = default);
 
     /// <summary>Người đang hoạt động có đúng vai, kèm số task và tổng chỉ tiêu đang chạy.</summary>
-    Task<List<AssignableUserRow>> GetAssignableUsersAsync(RoleName role, CancellationToken ct = default);
+    Task<List<AssignableUserRow>> GetAssignableUsersAsync(RoleName role, DateTimeOffset now, CancellationToken ct = default);
 
     Task<List<Script>> GetScriptsAsync(string[] ids, CancellationToken ct = default);
     Task<List<Recording>> GetRecordingsWithReviewsAsync(string[] ids, CancellationToken ct = default);
@@ -266,25 +266,49 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
     public Task<AppUser?> GetUserWithRoleAsync(long userId, CancellationToken ct = default) =>
         db.AppUsers.AsNoTracking().Include(u => u.Role).FirstOrDefaultAsync(u => u.UserId == userId, ct);
 
-    public Task<List<AssignableUserRow>> GetAssignableUsersAsync(RoleName role, CancellationToken ct = default) =>
-        db.AppUsers.AsNoTracking()
+    public async Task<List<AssignableUserRow>> GetAssignableUsersAsync(RoleName role, DateTimeOffset now, CancellationToken ct = default)
+    {
+        // TEAM_002: speaker prioritization — reuse v_speaker_performance + assignment load.
+        // Sort ranked-first (approval DESC, overdue ASC, load ASC); name last for stability.
+        // Speakers with no recordings have NULL rate and sort after rated speakers.
+        var users = await db.AppUsers.AsNoTracking()
             .Where(u => u.Status == UserStatus.Active && u.Role.RoleName == role)
-            .OrderBy(u => u.FullName)
-            .Select(u => new AssignableUserRow(
+            .Select(u => new
+            {
                 u.UserId,
                 u.FullName,
-                u.Role.RoleName,
-                db.TaskAssignments.Count(a =>
+                Role = u.Role.RoleName,
+                ActiveTasks = db.TaskAssignments.Count(a =>
                     a.UserId == u.UserId &&
                     a.AssignmentStatus == AssignmentStatus.Active &&
                     (a.Task.Status == WorkTaskStatus.Open || a.Task.Status == WorkTaskStatus.InProgress)),
-                db.TaskAssignments
+                TotalTarget = db.TaskAssignments
                     .Where(a =>
                         a.UserId == u.UserId &&
                         a.AssignmentStatus == AssignmentStatus.Active &&
                         (a.Task.Status == WorkTaskStatus.Open || a.Task.Status == WorkTaskStatus.InProgress))
-                    .Sum(a => (int?)a.Task.TargetQty) ?? 0))
+                    .Sum(a => (int?)a.Task.TargetQty) ?? 0,
+                OverdueTasks = db.TaskAssignments.Count(a =>
+                    a.UserId == u.UserId &&
+                    a.AssignmentStatus == AssignmentStatus.Active &&
+                    (a.Task.Status == WorkTaskStatus.Open || a.Task.Status == WorkTaskStatus.InProgress) &&
+                    a.Task.Deadline != null && a.Task.Deadline < now),
+                ApprovalRatePct = db.SpeakerPerformance
+                    .Where(s => s.UserId == u.UserId)
+                    .Select(s => (decimal?)s.ApprovalRatePct)
+                    .FirstOrDefault()
+            })
             .ToListAsync(ct);
+
+        return [.. users
+            .OrderByDescending(u => u.ApprovalRatePct.HasValue)
+            .ThenByDescending(u => u.ApprovalRatePct)
+            .ThenBy(u => u.OverdueTasks)
+            .ThenBy(u => u.ActiveTasks)
+            .ThenBy(u => u.FullName)
+            .Select(u => new AssignableUserRow(
+                u.UserId, u.FullName, u.Role, u.ActiveTasks, u.TotalTarget, u.ApprovalRatePct, u.OverdueTasks))];
+    }
 
     public Task<bool> IsActiveTaskOfAsync(
         long taskId, long userId, TaskType type, CancellationToken ct = default) =>

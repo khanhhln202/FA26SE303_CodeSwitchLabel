@@ -95,3 +95,14 @@ public class TaskRecording
     public WorkTask Task { get; set; } = null!;
     public Recording Recording { get; set; } = null!;
 }
+
+/// <summary>Speaker đăng ký tham gia một chiến dịch ("Đợt" ở FE) — không giới hạn số người.</summary>
+public class CampaignRegistration
+{
+    public long CampaignId { get; set; }
+    public long SpeakerId { get; set; }
+    public DateTimeOffset RegisteredAt { get; set; }
+
+    public Campaign Campaign { get; set; } = null!;
+    public AppUser Speaker { get; set; } = null!;
+}

@@ -219,6 +219,15 @@ CREATE INDEX idx_campaign_status     ON campaign (status);
 CREATE INDEX idx_campaign_dates      ON campaign (start_date, end_date);
 CREATE INDEX idx_campaign_assigned_to ON campaign (assigned_to);
 
+-- Speaker đăng ký tham gia một chiến dịch ("Đợt" ở FE) — không giới hạn số người.
+CREATE TABLE campaign_registration (
+    campaign_id   BIGINT NOT NULL REFERENCES campaign(campaign_id) ON DELETE CASCADE,
+    speaker_id    BIGINT NOT NULL REFERENCES app_user(user_id) ON DELETE CASCADE,
+    registered_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (campaign_id, speaker_id)
+);
+CREATE INDEX idx_campaign_registration_speaker ON campaign_registration (speaker_id);
+
 CREATE TABLE task (
     task_id      BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     campaign_id  BIGINT NOT NULL REFERENCES campaign(campaign_id),

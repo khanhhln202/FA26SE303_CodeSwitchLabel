@@ -443,9 +443,44 @@ public class TaskService(
         TaskType taskType, CancellationToken ct = default)
     {
         var role = taskType == TaskType.Recording ? RoleName.Speaker : RoleName.Reviewer;
-        var rows = await tasks.GetAssignableUsersAsync(role, ct);
 
-        return [.. rows.Select(r => new AssignableUserDto(r.UserId, r.FullName, r.Role, r.ActiveTasks, r.TotalTarget))];
+        // TEAM_002: rows arrive ranked-first from repository
+        // (approval DESC, overdue ASC, load ASC); keep that order for Task Manager UI.
+        var rows = await tasks.GetAssignableUsersAsync(role, clock.GetUtcNow(), ct);
+
+        return [.. rows.Select(r => new AssignableUserDto(r.UserId, r.FullName, r.Role, r.ActiveTasks, r.TotalTarget, r.ApprovalRatePct, r.OverdueTasks))];
+    }
+
+    public async Task<TaskManagerOverviewDto> GetManagerOverviewAsync(
+        long managerId, bool isAdmin, CancellationToken ct = default)
+    {
+        var now = clock.GetUtcNow();
+
+        var progress = await campaigns.GetProgressAsync(null, ct);
+
+        var mine = progress
+            .Where(p => isAdmin || p.AssignedTo == managerId)
+            .Select(p => new CampaignProgressDto(
+                p.CampaignId, p.CampaignName, p.CampaignTargetQty, p.StartDate, p.EndDate,
+                p.CampaignStatus, p.AssignedTo, p.AllocatedTaskQty, p.RemainingTaskQty,
+                p.TaskCount, p.CompletedTaskCount))
+            .ToList();
+
+        var byAssignee = await GetAssigneeSummaryAsync(ct);
+
+        // Đếm task còn chạy theo loại + quá hạn: chỉ cần Total nên pageSize = 1.
+        var (_, openRec) = await tasks.SearchAsync(
+            TaskType.Recording, WorkTaskStatus.Open, null, null, now, 1, 1, ct);
+        var (_, progRec) = await tasks.SearchAsync(
+            TaskType.Recording, WorkTaskStatus.InProgress, null, null, now, 1, 1, ct);
+        var (_, openRev) = await tasks.SearchAsync(
+            TaskType.Review, WorkTaskStatus.Open, null, null, now, 1, 1, ct);
+        var (_, progRev) = await tasks.SearchAsync(
+            TaskType.Review, WorkTaskStatus.InProgress, null, null, now, 1, 1, ct);
+        var (_, overdue) = await tasks.SearchAsync(
+            null, null, null, true, now, 1, 1, ct);
+
+        return new TaskManagerOverviewDto(mine, byAssignee, openRec + progRec, openRev + progRev, overdue);
     }
 
     // ----------------------------------------------------------------- nội bộ

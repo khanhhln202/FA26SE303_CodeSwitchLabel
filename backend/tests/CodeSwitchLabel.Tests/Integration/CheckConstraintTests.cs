@@ -59,7 +59,7 @@ public class CheckConstraintTests : IntegrationTestBase
             };
 
             Db.Campaigns.Add(campaign);
-            await Db.SaveChangesAsync();
+            await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
         });
     }
 
@@ -80,7 +80,7 @@ public class CheckConstraintTests : IntegrationTestBase
             };
 
             Db.Campaigns.Add(campaign);
-            await Db.SaveChangesAsync();
+            await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
         });
     }
 
@@ -101,7 +101,7 @@ public class CheckConstraintTests : IntegrationTestBase
             };
 
             Db.Campaigns.Add(campaign);
-            await Db.SaveChangesAsync();
+            await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
         });
     }
 
@@ -127,7 +127,7 @@ public class CheckConstraintTests : IntegrationTestBase
             };
 
             Db.Scripts.Add(script);
-            await Db.SaveChangesAsync();
+            await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
         });
     }
 
@@ -151,7 +151,7 @@ public class CheckConstraintTests : IntegrationTestBase
             };
 
             Db.Scripts.Add(script);
-            await Db.SaveChangesAsync();
+            await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
         });
     }
 
@@ -175,7 +175,7 @@ public class CheckConstraintTests : IntegrationTestBase
             };
 
             Db.Scripts.Add(script);
-            await Db.SaveChangesAsync();
+            await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
         });
     }
 
@@ -206,7 +206,7 @@ public class CheckConstraintTests : IntegrationTestBase
             };
 
             Db.Recordings.Add(recording);
-            await Db.SaveChangesAsync();
+            await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
         });
     }
 
@@ -236,7 +236,7 @@ public class CheckConstraintTests : IntegrationTestBase
             };
 
             Db.Recordings.Add(recording);
-            await Db.SaveChangesAsync();
+            await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
         });
     }
 
@@ -265,7 +265,7 @@ public class CheckConstraintTests : IntegrationTestBase
             };
 
             Db.Recordings.Add(recording);
-            await Db.SaveChangesAsync();
+            await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
         });
     }
 
@@ -285,7 +285,7 @@ public class CheckConstraintTests : IntegrationTestBase
             };
 
             Db.ImportBatches.Add(batch);
-            await Db.SaveChangesAsync();
+            await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
         });
     }
 
@@ -349,7 +349,7 @@ public class CheckConstraintTests : IntegrationTestBase
             };
 
             Db.WorkTasks.Add(task);
-            await Db.SaveChangesAsync();
+            await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
         });
     }
 
@@ -379,7 +379,7 @@ public class CheckConstraintTests : IntegrationTestBase
             };
 
             Db.Reviews.Add(review);
-            await Db.SaveChangesAsync();
+            await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
         });
     }
 
@@ -400,7 +400,7 @@ public class CheckConstraintTests : IntegrationTestBase
             };
 
             Db.Datasets.Add(dataset);
-            await Db.SaveChangesAsync();
+            await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
         });
     }
 }

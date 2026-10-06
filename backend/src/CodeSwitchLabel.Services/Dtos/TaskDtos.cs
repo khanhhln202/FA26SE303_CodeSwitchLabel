@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using CodeSwitchLabel.Repositories.Enums;
+using CodeSwitchLabel.Services.Abstractions;
 
 namespace CodeSwitchLabel.Services.Dtos;
 
@@ -132,3 +133,11 @@ public record SpeakerProgressDto(
     int TotalSubmitted,
     int TotalApproved,
     IReadOnlyList<TaskListItemDto> ActiveTasks);
+
+/// <summary>Tổng quan cho trang chủ Task Manager: chiến dịch của mình + tải của từng người nhận.</summary>
+public record TaskManagerOverviewDto(
+    IReadOnlyList<CampaignProgressDto> MyCampaigns,
+    IReadOnlyList<AssigneeSummaryDto> ByAssignee,
+    int OpenRecordingTasks,
+    int OpenReviewTasks,
+    int OverdueTasks);

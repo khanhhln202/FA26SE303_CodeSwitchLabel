@@ -31,6 +31,20 @@ public class AuthController(IAuthService authService) : ControllerBase
         [FromBody] LoginRequest request, CancellationToken ct)
         => Ok(await authService.LoginAsync(request, ct));
 
+    /// <summary>Tình nguyện viên tự đăng ký làm Speaker — hoạt động ngay, không qua duyệt.</summary>
+    /// <remarks>
+    /// Tạo tài khoản Speaker ở trạng thái Active kèm hồ sơ người đọc (nếu gửi).
+    /// Email lưu chữ thường; trùng email trả 409. Mật khẩu 8-128 ký tự.
+    /// </remarks>
+    [HttpPost("register-speaker")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<LoginResponse>> RegisterSpeaker(
+        [FromBody] RegisterSpeakerRequest request, CancellationToken ct)
+        => Ok(await authService.RegisterSpeakerAsync(request, ct));
+
     /// <summary>Thông tin tài khoản đang đăng nhập.</summary>
     /// <remarks>Đọc từ database chứ không từ token, nên vai và trạng thái luôn là mới nhất.</remarks>
     [HttpGet("me")]

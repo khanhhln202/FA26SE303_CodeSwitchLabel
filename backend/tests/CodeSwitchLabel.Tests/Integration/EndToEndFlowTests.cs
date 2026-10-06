@@ -235,7 +235,7 @@ public sealed class EndToEndFlowTests : ApiTestBase
 
     private async Task<JsonDocument> ReadJsonAsync(HttpResponseMessage response)
     {
-        var json = await response.Content.ReadAsStringAsync();
+        var json = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         Assert.False(string.IsNullOrWhiteSpace(json), "Response rỗng — không đọc được JSON.");
         return JsonDocument.Parse(json);
     }
@@ -243,7 +243,7 @@ public sealed class EndToEndFlowTests : ApiTestBase
     private async Task<long> GetUserIdAsync(string accessToken)
     {
         using var client = CreateAuthenticatedClient(accessToken);
-        var me = await client.GetFromJsonAsync<JsonElement>("/api/auth/me", JsonOptions);
+        var me = await client.GetFromJsonAsync<JsonElement>("/api/auth/me", JsonOptions, TestContext.Current.CancellationToken);
         return me.GetProperty("userId").GetInt64();
     }
 
@@ -350,13 +350,13 @@ public sealed class EndToEndFlowTests : ApiTestBase
     private async Task<string?> ReadRecordingColumnAsync(string recordingId, string expression)
     {
         await using var connection = new NpgsqlConnection(_api.ConnectionString);
-        await connection.OpenAsync();
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
 
         await using var command = new NpgsqlCommand(
             $"SELECT {expression} FROM recording WHERE recording_id = $1", connection);
         command.Parameters.AddWithValue(recordingId);
 
-        var result = await command.ExecuteScalarAsync();
+        var result = await command.ExecuteScalarAsync(TestContext.Current.CancellationToken);
         return result is null or DBNull ? null : (string)result;
     }
 }

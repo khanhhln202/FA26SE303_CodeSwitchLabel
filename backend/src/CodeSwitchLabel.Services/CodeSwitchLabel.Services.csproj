@@ -7,6 +7,7 @@
   <ItemGroup>
     <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.12" />
     <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.12" />
     <!-- Giữ cùng dòng 8.x mới nhất với các gói Microsoft.IdentityModel mà JwtBearer 10 kéo theo.
          Trộn hai phiên bản khác nhau của họ gói này là nguồn lỗi xác thực token khó tìm. -->

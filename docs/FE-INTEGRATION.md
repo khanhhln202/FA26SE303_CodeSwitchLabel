@@ -5,6 +5,14 @@ Swagger — đó là nguồn chính xác nhất vì sinh thẳng từ code. File
 màn hình nào gọi API nào theo thứ tự nào, cách xử lý đăng nhập, lỗi, thu âm và nghe lại.
 
 > Cập nhật ngày 22/09/2026 trên nhánh `main` — đã có API quản lý người dùng. Backend đổi hợp đồng API thì sửa file này trong cùng Pull Request.
+>
+> Cập nhật 06/10/2026 — thêm API theo nhu cầu FE: đợt/leaderboard/đăng ký của Speaker
+> (`/api/speaker/rounds/*`, `/api/speaker/recordings/rejected|history`, `/api/speaker/contributions/history`,
+> `/api/speaker/stats`), thống kê + lịch sử của Reviewer (`/api/reviewer/stats/*`,
+> `/api/reviewer/history/*`), tổng quan Task Manager (`/api/task-manager/overview`), đọc cấu hình
+> công khai (`/api/config`, `/api/config/topics`), khôi phục câu (`POST /api/scripts/{id}/restore`),
+> xem lại task duyệt đã đóng (read-only), và dataset (`/api/datasets/*`). Xem lại task đã đóng,
+> khôi phục câu và dataset không còn nằm ở mục 9.
 
 ---
 
@@ -147,7 +155,7 @@ Lỗi hệ thống trả 500 với `code: "internal_error"`. Gặp lỗi này th
 
 ### Mã lỗi cần xử lý riêng
 
-Đây là 75 mã hiện có. Mã nào không nằm trong nhóm "cần xử lý riêng" thì cứ hiện `title` là đủ.
+Đây là các mã cần xử lý riêng. Mã nào không nằm trong nhóm "cần xử lý riêng" thì cứ hiện `title` là đủ.
 
 | Mã | HTTP | Khi nào | Frontend nên làm gì |
 |---|---|---|---|
@@ -181,6 +189,13 @@ Lỗi hệ thống trả 500 với `code: "internal_error"`. Gặp lỗi này th
 | `task_deadline_outside_campaign` | 422 | Hạn của task nằm ngoài khoảng ngày của chiến dịch | Giới hạn ô chọn ngày theo `startDate` và `endDate` của chiến dịch |
 | `campaign_target_below_allocated` | 422 | Hạ chỉ tiêu chiến dịch xuống dưới phần đã chia cho task | Hiện `title`, có kèm con số đã chia |
 | `assigned_to_invalid_role` | 422 | Giao chiến dịch cho người không phải Task Manager | Ô chọn người nhận chỉ lọc Task Manager |
+| `already_registered` | 409 | Đăng ký đợt đã đăng ký rồi | Hiện `title`, không làm gì thêm |
+| `registration_not_found` | 404 | Huỷ đăng ký đợt chưa đăng ký | Tải lại trạng thái đăng ký |
+| `script_not_restorable` | 409 | Khôi phục câu đang dùng được | Ẩn nút khôi phục khi `status` là `PendingValidation`/`Validated` |
+| `dataset_exists` | 409 | Tạo dataset trùng tên + phiên bản | Hiện lỗi cạnh ô tên/phiên bản |
+| `dataset_not_found` | 404 | Dataset không tồn tại | Tải lại danh sách |
+| `dataset_not_releasable` / `dataset_not_released` | 409 | Thao tác sai trạng thái dataset | Ẩn nút theo `status` |
+| `dataset_incomplete` | 422 | Phát hành khi còn cặp câu thiếu một biến thể | Hiện `title` + mở chi tiết xem `missingPairs` |
 
 Các mã còn lại: `alignment_incomplete`, `alignment_word_missing`, `already_assigned`, `batch_not_found`,
 `campaign_dates_invalid`, `campaign_not_found`, `config_not_found`, `deadline_in_past`, `duplicate_content`,
@@ -197,11 +212,15 @@ Các mã còn lại: `alignment_incomplete`, `alignment_word_missing`, `already_
 
 ### Chung
 
+### Chung
+
 | Màn hình | API |
 |---|---|
 | Đăng nhập | `POST /api/auth/login` |
 | Tải lại trang, biết mình là ai | `GET /api/auth/me` |
 | Đổi mật khẩu | `PUT /api/me/password` `{ "currentPassword": "…", "newPassword": "…" }` |
+| Đọc cấu hình (mọi vai) | `GET /api/config`, `GET /api/config/{key}` — ghi vẫn chỉ Admin qua `PUT /api/admin/config/{key}` |
+| Danh sách chủ đề | `GET /api/config/topics` — thay `admin_topic_config_v2` local |
 
 Đổi mật khẩu thành công trả **200** với body **giống hệt lúc đăng nhập** (`accessToken`, `expiresAt`, `user`):
 
@@ -297,6 +316,19 @@ Bản trượt kiểm tra **vẫn được lưu** kèm toàn bộ số đo (th�
 Câu phải có từ 1 đến 9 từ tiếng Anh, vì con số này nằm trong mã câu. Câu thuần Việt không được có nhãn `[en]`.
 
 **Tiến độ** — `GET /api/speaker/progress`: tổng bản đã nộp, số bản đạt, và các task thu âm đang giao.
+
+**Đợt, bảng xếp hạng, đăng ký (mới — thay `CURRENT_ROUND`, `ROUND_LEADERBOARD`, `NEXT_ROUND`)**
+
+| Màn hình | API |
+|---|---|
+| Đợt đang tham gia | `GET /api/speaker/rounds/current` — 204 = chưa tham gia đợt nào |
+| Các đợt đang mở | `GET /api/speaker/rounds/upcoming` — kèm `isRegistered`, `period`, `registerEndsIn` |
+| Bảng xếp hạng top 5 | `GET /api/speaker/rounds/{campaignId}/leaderboard?top=5` — xếp theo số bản duyệt đạt |
+| Đăng ký / huỷ | `POST /api/speaker/rounds/{campaignId}/register`, `DELETE /api/speaker/rounds/{campaignId}/registration` |
+| Bản bị từ chối cần thu lại | `GET /api/speaker/recordings/rejected?limit=5` — kèm `reason` + `audioUrl` nghe lại |
+| Lịch sử ghi âm | `GET /api/speaker/recordings/history?status&taskId&search&page&pageSize=` — kèm `reviews` đã chốt, nghe lại qua `GET /api/recordings/{id}/audio-url` |
+| Lịch sử đóng góp | `GET /api/speaker/contributions/history?category&search&page&pageSize=` |
+| Tổng hợp số liệu | `GET /api/speaker/stats` → `{total,approved,rejected,pending}` |
 
 **Hồ sơ người đọc** — `GET /api/me/speaker-profile` và `PUT /api/me/speaker-profile`:
 
@@ -394,6 +426,21 @@ duyệt câu nên lọc theo đúng các chủ đề này.
 **Tiến độ** — `GET /api/reviewer/progress`, trả `activeTasks` kèm `taskId` để gọi danh sách ở trên.
 Reviewer cũng dùng được màn hình **duyệt câu** giống Speaker.
 
+**Thống kê + lịch sử của chính mình (mới — thay `REVIEW_TOTALS`, `REJECT_STATS_DATA`, `TOP_REJECTED_*`)**
+
+| Màn hình | API |
+|---|---|
+| Tổng đã duyệt / từ chối | `GET /api/reviewer/stats/totals` |
+| Tỉ lệ lý do từ chối | `GET /api/reviewer/stats/reject-reasons` |
+| Câu bị từ chối nhiều nhất | `GET /api/reviewer/stats/top-rejected-sentences?limit=8` |
+| Người đọc bị từ chối nhiều nhất | `GET /api/reviewer/stats/top-rejected-speakers?limit=8` |
+| Lịch sử duyệt bản ghi | `GET /api/reviewer/history/recordings?taskId&status&search&page&pageSize=` |
+| Lịch sử duyệt câu | `GET /api/reviewer/history/contributions?kind&status&category&search&page&pageSize=` (`kind`: `edit`\|`report`\|`contribution`) |
+
+**Xem lại task duyệt đã đóng (mới):** `GET /api/reviewer/tasks/{taskId}/recordings` và
+`GET /api/reviewer/recordings/{id}` mở được cả khi task đã `Completed`/`Cancelled` (mình từng được
+giao) — các dòng có `canReview: false`, nộp duyệt vẫn trả 403 `task_not_reviewable`.
+
 ### Task Manager
 
 **Mọi task phải thuộc một chiến dịch.** Đây là điều kiện mới, không có đường đi vòng:
@@ -425,6 +472,7 @@ Reviewer cũng dùng được màn hình **duyệt câu** giống Speaker.
 | Ô chọn người nhận | `GET /api/tasks/assignable-users?taskType=Recording` — chỉ người đang hoạt động và đúng vai, kèm `activeTasks`, `totalTarget` để chia việc cho đều |
 | Tìm câu để thêm vào task | `GET /api/scripts?status=Validated` — thêm tuỳ chọn `domain`, `keyword` |
 | Tìm bản ghi để thêm vào task duyệt | `GET /api/recordings?status=PendingReview` — thêm tuỳ chọn `speakerId` |
+| Tổng quan trang chủ | `GET /api/task-manager/overview` — chiến dịch mình phụ trách, tải từng người, số task còn chạy |
 
 - Chỉ tiêu task **thu âm đếm theo cặp câu**: một cặp chỉ xong khi cả hai bản đều đạt. Task **duyệt** đếm theo bản ghi. Trường `progress.unit` cho biết đơn vị để hiển thị.
 - **Trạng thái task tự chạy**, frontend không gửi trạng thái: `Draft` → `Open` (đã giao) → `InProgress` (có việc đầu tiên) → `Completed`. Chỉ có huỷ là bấm tay.
@@ -438,6 +486,8 @@ Reviewer cũng dùng được màn hình **duyệt câu** giống Speaker.
 | Nhập kho câu từ file | `POST /api/scripts/import` — multipart, trường **`File`** là file JSON theo mẫu `docs/Requirement.txt` |
 | Thêm một cặp câu | `POST /api/scripts` — body như phần đóng góp câu. Câu vào thẳng `Validated` kèm một lượt duyệt `Accepted` tự động của chính Admin |
 | Kho câu | `GET /api/scripts` — lọc tuỳ chọn: `status`, `domain`, `keyword`, `page`, `pageSize`. Chi tiết: `GET /api/scripts/{id}` |
+| Khôi phục câu đã loại | `POST /api/scripts/{id}/restore` — `Rejected`/`Deactivated` về `PendingValidation` |
+| Dataset | `POST /api/datasets` (gom bản duyệt đạt theo `recordingIds` và/hoặc `campaignIds`), `GET /api/datasets`, `GET /api/datasets/{id}` (kèm `missingPairs`), `POST /api/datasets/{id}/release`, `POST /api/datasets/{id}/archive`, `GET /api/datasets/{id}/download` (ZIP `manifest.json` + `metadata.csv`, link nghe 15 phút) |
 | Bản ghi | `GET /api/recordings` — lọc tuỳ chọn: `status`, `scriptId`, `speakerId`, `page`, `pageSize`. Nghe: `GET /api/recordings/{id}/audio-url` |
 | Cấu hình | `GET /api/admin/config`, `PUT /api/admin/config/{key}` `{ "value": "30" }` |
 | Danh mục lý do | `GET /api/rejection-reasons?activeOnly=false`, `GET /api/script-error-reasons?activeOnly=false` |
@@ -599,9 +649,7 @@ Ai đã code theo bản API trước ngày 22/09/2026 thì cần sửa:
 
 | Chức năng | Ảnh hưởng tới màn hình |
 |---|---|
-| Khôi phục câu đã bị loại | Nút khôi phục trong kho câu |
-| Dataset: tạo, phát hành, tải về | Màn hình dataset của Admin |
-| Xem lại task duyệt đã đóng | Danh sách bản ghi trong task chỉ mở được khi task còn chạy |
+| Nhúng file âm thanh nhị phân vào ZIP dataset | File tải về hiện chỉ có `manifest.json` + `metadata.csv` với link nghe 15 phút — tải audio qua link |
 
 Giao diện cho các phần này cứ làm trước; khi backend xong sẽ cập nhật mục này và Swagger.
 

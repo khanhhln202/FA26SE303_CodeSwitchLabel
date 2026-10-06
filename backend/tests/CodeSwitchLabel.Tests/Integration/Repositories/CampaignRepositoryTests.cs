@@ -16,7 +16,7 @@ public class CampaignRepositoryTests : IntegrationTestBase
     public async Task SearchAsync_ReturnsCampaigns_WhenCampaignExists()
     {
         // Act
-        var (items, total) = await Campaigns.SearchAsync(null, null, 1, 10, CancellationToken.None);
+        var (items, total) = await Campaigns.SearchAsync(null, null, 1, 10, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(total >= 1);
@@ -27,7 +27,7 @@ public class CampaignRepositoryTests : IntegrationTestBase
     public async Task GetAsync_ReturnsCampaign_WhenCampaignExists()
     {
         // Act
-        var campaign = await Campaigns.GetAsync(CampaignId, CancellationToken.None);
+        var campaign = await Campaigns.GetAsync(CampaignId, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(campaign);
@@ -39,7 +39,7 @@ public class CampaignRepositoryTests : IntegrationTestBase
     public async Task GetForUpdateAsync_ReturnsCampaign_WhenCampaignExists()
     {
         // Act
-        var campaign = await Campaigns.GetForUpdateAsync(CampaignId, CancellationToken.None);
+        var campaign = await Campaigns.GetForUpdateAsync(CampaignId, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(campaign);
@@ -50,7 +50,7 @@ public class CampaignRepositoryTests : IntegrationTestBase
     public async Task SumAllocatedAsync_ReturnsZero_WhenNoTasks()
     {
         // Act
-        var allocated = await Campaigns.SumAllocatedAsync(CampaignId, CancellationToken.None);
+        var allocated = await Campaigns.SumAllocatedAsync(CampaignId, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(0, allocated);
@@ -60,7 +60,7 @@ public class CampaignRepositoryTests : IntegrationTestBase
     public async Task IsTaskManagerAsync_ReturnsTrue_ForTaskManagerUser()
     {
         // Act
-        var isManager = await Campaigns.IsTaskManagerAsync(ManagerUserId, CancellationToken.None);
+        var isManager = await Campaigns.IsTaskManagerAsync(ManagerUserId, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(isManager);
@@ -70,7 +70,7 @@ public class CampaignRepositoryTests : IntegrationTestBase
     public async Task IsTaskManagerAsync_ReturnsFalse_ForNonTaskManagerUser()
     {
         // Act
-        var isManager = await Campaigns.IsTaskManagerAsync(ReviewerUserId, CancellationToken.None);
+        var isManager = await Campaigns.IsTaskManagerAsync(ReviewerUserId, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(isManager);
@@ -80,7 +80,7 @@ public class CampaignRepositoryTests : IntegrationTestBase
     public async Task GetProgressAsync_ReturnsProgress_WhenCampaignExists()
     {
         // Act
-        var progress = await Campaigns.GetProgressAsync([CampaignId], CancellationToken.None);
+        var progress = await Campaigns.GetProgressAsync([CampaignId], TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(progress);
@@ -101,7 +101,7 @@ public class CampaignRepositoryTests : IntegrationTestBase
             CampaignStatus.Draft);
 
         // Act
-        var (items, total) = await Campaigns.SearchAsync(null, null, 1, 10, CancellationToken.None);
+        var (items, total) = await Campaigns.SearchAsync(null, null, 1, 10, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Contains(items, c => c.CampaignName == "New Campaign");

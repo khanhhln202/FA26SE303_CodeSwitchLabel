@@ -165,4 +165,10 @@ public class TasksController(ITaskService taskService) : ControllerBase
     [ProducesResponseType(typeof(IReadOnlyList<AssigneeSummaryDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<AssigneeSummaryDto>>> ByAssignee(CancellationToken ct)
         => Ok(await taskService.GetAssigneeSummaryAsync(ct));
+
+    /// <summary>Tổng quan trang chủ Task Manager: chiến dịch phụ trách, tải từng người, task còn chạy.</summary>
+    [HttpGet("/api/task-manager/overview")]
+    [ProducesResponseType(typeof(TaskManagerOverviewDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<TaskManagerOverviewDto>> Overview(CancellationToken ct)
+        => Ok(await taskService.GetManagerOverviewAsync(User.GetUserId(), User.IsInRole("Admin"), ct));
 }
