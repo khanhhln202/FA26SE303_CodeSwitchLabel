@@ -1,10 +1,10 @@
 import { useEffect } from "react";
-import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
+import { Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useFormik } from "formik";
 import { toast } from "sonner";
 import * as Yup from "yup";
-import { getPostLoginPath } from "../../../constants/auth";
+import { getPostLoginPath, ONBOARDING_PATH, ROLE_HOME_PATH } from "../../../constants/auth";
 import { loginApi } from "../../../services/authApi";
 import { getCurrentUser, saveSession } from "../../../utils/authStorage";
 import { LOGIN_API, GET_ME_API } from "../../../utils/queryKey";
@@ -19,9 +19,19 @@ const loginSchema = Yup.object({
   password: Yup.string().required("Vui lòng nhập mật khẩu"),
 });
 
+// Trang cần tới sau khi đăng nhập: quay lại trang người dùng định mở (ProtectedRoute gửi qua state.from)
+// nếu trang đó thuộc vai của họ; Speaker chưa có hồ sơ vẫn phải qua Onboarding trước.
+function getRedirectPath(user, from) {
+  const defaultPath = getPostLoginPath(user);
+  if (defaultPath === ONBOARDING_PATH) return defaultPath;
+  const roleHome = ROLE_HOME_PATH[user.role];
+  return from && roleHome && from.startsWith(roleHome) ? from : defaultPath;
+}
+
 export default function Login({ onLoginSuccess }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const from = useLocation().state?.from;
 
   // Bị interceptor đưa về đây vì token hết hạn (401, URL có ?expired=1) -> báo lý do.
   // id cố định: StrictMode chạy effect 2 lần ở dev cũng chỉ hiện 1 thông báo.
@@ -45,7 +55,7 @@ export default function Login({ onLoginSuccess }) {
       toast.success(`Chào mừng ${data.user.fullName}!`);
       if (onLoginSuccess) onLoginSuccess(data.user);
       // Speaker chưa có hồ sơ -> màn Hoàn thiện hồ sơ, còn lại về trang chủ của vai
-      navigate(getPostLoginPath(data.user), { replace: true });
+      navigate(getRedirectPath(data.user, from), { replace: true });
     },
     // Sai email/mật khẩu, tài khoản bị khoá, máy chủ không phản hồi... -> loginApi đã đổi thành câu báo lỗi
     onError: (error) => toast.error(error.message),
@@ -62,7 +72,7 @@ export default function Login({ onLoginSuccess }) {
 
   // Đã đăng nhập (vd. bấm Back từ trang làm việc về đây) -> vào thẳng trang của vai, không hiện lại form
   const sessionUser = getCurrentUser();
-  if (sessionUser) return <Navigate to={getPostLoginPath(sessionUser)} replace />;
+  if (sessionUser) return <Navigate to={getRedirectPath(sessionUser, from)} replace />;
 
   const errorOf = (name) => (formik.touched[name] && formik.errors[name]) || undefined;
 

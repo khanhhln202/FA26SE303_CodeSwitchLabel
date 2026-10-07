@@ -5,6 +5,7 @@ import ReviewerTemplate from "../pages/ReviewerTemplate/index";
 import Loading from "../components/Loading/Loading";
 import TaskManagerTemplate from "../pages/TaskManagerTemplate/index";
 import AdminTemplate from "../pages/AdminTemplate/index";
+import ProtectedRoute from "../components/Auth/ProtectedRoute";
 
 const HelpCenterLazy = lazy(() => import("../pages/HelpCenter/HelpCenter"));
 
@@ -29,6 +30,7 @@ const routes = [
   {
     path: "/speaker",
     element: HomeTemplate,
+    role: "Speaker",
     nested: [
       {
         path: "",
@@ -77,6 +79,7 @@ const routes = [
   {
     path: "/reviewer",
     element: ReviewerTemplate,
+    role: "Reviewer",
     nested: [
       {
         path: "",
@@ -135,7 +138,7 @@ const routes = [
   {
     path: "/task-manager",
     element: TaskManagerTemplate,
-    role: "Task Manager",
+    role: "TaskManager",
     nested: [
       {
         path: "profile",
@@ -172,7 +175,7 @@ const routes = [
   {
     path: "/admin",
     element: AdminTemplate,
-    role: "Administrator",
+    role: "Admin",
     nested: [
       {
         path: "profile",
@@ -222,7 +225,12 @@ export const renderRoutes = () => {
 
     if (route.nested) {
       return (
-        <Route key={idx} path={route.path} element={<Component />}>
+        <Route
+          key={idx}
+          path={route.path}
+          // Route có `role` (tên vai đúng như backend trả về) -> phải đăng nhập đúng vai mới vào được
+          element={route.role ? <ProtectedRoute role={route.role}><Component /></ProtectedRoute> : <Component />}
+        >
           {route.nested.map((item) => {
             const NestedComponent = item.element;
             return (
