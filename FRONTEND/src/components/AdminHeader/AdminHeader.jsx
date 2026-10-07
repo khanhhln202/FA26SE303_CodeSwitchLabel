@@ -1,31 +1,34 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Bell, ChevronDown, User, LogOut, CheckCircle2 } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Bell, ChevronDown, User, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { ADMIN_ACCENT as ACCENT } from '../../constants/theme';
 import ThemeToggle from '../ThemeToggle/ThemeToggle';
+import useLogout from '../../hooks/auth/useLogout';
+import { toast } from 'sonner';
+import { useQuery } from '@tanstack/react-query';
+import { getMeApi } from '../../services/authApi';
+import { getCurrentUser, updateCurrentUser } from '../../utils/authStorage';
+import { GET_ME_API } from '../../utils/queryKey';
 
 export default function AdminHeader() {
   const navigate = useNavigate();
+  const logout = useLogout();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
 
-  // State quản lý Toast giống hệt Login.jsx
-  const [toast, setToast] = useState({ show: false, message: "" });
 
-  const [adminName, setAdminName] = useState(() => {
-    const saved = localStorage.getItem('admin_user_profile');
-    return saved ? JSON.parse(saved).name : 'Quản Trị Hệ Thống';
+  // Người đang đăng nhập: hiện ngay bản lưu lúc đăng nhập, rồi gọi GET /api/auth/me lấy bản mới nhất
+  const { data: user } = useQuery({
+    queryKey: [GET_ME_API],
+    queryFn: async () => {
+      const me = await getMeApi();
+      updateCurrentUser(me);
+      return me;
+    },
+    initialData: getCurrentUser,
+    enabled: Boolean(getCurrentUser()),
   });
-
-  useEffect(() => {
-    const updateProfile = () => {
-      const saved = localStorage.getItem('admin_user_profile');
-      if (saved) setAdminName(JSON.parse(saved).name);
-    };
-
-    window.addEventListener('userProfileUpdated', updateProfile);
-    return () => window.removeEventListener('userProfileUpdated', updateProfile);
-  }, []);
+  const adminName = user?.fullName || user?.email || 'Quản Trị Hệ Thống';
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -35,34 +38,17 @@ export default function AdminHeader() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Xử lý Đăng xuất & hiển thị Toast giống Login.jsx
+  // Đăng xuất: chuyển ngay về /login (replace: bấm Back không quay lại trang cần đăng nhập)
   const handleLogout = () => {
     setMenuOpen(false);
-    localStorage.removeItem("auth_user");
-
-    // Hiển thị toast thông báo
-    setToast({ show: true, message: "Đăng xuất thành công!" });
-
-    // Đợi 1s cho người dùng thấy toast trước khi chuyển trang
-    setTimeout(() => {
-      setToast((prev) => ({ ...prev, show: false }));
-      navigate('/');
-    }, 1000);
+    logout(); // xoá access token, thông tin người dùng và cache
+    navigate('/login', { replace: true });
+    toast.success('Đã đăng xuất');
   };
 
   return (
     <header className="w-full flex justify-end items-center gap-3.5 py-3.5 px-6 lg:px-8 bg-white dark:bg-[#1C1D22] border-b border-[#E5E2D8] dark:border-gray-800 shrink-0 z-20 transition-colors relative">
       
-      {/* TOAST THÔNG BÁO TƯƠNG PHẢN NGƯỢC GIỐNG LOGIN.JSX */}
-      <div 
-        className={`fixed top-6 left-1/2 -translate-x-1/2 sm:left-auto sm:right-8 sm:translate-x-0 z-[9999] flex items-center gap-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-5 py-3.5 rounded-2xl shadow-2xl border border-slate-700 dark:border-slate-200 transition-all duration-300 ease-out ${
-          toast.show ? "translate-y-0 opacity-100 scale-100" : "-translate-y-4 opacity-0 scale-95 pointer-events-none"
-        }`}
-      >
-        <CheckCircle2 className="w-5 h-5 text-emerald-500 dark:text-emerald-600 shrink-0" />
-        <span className="text-xs font-bold">{toast.message}</span>
-      </div>
-
       {/* Nút đổi giao diện Sáng / Tối */}
       <ThemeToggle />
 

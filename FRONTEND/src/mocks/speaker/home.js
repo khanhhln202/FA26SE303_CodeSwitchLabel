@@ -67,17 +67,3 @@ export const REJECTED_RECORDINGS = [
     audioUrl: '/review-recording-first-sample.m4a',
   },
 ];
-
-// Đợt đang mở đăng ký (không giới hạn số người đăng ký)
-export const NEXT_ROUND = {
-  id: 'BATCH-05',
-  name: 'Đợt 5',
-  topic: 'Giáo dục',
-  registerEndsIn: '1 ngày',
-  target: 80,
-  period: '09/10 – 16/10',
-  isRegistered: false,
-};
-
-// Đợt kế sau đợt đang mở đăng ký (chỉ để xem trước)
-export const LATER_ROUND = { name: 'Đợt 6', topic: 'Hội thoại hàng ngày', registerOpensAt: '16/10' };

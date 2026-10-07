@@ -16,7 +16,15 @@ const routes = [
   },
   {
     path: "/login",
-    element: lazy(() => import("../pages/Login")),
+    element: lazy(() => import("../pages/Auth/Login/index")),
+  },
+  {
+    path: "/register",
+    element: lazy(() => import("../pages/Auth/Register/index")),
+  },
+  {
+    path: "/onboarding",
+    element: lazy(() => import("../pages/Auth/Onboarding/index")),
   },
   {
     path: "/speaker",

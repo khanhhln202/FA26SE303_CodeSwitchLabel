@@ -1,14 +1,19 @@
 import { useState, useRef, useEffect } from 'react';
 import { Bell, ChevronDown, User, LogOut } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import {
   TEXT_HEADING, TEXT_BODY,
   BORDER_LIGHT,
   CHIP_DANGER_BG, CHIP_DANGER_TEXT,
 } from '../../constants/theme';
 import { HEADER_CONFIG } from '../../constants/headerConfig';
+import useLogout from '../../hooks/auth/useLogout';
 import { PAGE_TITLES } from '../../hooks/usePageTitle';
-import { MOCK_USERS } from '../../mocks/users';
+import { getMeApi } from '../../services/authApi';
+import { getCurrentUser, updateCurrentUser } from '../../utils/authStorage';
+import { GET_ME_API } from '../../utils/queryKey';
 
 /**
  * Header dùng chung cho mọi role (giống Sidebar): <Header role="speaker" /> / <Header role="reviewer" />.
@@ -17,6 +22,7 @@ import { MOCK_USERS } from '../../mocks/users';
  */
 export default function Header({ role }) {
   const navigate = useNavigate();
+  const logout = useLogout();
   const { pathname } = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
@@ -32,13 +38,26 @@ export default function Header({ role }) {
   }, []);
 
   const { accent, profilePath } = HEADER_CONFIG[role];
-  // TODO: thay bằng user từ AuthContext (token / API /me) khi có API đăng nhập
-  const user = MOCK_USERS[role];
 
-  // TODO: chuyển vào AuthContext.logout() - gọi API đăng xuất, xoá token, xoá user rồi mới điều hướng
+  // Người đang đăng nhập: hiện ngay bản lưu lúc đăng nhập, rồi gọi GET /api/auth/me lấy bản mới nhất
+  const { data: user } = useQuery({
+    queryKey: [GET_ME_API],
+    queryFn: async () => {
+      const me = await getMeApi();
+      updateCurrentUser(me);
+      return me;
+    },
+    initialData: getCurrentUser,
+    enabled: Boolean(getCurrentUser()),
+  });
+  const userName = user?.fullName || user?.email || '';
+  const userRole = user?.role || '';
+
   const handleLogout = () => {
     setMenuOpen(false);
+    logout(); // xoá access token, thông tin người dùng và cache
     navigate('/login', { replace: true });
+    toast.success('Đã đăng xuất');
   };
 
   // Mọi trang chỉ 1 tiêu đề, cùng vị trí và độ đậm (luồng ghi âm đã có sidebar + TaskStepper chỉ bước)
@@ -81,8 +100,8 @@ export default function Header({ role }) {
             aria-expanded={menuOpen}
           >
             <span className="flex flex-col text-left leading-tight">
-              <span className="text-ui font-label" style={{ color: TEXT_HEADING }}>{user.name}</span>
-              <span className="text-meta font-regular" style={{ color: accent }}>{user.role}</span>
+              <span className="text-ui font-label" style={{ color: TEXT_HEADING }}>{userName}</span>
+              <span className="text-meta font-regular" style={{ color: accent }}>{userRole}</span>
             </span>
             <ChevronDown
               className={`w-4 h-4 transition-transform ${menuOpen ? 'rotate-180' : ''}`}
@@ -101,8 +120,8 @@ export default function Header({ role }) {
               }}
             >
               <div className="px-2.5 pt-2 pb-2.5 mb-1 border-b" style={{ borderColor: BORDER_LIGHT }}>
-                <p className="text-ui font-emphasis" style={{ color: TEXT_HEADING }}>{user.name}</p>
-                <p className="type-meta mt-0.5" style={{ color: TEXT_BODY }}>{user.role}</p>
+                <p className="text-ui font-emphasis" style={{ color: TEXT_HEADING }}>{userName}</p>
+                <p className="type-meta mt-0.5" style={{ color: TEXT_BODY }}>{userRole}</p>
               </div>
               <button
                 role="menuitem"

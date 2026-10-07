@@ -44,9 +44,9 @@ function InlineLabel({ variant }) {
 
 function StatCard({ icon: Icon, label, value, pct, accent, bg }) {
   return (
-    <div className="bg-white rounded-2xl p-3 sm:p-3.5 flex items-center gap-3 border border-[#E5E2D8] shadow-[0_1px_3px_rgba(16,17,20,0.04)]">
+    <div className="bg-white rounded-2xl px-3.5 py-2.5 flex items-center gap-3 border border-[#E5E2D8] shadow-[0_1px_3px_rgba(16,17,20,0.04)]">
       <span
-        className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+        className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
         style={{ background: bg }}
       >
         <Icon className="w-4 h-4" style={{ color: accent }} />
@@ -200,7 +200,7 @@ export default function ReviewHistoryRecording() {
       </div>
 
       <section className="flex-1 min-h-0 flex flex-col bg-white rounded-2xl border border-[#E5E2D8] overflow-hidden">
-        <div className="px-4 sm:px-5 py-3 border-b border-[#F0EEE6] space-y-3">
+        <div className="px-4 sm:px-5 py-2 border-b border-[#F0EEE6] space-y-3">
           <div className="flex flex-col md:flex-row gap-3">
             <div className="relative flex-1 min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9A9CA3]" />
@@ -212,7 +212,7 @@ export default function ReviewHistoryRecording() {
                   setCurrentPage(1);
                 }}
                 placeholder="Tìm nhiệm vụ, speaker, nội dung..."
-                className="w-full pl-9 pr-3 py-2 rounded-lg border border-[#E5E2D8] text-ui leading-4 focus:outline-none focus:border-blue-500"
+                className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-[#E5E2D8] text-ui leading-4 focus:outline-none focus:border-blue-500"
               />
             </div>
             <select
@@ -222,7 +222,7 @@ export default function ReviewHistoryRecording() {
                 setTaskFilter(event.target.value);
                 setCurrentPage(1);
               }}
-              className="min-w-0 rounded-lg border border-[#E5E2D8] px-3 py-2 bg-white text-meta text-[#16171C]"
+              className="min-w-0 rounded-lg border border-[#E5E2D8] px-3 py-1.5 bg-white text-meta text-[#16171C]"
             >
               <option value="all">Tất cả nhiệm vụ</option>
               {tasks.map((task) => (
@@ -238,7 +238,7 @@ export default function ReviewHistoryRecording() {
                 setStatusFilter(event.target.value);
                 setCurrentPage(1);
               }}
-              className="rounded-lg border border-[#E5E2D8] px-3 py-2 bg-white text-meta text-[#16171C]"
+              className="rounded-lg border border-[#E5E2D8] px-3 py-1.5 bg-white text-meta text-[#16171C]"
             >
               {FILTER_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -276,7 +276,7 @@ export default function ReviewHistoryRecording() {
                   <th
                     key={heading}
                     scope="col"
-                    className={`px-3 py-2.5 font-label ${heading === "STT" ? "text-center" : ""}`}
+                    className={`px-3 py-2 font-label ${heading === "STT" ? "text-center" : ""}`}
                   >
                     {heading}
                   </th>
@@ -308,7 +308,7 @@ export default function ReviewHistoryRecording() {
                       const transcript =
                         variant === "cs" ? item.csText : item.viText;
                       const cellSpacing =
-                        variant === "cs" ? "pt-[2px] pb-0" : "pt-0 pb-[2px]";
+                        variant === "cs" ? "pt-px pb-0" : "pt-0 pb-px";
                       return (
                         <tr key={variant}>
                           {variant === "cs" && (
@@ -335,7 +335,7 @@ export default function ReviewHistoryRecording() {
                             </>
                           )}
                           {variant === "cs" && (
-                            <td rowSpan={2} className="px-3 py-[3px]">
+                            <td rowSpan={2} className="px-3 py-0">
                               {/* Căn icon mắt về cùng một mép cột như bảng lịch sử câu đóng góp. */}
                               <div className="flex items-center gap-2">
                                 <div className="min-w-0 flex-1">
@@ -343,7 +343,7 @@ export default function ReviewHistoryRecording() {
                                     (text, textIndex) => (
                                       <p
                                         key={textIndex}
-                                        className="font-regular text-[#16171C] truncate leading-[22px]"
+                                        className="font-regular text-[#16171C] truncate leading-5"
                                       >
                                         {parseCodeSwitch(text).map(
                                           (segment, segmentIndex) => (
@@ -378,7 +378,7 @@ export default function ReviewHistoryRecording() {
                             </td>
                           )}
                           <td className={`px-3 ${cellSpacing}`}>
-                            <WaveformInline
+                            <WaveformInline compact
                               label={variant === "cs" ? "VI-EN" : "VI"}
                               src={variant === "cs" ? item.csAudioUrl : item.viAudioUrl}
                               demoSeed={`${variant}-${transcript}`}
