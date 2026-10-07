@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
-import { Toaster } from '@/components/ui/sonner';
 import Sidebar from '../../components/Sidebar/Sidebar';
 import Logo from '../../components/Logo/Logo';
 import Header from '../../components/Header/Header';
@@ -61,11 +60,6 @@ export default function HomeTemplate() {
           </main>
         </div>
 
-        <Toaster
-          position="top-right"
-          offset={{ top: '70px', right: '6px' }}
-          style={{ '--width': '280px' }}
-        />
     </div>
   );
 }

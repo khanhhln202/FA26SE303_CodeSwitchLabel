@@ -58,8 +58,8 @@ const catStyle = (c) => CATEGORY_COLORS[c] || { bg: "#F7F5EF", text: "#6E7078", 
 
 function StatCard({ icon: Icon, label, value, pct, accent, bg }) {
   return (
-    <div className="bg-white rounded-2xl p-3 sm:p-3.5 flex items-center gap-3 border border-[#E5E2D8] shadow-[0_1px_3px_rgba(16,17,20,0.04)]">
-      <span className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: bg }}>
+    <div className="bg-white rounded-2xl px-3.5 py-2.5 flex items-center gap-3 border border-[#E5E2D8] shadow-[0_1px_3px_rgba(16,17,20,0.04)]">
+      <span className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: bg }}>
         <Icon className="w-4 h-4" style={{ color: accent }} />
       </span>
       <div className="min-w-0">
@@ -222,7 +222,7 @@ export default function ReviewHistoryContribution() {
 
       {/* BẢNG */}
       <div className="flex-1 min-h-0 bg-white rounded-2xl border border-[#E5E2D8] shadow-[0_1px_3px_rgba(16,17,20,0.04)] flex flex-col overflow-hidden">
-        <div className="px-4 sm:px-5 py-3 border-b border-[#F0EEE6]">
+        <div className="px-4 sm:px-5 py-2 border-b border-[#F0EEE6]">
           <div className="flex flex-col md:flex-row md:items-center gap-3">
             {/* Lọc loại câu - giống hàng chờ "Đề xuất câu" */}
             <div className="flex items-center gap-1.5 shrink-0">
@@ -243,15 +243,15 @@ export default function ReviewHistoryContribution() {
             </div>
             <div className="relative flex-1 min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9A9CA3]" />
-              <input aria-label="Tìm câu" value={searchTerm} onChange={(event) => changeFilter(setSearchTerm)(event.target.value)} placeholder="Tìm người gửi, lý do, nội dung..." className="w-full pl-9 pr-3 py-2 rounded-lg border border-[#E5E2D8] text-ui leading-4 focus:outline-none focus:border-blue-500" />
+              <input aria-label="Tìm câu" value={searchTerm} onChange={(event) => changeFilter(setSearchTerm)(event.target.value)} placeholder="Tìm người gửi, lý do, nội dung..." className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-[#E5E2D8] text-ui leading-4 focus:outline-none focus:border-blue-500" />
             </div>
             {typeFilter === "contribution" && (
-              <select aria-label="Lọc phân loại" value={categoryFilter} onChange={(event) => changeFilter(setCategoryFilter)(event.target.value)} className="min-w-0 rounded-lg border border-[#E5E2D8] px-3 py-2 bg-white text-meta text-[#16171C]">
+              <select aria-label="Lọc phân loại" value={categoryFilter} onChange={(event) => changeFilter(setCategoryFilter)(event.target.value)} className="min-w-0 rounded-lg border border-[#E5E2D8] px-3 py-1.5 bg-white text-meta text-[#16171C]">
                 <option value="all">Tất cả phân loại</option>
                 {[...new Set(TEXT_HISTORY.map((item) => item.category))].map((category) => <option key={category} value={category}>{category}</option>)}
               </select>
             )}
-            <select aria-label="Lọc kết quả" value={statusFilter} onChange={(event) => changeFilter(setStatusFilter)(event.target.value)} className="rounded-lg border border-[#E5E2D8] px-3 py-2 bg-white text-meta text-[#16171C]">
+            <select aria-label="Lọc kết quả" value={statusFilter} onChange={(event) => changeFilter(setStatusFilter)(event.target.value)} className="rounded-lg border border-[#E5E2D8] px-3 py-1.5 bg-white text-meta text-[#16171C]">
               {FILTER_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </div>
@@ -270,12 +270,12 @@ export default function ReviewHistoryContribution() {
             </colgroup>
             <thead>
               <tr className="bg-[#F7F5EF] type-label text-[#9A9CA3] border-b border-[#E5E2D8]">
-                <th className="py-2.5 px-3 text-center">STT</th>
-                <th className="py-2.5 px-3 text-left">Loại</th>
-                <th className="py-2.5 px-3 text-left">Nội dung</th>
-                <th className="py-2.5 px-3 text-left">Speaker / Thời gian</th>
-                <th className="py-2.5 px-3 text-left">Bạn</th>
-                <th className="py-2.5 px-3 text-left">Kết quả</th>
+                <th className="py-2 px-3 text-center">STT</th>
+                <th className="py-2 px-3 text-left">Loại</th>
+                <th className="py-2 px-3 text-left">Nội dung</th>
+                <th className="py-2 px-3 text-left">Speaker / Thời gian</th>
+                <th className="py-2 px-3 text-left">Bạn</th>
+                <th className="py-2 px-3 text-left">Kết quả</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0EEE6] type-ui">
@@ -285,7 +285,7 @@ export default function ReviewHistoryContribution() {
                 const c = contentOf(item);
                 const tag = tagOf(item);
                 return (
-                  <tr key={item.id} onClick={() => setDetailItem(item)} className="hover:bg-[#F7F5EF]/70 transition-colors h-13 cursor-pointer">
+                  <tr key={item.id} onClick={() => setDetailItem(item)} className="hover:bg-[#F7F5EF]/70 transition-colors h-11 cursor-pointer">
                     <td className="px-3 text-center"><span className="text-[#9A9CA3] type-meta">{(currentPage - 1) * itemsPerPage + idx + 1}</span></td>
                     <td className="px-3 text-left">
                       <span className="w-[84px] h-6 inline-flex items-center justify-center rounded-md type-caption whitespace-nowrap" style={{ background: tag.bg, color: tag.text }}>{tag.label}</span>

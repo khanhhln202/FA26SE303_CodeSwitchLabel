@@ -111,6 +111,26 @@ export const RANK_GOLD = '#D9A441';
 export const RANK_GOLD_BG = 'linear-gradient(90deg, rgba(217,164,65,0.18), rgba(217,164,65,0.04))';
 export const RANK_GOLD_BORDER = 'rgba(217,164,65,0.45)';
 // ═══════════════════════════════════════════════════
+// ĐĂNG NHẬP / ĐĂNG KÝ (pages/Auth) — giao diện sáng, nút dùng xanh lá của logo
+// ═══════════════════════════════════════════════════
+export const AUTH_BRAND = '#16A34A';                 // nút chính, ô đang nhập, mục đang chọn
+export const AUTH_BRAND_HOVER = '#15803D';           // khi rê chuột + link
+export const AUTH_BRAND_SOFT = '#F0FDF4';            // nền mục đang chọn
+export const AUTH_BRAND_RING = 'rgba(22,163,74,0.18)';
+export const AUTH_TEXT_HEADING = '#13211F';
+export const AUTH_TEXT_BODY = '#435A57';
+export const AUTH_TEXT_FAINT = '#70817F';
+export const AUTH_BORDER = '#D3DEDC';                // viền ô nhập (nền trắng)
+export const AUTH_BORDER_STRONG = '#B5C6C3';         // viền khi rê chuột
+export const AUTH_FIELD_BG = '#F7FAF9';
+export const AUTH_ERROR = '#C93B3F';
+// Panel thương hiệu bên trái (nền xanh lá đậm)
+export const AUTH_PANEL_BG = 'radial-gradient(120% 90% at 0% 0%, #1E8F4E 0%, #0F5A33 45%, #0A3A22 100%)';
+export const AUTH_PANEL_ACCENT = '#7DE3A6';          // chữ nhấn, từ tiếng Anh, sóng âm trên nền đậm
+export const AUTH_PANEL_TEXT_SOFT = '#C7EDD6';       // chữ phụ trên nền đậm
+export const AUTH_PANEL_TEXT_MUTED = '#A9D8BC';
+
+// ═══════════════════════════════════════════════════
 // TRANG CHỦ SPEAKER — đợt ghi âm (nền sáng + 1 khối emerald làm điểm nhấn)
 // Bảng màu riêng của trang chủ (tiền tố HOME_), không đụng tới token chung ở trên
 // ═══════════════════════════════════════════════════

@@ -14,11 +14,12 @@ const DEMO_BARS = 44;
  * - label: tên bản ghi cho aria-label (vd. "VI-EN").
  * - className: đặt chiều rộng cả khối (mặc định giãn theo khung cha).
  * - large: bản lớn hơn một bậc (sóng cao 28px, nút 28px) - dùng khi chỉ duyệt 1 bản mỗi lần.
+ * - compact: bản gọn (cao 20px) - dùng cho bảng lịch sử để 10 dòng vừa một màn hình.
  */
-export default function WaveformInline({ src, label, demoSeed = '', demoDuration, previewProgress = 0, className = 'w-full', large = false }) {
+export default function WaveformInline({ src, label, demoSeed = '', demoDuration, previewProgress = 0, className = 'w-full', large = false, compact = false }) {
   const containerRef = useRef(null);
   const { ready, playing, duration, error, playPause } = useWaveSurfer(containerRef, src || null, {
-    height: large ? 28 : 24,
+    height: large ? 28 : compact ? 20 : 24,
     progressColor: AUDIO_PRIMARY,
   });
   const demoPeaks = useMemo(() => generatePeaks(demoSeed, DEMO_BARS), [demoSeed]);
@@ -28,19 +29,19 @@ export default function WaveformInline({ src, label, demoSeed = '', demoDuration
   else if (!src) timeText = demoDuration != null ? formatTime(demoDuration) : '--:--';
 
   return (
-    <div className={`flex items-center ${large ? 'gap-2.5 min-h-7' : 'gap-2 min-h-6'} ${className}`}>
+    <div className={`flex items-center ${large ? 'gap-2.5 min-h-7' : compact ? 'gap-2 min-h-5' : 'gap-2 min-h-6'} ${className}`}>
       <button
         disabled={!ready || error}
         onClick={playPause}
         aria-label={`${playing ? 'Tạm dừng' : 'Phát'} bản ${label}`}
         title={!src ? 'Sóng âm minh họa – chưa có file để phát' : undefined}
-        className={`${large ? 'w-7 h-7' : 'w-6 h-6'} rounded-full shrink-0 inline-flex items-center justify-center text-white disabled:cursor-not-allowed cursor-pointer`}
+        className={`${large ? 'w-7 h-7' : compact ? 'w-5 h-5' : 'w-6 h-6'} rounded-full shrink-0 inline-flex items-center justify-center text-white disabled:cursor-not-allowed cursor-pointer`}
       >
         <span className={`${large ? 'w-7 h-7' : 'w-5 h-5'} rounded-full inline-flex items-center justify-center`} style={{ background: AUDIO_PRIMARY, boxShadow: '0 1px 3px rgba(37,99,235,0.2)' }}>
           {playing ? <Pause className={large ? 'w-3.5 h-3.5' : 'w-3 h-3'} fill="currentColor" /> : <Play className={`${large ? 'w-3.5 h-3.5' : 'w-3 h-3'} ml-0.5`} fill="currentColor" />}
         </span>
       </button>
-      <div className={`relative flex-1 min-w-0 ${large ? 'h-7' : 'h-6'}`}>
+      <div className={`relative flex-1 min-w-0 ${large ? 'h-7' : compact ? 'h-5' : 'h-6'}`}>
         <div ref={containerRef} className={!src || error ? 'hidden' : 'w-full'} />
         {!src && (
           <svg viewBox="0 0 176 28" preserveAspectRatio="none" className="w-full h-full" role="img" aria-label="Sóng âm mẫu">

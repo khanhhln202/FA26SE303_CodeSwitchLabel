@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
-import { Toaster } from '@/components/ui/sonner';
 import Sidebar from '../../components/Sidebar/Sidebar';
 import Logo from '../../components/Logo/Logo';
 import AdminHeader from '../../components/AdminHeader/AdminHeader';
@@ -73,7 +72,6 @@ export default function AdminTemplate() {
         </main>
       </div>
 
-      <Toaster position="top-right" offset={{ top: '90px', right: '16px' }} style={{ '--width': '280px' }} />
     </div>
   );
 }

@@ -79,3 +79,12 @@
     width: 0%;
   }
 }
+/* Sóng âm minh hoạ ở panel trái trang Đăng nhập / Đăng ký (components/Auth/AuthBrandPanel.jsx) */
+@keyframes auth-wave {
+  0%, 100% { transform: scaleY(0.35); }
+  50% { transform: scaleY(1); }
+}
+.auth-wave-bar { animation: auth-wave 1.1s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .auth-wave-bar { animation: none; }
+}

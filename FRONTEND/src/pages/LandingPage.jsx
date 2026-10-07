@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { 
   ArrowRight, 
   Volume2, 
@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 
 import Logo from '../components/Logo/Logo';
+import { getPostLoginPath } from '../constants/auth';
+import { getCurrentUser } from '../utils/authStorage';
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -55,6 +57,15 @@ export default function LandingPage() {
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  // Landing chỉ dành cho người chưa đăng nhập (như Facebook, GitHub): đã đăng nhập thì "/" là trang làm việc của vai.
+  // replace -> không để lại mục "/" trong lịch sử, bấm Back không bị đẩy qua lại.
+  const sessionUser = getCurrentUser();
+  if (sessionUser) return <Navigate to={getPostLoginPath(sessionUser)} replace />;
+
+  // Mở trang đăng nhập bằng replace: đăng nhập xong lịch sử chỉ còn trang làm việc, Back là rời khỏi web
+  // thay vì quay về landing rồi lại bị chuyển vào.
+  const goToLogin = () => navigate('/login', { replace: true });
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#0F172A] text-slate-800 dark:text-white font-sans selection:bg-[#1DB954] selection:text-white flex flex-col justify-between transition-colors duration-300 relative">
@@ -139,7 +150,7 @@ export default function LandingPage() {
 
             <button
               type="button"
-              onClick={() => navigate('/login')}
+              onClick={goToLogin}
               className="px-5 py-2 bg-[#1DB954] hover:bg-[#1AA34A] text-white rounded-xl text-sm font-bold shadow-md shadow-[#1DB954]/20 hover:shadow-[#1DB954]/40 active:scale-95 transition-all cursor-pointer whitespace-nowrap"
             >
               Đăng nhập
@@ -175,7 +186,7 @@ export default function LandingPage() {
             <div className="flex justify-center pt-2">
               <button
                 type="button"
-                onClick={() => navigate('/login')}
+                onClick={goToLogin}
                 className="px-10 py-3.5 bg-[#1DB954] hover:bg-[#1AA34A] text-white rounded-2xl text-base font-bold shadow-xl shadow-[#1DB954]/30 hover:shadow-[#1DB954]/50 active:scale-98 transition-all cursor-pointer flex items-center justify-center gap-2"
               >
                 <span>Đăng nhập</span>

@@ -51,8 +51,8 @@ const catStyle = (cat) => CATEGORY_COLORS[cat] || { bg: "#F7F5EF", text: "#6E707
 
 function StatCard({ icon: Icon, label, value, pct, accent, bg }) {
   return (
-    <div className="bg-white rounded-2xl p-3 sm:p-3.5 flex items-center gap-3 border border-[#E5E2D8] shadow-[0_1px_3px_rgba(16,17,20,0.04)]">
-      <span className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: bg }}>
+    <div className="bg-white rounded-2xl px-3.5 py-2.5 flex items-center gap-3 border border-[#E5E2D8] shadow-[0_1px_3px_rgba(16,17,20,0.04)]">
+      <span className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: bg }}>
         <Icon className="w-4 h-4" style={{ color: accent }} />
       </span>
       <div className="min-w-0">
@@ -141,7 +141,7 @@ export default function ContributionHistory() {
 
       {/* BẢNG */}
       <div className="flex-1 min-h-0 bg-white rounded-2xl border border-[#E5E2D8] shadow-[0_1px_3px_rgba(16,17,20,0.04)] flex flex-col overflow-hidden">
-        <div className="px-4 sm:px-5 py-3 border-b border-[#F0EEE6] space-y-3">
+        <div className="px-4 sm:px-5 py-2 border-b border-[#F0EEE6] space-y-3">
           <div className="flex flex-col md:flex-row gap-3">
             <div className="relative flex-1 min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9A9CA3]" />
@@ -153,7 +153,7 @@ export default function ContributionHistory() {
                   setCurrentPage(1);
                 }}
                 placeholder="Tìm phân loại, nội dung..."
-                className="w-full pl-9 pr-3 py-2 rounded-lg border border-[#E5E2D8] text-ui leading-4 focus:outline-none focus:border-blue-500"
+                className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-[#E5E2D8] text-ui leading-4 focus:outline-none focus:border-blue-500"
               />
             </div>
             <select
@@ -163,7 +163,7 @@ export default function ContributionHistory() {
                 setCategoryFilter(event.target.value);
                 setCurrentPage(1);
               }}
-              className="min-w-0 rounded-lg border border-[#E5E2D8] px-3 py-2 bg-white text-meta text-[#16171C]"
+              className="min-w-0 rounded-lg border border-[#E5E2D8] px-3 py-1.5 bg-white text-meta text-[#16171C]"
             >
               <option value="all">Tất cả phân loại</option>
               {categories.map((category) => (
@@ -177,7 +177,7 @@ export default function ContributionHistory() {
                 setStatusFilter(event.target.value);
                 setCurrentPage(1);
               }}
-              className="rounded-lg border border-[#E5E2D8] px-3 py-2 bg-white text-meta text-[#16171C]"
+              className="rounded-lg border border-[#E5E2D8] px-3 py-1.5 bg-white text-meta text-[#16171C]"
             >
               {FILTER_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
@@ -190,11 +190,11 @@ export default function ContributionHistory() {
           <table className={`w-full min-w-[1000px] table-fixed border-collapse ${pageItems.length === itemsPerPage ? "h-full" : ""}`}>
             <thead>
               <tr className="bg-[#F7F5EF] type-label text-[#9A9CA3] border-b border-[#E5E2D8]">
-                <th className="py-2.5 px-3 text-center w-[5%]">STT</th>
-                <th className="py-2.5 px-3 text-left w-[50%]">Nội dung</th>
-                <th className="py-2.5 px-3 text-left w-[17%]">Phân loại</th>
-                <th className="py-2.5 px-3 text-left w-[14%]">Ngày nộp</th>
-                <th className="py-2.5 px-3 text-left w-[14%]">Kết quả</th>
+                <th className="py-2 px-3 text-center w-[5%]">STT</th>
+                <th className="py-2 px-3 text-left w-[50%]">Nội dung</th>
+                <th className="py-2 px-3 text-left w-[17%]">Phân loại</th>
+                <th className="py-2 px-3 text-left w-[14%]">Ngày nộp</th>
+                <th className="py-2 px-3 text-left w-[14%]">Kết quả</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0EEE6] type-ui">
@@ -203,7 +203,7 @@ export default function ContributionHistory() {
               ) : pageItems.map((item, idx) => {
                 const votedCount = item.reviews.filter((r) => r.decision === "approve" || r.decision === "reject").length;
                 return (
-                  <tr key={item.id} onClick={() => setDetailItem(item)} className="hover:bg-[#F7F5EF]/70 transition-colors group h-13 cursor-pointer">
+                  <tr key={item.id} onClick={() => setDetailItem(item)} className="hover:bg-[#F7F5EF]/70 transition-colors group h-11 cursor-pointer">
                     <td className="px-3 text-center whitespace-nowrap align-middle">
                       <span className="text-[#9A9CA3] type-meta">{(currentPage - 1) * itemsPerPage + idx + 1}</span>
                     </td>
