@@ -10,7 +10,7 @@ namespace CodeSwitchLabel.Api.Controllers;
 [ApiController]
 [Tags(ApiTags.Reviews)]
 [Authorize]
-public class ReviewsController(IReviewService reviewService) : ControllerBase
+public class ReviewsController(IReviewService reviewService, IReviewerStatsService statsService) : ControllerBase
 {
     /// <summary>Lấy bản ghi tiếp theo cần duyệt.</summary>
     /// <remarks>
@@ -44,6 +44,10 @@ public class ReviewsController(IReviewService reviewService) : ControllerBase
     /// <summary>Danh sách bản ghi trong một task duyệt được giao cho mình.</summary>
     /// <remarks>
     /// Dùng cho màn hình "task duyệt của tôi": thấy cả task một lượt thay vì bấm `next` từng bản.
+    ///
+    /// Task đã đóng (Completed/Cancelled) vẫn mở xem lại được khi mình từng được giao;
+    /// các dòng khi đó có `canReview: false` và nộp duyệt vẫn trả 403 `task_not_reviewable`.
+    /// Muốn duyệt tiếp thì nhờ Task Manager giao task mới.
     ///
     /// **Giữ nguyên luật duyệt mù** — không trả quyết định của ai. Mỗi bản chỉ cho biết đã có mấy
     /// lượt trên tổng số cần có (`reviewsDone`/`roundsRequired`), và bản thân bạn đã duyệt chưa
@@ -133,6 +137,52 @@ public class ReviewsController(IReviewService reviewService) : ControllerBase
     [ProducesResponseType(typeof(ReviewerProgressDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<ReviewerProgressDto>> Progress(CancellationToken ct)
         => Ok(await reviewService.GetProgressAsync(User.GetUserId(), ct));
+
+    /// <summary>Tổng số bản tôi đã duyệt đạt / từ chối.</summary>
+    [HttpGet("api/reviewer/stats/totals")]
+    [Authorize(Roles = "Reviewer")]
+    [ProducesResponseType(typeof(ReviewerTotalsDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ReviewerTotalsDto>> Totals(CancellationToken ct)
+        => Ok(await statsService.GetTotalsAsync(User.GetUserId(), ct));
+
+    /// <summary>Lý do từ chối tôi dùng nhiều nhất, kèm tỉ lệ.</summary>
+    [HttpGet("api/reviewer/stats/reject-reasons")]
+    [Authorize(Roles = "Reviewer")]
+    [ProducesResponseType(typeof(IEnumerable<RejectReasonStatDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<RejectReasonStatDto>>> RejectReasons(CancellationToken ct)
+        => Ok(await statsService.GetRejectReasonsAsync(User.GetUserId(), ct));
+
+    /// <summary>Các câu tôi từ chối nhiều nhất.</summary>
+    [HttpGet("api/reviewer/stats/top-rejected-sentences")]
+    [Authorize(Roles = "Reviewer")]
+    [ProducesResponseType(typeof(IEnumerable<TopRejectedSentenceDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<TopRejectedSentenceDto>>> TopRejectedSentences(
+        [FromQuery] int limit = 8, CancellationToken ct = default)
+        => Ok(await statsService.GetTopRejectedSentencesAsync(User.GetUserId(), limit, ct));
+
+    /// <summary>Các người đọc có bản ghi tôi từ chối nhiều nhất.</summary>
+    [HttpGet("api/reviewer/stats/top-rejected-speakers")]
+    [Authorize(Roles = "Reviewer")]
+    [ProducesResponseType(typeof(IEnumerable<TopRejectedSpeakerDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<TopRejectedSpeakerDto>>> TopRejectedSpeakers(
+        [FromQuery] int limit = 8, CancellationToken ct = default)
+        => Ok(await statsService.GetTopRejectedSpeakersAsync(User.GetUserId(), limit, ct));
+
+    /// <summary>Lịch sử duyệt bản ghi của chính mình.</summary>
+    [HttpGet("api/reviewer/history/recordings")]
+    [Authorize(Roles = "Reviewer")]
+    [ProducesResponseType(typeof(PagedResult<ReviewerHistoryItemDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResult<ReviewerHistoryItemDto>>> History(
+        [FromQuery] ReviewerHistoryQuery query, CancellationToken ct)
+        => Ok(await statsService.GetHistoryAsync(User.GetUserId(), query, ct));
+
+    /// <summary>Lịch sử duyệt câu của chính mình.</summary>
+    [HttpGet("api/reviewer/history/contributions")]
+    [Authorize(Roles = "Reviewer")]
+    [ProducesResponseType(typeof(PagedResult<ReviewerScriptHistoryItemDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResult<ReviewerScriptHistoryItemDto>>> ScriptHistory(
+        [FromQuery] ReviewerScriptHistoryQuery query, CancellationToken ct)
+        => Ok(await statsService.GetScriptHistoryAsync(User.GetUserId(), query, ct));
 
     private static ViewerRole ViewerRoleOf(ClaimsPrincipal user) =>
         user.IsInRole("Admin") || user.IsInRole("TaskManager") ? ViewerRole.Manager

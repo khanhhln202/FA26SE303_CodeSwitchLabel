@@ -142,6 +142,15 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
     public async Task<ActionResult<ScriptDetailDto>> Review(
         string id, [FromBody] ReviewScriptRequest request, CancellationToken ct)
         => Ok(await scriptService.ReviewAsync(id, User.GetUserId(), request, ct));
+
+    /// <summary>Khôi phục cặp câu đã bị loại về chờ duyệt.</summary>
+    [HttpPost("{id}/restore")]
+    [Authorize(Roles = "Admin")]
+    [ProducesResponseType(typeof(ScriptDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<ScriptDetailDto>> Restore(string id, CancellationToken ct)
+        => Ok(await scriptService.RestoreAsync(id, ct));
 }
 
 public class ImportScriptsForm

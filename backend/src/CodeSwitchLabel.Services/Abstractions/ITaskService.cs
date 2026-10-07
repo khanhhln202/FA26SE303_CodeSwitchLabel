@@ -38,4 +38,8 @@ public interface ITaskService
 
     /// <summary>Người giao được loại task này, kèm khối lượng đang gánh.</summary>
     Task<IReadOnlyList<AssignableUserDto>> GetAssignableUsersAsync(TaskType taskType, CancellationToken ct = default);
+
+    /// <summary>Tổng quan trang chủ Task Manager: chiến dịch phụ trách + tải từng người nhận.</summary>
+    Task<TaskManagerOverviewDto> GetManagerOverviewAsync(
+        long managerId, bool isAdmin, CancellationToken ct = default);
 }

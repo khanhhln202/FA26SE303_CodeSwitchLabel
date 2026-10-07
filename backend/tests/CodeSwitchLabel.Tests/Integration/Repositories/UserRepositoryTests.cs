@@ -16,7 +16,7 @@ public class UserRepositoryTests : IntegrationTestBase
     public async Task GetByEmailAsync_ReturnsUser_WhenUserExists()
     {
         // Act
-        var user = await Users.GetByEmailAsync("admin@test.local", CancellationToken.None);
+        var user = await Users.GetByEmailAsync("admin@test.local", TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(user);
@@ -28,7 +28,7 @@ public class UserRepositoryTests : IntegrationTestBase
     public async Task GetByEmailAsync_ReturnsNull_WhenUserDoesNotExist()
     {
         // Act
-        var user = await Users.GetByEmailAsync("nonexistent@test.local", CancellationToken.None);
+        var user = await Users.GetByEmailAsync("nonexistent@test.local", TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Null(user);
@@ -38,7 +38,7 @@ public class UserRepositoryTests : IntegrationTestBase
     public async Task GetForUpdateAsync_ReturnsUserWithRole_WhenUserExists()
     {
         // Act
-        var user = await Users.GetForUpdateAsync(AdminUserId, CancellationToken.None);
+        var user = await Users.GetForUpdateAsync(AdminUserId, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(user);
@@ -59,7 +59,7 @@ public class UserRepositoryTests : IntegrationTestBase
         Assert.NotEqual(0, user.UserId);
         Assert.Equal(email, user.Email);
 
-        var fetched = await Users.GetByEmailAsync(email, CancellationToken.None);
+        var fetched = await Users.GetByEmailAsync(email, TestContext.Current.CancellationToken);
         Assert.NotNull(fetched);
         Assert.Equal(email, fetched.Email);
     }
@@ -73,7 +73,7 @@ public class UserRepositoryTests : IntegrationTestBase
 
         // Assert
         Assert.NotEqual(0, user.UserId);
-        var fetched = await Users.GetByEmailAsync(email, CancellationToken.None);
+        var fetched = await Users.GetByEmailAsync(email, TestContext.Current.CancellationToken);
         Assert.NotNull(fetched);
     }
 
@@ -81,7 +81,7 @@ public class UserRepositoryTests : IntegrationTestBase
     public async Task SearchAsync_ReturnsUsers_WhenUsersExist()
     {
         // Act
-        var (items, total) = await Users.SearchAsync(null, null, null, 1, 10, CancellationToken.None);
+        var (items, total) = await Users.SearchAsync(null, null, null, 1, 10, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(total >= 4); // 4 seeded users
@@ -91,7 +91,7 @@ public class UserRepositoryTests : IntegrationTestBase
     public async Task GetByRoleAsync_ReturnsUsersWithRole()
     {
         // Act
-        var reviewers = await Users.GetByRoleAsync(RoleName.Reviewer, CancellationToken.None);
+        var reviewers = await Users.GetByRoleAsync(RoleName.Reviewer, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotEmpty(reviewers);
@@ -102,7 +102,7 @@ public class UserRepositoryTests : IntegrationTestBase
     public async Task GetOpenTasksAsync_ReturnsEmpty_WhenNoTasks()
     {
         // Act
-        var tasks = await Users.GetOpenTasksAsync(SpeakerUserId, CancellationToken.None);
+        var tasks = await Users.GetOpenTasksAsync(SpeakerUserId, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(tasks);

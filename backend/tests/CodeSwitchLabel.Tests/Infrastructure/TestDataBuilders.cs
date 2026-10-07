@@ -170,7 +170,7 @@ public static class TestDataBuilders
         {
             var scriptId = await db.Database
                 .SqlQuery<string>($"""SELECT fn_generate_script_id({_enWordCount}, CAST('{SnakeCaseNaming.ToSnakeCase(_domain.ToString())}' AS script_domain), 1) AS "Value" """)
-                .SingleAsync();
+                .SingleAsync(TestContext.Current.CancellationToken);
 
             var script = new Script
             {

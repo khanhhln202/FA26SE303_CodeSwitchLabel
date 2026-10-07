@@ -381,6 +381,25 @@ public class ScriptService(
 
     // ----------------------------------------------------------------- nội bộ
 
+    /// <summary>Khôi phục câu đã bị loại về chờ duyệt nội dung.</summary>
+    public async Task<ScriptDetailDto> RestoreAsync(string scriptId, CancellationToken ct = default)
+    {
+        var script = await repository.GetForUpdateAsync(scriptId, ct)
+                     ?? throw NotFoundException.Script(scriptId);
+
+        if (script.Status is ScriptStatus.PendingValidation or ScriptStatus.Validated)
+        {
+            throw new ConflictException(
+                "script_not_restorable",
+                $"Cặp câu {scriptId} đang ở trạng thái {script.Status} nên không cần khôi phục.");
+        }
+
+        script.Status = ScriptStatus.PendingValidation;
+        await repository.SaveChangesAsync(ct);
+
+        return (await repository.GetWithReviewsAsync(scriptId, ct))!.ToDetail();
+    }
+
     private async Task<ScriptDetailDto> CreateInternalAsync(
         CreateScriptRequest request, long userId, ScriptStatus status, long? batchId, CancellationToken ct)
     {

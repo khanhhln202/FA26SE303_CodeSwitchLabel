@@ -78,7 +78,7 @@ public sealed class AccountStateTests(DatabaseFixture fixture) : ApiTestBase(fix
 
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
 
-        using var doc = JsonDocument.Parse(await created.Content.ReadAsStringAsync());
+        using var doc = JsonDocument.Parse(await created.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         var userId = doc.RootElement.GetProperty("user").GetProperty("userId").GetInt64();
         var temporaryPassword = doc.RootElement.GetProperty("temporaryPassword").GetString()!;
 

@@ -59,7 +59,11 @@ public class ReviewService(
     public async Task<PagedResult<TaskReviewItemDto>> GetTaskRecordingsAsync(
         long taskId, long reviewerId, TaskReviewQuery query, CancellationToken ct = default)
     {
-        if (!await reviews.IsActiveReviewTaskOfAsync(taskId, reviewerId, ct))
+        var isActive = await reviews.IsActiveReviewTaskOfAsync(taskId, reviewerId, ct);
+
+        // Task đã đóng (Completed/Cancelled) vẫn xem lại được read-only;
+        // BlockerFor bên dưới tự đánh canReview=false vì bản ghi không còn PendingReview.
+        if (!isActive && !await reviews.IsReviewTaskOfAsync(taskId, reviewerId, ct))
         {
             throw new ForbiddenException(
                 "task_not_reviewable", $"Task #{taskId} không phải task duyệt đang giao cho bạn.");

@@ -34,6 +34,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
     public DbSet<ScriptReview> ScriptReviews => Set<ScriptReview>();
 
     public DbSet<Campaign> Campaigns => Set<Campaign>();
+    public DbSet<CampaignRegistration> CampaignRegistrations => Set<CampaignRegistration>();
     public DbSet<WorkTask> WorkTasks => Set<WorkTask>();
     public DbSet<TaskAssignment> TaskAssignments => Set<TaskAssignment>();
     public DbSet<TaskScript> TaskScripts => Set<TaskScript>();
@@ -230,6 +231,15 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
 
             e.HasOne(x => x.Creator).WithMany().HasForeignKey(x => x.CreatedBy);
             e.HasOne(x => x.AssignedToUser).WithMany().HasForeignKey(x => x.AssignedTo);
+        });
+
+        modelBuilder.Entity<CampaignRegistration>(e =>
+        {
+            e.ToTable("campaign_registration");
+            e.HasKey(x => new { x.CampaignId, x.SpeakerId });
+
+            e.HasOne(x => x.Campaign).WithMany().HasForeignKey(x => x.CampaignId);
+            e.HasOne(x => x.Speaker).WithMany().HasForeignKey(x => x.SpeakerId);
         });
 
         modelBuilder.Entity<WorkTask>(e =>

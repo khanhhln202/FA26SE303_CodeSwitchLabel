@@ -102,16 +102,16 @@ public abstract class IntegrationTestBase : IAsyncLifetime
     {
         // Mở transaction + seed trong InitializeAsync (bất đồng bộ) thay vì ctor .GetAwaiter().GetResult()
         // để tránh deadlock trên SynchronizationContext và giữ ctor nhẹ.
-        _transaction = await Db.Database.BeginTransactionAsync();
+        _transaction = await Db.Database.BeginTransactionAsync(TestContext.Current.CancellationToken);
         await SeedTestDataAsync();
-        await Db.Database.CanConnectAsync();
+        await Db.Database.CanConnectAsync(TestContext.Current.CancellationToken);
     }
 
     public virtual async ValueTask DisposeAsync()
     {
         if (_transaction is not null)
         {
-            await _transaction.RollbackAsync();
+            await _transaction.RollbackAsync(TestContext.Current.CancellationToken);
             _transaction.Dispose();
             _transaction = null;
         }
@@ -122,12 +122,12 @@ public abstract class IntegrationTestBase : IAsyncLifetime
     {
         var hasher = Services.GetRequiredService<IPasswordHasher>();
 
-        var adminRole = await Db.Roles.FirstAsync(r => r.RoleName == RoleName.Admin);
-        var managerRole = await Db.Roles.FirstAsync(r => r.RoleName == RoleName.TaskManager);
-        var reviewerRole = await Db.Roles.FirstAsync(r => r.RoleName == RoleName.Reviewer);
-        var speakerRole = await Db.Roles.FirstAsync(r => r.RoleName == RoleName.Speaker);
+        var adminRole = await Db.Roles.FirstAsync(r => r.RoleName == RoleName.Admin, TestContext.Current.CancellationToken);
+        var managerRole = await Db.Roles.FirstAsync(r => r.RoleName == RoleName.TaskManager, TestContext.Current.CancellationToken);
+        var reviewerRole = await Db.Roles.FirstAsync(r => r.RoleName == RoleName.Reviewer, TestContext.Current.CancellationToken);
+        var speakerRole = await Db.Roles.FirstAsync(r => r.RoleName == RoleName.Speaker, TestContext.Current.CancellationToken);
 
-        var admin = await Db.AppUsers.FirstOrDefaultAsync(u => u.Email == "admin@test.local");
+        var admin = await Db.AppUsers.FirstOrDefaultAsync(u => u.Email == "admin@test.local", TestContext.Current.CancellationToken);
         if (admin == null)
         {
             admin = new AppUser
@@ -142,7 +142,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
             Db.AppUsers.Add(admin);
         }
 
-        var manager = await Db.AppUsers.FirstOrDefaultAsync(u => u.Email == "manager@test.local");
+        var manager = await Db.AppUsers.FirstOrDefaultAsync(u => u.Email == "manager@test.local", TestContext.Current.CancellationToken);
         if (manager == null)
         {
             manager = new AppUser
@@ -157,7 +157,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
             Db.AppUsers.Add(manager);
         }
 
-        var reviewer = await Db.AppUsers.FirstOrDefaultAsync(u => u.Email == "reviewer@test.local");
+        var reviewer = await Db.AppUsers.FirstOrDefaultAsync(u => u.Email == "reviewer@test.local", TestContext.Current.CancellationToken);
         if (reviewer == null)
         {
             reviewer = new AppUser
@@ -172,7 +172,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
             Db.AppUsers.Add(reviewer);
         }
 
-        var speaker = await Db.AppUsers.FirstOrDefaultAsync(u => u.Email == "speaker@test.local");
+        var speaker = await Db.AppUsers.FirstOrDefaultAsync(u => u.Email == "speaker@test.local", TestContext.Current.CancellationToken);
         if (speaker == null)
         {
             speaker = new AppUser
@@ -195,16 +195,16 @@ public abstract class IntegrationTestBase : IAsyncLifetime
             Db.AppUsers.Add(speaker);
         }
 
-        await Db.SaveChangesAsync();
+        await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        admin = await Db.AppUsers.FirstAsync(u => u.Email == "admin@test.local");
-        manager = await Db.AppUsers.FirstAsync(u => u.Email == "manager@test.local");
-        reviewer = await Db.AppUsers.FirstAsync(u => u.Email == "reviewer@test.local");
-        speaker = await Db.AppUsers.FirstAsync(u => u.Email == "speaker@test.local");
+        admin = await Db.AppUsers.FirstAsync(u => u.Email == "admin@test.local", TestContext.Current.CancellationToken);
+        manager = await Db.AppUsers.FirstAsync(u => u.Email == "manager@test.local", TestContext.Current.CancellationToken);
+        reviewer = await Db.AppUsers.FirstAsync(u => u.Email == "reviewer@test.local", TestContext.Current.CancellationToken);
+        speaker = await Db.AppUsers.FirstAsync(u => u.Email == "speaker@test.local", TestContext.Current.CancellationToken);
 
         foreach (var domain in Enum.GetValues<ScriptDomain>())
         {
-            var exists = await Db.UserDomains.AnyAsync(d => d.UserId == reviewer.UserId && d.Domain == domain);
+            var exists = await Db.UserDomains.AnyAsync(d => d.UserId == reviewer.UserId && d.Domain == domain, TestContext.Current.CancellationToken);
             if (!exists)
             {
                 Db.UserDomains.Add(new UserDomain
@@ -216,7 +216,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
             }
         }
 
-        var campaign = await Db.Campaigns.FirstOrDefaultAsync(c => c.CampaignName == "Test Campaign");
+        var campaign = await Db.Campaigns.FirstOrDefaultAsync(c => c.CampaignName == "Test Campaign", TestContext.Current.CancellationToken);
         if (campaign == null)
         {
             campaign = new Campaign
@@ -239,7 +239,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
             campaign.AssignedTo = manager.UserId;
         }
 
-        await Db.SaveChangesAsync();
+        await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         AdminUserId = admin.UserId;
         ManagerUserId = manager.UserId;
@@ -322,7 +322,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         SpeakerProfile? profile = null)
     {
         var hasher = Services.GetRequiredService<IPasswordHasher>();
-        var roleEntity = await Db.Roles.FirstAsync(r => r.RoleName == role);
+        var roleEntity = await Db.Roles.FirstAsync(r => r.RoleName == role, TestContext.Current.CancellationToken);
 
         var user = new AppUser
         {
@@ -336,7 +336,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         };
 
         Db.AppUsers.Add(user);
-        await Db.SaveChangesAsync();
+        await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
         return user;
     }
 
@@ -360,7 +360,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         };
 
         Db.Campaigns.Add(campaign);
-        await Db.SaveChangesAsync();
+        await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
         return campaign;
     }
 
@@ -384,7 +384,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         };
 
         Db.WorkTasks.Add(task);
-        await Db.SaveChangesAsync();
+        await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
         return task;
     }
 
@@ -397,7 +397,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         ScriptStatus status = ScriptStatus.PendingValidation,
         ScriptRelation relation = ScriptRelation.DirectTranslation)
     {
-        var scriptId = await Scripts.GenerateIdAsync(enWordCount, domain, relation, CancellationToken.None);
+        var scriptId = await Scripts.GenerateIdAsync(enWordCount, domain, relation, TestContext.Current.CancellationToken);
 
         var script = new Script
         {
@@ -414,7 +414,36 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         };
 
         Db.Scripts.Add(script);
-        await Db.SaveChangesAsync();
+        await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return script;
+    }
+
+    /// <summary>
+    /// TEAM_002: tạo cặp câu đã duyệt đúng luồng trigger trg_script_validated_domain —
+    /// chèn ở chờ duyệt, ghi lượt Accepted của Reviewer đủ chủ đề, rồi mới chốt Validated.
+    /// Chèn thẳng Validated sẽ bị trigger từ chối vì thiếu lượt duyệt hợp lệ.
+    /// </summary>
+    protected async Task<Script> CreateValidatedScriptAsync(
+        string csContent,
+        string viContent,
+        ScriptDomain domain,
+        long createdBy,
+        int enWordCount = 1)
+    {
+        var script = await CreateScriptAsync(csContent, viContent, domain, createdBy, enWordCount);
+
+        Db.ScriptReviews.Add(new ScriptReview
+        {
+            ScriptId = script.ScriptId,
+            UserId = ReviewerUserId,
+            Action = ScriptReviewAction.Accepted,
+            Comment = "Test — tự động chấp nhận.",
+            ReviewedAt = DateTimeOffset.UtcNow
+        });
+        await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        script.Status = ScriptStatus.Validated;
+        await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
         return script;
     }
 
@@ -426,8 +455,8 @@ public abstract class IntegrationTestBase : IAsyncLifetime
     {
         // Mã bản ghi phải đúng định dạng CHECK của lược đồ, và take phải tự tăng —
         // gọi nhiều lần cho cùng cặp câu vẫn ra mã mới (r_cs_..._t2, _t3...).
-        var take = await Recordings.CountTakesAsync(scriptId, variant, CancellationToken.None) + 1;
-        var recordingId = await Recordings.GenerateIdAsync(scriptId, variant, take, CancellationToken.None);
+        var take = await Recordings.CountTakesAsync(scriptId, variant, TestContext.Current.CancellationToken) + 1;
+        var recordingId = await Recordings.GenerateIdAsync(scriptId, variant, take, TestContext.Current.CancellationToken);
 
         var recording = new Recording
         {
@@ -443,13 +472,13 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         };
 
         Db.Recordings.Add(recording);
-        await Db.SaveChangesAsync();
+        await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
         return recording;
     }
 
     protected async Task<string> CreateAccessTokenAsync(long userId, RoleName role)
     {
-        var user = await Db.AppUsers.FirstAsync(u => u.UserId == userId);
+        var user = await Db.AppUsers.FirstAsync(u => u.UserId == userId, TestContext.Current.CancellationToken);
         var issuer = Services.GetRequiredService<IAccessTokenIssuer>();
         var token = issuer.Issue(user);
         return token.AccessToken;
@@ -464,7 +493,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         RoleName role, string? email = null, string fullName = "Test User")
     {
         var hasher = Services.GetRequiredService<IPasswordHasher>();
-        var roleEntity = await Db.Roles.FirstAsync(r => r.RoleName == role);
+        var roleEntity = await Db.Roles.FirstAsync(r => r.RoleName == role, TestContext.Current.CancellationToken);
 
         var user = new TestDataBuilders.UserBuilder()
             .WithEmail(email ?? NewUniqueEmail(role.ToString().ToLowerInvariant()))
@@ -475,7 +504,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         // Builder gán RoleId theo enum cứng; ghi đè bằng RoleId thật trong database.
         user.RoleId = roleEntity.RoleId;
         Db.AppUsers.Add(user);
-        await Db.SaveChangesAsync();
+        await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
         return user;
     }
 }

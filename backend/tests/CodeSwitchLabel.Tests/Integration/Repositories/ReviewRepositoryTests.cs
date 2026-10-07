@@ -25,7 +25,7 @@ public class ReviewRepositoryTests : IntegrationTestBase
         var recording = await CreateRecordingAsync(script.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching);
 
         // Act
-        var reviews = await Reviews.GetReviewsAsync(recording.RecordingId, CancellationToken.None);
+        var reviews = await Reviews.GetReviewsAsync(recording.RecordingId, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(reviews);
@@ -50,7 +50,7 @@ public class ReviewRepositoryTests : IntegrationTestBase
 
         // Act
         var result = await Reviews.GetNextForReviewerAsync(
-            ReviewerUserId, null, speaker.UserId, false, 3, CancellationToken.None);
+            ReviewerUserId, null, speaker.UserId, false, 3, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(result);
@@ -70,7 +70,7 @@ public class ReviewRepositoryTests : IntegrationTestBase
         var recording = await CreateRecordingAsync(script.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching);
 
         // Act
-        var result = await Reviews.GetWithScriptAsync(recording.RecordingId, CancellationToken.None);
+        var result = await Reviews.GetWithScriptAsync(recording.RecordingId, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(result);
@@ -91,7 +91,7 @@ public class ReviewRepositoryTests : IntegrationTestBase
         var recording = await CreateRecordingAsync(script.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching);
 
         // Act
-        var status = await Reviews.GetRecordingStatusAsync(recording.RecordingId, CancellationToken.None);
+        var status = await Reviews.GetRecordingStatusAsync(recording.RecordingId, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(RecordingStatus.PendingReview, status);
@@ -111,7 +111,7 @@ public class ReviewRepositoryTests : IntegrationTestBase
 
         // Act — IntegrationTestBase đã mở transaction cho cả bài test, nên không mở thêm:
         // mở chồng transaction trên cùng connection là lỗi của Npgsql/EF.
-        var locked = await Reviews.LockRecordingAsync(recording.RecordingId, CancellationToken.None);
+        var locked = await Reviews.LockRecordingAsync(recording.RecordingId, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(locked);
