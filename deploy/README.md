@@ -23,13 +23,41 @@ Caddy tự xin chứng chỉ Let's Encrypt và tự gia hạn, nhóm không ph�
 2. **Tên miền**: một tên miền bất kỳ, tạo hai bản ghi A trỏ về IP máy chủ: `api` và `files`.
 3. **Mở cổng** 80 và 443 trên firewall của nhà cung cấp.
 
-Nhóm đang dùng **Azure for Students** cho máy chủ và **tên miền `.me` miễn phí qua GitHub Student
-Developer Pack**. Hai mục dưới đây là các bước đã chọn; giao diện nhà cung cấp có thể đổi theo thời gian
-nên lấy ý chính, đừng lấy từng chữ.
+Nhóm chốt ngày 08/10/2026: máy chủ **Azure for Students** (tài khoản của Lân), và **dùng tên miền miễn
+phí Azure cấp kèm IP công khai** để chạy ngay — mua tên miền riêng sau. Xem mục *Chế độ một tên miền*
+bên dưới. Giao diện nhà cung cấp có thể đổi theo thời gian nên lấy ý chính, đừng lấy từng chữ.
+
+### Chế độ một tên miền
+
+Azure cấp miễn phí một tên miền cho mỗi IP công khai, dạng `<nhãn>.southeastasia.cloudapp.azure.com`
+(đặt ở *Public IP → Configuration → DNS name label*). Let's Encrypt cấp chứng chỉ cho tên này bình thường.
+
+Hệ thống cần hai địa chỉ mà Azure chỉ cho một, nên ở chế độ này Caddy tách theo **đường dẫn** thay vì
+theo tên miền: `/recordings/*` đi vào kho file, phần còn lại đi vào API. Làm được vì kho file chạy
+path-style nên link nghe luôn bắt đầu bằng `/recordings`, còn API không có route nào ở gốc đó.
+
+Bật bằng ba dòng trong `deploy/.env`:
+
+```
+API_DOMAIN=<nhãn>.southeastasia.cloudapp.azure.com
+FILES_DOMAIN=<đúng tên miền đó>
+CADDYFILE=./Caddyfile.one-host
+```
+
+Khi mua được tên miền riêng thì đổi lại ba dòng này (`api.*`, `files.*`, `CADDYFILE=./Caddyfile`),
+thêm hai bản ghi A, rồi dựng lại — không phải sửa code.
+
+Đổi nhà cung cấp về sau không đắt: tất cả nằm trong Docker, một file `.env` và một bản `pg_dump`.
 
 ### Máy chủ trên Azure for Students
 
 Gói này cho 100 USD credit trong 12 tháng và **không cần thẻ**, chỉ cần email trường còn hiệu lực.
+
+Một con số phải nhìn thẳng: **credit hết trước khi đồ án kết thúc.** Một máy B2s chạy liên tục tốn khoảng
+30 USD/tháng, nên 100 USD chỉ đủ **cỡ ba tháng** — tức là hết vào khoảng tháng 1/2027, trong khi đồ án
+chạy tới 03/2027 và Hội đồng rơi vào 12/2026. Giá thực tế xem trong Cost Management của Azure, đừng lấy
+con số này đi báo cáo. Cách xử lý: xem lại ở **tuần 10**, khi đã biết dữ liệu thật nặng bao nhiêu, rồi
+quyết định ở lại Azure và trả tiền, hay chuyển sang VPS trả theo tháng.
 
 1. Đăng ký ở trang Azure for Students, xác thực bằng email `@fpt.edu.vn`.
 2. Tạo **Virtual Machine**:
@@ -39,23 +67,33 @@ Gói này cho 100 USD credit trong 12 tháng và **không cần thẻ**, chỉ c
    - Inbound ports: cho phép **SSH (22)**, **HTTP (80)**, **HTTPS (443)**.
 3. **Đổi Public IP sang Static.** Mặc định Azure cấp IP động; máy khởi động lại là đổi IP, hai bản ghi DNS
    trỏ sai và HTTPS đứt. Vào Networking → IP configuration → Assignment: **Static**.
-4. Đặt **budget alert** ở mức 80 USD để biết trước khi hết credit. Hết credit là máy tắt, dữ liệu thu được
-   nằm trong volume Docker nên phải có bản sao lưu từ trước (xem mục định kỳ bên dưới).
+4. Đặt **budget alert ở mức 50 USD**, không phải 80. Ở mức 50 còn kịp xoay nhà cung cấp; tới 80 thì chỉ
+   còn vài tuần. Hết credit là Azure tắt máy, dữ liệu thu được nằm trong volume Docker nên **bản sao lưu
+   phải có từ trước**, không phải lúc đó mới làm (xem mục định kỳ bên dưới).
 5. SSH vào máy rồi cài Docker theo bước 1 ở phần dưới.
 
 > Đừng tắt (deallocate) máy để tiết kiệm credit trong giai đoạn đội frontend đang ghép: IP static vẫn giữ,
 > nhưng API tắt là đội frontend đứng bánh.
 
-### Tên miền `.me` qua GitHub Student Developer Pack
+### Tên miền mua ở nhà cung cấp trong nước
 
-1. Xác thực sinh viên trên GitHub Education, rồi vào trang Student Developer Pack.
-2. Nhận ưu đãi **Namecheap**: một tên miền `.me` miễn phí 1 năm. Chọn tên gọn, ví dụ `codeswitchlabel.me`.
-3. Trong Namecheap → **Advanced DNS**, thêm đúng hai bản ghi, cùng trỏ về IP static của máy chủ:
+Nhà đăng ký phổ biến: iNET, Nhân Hoà, Tenten, Mắt Bão. Cái nào cũng được, khác nhau chủ yếu ở giao diện.
+
+1. **Mua đuôi quốc tế** (`.com`, `.dev`, `.xyz`), đừng mua `.vn`. Đuôi quốc tế mua xong là dùng ngay;
+   `.vn` phải nộp CCCD, duyệt lâu hơn và phí duy trì hằng năm cao hơn, mà đồ án không cần tới.
+2. **Không mua kèm bất cứ thứ gì khác.** Nhà đăng ký nào cũng mời chào chứng chỉ SSL, hosting, email,
+   dịch vụ bảo mật. Mình **không cần SSL trả tiền** — Caddy tự xin Let's Encrypt miễn phí và tự gia hạn;
+   hosting và email cũng không dùng tới.
+3. Mua xong, vào mục quản lý DNS của nhà đăng ký (thường tên là *Quản lý tên miền → Bản ghi DNS*
+   hoặc *DNS Records*), thêm đúng hai bản ghi, cùng trỏ về IP static của máy chủ:
 
    | Type | Host | Value | TTL |
    |---|---|---|---|
    | A Record | `api` | IP máy chủ | Automatic |
    | A Record | `files` | IP máy chủ | Automatic |
+
+   Giữ DNS ở chính nhà đăng ký, đừng chuyển đi đâu cho phức tạp. Nếu về sau chuyển sang Cloudflare thì hai bản ghi này **phải để DNS only
+   (mây xám)**: bật proxy là Cloudflare tự đứng ra làm TLS, Caddy không xin được chứng chỉ.
 
 4. **Kiểm DNS đã lan xong trước khi chạy Docker:**
 
