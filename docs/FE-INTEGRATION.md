@@ -13,6 +13,43 @@ màn hình nào gọi API nào theo thứ tự nào, cách xử lý đăng nhậ
 > công khai (`/api/config`, `/api/config/topics`), khôi phục câu (`POST /api/scripts/{id}/restore`),
 > xem lại task duyệt đã đóng (read-only), và dataset (`/api/datasets/*`). Xem lại task đã đóng,
 > khôi phục câu và dataset không còn nằm ở mục 9.
+>
+> Cập nhật 08/10/2026 — **API đã chạy trên máy chủ thật, HTTPS**. Xem mục 0 ngay dưới đây.
+
+---
+
+## 0. Máy chủ thử nghiệm — dùng cái này để ghép
+
+| Địa chỉ | Là gì |
+|---|---|
+| `https://csl-codeswitchlabel.eastasia.cloudapp.azure.com` | API, đồng thời là trang Swagger |
+| `https://csl-codeswitchlabel.eastasia.cloudapp.azure.com/swagger/v1/swagger.json` | Hợp đồng API dạng máy đọc được |
+| `https://csl-codeswitchlabel.eastasia.cloudapp.azure.com/health` | Kiểm máy chủ còn sống |
+
+Khác bản chạy trên máy cá nhân ở ba điểm:
+
+**Một tên miền duy nhất.** Link nghe audio giờ có dạng `https://<tên-miền>/recordings/...` — **cùng tên miền
+với API**, không còn cổng 9000 riêng. Frontend không phải đổi gì: cứ lấy địa chỉ trả về từ
+`GET /api/recordings/{id}/audio-url` rồi gán thẳng vào `<audio src>`.
+
+**CORS** đang mở cho hai origin Vercel:
+
+```
+https://fa-26-se-303-code-switch-label-ebon.vercel.app          (production)
+https://fa-26-se-303-code-swit-git-d93afa-...vercel.app         (alias theo nhánh)
+```
+
+URL riêng của từng lần deploy (dạng `...-dk27tfim6.vercel.app`) **không** nằm trong danh sách, vì nó đổi
+mỗi lần push. Cần thêm domain nào thì báo backend — sửa một dòng cấu hình, mất 30 giây.
+
+**Tài khoản mẫu** vẫn là `admin@`, `manager@`, `reviewer@`, `reviewer2@`, `reviewer3@`, `speaker1@`,
+`speaker2@` đuôi `@codeswitchlabel.local`, nhưng **mật khẩu khác bản dev**. Mật khẩu máy chủ không ghi
+vào tài liệu này — backend gửi riêng trong nhóm, vì ai có nó là vào được cả vai Admin từ Internet.
+
+> Máy chủ chạy code từ nhánh `main`. Có code mới trên `main` thì backend cập nhật máy chủ, frontend
+> không phải làm gì. Dữ liệu trên đó là dữ liệu mẫu và có thể bị xoá để kiểm thử — đừng coi là dữ liệu thật.
+
+Vẫn chạy backend trên máy mình được như cũ (mục 1), tiện khi sửa code mà không muốn phụ thuộc mạng.
 
 ---
 
