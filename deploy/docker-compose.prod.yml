@@ -29,7 +29,9 @@ services:
       FILES_DOMAIN: ${FILES_DOMAIN}
     logging: *logging
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Mặc định hai tên miền (api.* và files.*). Chỉ có một tên miền thì đặt
+      # CADDYFILE=./Caddyfile.one-host trong deploy/.env.
+      - ${CADDYFILE:-./Caddyfile}:/etc/caddy/Caddyfile:ro
       - caddy-data:/data      # chứng chỉ HTTPS, mất là phải xin lại
       - caddy-config:/config
     depends_on:

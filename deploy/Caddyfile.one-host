@@ -1,0 +1,43 @@
+# Bản dùng khi nhóm chỉ có MỘT tên miền — ví dụ tên miền miễn phí Azure cấp kèm IP công khai
+# (dạng <nhãn>.southeastasia.cloudapp.azure.com). Bản mặc định `Caddyfile` cần hai tên miền
+# riêng cho API và kho file; bản này gộp cả hai vào một tên, tách nhau bằng đường dẫn.
+#
+# Vì sao tách được: kho file chạy chế độ path-style, nên link nghe tạm LUÔN có dạng
+#   https://<tên-miền>/recordings/<khoá-file>?X-Amz-...
+# Chỉ cần đẩy mọi đường dẫn bắt đầu bằng /recordings sang kho file, phần còn lại sang API.
+# API không có route nào ở gốc /recordings (các route của nó nằm dưới /api), nên không đụng nhau.
+#
+# Chữ ký của link nghe gắn với tên host. Caddy giữ nguyên header Host khi chuyển tiếp,
+# và ở chế độ này host của API và của kho file là một, nên chữ ký luôn khớp.
+#
+# Dùng bản này bằng cách đặt trong deploy/.env:
+#   CADDYFILE=./Caddyfile.one-host
+#   API_DOMAIN=<tên-miền>
+#   FILES_DOMAIN=<đúng tên miền đó>
+
+{$API_DOMAIN} {
+	encode zstd gzip
+
+	# Bỏ header Server để không khai báo luôn công nghệ phía sau cho người quét cổng.
+	header -Server
+
+	# Trình duyệt tải file âm thanh thẳng từ kho, không qua API.
+	handle /recordings/* {
+		request_body {
+			max_size 25MB
+		}
+		reverse_proxy minio:9000
+	}
+
+	# Mọi thứ còn lại là API và trang Swagger.
+	handle {
+		reverse_proxy api:8080
+	}
+
+	log {
+		output file /data/api-access.log {
+			roll_size 10mb
+			roll_keep 5
+		}
+	}
+}

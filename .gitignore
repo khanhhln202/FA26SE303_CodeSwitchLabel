@@ -44,3 +44,9 @@ test-out.txt
 # ---- Tài liệu đề tài: chứa số điện thoại, MSSV, email của nhóm và giảng viên ----
 # Để ngoài lịch sử git — đẩy repo lên GitHub sẽ không lộ dữ liệu cá nhân.
 FA26SE303_CodeSwitchLabel.docx
+
+# ---- Cấu hình tạm khi mở API ra ngoài bằng Cloudflare Tunnel ----
+docker-compose.override.yml
+
+# ---- File do kịch bản demo tự sinh lại mỗi lần chạy ----
+demo/demo-live-import.json
