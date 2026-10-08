@@ -123,9 +123,17 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
     public void Remove(TaskScript item) => db.TaskScripts.Remove(item);
     public void Remove(TaskRecording item) => db.TaskRecordings.Remove(item);
 
+    /// <summary>
+    /// Khoá dòng task để hai người sửa cùng lúc không ghi đè nhau.
+    /// </summary>
+    /// <remarks>
+    /// Dùng <c>SingleOrDefault</c> chứ không phải <c>FirstOrDefault</c>: câu SQL thô đã lọc theo khoá
+    /// chính nên nhiều nhất một dòng. EF không đọc được mệnh đề WHERE nằm trong SQL thô, nên với
+    /// <c>First</c> nó tưởng đây là "lấy một dòng bất kỳ trong bảng" và cảnh báo kết quả không đoán được.
+    /// </remarks>
     public Task<WorkTask?> GetForUpdateAsync(long taskId, CancellationToken ct = default) =>
         db.WorkTasks.FromSqlInterpolated($"SELECT * FROM task WHERE task_id = {taskId} FOR UPDATE")
-            .FirstOrDefaultAsync(ct);
+            .SingleOrDefaultAsync(ct);
 
     public Task<TaskAssignment?> GetActiveAssignmentAsync(long taskId, CancellationToken ct = default) =>
         db.TaskAssignments.FirstOrDefaultAsync(

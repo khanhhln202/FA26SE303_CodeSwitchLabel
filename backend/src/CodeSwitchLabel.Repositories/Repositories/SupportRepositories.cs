@@ -200,8 +200,13 @@ public interface IStatisticsRepository
 
 public class StatisticsRepository(CodeSwitchLabelDbContext db) : IStatisticsRepository
 {
+    /// <remarks>
+    /// <c>v_dashboard_summary</c> chỉ gồm các truy vấn con đếm số, không có FROM và không GROUP BY,
+    /// nên luôn trả đúng một dòng. Dùng <c>Single</c> để nói rõ điều đó; <c>First</c> làm EF cảnh báo
+    /// "lấy một dòng mà không sắp xếp", vì nó không biết khung nhìn này chỉ có một dòng.
+    /// </remarks>
     public Task<DashboardSummary> GetDashboardAsync(CancellationToken ct = default) =>
-        db.DashboardSummary.AsNoTracking().FirstAsync(ct);
+        db.DashboardSummary.AsNoTracking().SingleAsync(ct);
 
     public Task<List<SpeakerPerformance>> GetSpeakerPerformanceAsync(CancellationToken ct = default) =>
         db.SpeakerPerformance.AsNoTracking()
