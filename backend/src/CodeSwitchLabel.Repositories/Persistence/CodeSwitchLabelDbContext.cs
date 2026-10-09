@@ -247,7 +247,10 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.ToTable("task");
             e.HasKey(x => x.TaskId);
             e.HasOne(x => x.Creator).WithMany().HasForeignKey(x => x.CreatedBy);
-            e.HasOne(x => x.Campaign).WithMany(c => c.Tasks).HasForeignKey(x => x.CampaignId);
+            // C1/C2: task độc lập (campaign_id NULL); xoá campaign giữ lại task (SET NULL).
+            e.HasOne(x => x.Campaign).WithMany(c => c.Tasks).HasForeignKey(x => x.CampaignId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<TaskAssignment>(e =>

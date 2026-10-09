@@ -228,9 +228,13 @@ CREATE TABLE campaign_registration (
 );
 CREATE INDEX idx_campaign_registration_speaker ON campaign_registration (speaker_id);
 
+-- campaign_id is NULL for standalone tasks (created outside any campaign,
+-- attached to a campaign later, or detached back). Deleting a campaign
+-- keeps its tasks: FK is ON DELETE SET NULL; use the campaign-scoped
+-- detach endpoint to remove a task from a campaign without deleting it.
 CREATE TABLE task (
     task_id      BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    campaign_id  BIGINT NOT NULL REFERENCES campaign(campaign_id),
+    campaign_id  BIGINT REFERENCES campaign(campaign_id) ON DELETE SET NULL,
     created_by   BIGINT NOT NULL REFERENCES app_user(user_id),
     task_type    task_type NOT NULL,
     description  TEXT,
@@ -455,6 +459,11 @@ DECLARE
     v_start_date DATE;
     v_end_date   DATE;
 BEGIN
+    -- Standalone task (NULL campaign_id): no campaign window to check.
+    IF NEW.campaign_id IS NULL THEN
+        RETURN NEW;
+    END IF;
+
     SELECT start_date, end_date
       INTO v_start_date, v_end_date
       FROM campaign
@@ -500,6 +509,11 @@ BEGIN
         RETURN OLD;
     END IF;
 
+    -- Detach: leaving a campaign cannot over-allocate anything.
+    IF NEW.campaign_id IS NULL THEN
+        RETURN NEW;
+    END IF;
+
     IF TG_OP = 'INSERT' THEN
         SELECT c.target_qty
           INTO v_new_target
@@ -515,6 +529,34 @@ BEGIN
           INTO v_new_total
           FROM task t
          WHERE t.campaign_id = NEW.campaign_id;
+
+        IF v_new_total + NEW.target_qty > v_new_target THEN
+            RAISE EXCEPTION
+                'campaign % target exceeded: allocated task quantity % + task quantity % > campaign target %',
+                NEW.campaign_id, v_new_total, NEW.target_qty, v_new_target;
+        END IF;
+
+        RETURN NEW;
+    END IF;
+
+    -- Attach: OLD.campaign_id IS NULL, NEW.campaign_id IS NOT NULL.
+    -- Same checks as INSERT (lock new campaign, count its tasks).
+    IF OLD.campaign_id IS NULL THEN
+        SELECT c.target_qty
+          INTO v_new_target
+          FROM campaign c
+         WHERE c.campaign_id = NEW.campaign_id
+         FOR UPDATE;
+
+        IF NOT FOUND THEN
+            RAISE EXCEPTION 'campaign % does not exist', NEW.campaign_id;
+        END IF;
+
+        SELECT COALESCE(SUM(t.target_qty), 0)
+          INTO v_new_total
+          FROM task t
+         WHERE t.campaign_id = NEW.campaign_id
+           AND t.task_id <> OLD.task_id;
 
         IF v_new_total + NEW.target_qty > v_new_target THEN
             RAISE EXCEPTION
@@ -551,7 +593,7 @@ BEGIN
         RETURN NEW;
     END IF;
 
-    -- UPDATE moving a task from one campaign to another.
+    -- UPDATE moving a task from one campaign to another (both non-NULL here).
     -- Lock both campaign rows in ascending campaign_id order.
     v_first_campaign := LEAST(OLD.campaign_id, NEW.campaign_id);
     v_second_campaign := GREATEST(OLD.campaign_id, NEW.campaign_id);
@@ -608,6 +650,11 @@ CREATE OR REPLACE FUNCTION fn_validate_task_creator_assigned() RETURNS trigger A
 DECLARE
     v_assigned_to BIGINT;
 BEGIN
+    -- Standalone task: no campaign assignment rule applies.
+    IF NEW.campaign_id IS NULL THEN
+        RETURN NEW;
+    END IF;
+
     SELECT c.assigned_to
       INTO v_assigned_to
       FROM campaign c
@@ -1082,7 +1129,7 @@ SELECT
         WHERE ts.task_id = t.task_id AND ts.status = 'completed')      AS scripts_completed,
     (SELECT COUNT(*) FROM review rv WHERE rv.task_id = t.task_id)      AS reviews_done
 FROM task t
-JOIN campaign c ON c.campaign_id = t.campaign_id;
+LEFT JOIN campaign c ON c.campaign_id = t.campaign_id;
 
 -- Campaign-level planning/progress summary
 CREATE VIEW v_campaign_progress AS

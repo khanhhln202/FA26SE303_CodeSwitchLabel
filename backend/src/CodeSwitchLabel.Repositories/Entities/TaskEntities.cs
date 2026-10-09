@@ -4,9 +4,9 @@ namespace CodeSwitchLabel.Repositories.Entities;
 
 /// <summary>
 /// Chiến dịch thu thập — đơn vị kế hoạch của Task Manager cho một đợt (thường 1-2 tuần).
-/// Mọi task đều thuộc một chiến dịch. Chỉ tiêu và thời gian do trigger của database ràng buộc
-/// với các task con: tổng chỉ tiêu task không được vượt chỉ tiêu chiến dịch, và hạn task phải
-/// nằm trong khoảng ngày của chiến dịch.
+/// Task có thể độc lập (campaign_id NULL) rồi gắn vào chiến dịch sau, hoặc gỡ ra mà không bị xoá.
+/// Chỉ tiêu và thời gian chỉ ràng buộc khi task đang gắn với chiến dịch: tổng chỉ tiêu task
+/// không được vượt chỉ tiêu chiến dịch, và hạn task phải nằm trong khoảng ngày của chiến dịch.
 /// </summary>
 public class Campaign
 {
@@ -37,8 +37,8 @@ public class WorkTask
 {
     public long TaskId { get; set; }
 
-    /// <summary>Mỗi task phải thuộc một chiến dịch — lược đồ đặt campaign_id là NOT NULL.</summary>
-    public long CampaignId { get; set; }
+    /// <summary>NULL = task độc lập, chưa gắn chiến dịch nào; gắn sau hoặc gỡ ra đều được.</summary>
+    public long? CampaignId { get; set; }
 
     public long CreatedBy { get; set; }
     public TaskType TaskType { get; set; }
@@ -51,7 +51,7 @@ public class WorkTask
     public WorkTaskStatus Status { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 
-    public Campaign Campaign { get; set; } = null!;
+    public Campaign? Campaign { get; set; }
     public AppUser Creator { get; set; } = null!;
     public ICollection<TaskAssignment> Assignments { get; set; } = [];
     public ICollection<TaskScript> TaskScripts { get; set; } = [];

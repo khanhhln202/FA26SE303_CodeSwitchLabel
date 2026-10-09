@@ -84,6 +84,11 @@ builder.Services
 
 builder.Services.AddAuthorization();
 
+// C3: sai vai trả 403 JSON có mã thay vì body rỗng.
+builder.Services.AddSingleton<
+    Microsoft.AspNetCore.Authorization.IAuthorizationMiddlewareResultHandler,
+    JsonAuthorizationHandler>();
+
 builder.Services
     .AddControllers()
     .AddJsonOptions(options =>

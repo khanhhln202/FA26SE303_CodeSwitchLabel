@@ -160,6 +160,42 @@ docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --
 File âm thanh nằm trong volume `codeswitchlabel_minio-data`; sao lưu volume này cùng với database,
 vì mất file audio là mất dữ liệu nghiên cứu, không tạo lại được.
 
+### Cập nhật lược đồ khi có migration mới (ví dụ V2 task độc lập)
+
+`docs/codeswitchlabel.sql` chỉ chạy **một lần** qua `/docker-entrypoint-initdb.d/` lúc volume
+`pg-data` còn trống. DB đã có dữ liệu **không** tự nhận lược đồ mới khi `up -d --build`,
+và `DatabaseSeeder.EnsureSchemaAsync` chỉ tự vá bảng `campaign_registration` — nên mỗi file
+trong `migrations/` phải chạy tay đúng một lần. **Không bao giờ `down -v` trên máy deploy**
+(vì xoá sạch `pg-data` + metadata bản ghi).
+
+```bash
+# 0. Trên máy deploy: sao lưu TRƯỚC khi chạm vào DB
+docker exec csl-postgres pg_dump -U csl codeswitchlabel | gzip > backup-$(date +%F)-preMigrate.sql.gz
+
+# 1. Kéo code mới (phải thấy file migration, ví dụ migrations/V2__*.sql)
+git pull
+ls -lh migrations/
+
+# 2. Áp migration — idempotent, chạy lại an toàn (single transaction, -v ON_ERROR_STOP=1)
+cat migrations/V2__task_independent_of_campaign.sql | docker exec -i csl-postgres psql -U csl -d codeswitchlabel -v ON_ERROR_STOP=1
+
+# 3. Chạy file verify đi kèm — chạy trong transaction ROLLBACK nên không làm bẩn dữ liệu
+cat migrations/V2__verify_task_independent.sql | docker exec -i csl-postgres psql -U csl -d codeswitchlabel -v ON_ERROR_STOP=1
+# Kỳ vọng: NOTICE: ALL V2 CHECKS PASSED
+
+# 4. Kiểm nhanh: campaign_id phải nullable + FK SET NULL
+docker exec csl-postgres psql -U csl -d codeswitchlabel -c "SELECT column_name,is_nullable FROM information_schema.columns WHERE table_name='task' AND column_name='campaign_id';"
+docker exec csl-postgres psql -U csl -d codeswitchlabel -c "SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid='task'::regclass AND contype='f';"
+
+# 5. Rebuild API rồi xem log tới khi sẵn sàng
+docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build
+docker compose -f deploy/docker-compose.prod.yml logs -f api
+```
+
+Rollback V2 (chạy tay trong transaction, xem cuối file migration): gắn lại hoặc xoá task
+`campaign_id IS NULL` trước, rồi `SET NOT NULL` + khôi phục function/view từ git history
+của `docs/codeswitchlabel.sql`.
+
 ## Khi chuyển sang bản chạy thật
 
 Trong `deploy/.env`: đặt `SWAGGER_ENABLED=false`, bỏ trống `SEED_PASSWORD`, đổi lại toàn bộ mật khẩu,

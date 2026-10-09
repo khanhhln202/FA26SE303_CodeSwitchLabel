@@ -70,7 +70,7 @@ public interface IStatisticsService
     Task<IReadOnlyList<CampaignProgressDto>> GetCampaignProgressAsync(CancellationToken ct = default);
 }
 
-/// <summary>Chiến dịch thu thập — đơn vị kế hoạch cha của mọi task.</summary>
+/// <summary>Chiến dịch thu thập — task có thể độc lập (campaign_id NULL) rồi gắn sau.</summary>
 public interface ICampaignService
 {
     Task<PagedResult<CampaignListItemDto>> SearchAsync(
@@ -86,6 +86,10 @@ public interface ICampaignService
 
     Task<CampaignDto> AssignAsync(
         long campaignId, long? assignedToUserId, CancellationToken ct = default);
+
+    /// <summary>Gỡ task khỏi chiến dịch (detach, giữ lại task). Xoá cứng dùng ITaskService.DeleteAsync.</summary>
+    Task<TaskDetailDto> DetachTaskAsync(
+        long campaignId, long taskId, long? callerId, bool isAdmin, CancellationToken ct = default);
 }
 
 public record SystemConfigDto(

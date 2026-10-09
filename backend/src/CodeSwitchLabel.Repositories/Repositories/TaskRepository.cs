@@ -14,8 +14,8 @@ namespace CodeSwitchLabel.Repositories.Repositories;
 /// <param name="UsableItems">Số mục còn làm được — không tính mục đã bị loại.</param>
 public record TaskRow(
     long TaskId,
-    long CampaignId,
-    string CampaignName,
+    long? CampaignId,
+    string? CampaignName,
     TaskType TaskType,
     string? Description,
     WorkTaskStatus Status,
@@ -40,6 +40,8 @@ public interface ITaskRepository
     Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken ct = default);
 
     void Add(WorkTask task);
+    void RemoveTask(WorkTask task);
+    Task DeleteAsync(long taskId, CancellationToken ct = default);
     void AddAssignment(TaskAssignment assignment);
     void AddScriptItems(IEnumerable<TaskScript> items);
     void AddRecordingItems(IEnumerable<TaskRecording> items);
@@ -117,6 +119,18 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         db.Database.BeginTransactionAsync(ct);
 
     public void Add(WorkTask task) => db.WorkTasks.Add(task);
+    public void RemoveTask(WorkTask task) => db.WorkTasks.Remove(task);
+
+    /// <summary>Xoá cứng task: cascade assignments/items; recording/review chỉ SET NULL theo lược đồ.</summary>
+    public async Task DeleteAsync(long taskId, CancellationToken ct = default)
+    {
+        var task = await db.WorkTasks.FirstOrDefaultAsync(t => t.TaskId == taskId, ct);
+        if (task is not null)
+        {
+            db.WorkTasks.Remove(task);
+            await db.SaveChangesAsync(ct);
+        }
+    }
     public void AddAssignment(TaskAssignment assignment) => db.TaskAssignments.Add(assignment);
     public void AddScriptItems(IEnumerable<TaskScript> items) => db.TaskScripts.AddRange(items);
     public void AddRecordingItems(IEnumerable<TaskRecording> items) => db.TaskRecordings.AddRange(items);
@@ -566,7 +580,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         source.Select(t => new TaskRow(
             t.TaskId,
             t.CampaignId,
-            t.Campaign.CampaignName,
+            t.Campaign!.CampaignName,
             t.TaskType,
             t.Description,
             t.Status,

@@ -6,8 +6,7 @@ namespace CodeSwitchLabel.Services.Dtos;
 
 public record CreateTaskRequest
 {
-    /// <summary>Mỗi task phải thuộc một chiến dịch — lược đồ đặt campaign_id là NOT NULL.</summary>
-    [Required(ErrorMessage = "Phải chọn chiến dịch.")]
+    /// <summary>Để trống (null) = tạo task độc lập, gắn vào chiến dịch sau. Có giá trị thì kiểm tra quota/hạn như cũ.</summary>
     [Range(1, long.MaxValue, ErrorMessage = "Chiến dịch không hợp lệ.")]
     public long? CampaignId { get; init; }
 
@@ -80,10 +79,17 @@ public record TaskProgressDto(
     double? HoursRemaining,
     bool IsOverdue);
 
+/// <summary>Gắn task vào chiến dịch (attach/move), hoặc gỡ ra (detach) khi CampaignId = null.</summary>
+public record AttachTaskRequest
+{
+    [Range(1, long.MaxValue, ErrorMessage = "Chiến dịch không hợp lệ.")]
+    public long? CampaignId { get; init; }
+}
+
 public record TaskListItemDto(
     long TaskId,
-    long CampaignId,
-    string CampaignName,
+    long? CampaignId,
+    string? CampaignName,
     TaskType TaskType,
     string? Description,
     WorkTaskStatus Status,

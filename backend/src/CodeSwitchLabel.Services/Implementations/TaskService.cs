@@ -7,6 +7,8 @@ using CodeSwitchLabel.Services.Common;
 using CodeSwitchLabel.Services.Dtos;
 using CodeSwitchLabel.Services.Reviews;
 using CodeSwitchLabel.Services.WorkTasks;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace CodeSwitchLabel.Services.Implementations;
 
@@ -47,61 +49,68 @@ public class TaskService(
     {
         var now = clock.GetUtcNow();
 
-        var campaignId = request.CampaignId!.Value;
-
-        var campaign = await campaigns.GetAsync(campaignId, ct)
-            ?? throw new NotFoundException("campaign_not_found", $"Không tìm thấy chiến dịch #{campaignId}.");
-
-        // TEAM_001: ERD — Task Manager chỉ tạo được task trong chiến dịch Admin đã giao cho chính
-        // mình; chiến dịch chưa giao thì chưa nhận task. Trigger trg_task_creator_assigned của
-        // database chặn lần nữa ở tầng sâu.
-        if (campaign.AssignedTo != createdById)
-        {
-            throw new UnprocessableException(
-                "campaign_not_assigned_to_manager",
-                campaign.AssignedTo is null
-                    ? $"Chiến dịch #{campaignId} chưa được giao cho Task Manager nào nên chưa nhận task. Nhờ Admin giao chiến dịch trước."
-                    : $"Chiến dịch #{campaignId} đang giao cho người khác — bạn chỉ tạo được task trong chiến dịch của mình.");
-        }
-
-        // Chiến dịch đã huỷ hoặc đã hoàn thành thì không nhận thêm việc nữa: đóng chiến dịch mà task vẫn
-        // chui vào được thì con số chỉ tiêu và báo cáo cuối đợt không còn đúng. Task đã tạo trước đó vẫn chạy.
-        if (campaign.Status is CampaignStatus.Completed or CampaignStatus.Cancelled)
-        {
-            throw new UnprocessableException(
-                "campaign_not_accepting_tasks",
-                $"Chiến dịch #{campaignId} đang ở trạng thái {campaign.Status} nên không nhận thêm task. " +
-                "Mở lại chiến dịch hoặc chọn chiến dịch khác.");
-        }
-
         var targetQty = request.TargetQty!.Value;
         var deadline = ToUtcFuture(request.Deadline!.Value, now);
 
-        // Hạn task phải nằm trong khoảng ngày của chiến dịch (trigger của database cũng chặn).
-        var deadlineDate = DateOnly.FromDateTime(deadline.UtcDateTime);
-
-        if (deadlineDate < campaign.StartDate || deadlineDate > campaign.EndDate)
+        // campaignId null = task độc lập (C1): bỏ qua mọi kiểm tra chiến dịch.
+        // Trigger trg_task_campaign_window / trg_task_campaign_target / trg_task_creator_assigned
+        // đều RETURN NEW ngay khi NEW.campaign_id IS NULL.
+        Campaign? campaign = null;
+        if (request.CampaignId.HasValue)
         {
-            throw new UnprocessableException(
-                "task_deadline_outside_campaign",
-                $"Hạn {deadlineDate:yyyy-MM-dd} phải nằm trong khoảng ngày của chiến dịch " +
-                $"{campaign.StartDate:yyyy-MM-dd} đến {campaign.EndDate:yyyy-MM-dd}.");
-        }
+            var campaignId = request.CampaignId.Value;
 
-        // Tổng chỉ tiêu các task không được vượt chỉ tiêu chiến dịch.
-        var allocated = await campaigns.SumAllocatedAsync(campaignId, ct);
+            campaign = await campaigns.GetAsync(campaignId, ct)
+                ?? throw new NotFoundException("campaign_not_found", $"Không tìm thấy chiến dịch #{campaignId}.");
 
-        if (allocated + targetQty > campaign.TargetQty)
-        {
-            throw new UnprocessableException(
-                "task_target_exceeds_campaign",
-                $"Chiến dịch #{campaignId} đã chia {allocated}/{campaign.TargetQty} cặp câu; " +
-                $"thêm {targetQty} là vượt chỉ tiêu.");
+            // TEAM_001: ERD — Task Manager chỉ tạo được task trong chiến dịch Admin đã giao cho chính
+            // mình; chiến dịch chưa giao thì chưa nhận task. Trigger trg_task_creator_assigned của
+            // database chặn lần nữa ở tầng sâu.
+            if (campaign.AssignedTo != createdById)
+            {
+                throw new UnprocessableException(
+                    "campaign_not_assigned_to_manager",
+                    campaign.AssignedTo is null
+                        ? $"Chiến dịch #{campaignId} chưa được giao cho Task Manager nào nên chưa nhận task. Nhờ Admin giao chiến dịch trước."
+                        : $"Chiến dịch #{campaignId} đang giao cho người khác — bạn chỉ tạo được task trong chiến dịch của mình.");
+            }
+
+            // Chiến dịch đã huỷ hoặc đã hoàn thành thì không nhận thêm việc nữa: đóng chiến dịch mà task vẫn
+            // chui vào được thì con số chỉ tiêu và báo cáo cuối đợt không còn đúng. Task đã tạo trước đó vẫn chạy.
+            if (campaign.Status is CampaignStatus.Completed or CampaignStatus.Cancelled)
+            {
+                throw new UnprocessableException(
+                    "campaign_not_accepting_tasks",
+                    $"Chiến dịch #{campaignId} đang ở trạng thái {campaign.Status} nên không nhận thêm task. " +
+                    "Mở lại chiến dịch hoặc chọn chiến dịch khác.");
+            }
+
+            // Hạn task phải nằm trong khoảng ngày của chiến dịch (trigger của database cũng chặn).
+            var deadlineDate = DateOnly.FromDateTime(deadline.UtcDateTime);
+
+            if (deadlineDate < campaign.StartDate || deadlineDate > campaign.EndDate)
+            {
+                throw new UnprocessableException(
+                    "task_deadline_outside_campaign",
+                    $"Hạn {deadlineDate:yyyy-MM-dd} phải nằm trong khoảng ngày của chiến dịch " +
+                    $"{campaign.StartDate:yyyy-MM-dd} đến {campaign.EndDate:yyyy-MM-dd}.");
+            }
+
+            // Tổng chỉ tiêu các task không được vượt chỉ tiêu chiến dịch.
+            var allocated = await campaigns.SumAllocatedAsync(campaignId, ct);
+
+            if (allocated + targetQty > campaign.TargetQty)
+            {
+                throw new UnprocessableException(
+                    "task_target_exceeds_campaign",
+                    $"Chiến dịch #{campaignId} đã chia {allocated}/{campaign.TargetQty} cặp câu; " +
+                    $"thêm {targetQty} là vượt chỉ tiêu.");
+            }
         }
 
         var task = new WorkTask
         {
-            CampaignId = campaignId,
+            CampaignId = request.CampaignId,
             CreatedBy = createdById,
             TaskType = request.TaskType!.Value,
             Description = Clean(request.Description),
@@ -112,9 +121,97 @@ public class TaskService(
         };
 
         tasks.Add(task);
-        await tasks.SaveChangesAsync(ct);
+        await SaveTasksAsync(ct);
 
         return await LoadDetailAsync(task.TaskId, ct);
+    }
+
+    /// <summary>Gắn task vào chiến dịch (attach/move), hoặc gỡ ra (detach) khi campaignId = null.</summary>
+    public async Task<TaskDetailDto> AttachAsync(
+        long taskId, long? campaignId, CancellationToken ct = default,
+        long? callerId = null, bool isAdmin = false)
+    {
+        await using var transaction = await BeginTransactionIfNeededAsync(ct);
+        var task = await LoadEditableAsync(taskId, ct);
+        await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
+
+        if (campaignId.HasValue)
+        {
+            var campaign = await campaigns.GetAsync(campaignId.Value, ct)
+                ?? throw new NotFoundException("campaign_not_found", $"Không tìm thấy chiến dịch #{campaignId}.");
+
+            if (campaign.AssignedTo.HasValue && callerId.HasValue && !isAdmin
+                && campaign.AssignedTo.Value != callerId.Value)
+            {
+                throw new ForbiddenException(
+                    "task_not_owned",
+                    $"Chiến dịch #{campaignId} không giao cho bạn nên không gắn task vào được.");
+            }
+
+            if (campaign.Status is CampaignStatus.Completed or CampaignStatus.Cancelled)
+            {
+                throw new UnprocessableException(
+                    "campaign_not_accepting_tasks",
+                    $"Chiến dịch #{campaignId} đang ở trạng thái {campaign.Status} nên không nhận thêm task.");
+            }
+
+            if (task.Deadline.HasValue)
+            {
+                var deadlineDate = DateOnly.FromDateTime(task.Deadline.Value.UtcDateTime);
+                if (deadlineDate < campaign.StartDate || deadlineDate > campaign.EndDate)
+                {
+                    throw new UnprocessableException(
+                        "task_deadline_outside_campaign",
+                        $"Hạn {deadlineDate:yyyy-MM-dd} phải nằm trong khoảng ngày của chiến dịch " +
+                        $"{campaign.StartDate:yyyy-MM-dd} đến {campaign.EndDate:yyyy-MM-dd}.");
+                }
+            }
+
+            var allocated = await campaigns.SumAllocatedAsync(campaignId.Value, ct);
+            var withoutThis = task.CampaignId == campaignId.Value ? allocated - task.TargetQty : allocated;
+            if (withoutThis + task.TargetQty > campaign.TargetQty)
+            {
+                throw new UnprocessableException(
+                    "task_target_exceeds_campaign",
+                    $"Chiến dịch #{campaignId} đã chia {allocated}/{campaign.TargetQty} cặp câu; " +
+                    $"gắn task này ({task.TargetQty}) là vượt chỉ tiêu.");
+            }
+        }
+
+        task.CampaignId = campaignId;
+        await SaveTasksAsync(ct);
+        if (transaction is not null) await transaction.CommitAsync(ct);
+
+        return await LoadDetailAsync(taskId, ct);
+    }
+
+    /// <summary>Gỡ task khỏi chiến dịch nhưng giữ lại task (C2). Không xoá assignments/items.</summary>
+    public async Task<TaskDetailDto> DetachAsync(
+        long campaignId, long taskId, CancellationToken ct = default,
+        long? callerId = null, bool isAdmin = false)
+    {
+        var task = await tasks.GetForUpdateAsync(taskId, ct) ?? throw NotFound(taskId);
+
+        if (task.CampaignId != campaignId)
+        {
+            throw new NotFoundException(
+                "task_not_found", $"Task #{taskId} không thuộc chiến dịch #{campaignId}.");
+        }
+
+        return await AttachAsync(taskId, null, ct, callerId, isAdmin);
+    }
+
+    /// <summary>Xoá cứng task (C2). Cascade theo lược đồ; recording/review chỉ SET NULL.</summary>
+    public async Task DeleteAsync(
+        long taskId, CancellationToken ct = default,
+        long? callerId = null, bool isAdmin = false)
+    {
+        await using var transaction = await BeginTransactionIfNeededAsync(ct);
+        var task = await LoadEditableAsync(taskId, ct);
+        await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
+
+        await tasks.DeleteAsync(taskId, ct);
+        if (transaction is not null) await transaction.CommitAsync(ct);
     }
 
     public async Task<PagedResult<TaskListItemDto>> SearchAsync(
@@ -137,7 +234,7 @@ public class TaskService(
         long taskId, UpdateTaskRequest request, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false)
     {
-        await using var transaction = await tasks.BeginTransactionAsync(ct);
+        await using var transaction = await BeginTransactionIfNeededAsync(ct);
         var task = await LoadEditableAsync(taskId, ct);
         await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
 
@@ -146,7 +243,9 @@ public class TaskService(
         if (request.Deadline.HasValue)
         {
             var deadline = ToUtcFuture(request.Deadline.Value, clock.GetUtcNow());
-            var campaign = await campaigns.GetAsync(task.CampaignId, ct);
+            var campaign = task.CampaignId.HasValue
+                ? await campaigns.GetAsync(task.CampaignId.Value, ct)
+                : null;
             if (campaign is not null)
             {
                 var deadlineDate = DateOnly.FromDateTime(deadline.UtcDateTime);
@@ -164,10 +263,13 @@ public class TaskService(
         if (request.TargetQty.HasValue)
         {
             // Giữ quota chiến dịch như lúc Create: tổng đã chia (trừ task này) + chỉ tiêu mới <= target.
-            var campaign = await campaigns.GetAsync(task.CampaignId, ct);
+            // Task độc lập (campaign_id NULL) bỏ qua kiểm tra này; trigger cũng RETURN NEW ngay.
+            var campaign = task.CampaignId.HasValue
+                ? await campaigns.GetAsync(task.CampaignId.Value, ct)
+                : null;
             if (campaign is not null)
             {
-                var allocated = await campaigns.SumAllocatedAsync(task.CampaignId, ct);
+                var allocated = await campaigns.SumAllocatedAsync(task.CampaignId!.Value, ct);
                 var withoutThis = allocated - task.TargetQty;
                 if (withoutThis + request.TargetQty.Value > campaign.TargetQty)
                 {
@@ -195,11 +297,11 @@ public class TaskService(
             task.TargetQty = request.TargetQty.Value;
         }
 
-        await tasks.SaveChangesAsync(ct);
+        await SaveTasksAsync(ct);
 
         // Đổi chỉ tiêu có thể làm task xong ngay, hoặc mở lại một task đã xong.
         await tracker.RefreshStatusAsync(taskId, ct);
-        await transaction.CommitAsync(ct);
+        if (transaction is not null) await transaction.CommitAsync(ct);
 
         return await LoadDetailAsync(taskId, ct);
     }
@@ -208,7 +310,7 @@ public class TaskService(
         long taskId, AddTaskItemsRequest request, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false)
     {
-        await using var transaction = await tasks.BeginTransactionAsync(ct);
+        await using var transaction = await BeginTransactionIfNeededAsync(ct);
         var task = await LoadMutableAsync(taskId, ct);
         await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
 
@@ -264,9 +366,9 @@ public class TaskService(
             }));
         }
 
-        await tasks.SaveChangesAsync(ct);
+        await SaveTasksAsync(ct);
         await tracker.RefreshStatusAsync(taskId, ct);
-        await transaction.CommitAsync(ct);
+        if (transaction is not null) await transaction.CommitAsync(ct);
 
         return new AddTaskItemsResult(accepted.Count, skipped, await LoadDetailAsync(taskId, ct));
     }
@@ -275,7 +377,7 @@ public class TaskService(
         long taskId, string itemId, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false)
     {
-        await using var transaction = await tasks.BeginTransactionAsync(ct);
+        await using var transaction = await BeginTransactionIfNeededAsync(ct);
         var task = await LoadMutableAsync(taskId, ct);
         await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
 
@@ -314,8 +416,8 @@ public class TaskService(
             tasks.Remove(item);
         }
 
-        await tasks.SaveChangesAsync(ct);
-        await transaction.CommitAsync(ct);
+        await SaveTasksAsync(ct);
+        if (transaction is not null) await transaction.CommitAsync(ct);
         return await LoadDetailAsync(taskId, ct);
     }
 
@@ -354,7 +456,7 @@ public class TaskService(
                 DescribeShortfall(task.TargetQty, workable, blocked) + " Thêm mục, gỡ các mục đó, hoặc hạ chỉ tiêu.");
         }
 
-        await using var transaction = await tasks.BeginTransactionAsync(ct);
+        await using var transaction = await BeginTransactionIfNeededAsync(ct);
 
         var current = await tasks.GetActiveAssignmentAsync(taskId, ct);
 
@@ -370,7 +472,7 @@ public class TaskService(
 
             // Lưu NGAY: database chỉ cho mỗi task một lượt giao đang hoạt động, gộp một lần lưu
             // thì EF có thể ghi lượt mới trước và vi phạm index duy nhất.
-            await tasks.SaveChangesAsync(ct);
+            await SaveTasksAsync(ct);
         }
 
         tasks.AddAssignment(new TaskAssignment
@@ -381,11 +483,11 @@ public class TaskService(
             AssignmentStatus = AssignmentStatus.Active
         });
 
-        await tasks.SaveChangesAsync(ct);
+        await SaveTasksAsync(ct);
 
         // Giao lần đầu: Draft → Open. Điều phối lại task đã có việc: giữ InProgress.
         await tracker.RefreshStatusAsync(taskId, ct);
-        await transaction.CommitAsync(ct);
+        if (transaction is not null) await transaction.CommitAsync(ct);
 
         return await LoadDetailAsync(taskId, ct);
     }
@@ -409,7 +511,7 @@ public class TaskService(
 
         // Các mục giữ nguyên để còn dấu vết. Task đã huỷ không giữ chỗ gì nữa:
         // truy vấn tự lấp chỉ tránh những mục đang nằm trong task còn chạy.
-        await tasks.SaveChangesAsync(ct);
+        await SaveTasksAsync(ct);
 
         return await LoadDetailAsync(taskId, ct);
     }
@@ -631,6 +733,7 @@ public class TaskService(
 
     /// <summary>
     /// Chỉ Task Manager sở hữu chiến dịch (campaign.AssignedTo) hoặc Admin được sửa task.
+    /// Task độc lập (campaign_id NULL): chỉ người tạo hoặc Admin được sửa.
     /// callerId null nghĩa là caller cũ (test) — bỏ qua để tương thích ngược.
     /// </summary>
     private async Task EnsureCampaignOwnerAsync(WorkTask task, long? callerId, bool isAdmin, CancellationToken ct)
@@ -638,7 +741,18 @@ public class TaskService(
         if (!callerId.HasValue) return;
         if (isAdmin) return;
 
-        var campaign = await campaigns.GetAsync(task.CampaignId, ct)
+        if (!task.CampaignId.HasValue)
+        {
+            if (task.CreatedBy != callerId.Value)
+            {
+                throw new ForbiddenException(
+                    "task_not_owned",
+                    $"Task #{task.TaskId} là task độc lập do người khác tạo nên bạn không sửa được.");
+            }
+            return;
+        }
+
+        var campaign = await campaigns.GetAsync(task.CampaignId.Value, ct)
             ?? throw new NotFoundException("campaign_not_found", $"Không tìm thấy chiến dịch #{task.CampaignId}.");
 
         if (campaign.AssignedTo != callerId.Value)
@@ -647,6 +761,69 @@ public class TaskService(
                 "task_not_owned",
                 $"Task #{task.TaskId} thuộc chiến dịch #{campaign.CampaignId} không giao cho bạn.");
         }
+    }
+
+    /// <summary>
+    /// Mở transaction riêng, trừ khi caller đã ở trong một transaction (test
+    /// tích hợp giữ transaction ambient để rollback). EF không cho transaction
+    /// lồng nhau trên cùng connection nên trường hợp đó dùng luôn ambient.
+    /// </summary>
+    private async Task<IDbContextTransaction?> BeginTransactionIfNeededAsync(CancellationToken ct)
+    {
+        try
+        {
+            return await tasks.BeginTransactionAsync(ct);
+        }
+        catch (InvalidOperationException ex)
+            when (ex.Message.Contains("already in a transaction", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Lưu thay đổi task, dịch lỗi thô của trigger PostgreSQL (khi race với
+    /// kiểm tra ở trên) thành lỗi nghiệp vụ có mã để frontend hiện được.
+    /// </summary>
+    private async Task SaveTasksAsync(CancellationToken ct)
+    {
+        try
+        {
+            await tasks.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (MapTriggerException(ex) is not null)
+        {
+            throw MapTriggerException(ex)!;
+        }
+    }
+
+    private static AppException? MapTriggerException(DbUpdateException ex)
+    {
+        var message = ex.InnerException?.Message ?? ex.Message;
+
+        if (message.Contains("target exceeded", StringComparison.OrdinalIgnoreCase))
+        {
+            return new UnprocessableException(
+                "task_target_exceeds_campaign",
+                "Chỉ tiêu task vượt phần còn lại của chiến dịch. Lấy allocatedTaskQty ở danh sách chiến dịch để chia lại.");
+        }
+
+        if (message.Contains("must be within campaign", StringComparison.OrdinalIgnoreCase))
+        {
+            return new UnprocessableException(
+                "task_deadline_outside_campaign",
+                "Hạn của task nằm ngoài khoảng ngày của chiến dịch. Giới hạn ô chọn ngày theo startDate/endDate.");
+        }
+
+        if (message.Contains("no assigned task manager", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("must be the assigned task manager", StringComparison.OrdinalIgnoreCase))
+        {
+            return new UnprocessableException(
+                "campaign_not_assigned_to_manager",
+                "Chiến dịch chưa được giao cho bạn nên chưa nhận task. Nhờ Admin giao chiến dịch trước.");
+        }
+
+        return null;
     }
 
     private async Task<TaskDetailDto> LoadDetailAsync(long taskId, CancellationToken ct)

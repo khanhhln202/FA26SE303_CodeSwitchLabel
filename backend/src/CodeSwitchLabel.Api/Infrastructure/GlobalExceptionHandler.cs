@@ -23,7 +23,7 @@ public class GlobalExceptionHandler(
         var problem = exception switch
         {
             AppException app => HandleAppException(app),
-            _ => HandleUnexpected(exception)
+            _ => MapTriggerException(exception) ?? HandleUnexpected(exception)
         };
 
         problem.Instance = $"{context.Request.Method} {context.Request.Path}";
@@ -51,6 +51,71 @@ public class GlobalExceptionHandler(
             Extensions = { ["code"] = exception.Code }
         };
     }
+
+    /// <summary>
+    /// C3: trigger PostgreSQL là lưới chắn cuối (race với kiểm tra ở service,
+    /// hoặc ghi thẳng bằng SQL). Dịch lỗi thô thành mã nghiệp vụ để frontend
+    /// hiện được thay vì 500 internal_error chung chung.
+    /// </summary>
+    private static ProblemDetails? MapTriggerException(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            var message = current.Message ?? string.Empty;
+
+            if (message.Contains("target exceeded", StringComparison.OrdinalIgnoreCase))
+            {
+                return BusinessProblem(
+                    StatusCodes.Status422UnprocessableEntity,
+                    "task_target_exceeds_campaign",
+                    "Chỉ tiêu task vượt phần còn lại của chiến dịch.");
+            }
+
+            if (message.Contains("must be within campaign", StringComparison.OrdinalIgnoreCase))
+            {
+                return BusinessProblem(
+                    StatusCodes.Status422UnprocessableEntity,
+                    "task_deadline_outside_campaign",
+                    "Hạn của task nằm ngoài khoảng ngày của chiến dịch.");
+            }
+
+            if (message.Contains("no assigned task manager", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("must be the assigned task manager", StringComparison.OrdinalIgnoreCase))
+            {
+                return BusinessProblem(
+                    StatusCodes.Status422UnprocessableEntity,
+                    "campaign_not_assigned_to_manager",
+                    "Chiến dịch chưa được giao cho bạn nên chưa nhận task.");
+            }
+
+            if (message.Contains("cannot be validated", StringComparison.OrdinalIgnoreCase))
+            {
+                return BusinessProblem(
+                    StatusCodes.Status422UnprocessableEntity,
+                    "reviewer_domain_required",
+                    "Chỉ người được phân đúng chủ đề mới duyệt được cặp câu này sang trạng thái đã duyệt.");
+            }
+
+            if (message.Contains("self-review blocked", StringComparison.OrdinalIgnoreCase))
+            {
+                return BusinessProblem(
+                    StatusCodes.Status403Forbidden,
+                    "self_review_forbidden",
+                    "Bạn không được duyệt bản ghi do chính mình thu.");
+            }
+        }
+
+        return null;
+    }
+
+    private static ProblemDetails BusinessProblem(int status, string code, string title) =>
+        new()
+        {
+            Status = status,
+            Title = title,
+            Type = $"https://codeswitchlabel.local/errors/{code}",
+            Extensions = { ["code"] = code }
+        };
 
     private ProblemDetails HandleUnexpected(Exception exception)
     {

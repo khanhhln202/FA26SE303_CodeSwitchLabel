@@ -32,6 +32,21 @@ public interface ITaskService
         long taskId, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false);
 
+    /// <summary>Gắn task vào chiến dịch (attach/move), hoặc gỡ ra (detach) khi campaignId = null.</summary>
+    Task<TaskDetailDto> AttachAsync(
+        long taskId, long? campaignId, CancellationToken ct = default,
+        long? callerId = null, bool isAdmin = false);
+
+    /// <summary>Gỡ task khỏi chiến dịch nhưng giữ lại task (C2).</summary>
+    Task<TaskDetailDto> DetachAsync(
+        long campaignId, long taskId, CancellationToken ct = default,
+        long? callerId = null, bool isAdmin = false);
+
+    /// <summary>Xoá cứng task (C2). Chỉ từ màn hình Task độc lập.</summary>
+    Task DeleteAsync(
+        long taskId, CancellationToken ct = default,
+        long? callerId = null, bool isAdmin = false);
+
     Task<IReadOnlyList<AssigneeSummaryDto>> GetAssigneeSummaryAsync(CancellationToken ct = default);
 
     Task<SpeakerProgressDto> GetSpeakerProgressAsync(long speakerId, CancellationToken ct = default);
