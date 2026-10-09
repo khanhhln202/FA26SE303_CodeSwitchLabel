@@ -75,6 +75,10 @@ export const taskService = {
     const res = await apiClient.post(`/api/tasks/${id}/cancel`);
     return res.data;
   },
+  deleteTask: async (id) => {
+    const res = await apiClient.delete(`/api/tasks/${id}`);
+    return res.data;
+  },
 
   getAssignableUsers: async (taskType) => {
     const res = await apiClient.get('/api/tasks/assignable-users', { params: { taskType } });
