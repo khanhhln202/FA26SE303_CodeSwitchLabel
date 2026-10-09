@@ -316,11 +316,10 @@ COMMIT;
 -- ============================================================
 -- ROLLBACK (as comments only — run manually, in a transaction):
 --
--- -- 1. Re-attach or delete standalone tasks first, otherwise the
--- --    NOT NULL restore fails:
+-- -- 1. Re-attach standalone tasks first (or cancel them), otherwise the
+-- --    NOT NULL restore fails. Tasks are never hard-deleted via the API:
 -- --    SELECT task_id FROM task WHERE campaign_id IS NULL;
 -- --    UPDATE task SET campaign_id = <campaign_id> WHERE campaign_id IS NULL;
--- --    -- or: DELETE FROM task WHERE campaign_id IS NULL;
 -- -- 2. ALTER TABLE task ALTER COLUMN campaign_id SET NOT NULL;
 -- -- 3. ALTER TABLE task DROP CONSTRAINT IF EXISTS task_campaign_id_fkey;
 -- --    ALTER TABLE task ADD CONSTRAINT task_campaign_id_fkey

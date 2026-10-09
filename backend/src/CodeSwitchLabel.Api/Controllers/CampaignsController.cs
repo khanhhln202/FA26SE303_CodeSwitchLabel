@@ -77,7 +77,7 @@ public class CampaignsController(ICampaignService campaignService) : ControllerB
         long id, [FromBody] UpdateCampaignRequest request, CancellationToken ct)
         => Ok(await campaignService.UpdateAsync(id, request, ct));
 
-    /// <summary>Gỡ task khỏi chiến dịch (detach): task còn tồn tại với campaign_id NULL, giữ assignments/items. Chỉ detach ở đây; xoá cứng dùng DELETE /api/tasks/{id}.</summary>
+    /// <summary>Gỡ task khỏi chiến dịch (detach): task còn tồn tại với campaign_id NULL, giữ assignments/items. Task không bao giờ bị xoá cứng qua API; đóng task dùng POST /api/tasks/{id}/cancel.</summary>
     /// <remarks>
     /// Không xoá task, không xoá task_script/task_recording/assignment. Xoá campaign (SQL trực tiếp)
     /// cũng chỉ SET NULL nhờ FK ON DELETE SET NULL — không endpoint xoá campaign.

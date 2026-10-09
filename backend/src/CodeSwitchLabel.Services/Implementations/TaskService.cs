@@ -201,19 +201,6 @@ public class TaskService(
         return await AttachAsync(taskId, null, ct, callerId, isAdmin);
     }
 
-    /// <summary>Xoá cứng task (C2). Cascade theo lược đồ; recording/review chỉ SET NULL.</summary>
-    public async Task DeleteAsync(
-        long taskId, CancellationToken ct = default,
-        long? callerId = null, bool isAdmin = false)
-    {
-        await using var transaction = await BeginTransactionIfNeededAsync(ct);
-        var task = await LoadEditableAsync(taskId, ct);
-        await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
-
-        await tasks.DeleteAsync(taskId, ct);
-        if (transaction is not null) await transaction.CommitAsync(ct);
-    }
-
     public async Task<PagedResult<TaskListItemDto>> SearchAsync(
         TaskSearchRequest request, CancellationToken ct = default)
     {

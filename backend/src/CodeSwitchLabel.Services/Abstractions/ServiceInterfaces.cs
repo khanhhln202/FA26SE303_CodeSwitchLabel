@@ -87,7 +87,7 @@ public interface ICampaignService
     Task<CampaignDto> AssignAsync(
         long campaignId, long? assignedToUserId, CancellationToken ct = default);
 
-    /// <summary>Gỡ task khỏi chiến dịch (detach, giữ lại task). Xoá cứng dùng ITaskService.DeleteAsync.</summary>
+    /// <summary>Gỡ task khỏi chiến dịch (detach, giữ lại task). Task không bao giờ bị xoá cứng qua API.</summary>
     Task<TaskDetailDto> DetachTaskAsync(
         long campaignId, long taskId, long? callerId, bool isAdmin, CancellationToken ct = default);
 }

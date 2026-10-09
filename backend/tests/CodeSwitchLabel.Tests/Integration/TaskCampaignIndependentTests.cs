@@ -1,3 +1,6 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
 using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Services.Common;
 using CodeSwitchLabel.Services.Dtos;
@@ -8,13 +11,20 @@ using Xunit;
 namespace CodeSwitchLabel.Tests.Integration;
 
 /// <summary>
-/// C1/C2: task độc lập (campaign_id NULL), attach/detach/move, xoá cứng.
+/// C1/C2: task độc lập (campaign_id NULL), attach/detach/move, cancel (không xoá cứng).
 /// Mỗi test chạy trong transaction riêng (rollback khi Dispose).
 /// </summary>
 [Collection("Database")]
 [Trait("Category", "Integration")]
-public sealed class TaskCampaignIndependentTests(DatabaseFixture fixture) : IntegrationTestBase(fixture)
+public sealed class TaskCampaignIndependentTests : IntegrationTestBase
 {
+    private readonly DatabaseFixture _fixture;
+
+    public TaskCampaignIndependentTests(DatabaseFixture fixture) : base(fixture)
+    {
+        _fixture = fixture;
+    }
+
     [Fact]
     public async Task StandaloneCreate_Succeeds_WithNullCampaign()
     {
@@ -142,6 +152,64 @@ public sealed class TaskCampaignIndependentTests(DatabaseFixture fixture) : Inte
     }
 
     [Fact]
+    public async Task DetachViaCampaignEndpoint_DetachesInDatabase()
+    {
+        // Hồi quy cho bug FE: màn hình đợt phải gọi đúng endpoint detach này,
+        // không phải PATCH /api/tasks/{id} với {campaignId: null} (bị backend lờ đi).
+        // Toàn bộ đi qua HTTP (mỗi request commit riêng), vì dữ liệu tạo bằng
+        // service nằm trong transaction ambient mà connection HTTP không thấy.
+        var adminToken = await _fixture.GetAdminTokenAsync();
+        var managerToken = await _fixture.GetManagerTokenAsync();
+        using var admin = _fixture.CreateClientWithAuth(adminToken);
+        using var manager = _fixture.CreateClientWithAuth(managerToken);
+        var ct = TestContext.Current.CancellationToken;
+
+        using var me = await manager.GetAsync("/api/auth/me", ct);
+        me.EnsureSuccessStatusCode();
+        using var meDoc = JsonDocument.Parse(await me.Content.ReadAsStringAsync(ct));
+        var managerId = meDoc.RootElement.GetProperty("userId").GetInt64();
+
+        var campaignName = $"Detach E2E {Guid.NewGuid():N}";
+        using var createCampaign = await admin.PostAsJsonAsync("/api/campaigns",
+            new
+            {
+                campaignName,
+                targetQty = 2000,
+                startDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
+                endDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30))
+            }, ct);
+        Assert.Equal(HttpStatusCode.Created, createCampaign.StatusCode);
+        using var campaignDoc = JsonDocument.Parse(
+            await createCampaign.Content.ReadAsStringAsync(ct));
+        var campaignId = campaignDoc.RootElement.GetProperty("campaignId").GetInt64();
+
+        using var assign = await admin.PostAsJsonAsync($"/api/campaigns/{campaignId}/assign",
+            new { assignedToUserId = managerId }, ct);
+        Assert.Equal(HttpStatusCode.OK, assign.StatusCode);
+
+        using var createTask = await manager.PostAsJsonAsync("/api/tasks",
+            new
+            {
+                campaignId,
+                taskType = "Recording",
+                description = "Gỡ qua endpoint",
+                targetQty = 1,
+                deadline = DateTimeOffset.UtcNow.AddDays(7)
+            }, ct);
+        Assert.Equal(HttpStatusCode.Created, createTask.StatusCode);
+        using var taskDoc = JsonDocument.Parse(await createTask.Content.ReadAsStringAsync(ct));
+        var taskId = taskDoc.RootElement.GetProperty("summary").GetProperty("taskId").GetInt64();
+
+        using var detach = await manager.DeleteAsync(
+            $"/api/campaigns/{campaignId}/tasks/{taskId}", ct);
+        Assert.Equal(HttpStatusCode.OK, detach.StatusCode);
+
+        using var doc = JsonDocument.Parse(await detach.Content.ReadAsStringAsync(ct));
+        Assert.Equal(JsonValueKind.Null,
+            doc.RootElement.GetProperty("summary").GetProperty("campaignId").ValueKind);
+    }
+
+    [Fact]
     public async Task DeleteCampaign_SetsTasksNull()
     {
         var created = await TaskService.CreateAsync(new CreateTaskRequest
@@ -165,8 +233,10 @@ public sealed class TaskCampaignIndependentTests(DatabaseFixture fixture) : Inte
     }
 
     [Fact]
-    public async Task DeleteTask_RemovesRowAndItems()
+    public async Task Cancel_PreservesRowAndItems()
     {
+        // Không xoá cứng trong project: đóng task độc lập bằng Cancel,
+        // hàng và items ở lại làm dấu vết.
         var script = await CreateValidatedScriptAsync(
             "[vi]Anh gửi em cái [en]link [vi]nhé.", "[vi]Anh gửi em cái đường dẫn nhé.",
             ScriptDomain.DailyLife, AdminUserId, 1);
@@ -175,7 +245,7 @@ public sealed class TaskCampaignIndependentTests(DatabaseFixture fixture) : Inte
         {
             CampaignId = null,
             TaskType = TaskType.Recording,
-            Description = "Xoá cứng",
+            Description = "Đóng thay vì xoá",
             TargetQty = 1,
             Deadline = DateTimeOffset.UtcNow.AddDays(7)
         }, ManagerUserId, TestContext.Current.CancellationToken);
@@ -184,11 +254,43 @@ public sealed class TaskCampaignIndependentTests(DatabaseFixture fixture) : Inte
             new AddTaskItemsRequest { Ids = [script.ScriptId] },
             TestContext.Current.CancellationToken, ManagerUserId, false);
 
-        await TaskService.DeleteAsync(created.Summary.TaskId,
+        var cancelled = await TaskService.CancelAsync(created.Summary.TaskId,
             TestContext.Current.CancellationToken, ManagerUserId, false);
 
-        Assert.Null(await Tasks.GetRowAsync(created.Summary.TaskId, TestContext.Current.CancellationToken));
-        Assert.Empty(await Tasks.GetScriptItemsAsync(created.Summary.TaskId, TestContext.Current.CancellationToken));
+        Assert.Equal(WorkTaskStatus.Cancelled, cancelled.Summary.Status);
+
+        var row = await Tasks.GetRowAsync(created.Summary.TaskId, TestContext.Current.CancellationToken);
+        Assert.NotNull(row);
+        Assert.Equal(WorkTaskStatus.Cancelled, row!.Status);
+
+        var items = await Tasks.GetScriptItemsAsync(created.Summary.TaskId, TestContext.Current.CancellationToken);
+        Assert.Contains(items, i => i.ScriptId == script.ScriptId);
+    }
+
+    [Fact]
+    public async Task DeleteRoute_IsGone()
+    {
+        // Route DELETE /api/tasks/{id} đã bị gỡ: API phải trả 404/405, không xoá gì.
+        var created = await TaskService.CreateAsync(new CreateTaskRequest
+        {
+            CampaignId = null,
+            TaskType = TaskType.Recording,
+            Description = "Route đã gỡ",
+            TargetQty = 1,
+            Deadline = DateTimeOffset.UtcNow.AddDays(7)
+        }, ManagerUserId, TestContext.Current.CancellationToken);
+
+        var token = await _fixture.GetManagerTokenAsync();
+        using var client = _fixture.CreateClientWithAuth(token);
+        using var response = await client.DeleteAsync(
+            $"/api/tasks/{created.Summary.TaskId}", TestContext.Current.CancellationToken);
+
+        Assert.True(
+            response.StatusCode is System.Net.HttpStatusCode.NotFound
+                or System.Net.HttpStatusCode.MethodNotAllowed,
+            $"DELETE /api/tasks/{{id}} phải 404/405, nhận {(int)response.StatusCode}.");
+
+        Assert.NotNull(await Tasks.GetRowAsync(created.Summary.TaskId, TestContext.Current.CancellationToken));
     }
 
     [Fact]
