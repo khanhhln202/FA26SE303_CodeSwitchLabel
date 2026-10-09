@@ -1,8 +1,49 @@
 import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Pagination from "../../../../components/Pagination/Pagination";
 import { CheckCircle2, XCircle, Clock, AlertCircle, X, BarChart3, Search, ArrowRight } from "lucide-react";
-import { SPEAKER_ACCENT as ACCENT, SUCCESS, DANGER, WARNING } from "../../../../constants/theme";
-import { CONTRIBUTION_HISTORY as TEXT_HISTORY } from "../../../../mocks/speaker/history";
+import { SPEAKER_ACCENT as ACCENT, SUCCESS, DANGER, WARNING, AUDIO_PRIMARY } from "../../../../constants/theme";
+import CodeSwitchText from "../../../../components/CodeSwitchText/CodeSwitchText";
+import { stripTags } from "../../../../utils/codeSwitch";
+import Loading from "../../../../components/Loading/Loading";
+import ErrorState from "../../../../components/ErrorState/ErrorState";
+import EmptyState from "../../../../components/EmptyState/EmptyState";
+import { getSpeakerContributionHistoryApi } from "../../../../services/speakerApi";
+import { GET_SPEAKER_CONTRIBUTION_HISTORY_API } from "../../../../utils/queryKey";
+
+// "2026-09-05T07:20:00Z" -> "05/09/2026 - 14:20" (giờ máy người dùng)
+function formatDateTime(iso) {
+  const d = new Date(iso);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} - ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Trạng thái câu của backend -> 3 trạng thái của bảng
+const STATUS_OF = {
+  Validated: "Approved",
+  Rejected: "Rejected",
+  Deactivated: "Rejected",
+  PendingValidation: "Pending",
+};
+
+/** Đổi 1 câu đóng góp từ API sang dạng bảng đang dùng (giữ nguyên tên trường cũ để không phải sửa giao diện). */
+function toRow(item) {
+  return {
+    id: item.scriptId,
+    category: item.category,
+    cs_transcript: item.csTranscript,
+    vi_equivalent: item.viEquivalent,
+    alignment: item.alignment ?? [],
+    date: formatDateTime(item.createdAt),
+    status: STATUS_OF[item.status] ?? "Pending",
+    // Lượt duyệt nội dung: Accepted / Edited / Rejected (kèm nhận xét)
+    reviews: (item.reviews ?? []).map((r, i) => ({
+      reviewer: `R${i + 1}`,
+      decision: r.decision === "Rejected" ? "reject" : "approve",
+      reason: r.decision === "Edited" ? `Đã sửa câu${r.reason ? `: ${r.reason}` : ""}` : r.reason,
+    })),
+  };
+}
 
 function SentenceContent({ item }) {
   return (
@@ -10,7 +51,7 @@ function SentenceContent({ item }) {
       {[{ label: "VI-EN", text: item.cs_transcript, color: ACCENT }, { label: "VI", text: item.vi_equivalent, color: "#8B8D95" }].map(({ label, text, color }) => (
         <div key={label} className="bg-[#F7F5EF] p-3.5 rounded-xl border border-[#E5E2D8] mb-2.5 flex items-center gap-2.5">
           <span className="text-tag font-emphasis w-9 h-4 shrink-0 rounded inline-flex items-center justify-center text-white" style={{ background: color }}>{label}</span>
-          <p className="type-body text-[#16171C] break-words min-w-0">{text}</p>
+          <p className="type-body text-[#16171C] break-words min-w-0"><CodeSwitchText transcript={text} accent={AUDIO_PRIMARY} /></p>
         </div>
       ))}
       {item.alignment.length > 0 && (
@@ -29,16 +70,6 @@ function SentenceContent({ item }) {
       )}
     </>
   );
-}
-
-// Tính trạng thái tổng từ 3 đánh giá của reviewer: >=2 từ chối -> Rejected, >=2 duyệt -> Approved, còn lại -> Pending
-// (đồng bộ với RecordingHistory - đóng góp giờ cũng qua 3 reviewer thay vì 1)
-function resolveStatus(reviews) {
-  const rejected = reviews.filter((r) => r.decision === "reject").length;
-  const approved = reviews.filter((r) => r.decision === "approve").length;
-  if (rejected >= 2) return "Rejected";
-  if (approved >= 2) return "Approved";
-  return "Pending";
 }
 
 // Màu phân loại (bộ A) - xanh dương / hổ phách / hồng magenta, giống bên Reviewer
@@ -101,7 +132,21 @@ export default function ContributionHistory() {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
 
-  const withStatus = useMemo(() => TEXT_HISTORY.map((it) => ({ ...it, status: resolveStatus(it.reviews) })), []);
+  // Lấy hết lịch sử (mỗi lần tối đa 100 câu) - lọc, tìm, phân trang làm ở FE như bảng cũ
+  const historyQuery = useQuery({
+    queryKey: [GET_SPEAKER_CONTRIBUTION_HISTORY_API],
+    queryFn: async () => {
+      const all = [];
+      for (let page = 1; ; page += 1) {
+        const result = await getSpeakerContributionHistoryApi({ page, pageSize: 100 });
+        all.push(...result.items);
+        if (!result.hasNext) break;
+      }
+      return all;
+    },
+  });
+
+  const withStatus = useMemo(() => (historyQuery.data ?? []).map(toRow), [historyQuery.data]);
 
   const stats = useMemo(() => {
     const total = withStatus.length;
@@ -112,13 +157,13 @@ export default function ContributionHistory() {
     return { total, approved, rejected, pending, approvedPct: pct(approved), rejectedPct: pct(rejected), pendingPct: pct(pending) };
   }, [withStatus]);
 
-  const categories = [...new Set(TEXT_HISTORY.map((item) => item.category))];
+  const categories = [...new Set(withStatus.map((item) => item.category))];
   const filteredData = useMemo(() => {
     const query = searchTerm.trim().toLocaleLowerCase("vi");
     return withStatus.filter((item) =>
       (statusFilter === "all" || item.status === statusFilter) &&
       (categoryFilter === "all" || item.category === categoryFilter) &&
-      [item.category, item.cs_transcript, item.vi_equivalent].some((value) =>
+      [item.category, stripTags(item.cs_transcript), stripTags(item.vi_equivalent)].some((value) =>
         value.toLocaleLowerCase("vi").includes(query)
       )
     );
@@ -127,6 +172,11 @@ export default function ContributionHistory() {
   const itemsPerPage = 10;
   const totalPages = Math.max(1, Math.ceil(filteredData.length / itemsPerPage));
   const pageItems = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  if (historyQuery.isLoading) return <Loading />;
+  if (historyQuery.isError) {
+    return <ErrorState message={historyQuery.error.message} onRetry={historyQuery.refetch} />;
+  }
 
   return (
     <div className="-mt-2 h-full min-h-0 flex flex-col gap-3 text-left">
@@ -199,7 +249,15 @@ export default function ContributionHistory() {
             </thead>
             <tbody className="divide-y divide-[#F0EEE6] type-ui">
               {filteredData.length === 0 ? (
-                <tr><td colSpan={5} className="py-10 text-center text-[#9A9CA3] text-body">Không có mục nào phù hợp bộ lọc.</td></tr>
+                <tr>
+                  <td colSpan={5}>
+                    {withStatus.length === 0 ? (
+                      <EmptyState title="Chưa có câu đóng góp nào" description="Đóng góp câu đầu tiên ở mục Đóng góp văn bản." />
+                    ) : (
+                      <EmptyState title="Không có câu phù hợp bộ lọc" description="Thử đổi từ khoá hoặc bộ lọc." />
+                    )}
+                  </td>
+                </tr>
               ) : pageItems.map((item, idx) => {
                 const votedCount = item.reviews.filter((r) => r.decision === "approve" || r.decision === "reject").length;
                 return (
@@ -208,8 +266,8 @@ export default function ContributionHistory() {
                       <span className="text-[#9A9CA3] type-meta">{(currentPage - 1) * itemsPerPage + idx + 1}</span>
                     </td>
                     <td className="px-3 text-left align-middle">
-                      <p className="text-meta font-regular text-[#16171C] truncate leading-5">{item.cs_transcript}</p>
-                      <p className="text-meta font-regular text-[#16171C] truncate leading-5 mt-0.5">{item.vi_equivalent}</p>
+                      <p className="text-meta font-regular text-[#16171C] truncate leading-5"><CodeSwitchText transcript={item.cs_transcript} accent={AUDIO_PRIMARY} /></p>
+                      <p className="text-meta font-regular text-[#16171C] truncate leading-5 mt-0.5"><CodeSwitchText transcript={item.vi_equivalent} accent={AUDIO_PRIMARY} /></p>
                     </td>
                     <td className="px-3 text-left align-middle">
                       <span className="w-[136px] h-6 inline-flex items-center justify-center rounded-md type-caption whitespace-nowrap border" style={{ background: catStyle(item.category).bg, color: catStyle(item.category).text, borderColor: catStyle(item.category).border }}>{item.category}</span>
@@ -261,6 +319,9 @@ export default function ContributionHistory() {
 
                 <SentenceContent item={detailItem} />
 
+                {detailItem.reviews.length === 0 && (
+                  <p className="type-meta text-[#6E7078]">Câu đang chờ duyệt nội dung. Kết quả hiện khi có người duyệt.</p>
+                )}
                 {/* 3 reviewer - giống RecordingHistory */}
                 <div className="flex flex-col gap-2">
                   {detailItem.reviews.filter((r) => r.decision !== "not_needed" && (detailItem.status === "Pending" || r.decision === "approve" || r.decision === "reject")).map((r, i) => {

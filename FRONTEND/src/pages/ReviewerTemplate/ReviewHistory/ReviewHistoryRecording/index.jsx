@@ -11,10 +11,7 @@ import {
   BarChart3,
   Search,
 } from "lucide-react";
-import {
-  parseCodeSwitch,
-  stripTags,
-} from "../../../../components/CodeSwitchText/CodeSwitchText";
+import { parseCodeSwitch, stripTags } from "../../../../utils/codeSwitch";
 import {
   REVIEWER_ACCENT as ACCENT,
   AUDIO_PRIMARY,
