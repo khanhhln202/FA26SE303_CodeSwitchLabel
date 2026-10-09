@@ -140,6 +140,25 @@ public class ReviewService(
     public async Task<SubmitReviewResult> SubmitAsync(
         string recordingId, long reviewerId, SubmitReviewRequest request, CancellationToken ct = default)
     {
+        try
+        {
+            return await SubmitCoreAsync(recordingId, reviewerId, request, ct);
+        }
+        catch (AppException ex)
+        {
+            // Chẩn đoán ca "tạo comment/duyệt không được": ghi đủ ngữ cảnh (ai, bản nào,
+            // quyết định gì, mã lỗi gì) để tra log thay vì phải hỏi lại đang ở màn hình
+            // nào và dùng role nào.
+            logger.LogWarning(ex,
+                "Từ chối lượt duyệt: recording {RecordingId}, reviewer {ReviewerId}, decision {Decision}, task {TaskId}: {Code}",
+                recordingId, reviewerId, request.Decision, request.TaskId, ex.Code);
+            throw;
+        }
+    }
+
+    private async Task<SubmitReviewResult> SubmitCoreAsync(
+        string recordingId, long reviewerId, SubmitReviewRequest request, CancellationToken ct)
+    {
         var decision = request.Decision!.Value;
 
         var codes = request.RejectionReasonCodes

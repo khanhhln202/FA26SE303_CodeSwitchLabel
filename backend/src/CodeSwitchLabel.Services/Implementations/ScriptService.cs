@@ -8,6 +8,7 @@ using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Common;
 using CodeSwitchLabel.Services.Dtos;
 using CodeSwitchLabel.Services.WorkTasks;
+using Microsoft.Extensions.Logging;
 
 namespace CodeSwitchLabel.Services.Implementations;
 
@@ -49,7 +50,8 @@ public class ScriptService(
     IUserDomainRepository domainRepository,
     ISystemConfigService config,
     ITaskProgressTracker taskTracker,
-    TimeProvider clock) : IScriptService
+    TimeProvider clock,
+    ILogger<ScriptService> logger) : IScriptService
 {
     public async Task<PagedResult<ScriptListItemDto>> SearchAsync(
         ScriptSearchRequest request, CancellationToken ct = default)
@@ -310,6 +312,24 @@ public class ScriptService(
     public async Task<ScriptDetailDto> ReviewAsync(
         string scriptId, long userId, ReviewScriptRequest request, CancellationToken ct = default)
     {
+        try
+        {
+            return await ReviewCoreAsync(scriptId, userId, request, ct);
+        }
+        catch (AppException ex)
+        {
+            // Chẩn đoán ca "tạo comment/duyệt câu không được": ghi đủ ngữ cảnh để tra log
+            // thay vì phải hỏi lại đang ở màn hình nào và dùng role nào.
+            logger.LogWarning(ex,
+                "Từ chối duyệt câu: script {ScriptId}, user {UserId}, action {Action}: {Code}",
+                scriptId, userId, request.Action, ex.Code);
+            throw;
+        }
+    }
+
+    private async Task<ScriptDetailDto> ReviewCoreAsync(
+        string scriptId, long userId, ReviewScriptRequest request, CancellationToken ct)
+    {
         var script = await repository.GetForUpdateAsync(scriptId, ct)
                      ?? throw NotFoundException.Script(scriptId);
 
@@ -328,7 +348,8 @@ public class ScriptService(
             ScriptId = scriptId,
             UserId = userId,
             Action = action,
-            Comment = request.Comment,
+            // Đồng nhất với nhánh review bản ghi: chuỗi trắng thành NULL, cắt khoảng trắng thừa.
+            Comment = string.IsNullOrWhiteSpace(request.Comment) ? null : request.Comment.Trim(),
             ReviewedAt = now
         };
 

@@ -105,11 +105,12 @@ BEGIN
     IF v_n <> 1 THEN RAISE EXCEPTION '6. FAILED: campaign delete did not SET NULL'; END IF;
     RAISE NOTICE '6. campaign delete SET NULL OK';
 
-    -- 7. DELETE on task removes it (cascades per existing rules).
-    DELETE FROM task WHERE task_id = v_t_move;
-    SELECT COUNT(*) INTO v_n FROM task WHERE task_id = v_t_move;
-    IF v_n <> 0 THEN RAISE EXCEPTION '7. FAILED: task not deleted'; END IF;
-    RAISE NOTICE '7. task hard delete OK';
+    -- 7. Cancel keeps the row (no hard delete in project): task stays
+    --    Cancelled with its child rows instead of being removed.
+    UPDATE task SET status = 'cancelled' WHERE task_id = v_t_move;
+    SELECT COUNT(*) INTO v_n FROM task WHERE task_id = v_t_move AND status = 'cancelled';
+    IF v_n <> 1 THEN RAISE EXCEPTION '7. FAILED: cancelled task row lost'; END IF;
+    RAISE NOTICE '7. cancel preserves row OK';
 
     RAISE NOTICE 'ALL V2 CHECKS PASSED';
 END $$;

@@ -196,6 +196,28 @@ Rollback V2 (chạy tay trong transaction, xem cuối file migration): gắn l�
 `campaign_id IS NULL` trước, rồi `SET NOT NULL` + khôi phục function/view từ git history
 của `docs/codeswitchlabel.sql`.
 
+### Khôi phục database từ bản sao lưu (khi migration hoặc deploy hỏng)
+
+```bash
+# 1. Phục hồi database từ file backup ở bước 0 (ghi đè toàn bộ DB hiện tại)
+gunzip -c backup-<ngày>-preMigrate.sql.gz | docker exec -i csl-postgres psql -U csl -d codeswitchlabel -v ON_ERROR_STOP=1
+
+# 2. Phục hồi file âm thanh nếu volume MinIO cũng bị ảnh hưởng
+docker compose -f deploy/docker-compose.prod.yml stop minio
+docker run --rm -v codeswitchlabel_minio-data:/data -v $(pwd):/backup ubuntu tar xzf /backup/minio-<ngày>.tgz -C /
+docker compose -f deploy/docker-compose.prod.yml start minio
+
+# 3. Lùi code về commit trước khi migration rồi rebuild API
+git log --oneline -5   # chép sha của commit trước khi có migration
+git checkout <sha-cũ> -- backend docs migrations
+docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build
+docker compose -f deploy/docker-compose.prod.yml logs -f api
+```
+
+Thứ tự ngược với lúc update: **phục hồi DB trước, lùi code sau** — API cũ không bao giờ
+được chạy với schema mới và ngược lại. Xong thì smoke check lại như mục nghiệm thu
+(health, Swagger, đăng nhập, `GET /api/campaigns`, `GET /api/tasks`).
+
 ## Khi chuyển sang bản chạy thật
 
 Trong `deploy/.env`: đặt `SWAGGER_ENABLED=false`, bỏ trống `SEED_PASSWORD`, đổi lại toàn bộ mật khẩu,

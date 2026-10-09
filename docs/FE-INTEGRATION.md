@@ -489,9 +489,9 @@ giao) — các dòng có `canReview: false`, nộp duyệt vẫn trả 403 `task
    rồi gắn sau bằng `PATCH /api/tasks/{id}/campaign`. Tạo kèm `campaignId` thì kiểm tra
    quota/hạn như cũ. Quy tắc quota (`task_target_exceeds_campaign`) và khung hạn
    (`task_deadline_outside_campaign`) **chỉ áp dụng khi task đang gắn với chiến dịch**.
-3. **Gỡ khác xoá:** `DELETE /api/campaigns/{id}/tasks/{taskId}` chỉ gỡ task khỏi chiến dịch
-   (task còn tồn tại với `campaignId: null`, giữ assignments/items). Chỉ màn hình Task độc lập
-   mới được xoá cứng bằng `DELETE /api/tasks/{id}`.
+3. **Gỡ chứ không xoá:** `DELETE /api/campaigns/{id}/tasks/{taskId}` chỉ gỡ task khỏi chiến dịch
+   (task còn tồn tại với `campaignId: null`, giữ assignments/items). Task không bao giờ bị xoá cứng
+   qua API — muốn đóng task thì dùng `POST /api/tasks/{id}/cancel` (task ở lại với trạng thái `Cancelled`).
 
 | Lỗi | Nghĩa |
 |---|---|
@@ -506,7 +506,6 @@ giao) — các dòng có `canReview: false`, nộp duyệt vẫn trả 403 `task
 | Tạo task | `POST /api/tasks` `{ "campaignId": 2, "taskType": "Recording", "description": "…", "targetQty": 10, "deadline": "2026-09-30T17:00:00+07:00" }` — `campaignId` để trống/`null` = task độc lập |
 | Gắn/chuyển/gỡ chiến dịch | `PATCH /api/tasks/{id}/campaign` `{ "campaignId": 2 }` — `null` = gỡ về độc lập |
 | Gỡ task khỏi chiến dịch (giữ task) | `DELETE /api/campaigns/{id}/tasks/{taskId}` |
-| Xoá cứng task | `DELETE /api/tasks/{id}` — chỉ từ màn hình Task độc lập |
 | Chi tiết task | `GET /api/tasks/{id}` — tiến độ, lịch sử giao, danh sách mục (`campaignId`/`campaignName` có thể `null`) |
 | Sửa task | `PATCH /api/tasks/{id}` — chỉ gửi trường cần đổi (không đổi chiến dịch ở đây) |
 | Thêm mục chọn tay | `POST /api/tasks/{id}/items` `{ "ids": ["s_211000001", "s_131000002"] }` |

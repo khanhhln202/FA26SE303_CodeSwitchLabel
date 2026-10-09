@@ -144,21 +144,6 @@ public class TasksController(ITaskService taskService) : ControllerBase
         long id, [FromBody] AttachTaskRequest request, CancellationToken ct)
         => Ok(await taskService.AttachAsync(id, request.CampaignId, ct, User.GetUserId(), User.IsInRole("Admin")));
 
-    /// <summary>Xoá cứng task — chỉ từ màn hình Task độc lập. Task trong chiến dịch chỉ được gỡ (detach).</summary>
-    /// <remarks>
-    /// Xoá task kéo theo assignments/task_script/task_recording (CASCADE); recording/review chỉ SET NULL.
-    /// Muốn gỡ task khỏi chiến dịch mà giữ lại task thì dùng
-    /// <c>DELETE /api/campaigns/{campaignId}/tasks/{taskId}</c> thay vì endpoint này.
-    /// </remarks>
-    [HttpDelete("{id:long}")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Delete(long id, CancellationToken ct)
-    {
-        await taskService.DeleteAsync(id, ct, User.GetUserId(), User.IsInRole("Admin"));
-        return NoContent();
-    }
-
     /// <summary>Huỷ task — việc duy nhất phải bấm tay.</summary>
     /// <remarks>
     /// Task đã huỷ không mở lại được và không sửa được nữa. Các mục giữ nguyên để còn dấu vết,

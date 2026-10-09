@@ -1,13 +1,15 @@
 name: Backend
 
-# Repo dùng chung cho cả frontend lẫn backend, nên chỉ chạy khi phần backend hoặc lược đồ database
-# thay đổi. Commit của đội frontend không kích hoạt workflow này.
+# Repo dùng chung cho cả frontend lẫn backend, nên chỉ chạy khi phần backend, lược đồ database
+# hoặc file migration thay đổi. Commit của đội frontend không kích hoạt workflow này.
+# migrations/** bắt buộc có mặt: migration hỏng mà CI không chạy là lọt thẳng lên máy deploy.
 on:
   pull_request:
     branches: [dev, main]
     paths:
       - 'backend/**'
       - 'docs/codeswitchlabel.sql'
+      - 'migrations/**'
       - 'global.json'
       - '.github/workflows/backend.yml'
   push:
@@ -15,6 +17,7 @@ on:
     paths:
       - 'backend/**'
       - 'docs/codeswitchlabel.sql'
+      - 'migrations/**'
       - 'global.json'
       - '.github/workflows/backend.yml'
 
