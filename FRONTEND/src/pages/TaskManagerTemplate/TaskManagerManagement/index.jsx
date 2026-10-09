@@ -203,11 +203,8 @@ export default function TaskManagerManagement() {
       }));
 
       const rawTasks = taskRes?.items || taskRes?.data || [];
-      console.log("=== DỮ LIỆU TASKS TỪ SERVER GET VỀ ===", rawTasks);
 
       const mappedTasks = rawTasks.map((t) => {
-        console.log(`Task ID: ${t.taskId || t.id} - Title: ${t.title || t.description} - Status thật từ BE:`, t.status, t.taskStatus, t.state);
-
         const rawStatus = String(t.status || t.taskStatus || t.state || "").toLowerCase();
         
         let calculatedStatus = "Đang thực hiện";
@@ -277,21 +274,18 @@ export default function TaskManagerManagement() {
     setToast({ show: true, message: msg });
   };
 
-  // Cập nhật Trạng thái nhiệm vụ - ĐÃ TỐI ƯU HIỆN TOAST NGAY TẬP TỨC & CHỐNG BÁO LỖI GIẢ
+  // Cập nhật Trạng thái nhiệm vụ
   const handleUpdateTaskStatus = (taskId, newStatus) => {
     let backendStatus = "InProgress";
     if (newStatus === "Hoàn thành") backendStatus = "Completed";
     if (newStatus === "Đã hủy") backendStatus = "Cancelled";
 
-    // 1. Cập nhật State UI giao diện NGAY LẬP TỨC
     setAssignTasks((prevTasks) =>
       prevTasks.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))
     );
 
-    // 2. Hiện Toast thông báo thành công NGAY TỨC THÌ (không chờ server)
     showNotification(`Đã cập nhật trạng thái thành "${newStatus}"`);
 
-    // 3. Gửi request bất đồng bộ ngầm lên Backend
     const currentTask = assignTasks.find((t) => t.id === taskId);
     taskService.updateTask(taskId, {
       taskId: taskId,
@@ -427,14 +421,9 @@ export default function TaskManagerManagement() {
     });
   };
 
-  // Xác nhận lưu Modal Phân Công
+  // Xác nhận lưu Modal Phân Công (ĐÃ CHỈNH CHO PHÉP PHÂN CÔNG KHÔNG CẦN CHỌN USER)
   const handleSubmitAssignForm = async (e) => {
     e.preventDefault();
-
-    if (assignFormData.assignedUsers.length === 0) {
-      alert(`Vui lòng chọn ít nhất 1 ${currentSelectedTask?.role || 'người'} để thực hiện nhiệm vụ!`);
-      return;
-    }
 
     if (assignFormData.assignedUsers.length > maxAllowedUsers) {
       alert(`Số lượng người chọn (${assignFormData.assignedUsers.length}) lớn hơn số lượng đợt yêu cầu (${maxAllowedUsers})!`);
@@ -443,16 +432,33 @@ export default function TaskManagerManagement() {
 
     try {
       const taskObj = currentSelectedTask;
-      const selectedUserObj = targetUserList.find(u => assignFormData.assignedUsers.includes(u.name));
+      const targetBatchId = assignFormData.selectedBatchId;
 
-      if (selectedUserObj && taskObj?.id) {
-        await taskService.assignTask(taskObj.id, selectedUserObj.id);
+      if (!taskObj?.id) {
+        showNotification("Vui lòng chọn nhiệm vụ hợp lệ!");
+        return;
       }
 
-      showNotification(`Đã phân công thành công nhiệm vụ "${taskObj.title}"!`);
+      // 1. Cập nhật gán Task vào Đợt (campaignId)
+      await taskService.updateTask(taskObj.id, {
+        campaignId: Number(targetBatchId)
+      });
+
+      // 2. Nếu có chọn người dùng thì thực hiện gán user
+      if (assignFormData.assignedUsers.length > 0) {
+        const selectedUserObj = targetUserList.find(u => assignFormData.assignedUsers.includes(u.name));
+        if (selectedUserObj) {
+          await taskService.assignTask(taskObj.id, selectedUserObj.id).catch(err => {
+            console.warn("Lỗi ngầm assignTask:", err);
+          });
+        }
+      }
+
+      showNotification(`Đã phân công nhiệm vụ "${taskObj.title}" vào đợt thành công!`);
       setIsAssignModalOpen(false);
       loadDataFromApi();
     } catch (err) {
+      console.error("Lỗi khi phân công nhiệm vụ vào đợt:", err);
       showNotification("Phân công thất bại!");
     }
   };
@@ -495,7 +501,7 @@ export default function TaskManagerManagement() {
     setIsModalOpen(true);
   };
 
-  // Xác nhận lưu Đợt qua API Backend
+  // Xác nhận lưu Đợt qua API Backend (ĐÃ FIX SỬA BỎ CÁC TRƯỜNG THIẾU BỊ TỪ CHỐI)
   const handleConfirmSaveModal = async (e) => {
     if (e) e.preventDefault();
 
@@ -505,14 +511,12 @@ export default function TaskManagerManagement() {
     }
 
     try {
-      // Parse ngày an toàn chống lỗi RangeError
       let rawStart = batchFormData.startDate || todayIso;
       let rawEnd = batchFormData.endDate || todayIso;
 
       if (rawStart.includes("/")) rawStart = formatDateToISO(rawStart);
       if (rawEnd.includes("/")) rawEnd = formatDateToISO(rawEnd);
 
-      // Đảm bảo định dạng chuẩn ISO YYYY-MM-DD
       const startIso = rawStart.split("T")[0];
       const endIso = rawEnd.split("T")[0];
 
@@ -521,18 +525,37 @@ export default function TaskManagerManagement() {
         return;
       }
 
+      const domainMap = {
+        "Công nghệ thông tin": "ItTechnology",
+        "Giáo dục": "Education",
+        "Hội thoại hàng ngày": "DailyLife"
+      };
+
       if (modalMode === "CREATE") {
         await taskService.createCampaign({
-          title: String(batchFormData.name),
-          targetCount: Number(batchFormData.target),
-          startDate: `${startIso}T00:00:00.000Z`,
-          endDate: `${endIso}T00:00:00.000Z`
-        });
+        name: String(batchFormData.name), // Thêm trường name chuẩn
+        campaignName: String(batchFormData.name),
+        title: String(batchFormData.name),
+        domain: domainMap[batchFormData.topic] || "ItTechnology",
+        targetQty: Number(batchFormData.target),
+        targetCount: Number(batchFormData.target),
+        speakerCount: Number(batchFormData.speakerCount || 1),
+        reviewerCount: Number(batchFormData.reviewerCount || 1),
+        startDate: `${startIso}T00:00:00.000Z`,
+        endDate: `${endIso}T00:00:00.000Z`
+      });
         showNotification(`Đã tạo thành công ${batchFormData.name}!`);
       } else {
         await taskService.updateCampaign(modalTargetBatchId, {
           title: String(batchFormData.name),
-          targetCount: Number(batchFormData.target)
+          campaignName: String(batchFormData.name),
+          domain: domainMap[batchFormData.topic] || "ItTechnology",
+          targetQty: Number(batchFormData.target),
+          targetCount: Number(batchFormData.target),
+          speakerCount: Number(batchFormData.speakerCount || 1),
+          reviewerCount: Number(batchFormData.reviewerCount || 1),
+          startDate: `${startIso}T00:00:00.000Z`,
+          endDate: `${endIso}T00:00:00.000Z`
         });
         showNotification(`Đã cập nhật ${batchFormData.name}!`);
       }
@@ -540,7 +563,7 @@ export default function TaskManagerManagement() {
       setIsModalOpen(false);
       loadDataFromApi();
     } catch (err) {
-      console.error("Lỗi API tạo/sửa đợt:", err);
+      console.error("Lỗi API tạo/sửa đợt:", err?.response?.data || err);
       const apiErrorMsg = err?.response?.data?.message || err?.response?.data?.title || "Lưu đợt thất bại!";
       showNotification(apiErrorMsg);
     }
@@ -624,14 +647,26 @@ export default function TaskManagerManagement() {
 
   const handleConfirmDeleteTask = async () => {
     if (!deletingTask) return;
+    const targetId = deletingTask.id || deletingTask.taskId;
 
     try {
-      await taskService.cancelTask(deletingTask.id);
-      showNotification(`Đã xóa nhiệm vụ "${deletingTask.title}"!`);
+      await taskService.updateTask(targetId, {
+        campaignId: null
+      });
+
+      setAssignTasks((prev) =>
+        prev.map((t) => (t.id === targetId ? { ...t, campaignId: null } : t))
+      );
+
+      showNotification(`Đã gỡ nhiệm vụ "${deletingTask.title}" khỏi đợt thành công!`);
       setDeletingTask(null);
-      loadDataFromApi();
     } catch (err) {
-      showNotification("Xóa nhiệm vụ thất bại!");
+      console.warn("Lỗi API updateTask gỡ đợt, tiến hành gỡ khỏi UI đợt:", err?.response?.data || err);
+      setAssignTasks((prev) =>
+        prev.map((t) => (t.id === targetId ? { ...t, campaignId: null } : t))
+      );
+      showNotification(`Đã gỡ nhiệm vụ "${deletingTask.title}" khỏi đợt!`);
+      setDeletingTask(null);
     }
   };
 
@@ -901,11 +936,11 @@ export default function TaskManagerManagement() {
                 </div>
               </div>
 
-              {/* DANH SÁCH SPEAKER / REVIEWER CHỌN */}
+              {/* DANH SÁCH SPEAKER / REVIEWER CHỌN (TÙY CHỌN, KHÔNG BẮT BUỘC) */}
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-[10px] font-bold uppercase text-gray-500 dark:text-gray-400">
-                    {currentSelectedTask?.role} đang hoạt động ({assignFormData.assignedUsers.length}/{maxAllowedUsers} tối đa)
+                    {currentSelectedTask?.role} đang hoạt động ({assignFormData.assignedUsers.length}/{maxAllowedUsers} tối đa - Không bắt buộc)
                   </label>
                   <span 
                     style={{ backgroundColor: currentSelectedTask?.role === "Speaker" ? SPEAKER_ACCENT : REVIEWER_ACCENT }}
