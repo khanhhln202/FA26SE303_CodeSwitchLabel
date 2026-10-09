@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import WaveformInline from "../../../../components/AudioPlayer/WaveformInline";
-import { parseCodeSwitch, stripTags } from "../../../../components/CodeSwitchText/CodeSwitchText";
+import { parseCodeSwitch, stripTags } from "../../../../utils/codeSwitch";
 import {
   REVIEWER_ACCENT as ACCENT,
   AUDIO_PRIMARY,

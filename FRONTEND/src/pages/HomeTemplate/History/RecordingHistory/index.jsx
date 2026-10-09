@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Pagination from "../../../../components/Pagination/Pagination";
 import WaveformInline from "../../../../components/AudioPlayer/WaveformInline";
 import {
@@ -11,31 +12,94 @@ import {
   BarChart3,
   Search,
 } from "lucide-react";
-import {
-  parseCodeSwitch,
-  stripTags,
-} from "../../../../components/CodeSwitchText/CodeSwitchText";
+import CodeSwitchText from "../../../../components/CodeSwitchText/CodeSwitchText";
+import { stripTags } from "../../../../utils/codeSwitch";
 import {
   SPEAKER_ACCENT as ACCENT,
   AUDIO_PRIMARY,
 } from "../../../../constants/theme";
-import { RECORDING_HISTORY as AUDIO_HISTORY } from "../../../../mocks/speaker/history";
+import Loading from "../../../../components/Loading/Loading";
+import ErrorState from "../../../../components/ErrorState/ErrorState";
+import EmptyState from "../../../../components/EmptyState/EmptyState";
+import { getSpeakerRecordingHistoryApi } from "../../../../services/speakerApi";
+import { getRecordingAudioUrlApi } from "../../../../services/recordingApi";
+import { GET_SPEAKER_RECORDING_HISTORY_API, GET_RECORDING_AUDIO_URL_API } from "../../../../utils/queryKey";
 
-// 3 reviewer -> trạng thái tổng: >=2 từ chối = Rejected, >=2 duyệt = Approved, còn lại Pending
-function resolveStatus(reviews) {
-  const rejected = reviews.filter((r) => r.decision === "reject").length;
-  const approved = reviews.filter((r) => r.decision === "approve").length;
-  if (rejected >= 2) return "Rejected";
-  if (approved >= 2) return "Approved";
-  return "Pending";
+const VARIANT_LABEL = { cs: "Bản Việt-Anh", vi: "Bản tiếng Việt" };
+
+// Mã bản ghi có dạng r_cs_111000003 / r_vi_111000003 (thu lại thì thêm _t2...) -> biết là bản nào
+const variantOf = (recordingId) => (recordingId.includes("_vi_") ? "vi" : "cs");
+
+// "2026-09-07T03:15:00Z" -> "07/09/2026 - 10:15" (giờ máy người dùng)
+function formatDateTime(iso) {
+  const d = new Date(iso);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} - ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-// Số phiếu THỰC SỰ đã bỏ (approve/reject) - loại cả "pending" (chưa tới lượt/chưa vote) lẫn
-// "not_needed" (R1+R2 đã đồng thuận nên R3 không cần đánh giá nữa).
-function votedCountOf(reviews) {
-  return reviews.filter(
-    (r) => r.decision === "approve" || r.decision === "reject",
-  ).length;
+/**
+ * API trả từng bản ghi (bản Việt-Anh, bản tiếng Việt riêng) -> gộp theo cặp câu để hiện 1 dòng / cặp như bảng cũ.
+ * Mỗi biến thể chỉ lấy lần thu mới nhất (API đã xếp mới nhất trước).
+ * Trạng thái cặp: có bản bị từ chối -> Rejected; cả 2 bản đạt -> Approved; còn lại (đang chờ, trượt QC, thiếu bản) -> Pending.
+ */
+function groupByPair(recordings) {
+  const pairs = new Map();
+  for (const rec of recordings) {
+    const pair = pairs.get(rec.scriptId) ?? {
+      id: rec.scriptId,
+      task: rec.taskTitle || "Thu âm tự do",
+      csText: rec.csText,
+      viText: rec.viText,
+      date: formatDateTime(rec.recordedAt),
+      cs: null,
+      vi: null,
+    };
+    const variant = variantOf(rec.recordingId);
+    if (!pair[variant]) pair[variant] = rec;
+    pairs.set(rec.scriptId, pair);
+  }
+
+  return [...pairs.values()].map((pair) => {
+    const recs = [pair.cs, pair.vi].filter(Boolean);
+    const status = recs.some((r) => r.status === "Rejected")
+      ? "Rejected"
+      : pair.cs?.status === "Approved" && pair.vi?.status === "Approved"
+        ? "Approved"
+        : "Pending";
+    // Lượt duyệt của cả 2 bản (chỉ có khi bản đã chốt), ghi rõ thuộc bản nào cho popup Kết quả
+    const reviews = ["cs", "vi"].flatMap((v) =>
+      (pair[v]?.reviews ?? []).map((r) => ({
+        reviewer: `R${r.round}`,
+        decision: r.decision === "Approved" ? "approve" : "reject",
+        reason: r.reason ? `${VARIANT_LABEL[v]}: ${r.reason}` : VARIANT_LABEL[v],
+      })),
+    );
+    const votedCount = Math.max(0, ...recs.map((r) => r.reviews?.length ?? 0));
+    return { ...pair, status, reviews, votedCount };
+  });
+}
+
+/** Sóng âm của 1 bản ghi: link nghe chỉ lấy khi dòng đang hiện (link hết hạn sau 15 phút nên giữ cache 10 phút). */
+function RecordingAudio({ recording, variant, transcript }) {
+  const { data } = useQuery({
+    queryKey: [GET_RECORDING_AUDIO_URL_API, recording?.recordingId],
+    queryFn: () => getRecordingAudioUrlApi(recording.recordingId),
+    enabled: Boolean(recording),
+    staleTime: 10 * 60 * 1000,
+  });
+
+  if (!recording) {
+    return <span className="type-caption text-[#9A9CA3]">{VARIANT_LABEL[variant]} chưa ghi</span>;
+  }
+  return (
+    <WaveformInline
+      compact
+      label={variant === "cs" ? "VI-EN" : "VI"}
+      src={data?.url}
+      demoSeed={`${variant}-${transcript}`}
+      demoDuration={recording.durationSec}
+    />
+  );
 }
 
 function InlineLabel({ variant }) {
@@ -107,11 +171,21 @@ export default function RecordingHistory() {
   const [searchTerm, setSearchTerm] = useState("");
   const [taskFilter, setTaskFilter] = useState("all");
 
-  const withStatus = useMemo(
-    () =>
-      AUDIO_HISTORY.map((it) => ({ ...it, status: resolveStatus(it.reviews) })),
-    [],
-  );
+  // Lấy hết lịch sử (mỗi lần tối đa 100 bản) rồi gộp theo cặp - lọc, tìm, phân trang làm ở FE như bảng cũ
+  const historyQuery = useQuery({
+    queryKey: [GET_SPEAKER_RECORDING_HISTORY_API],
+    queryFn: async () => {
+      const all = [];
+      for (let page = 1; ; page += 1) {
+        const result = await getSpeakerRecordingHistoryApi({ page, pageSize: 100 });
+        all.push(...result.items);
+        if (!result.hasNext) break;
+      }
+      return all;
+    },
+  });
+
+  const withStatus = useMemo(() => groupByPair(historyQuery.data ?? []), [historyQuery.data]);
 
   const stats = useMemo(() => {
     const total = withStatus.length;
@@ -130,7 +204,7 @@ export default function RecordingHistory() {
     };
   }, [withStatus]);
 
-  const tasks = [...new Set(AUDIO_HISTORY.map((item) => item.task))];
+  const tasks = [...new Set(withStatus.map((item) => item.task))];
   const filteredData = useMemo(() => {
     const query = searchTerm.trim().toLocaleLowerCase("vi");
     return withStatus.filter(
@@ -147,6 +221,11 @@ export default function RecordingHistory() {
   const totalPages = Math.max(1, Math.ceil(filteredData.length / itemsPerPage));
   const startIndex = (currentPage - 1) * itemsPerPage;
   const pageItems = filteredData.slice(startIndex, startIndex + itemsPerPage);
+
+  if (historyQuery.isLoading) return <Loading />;
+  if (historyQuery.isError) {
+    return <ErrorState message={historyQuery.error.message} onRetry={historyQuery.refetch} />;
+  }
 
   return (
     <div className="-mt-2 h-full min-h-0 flex flex-col gap-3 text-left font-sans">
@@ -271,18 +350,19 @@ export default function RecordingHistory() {
             {pageItems.length === 0 ? (
               <tbody className="type-ui">
                 <tr>
-                  <td
-                    colSpan={6}
-                    className="py-12 px-4 text-center text-body text-[#6E7078]"
-                  >
-                    Không có bản ghi phù hợp bộ lọc.
+                  <td colSpan={6}>
+                    {withStatus.length === 0 ? (
+                      <EmptyState title="Chưa có bản ghi nào" description="Ghi âm câu đầu tiên ở mục Câu chờ ghi âm." />
+                    ) : (
+                      <EmptyState title="Không có bản ghi phù hợp bộ lọc" description="Thử đổi từ khoá hoặc bộ lọc." />
+                    )}
                   </td>
                 </tr>
               </tbody>
             ) : (
               pageItems.map((item, index) => {
                 const [date, time] = item.date.split(" - ");
-                const votedCount = votedCountOf(item.reviews);
+                const { votedCount } = item;
                 return (
                   <tbody
                     key={item.id}
@@ -326,22 +406,7 @@ export default function RecordingHistory() {
                                         key={textIndex}
                                         className="text-meta font-regular text-[#16171C] truncate leading-5"
                                       >
-                                        {parseCodeSwitch(text).map(
-                                          (segment, segmentIndex) => (
-                                            <span
-                                              key={segmentIndex}
-                                              style={
-                                                segment.lang === "en"
-                                                  ? {
-                                                      color: AUDIO_PRIMARY,
-                                                    }
-                                                  : undefined
-                                              }
-                                            >
-                                              {segment.text}
-                                            </span>
-                                          ),
-                                        )}
+                                        <CodeSwitchText transcript={text} accent={AUDIO_PRIMARY} />
                                       </p>
                                     ),
                                   )}
@@ -359,11 +424,10 @@ export default function RecordingHistory() {
                             </td>
                           )}
                           <td className={`px-3 ${cellSpacing}`}>
-                            <WaveformInline compact
-                              label={variant === "cs" ? "VI-EN" : "VI"}
-                              src={variant === "cs" ? item.csAudioUrl : item.viAudioUrl}
-                              demoSeed={`${variant}-${transcript}`}
-                              demoDuration={variant === "cs" ? item.csDuration : item.viDuration}
+                            <RecordingAudio
+                              recording={item[variant]}
+                              variant={variant}
+                              transcript={transcript}
                             />
                           </td>
                           {variant === "cs" && (
@@ -432,7 +496,7 @@ export default function RecordingHistory() {
               <div className="bg-[#F7F5EF] p-3.5 rounded-xl border border-[#E5E2D8] mb-2.5 flex items-center gap-2.5">
                 <InlineLabel variant="cs" />
                 <p className="type-body text-[#16171C] break-words min-w-0">
-                  {parseCodeSwitch(sentenceItem.csText).map((segment, i) => <span key={i} style={segment.lang === "en" ? { color: AUDIO_PRIMARY } : undefined}>{segment.text}</span>)}
+                  <CodeSwitchText transcript={sentenceItem.csText} accent={AUDIO_PRIMARY} />
                 </p>
               </div>
               <div className="bg-[#F7F5EF] p-3.5 rounded-xl border border-[#E5E2D8] flex items-center gap-2.5">
@@ -515,6 +579,11 @@ export default function RecordingHistory() {
                     <InlineLabel variant="vi" />
                     <p className="type-body text-[#16171C] break-words min-w-0">{stripTags(detailItem.viText)}</p>
                   </div>
+                  {detailItem.reviews.length === 0 && (
+                    <p className="type-meta text-[#6E7078]">
+                      Bản ghi đang chờ duyệt. Kết quả và nhận xét hiện khi đủ lượt duyệt.
+                    </p>
+                  )}
                   <div className="flex flex-col gap-2">
                     {detailItem.reviews.filter((r) => r.decision !== "not_needed" && (detailItem.status === "Pending" || r.decision === "approve" || r.decision === "reject")).map((r, i) => {
                       const isReject = r.decision === "reject";
