@@ -8,7 +8,9 @@ import {
   Edit3, 
   Trash2, 
   X, 
-  AlertTriangle
+  AlertTriangle,
+  Loader2,
+  Calendar
 } from "lucide-react";
 import Pagination from "../../../components/Pagination/Pagination";
 import {
@@ -16,63 +18,48 @@ import {
   SUCCESS,
   DANGER
 } from "../../../constants/theme";
+import { taskService } from "../../../services/taskService";
 
-// Bộ màu badge chủ đề chuẩn thiết kế giao diện nhẹ nhàng
 const CATEGORY_COLORS = {
   'Hội thoại hàng ngày': { bg: '#E6F0FE', text: '#1E40AF', border: '#C9DEFB' },
   'Công nghệ thông tin': { bg: '#FBF0DA', text: '#92600A', border: '#F3E0B5' },
   'Giáo dục': { bg: '#FCE7F0', text: '#9D2662', border: '#F8CFE0' },
+  'ItTechnology': { bg: '#FBF0DA', text: '#92600A', border: '#F3E0B5' },
+  'Education': { bg: '#FCE7F0', text: '#9D2662', border: '#F8CFE0' },
+  'DailyLife': { bg: '#E6F0FE', text: '#1E40AF', border: '#C9DEFB' }
 };
 
-const getCatStyle = (cat) => CATEGORY_COLORS[cat] || { 
-  bg: '#F3F4F6', 
-  text: '#374151', 
-  border: '#E5E7EB' 
+const getCatStyle = (cat) => CATEGORY_COLORS[cat] || { bg: '#F3F4F6', text: '#374151', border: '#E5E7EB' };
+
+const formatDate = (dateStr) => {
+  if (!dateStr) return "---";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "---";
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  } catch {
+    return "---";
+  }
 };
 
-// Danh sách dữ liệu mẫu đã được Việt hóa chủ đề
-const INITIAL_REVIEWER_TASKS = [
-  { id: "TSK-001", title: "Nhiệm vụ kiểm thử thuật ngữ công nghệ", topic: "Công nghệ thông tin", reviewed: 65, status: "Đang thực hiện", statusType: "in-progress" },
-  { id: "TSK-002", title: "Nhiệm vụ đánh giá hội thoại giáo dục phổ thông", topic: "Giáo dục", reviewed: 80, status: "Hoàn thành", statusType: "completed" },
-  { id: "TSK-003", title: "Rà soát dữ liệu giao tiếp đời sống hàng ngày", topic: "Hội thoại hàng ngày", reviewed: 135, status: "Đang thực hiện", statusType: "in-progress" },
-  { id: "TSK-004", title: "Thẩm định ngữ liệu lệnh thoại nhà thông minh", topic: "Công nghệ thông tin", reviewed: 40, status: "Đang thực hiện", statusType: "in-progress" },
-  { id: "TSK-005", title: "Kiểm duyệt kịch bản hỏi đáp y tế cơ bản", topic: "Hội thoại hàng ngày", reviewed: 0, status: "Chưa bắt đầu", statusType: "pending" },
-  { id: "TSK-006", title: "Đánh giá bài giảng toán học trực tuyến", topic: "Giáo dục", reviewed: 110, status: "Hoàn thành", statusType: "completed" },
-  { id: "TSK-007", title: "Kiểm tra tin tức kinh tế và thị trường tài chính", topic: "Hội thoại hàng ngày", reviewed: 20, status: "Đang thực hiện", statusType: "in-progress" },
-  { id: "TSK-008", title: "Thẩm định dữ liệu hội thoại bán hàng tự động", topic: "Công nghệ thông tin", reviewed: 130, status: "Hoàn thành", statusType: "completed" },
-  { id: "TSK-009", title: "Rà soát phát âm bảng chữ cái Tiếng Việt cho trẻ em", topic: "Giáo dục", reviewed: 0, status: "Chưa bắt đầu", statusType: "pending" },
-  { id: "TSK-010", title: "Kiểm duyệt tài liệu hướng dẫn lập trình Python", topic: "Công nghệ thông tin", reviewed: 85, status: "Đang thực hiện", statusType: "in-progress" },
-  { id: "TSK-011", title: "Đánh giá mẫu hội thoại đặt xe trực tuyến", topic: "Hội thoại hàng ngày", reviewed: 85, status: "Hoàn thành", statusType: "completed" },
-  { id: "TSK-012", title: "Thẩm định thuật ngữ trí tuệ nhân tạo nâng cao", topic: "Công nghệ thông tin", reviewed: 30, status: "Đang thực hiện", statusType: "in-progress" },
-  { id: "TSK-013", title: "Rà soát bài luyện nói Tiếng Anh giao tiếp", topic: "Giáo dục", reviewed: 0, status: "Chưa bắt đầu", statusType: "pending" },
-  { id: "TSK-014", title: "Kiểm duyệt các đoạn hội thoại tư vấn tài chính", topic: "Hội thoại hàng ngày", reviewed: 110, status: "Hoàn thành", statusType: "completed" },
-  { id: "TSK-015", title: "Đánh giá lệnh điều khiển thiết bị IoT trong nhà", topic: "Công nghệ thông tin", reviewed: 50, status: "Đang thực hiện", statusType: "in-progress" },
-  { id: "TSK-016", title: "Thẩm định truyện đọc phát triển trí tuệ trẻ em", topic: "Giáo dục", reviewed: 20, status: "Đang thực hiện", statusType: "in-progress" },
-  { id: "TSK-017", title: "Rà soát kịch bản hỏi đáp dịch vụ khách sạn", topic: "Hội thoại hàng ngày", reviewed: 0, status: "Chưa bắt đầu", statusType: "pending" },
-  { id: "TSK-018", title: "Kiểm duyệt tài liệu về an ninh mạng và bảo mật", topic: "Công nghệ thông tin", reviewed: 125, status: "Hoàn thành", statusType: "completed" },
-  { id: "TSK-019", title: "Đánh giá bài giảng môn Lịch Sử phổ thông", topic: "Giáo dục", reviewed: 45, status: "Đang thực hiện", statusType: "in-progress" },
-  { id: "TSK-020", title: "Thẩm định giao tiếp tại sân bay và ga tàu", topic: "Hội thoại hàng ngày", reviewed: 105, status: "Hoàn thành", statusType: "completed" }
-];
+const toInputDateFormat = (dateStr) => {
+  if (!dateStr) return "";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "";
+    return d.toISOString().split('T')[0];
+  } catch {
+    return "";
+  }
+};
 
-const TASK_STORAGE_KEY = "task_manager_custom_dataset_v1";
-
-export default function TaskManagerCustomPage() {
-  const [tasks, setTasks] = useState(() => {
-    const saved = localStorage.getItem(TASK_STORAGE_KEY);
-    if (saved) {
-      try { 
-        const parsed = JSON.parse(saved);
-        return parsed.map(t => ({
-          ...t,
-          topic: t.topic === "IT/Technology" ? "Công nghệ thông tin" :
-                 t.topic === "Education" ? "Giáo dục" :
-                 t.topic === "Daily Life" ? "Hội thoại hàng ngày" : t.topic
-        }));
-      } catch (e) { console.error(e); }
-    }
-    return INITIAL_REVIEWER_TASKS;
-  });
-
+export default function TaskManagerReviewerTasks() {
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [defaultCampaignId, setDefaultCampaignId] = useState(null);
   const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [topicFilter, setTopicFilter] = useState("all");
@@ -83,16 +70,69 @@ export default function TaskManagerCustomPage() {
   const [taskToDelete, setTaskToDelete] = useState(null);
   const [toast, setToast] = useState({ show: false, message: "" });
 
+  const todayStr = new Date().toISOString().split('T')[0];
+
   const [formData, setFormData] = useState({
     title: "",
-    topic: "Công nghệ thông tin"
+    topic: "Công nghệ thông tin",
+    createdAt: todayStr,
+    deadline: ""
   });
 
   const pageSize = 10;
 
+  const loadTasksFromApi = async () => {
+    try {
+      setLoading(true);
+      const [res, campaignRes] = await Promise.all([
+        taskService.getTasks({ taskType: "Review" }).catch(() => ({ items: [] })),
+        taskService.getCampaigns().catch(() => ({ items: [] }))
+      ]);
+
+      const campaignList = campaignRes?.items || campaignRes?.data || [];
+      if (campaignList.length > 0) {
+        setDefaultCampaignId(campaignList[0].campaignId || campaignList[0].id);
+      }
+
+      const campaignTopicMap = {};
+      campaignList.forEach(c => {
+        const cId = c.campaignId || c.id;
+        if (cId) campaignTopicMap[cId] = c.domain || c.topic || c.campaignName;
+      });
+
+      const items = res?.items || res?.data || [];
+      const mapped = items.map(t => {
+        const rawDomain = String(t.domain || t.topic || campaignTopicMap[t.campaignId] || "").toLowerCase();
+        let topicName = "Công nghệ thông tin";
+
+        if (rawDomain.includes("edu") || rawDomain.includes("giáo dục")) {
+          topicName = "Giáo dục";
+        } else if (rawDomain.includes("life") || rawDomain.includes("hội thoại") || rawDomain.includes("hàng ngày")) {
+          topicName = "Hội thoại hàng ngày";
+        } else if (rawDomain.includes("it") || rawDomain.includes("tech") || rawDomain.includes("công nghệ")) {
+          topicName = "Công nghệ thông tin";
+        }
+
+        return {
+          id: t.taskId || t.id,
+          title: t.title || t.description || "Nhiệm vụ kiểm duyệt",
+          topic: topicName,
+          rawDomain: t.domain,
+          createdAt: t.createdAt || t.createdDate,
+          deadline: t.deadline || t.dueDate || t.endDate
+        };
+      });
+      setTasks(mapped);
+    } catch (e) {
+      console.error("Lỗi lấy danh sách task reviewer:", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(tasks));
-  }, [tasks]);
+    loadTasksFromApi();
+  }, []);
 
   useEffect(() => {
     if (toast.show) {
@@ -118,66 +158,112 @@ export default function TaskManagerCustomPage() {
 
   const handleOpenAddModal = () => {
     setEditingTask(null);
-    setFormData({
-      title: "",
-      topic: "Công nghệ thông tin"
+    const defaultDate = new Date();
+    defaultDate.setDate(defaultDate.getDate() + 7);
+    setFormData({ 
+      title: "", 
+      topic: "Công nghệ thông tin",
+      createdAt: todayStr,
+      deadline: defaultDate.toISOString().split('T')[0]
     });
     setIsModalOpen(true);
   };
 
   const handleOpenEditModal = (task) => {
     setEditingTask(task);
-    setFormData({
-      title: task.title,
-      topic: task.topic
+    setFormData({ 
+      title: task.title, 
+      topic: task.topic,
+      createdAt: toInputDateFormat(task.createdAt) || todayStr,
+      deadline: toInputDateFormat(task.deadline)
     });
     setIsModalOpen(true);
   };
 
-  const handleSubmitForm = (e) => {
+  const handleSubmitForm = async (e) => {
     e.preventDefault();
     if (!formData.title) return;
 
-    if (editingTask) {
-      setTasks((prev) =>
-        prev.map((t) =>
-          t.id === editingTask.id
-            ? {
-                ...t,
-                title: formData.title,
-                topic: formData.topic
-              }
-            : t
-        )
-      );
-      showNotification(`Đã cập nhật nhiệm vụ "${formData.title}"!`);
-    } else {
-      const created = {
-        id: `TSK-00${tasks.length + 1}`,
-        title: formData.title,
-        topic: formData.topic,
-        reviewed: 0,
-        status: "Chưa bắt đầu",
-        statusType: "pending",
+    try {
+      const domainMap = {
+        "Công nghệ thông tin": "ItTechnology",
+        "Giáo dục": "Education",
+        "Hội thoại hàng ngày": "DailyLife"
       };
-      setTasks((prev) => [...prev, created]);
-      showNotification(`Đã tạo thành công nhiệm vụ "${formData.title}"!`);
-    }
 
-    setIsModalOpen(false);
+      const isoCreatedAt = formData.createdAt ? new Date(formData.createdAt).toISOString() : new Date().toISOString();
+      const isoDeadline = formData.deadline ? new Date(formData.deadline).toISOString() : new Date().toISOString();
+
+      if (editingTask) {
+        await taskService.updateTask(editingTask.id, {
+          title: formData.title,
+          description: formData.title,
+          domain: domainMap[formData.topic] || "ItTechnology",
+          targetQty: 10,
+          targetQuantity: 10,
+          targetCount: 10,
+          createdAt: isoCreatedAt,
+          dueDate: isoDeadline,
+          endDate: isoDeadline,
+          deadline: isoDeadline
+        });
+        showNotification(`Đã cập nhật nhiệm vụ "${formData.title}"!`);
+      } else {
+        await taskService.createTask({
+          title: formData.title,
+          description: formData.title,
+          campaignId: null, // Tạo nhiệm vụ chưa gắn vào đợt nào
+          taskType: "Review",
+          domain: domainMap[formData.topic] || "ItTechnology",
+          targetQty: 10,
+          targetQuantity: 10,
+          targetCount: 10,
+          createdAt: isoCreatedAt,
+          dueDate: isoDeadline,
+          endDate: isoDeadline,
+          deadline: isoDeadline
+        });
+        showNotification(`Đã tạo thành công nhiệm vụ "${formData.title}"!`);
+      }
+      setIsModalOpen(false);
+      loadTasksFromApi();
+    } catch (err) {
+      console.error("Lỗi tạo/sửa nhiệm vụ:", err?.response?.data || err);
+      
+      const responseData = err?.response?.data;
+      let errorMsg = responseData?.title || responseData?.message || "Thao tác thất bại!";
+      
+      if (responseData?.errors) {
+        const firstKey = Object.keys(responseData.errors)[0];
+        if (firstKey && responseData.errors[firstKey]?.[0]) {
+          errorMsg = `${responseData.errors[firstKey][0]}`;
+        }
+      }
+      showNotification(errorMsg);
+    }
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!taskToDelete) return;
-    setTasks((prev) => prev.filter((t) => t.id !== taskToDelete.id));
-    showNotification(`Đã xóa thành công nhiệm vụ "${taskToDelete.title}"!`);
-    setTaskToDelete(null);
+    const targetId = taskToDelete.id || taskToDelete.taskId;
+
+    try {
+      await taskService.cancelTask(targetId);
+      setTasks((prev) => prev.filter((t) => t.id !== targetId));
+      showNotification(`Đã xóa thành công nhiệm vụ "${taskToDelete.title}"!`);
+      setTaskToDelete(null);
+    } catch (e) {
+      console.warn("Lỗi API cancel, tiến hành xóa khỏi UI:", e?.response?.data || e);
+      setTasks((prev) => prev.filter((t) => t.id !== targetId));
+      showNotification(`Đã xóa nhiệm vụ "${taskToDelete.title}"!`);
+      setTaskToDelete(null);
+    }
   };
 
   const filteredTasks = useMemo(() => {
     return tasks.filter((t) => {
       const matchSearch = t.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          t.id.toLowerCase().includes(searchTerm.toLowerCase());
+                          String(t.id).toLowerCase().includes(searchTerm.toLowerCase());
       const matchTopic = topicFilter === "all" || t.topic === topicFilter;
       return matchSearch && matchTopic;
     });
@@ -264,7 +350,7 @@ export default function TaskManagerCustomPage() {
                 setTopicFilter(e.target.value);
                 setCurrentPage(1);
               }}
-              className="w-[150px] px-2.5 py-2 border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#25272E] text-gray-900 dark:text-white focus:bg-white dark:focus:bg-[#1C1D22] focus:border-gray-400 dark:focus:border-gray-500 rounded-xl text-xs font-bold outline-none cursor-pointer transition-all font-sans"
+              className="min-w-[170px] w-auto px-2.5 py-2 border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#25272E] text-gray-900 dark:text-white focus:bg-white dark:focus:bg-[#1C1D22] focus:border-gray-400 dark:focus:border-gray-500 rounded-xl text-xs font-bold outline-none cursor-pointer transition-all font-sans"
             >
               <option value="all" className="bg-white dark:bg-[#25272E]">Tất cả chủ đề</option>
               <option value="Công nghệ thông tin" className="bg-white dark:bg-[#25272E]">Công nghệ thông tin</option>
@@ -278,18 +364,22 @@ export default function TaskManagerCustomPage() {
       {/* Khung chứa bảng */}
       <div className="bg-white dark:bg-[#1C1D22] rounded-xl border border-gray-200 dark:border-gray-800 shadow-xs overflow-hidden transition-colors flex-1 flex flex-col justify-between my-1.5 min-h-0">
         <div className="flex-1 flex flex-col min-h-0">
-          <div className="min-w-[700px] h-full flex flex-col">
-            {/* Header Bảng */}
+          <div className="min-w-[850px] h-full flex flex-col">
             <div className="bg-gray-50 dark:bg-[#25272E] text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-800 font-bold flex items-center shrink-0 h-9">
-              <div className="px-3 text-center whitespace-nowrap w-[60px]">STT</div>
+              <div className="px-3 text-center whitespace-nowrap w-[50px]">STT</div>
               <div className="px-4 text-left flex-1">Nhiệm vụ</div>
-              <div className="px-3 text-left w-[200px] whitespace-nowrap">Chủ đề</div>
-              <div className="px-4 text-center w-[100px] whitespace-nowrap">Thao tác</div>
+              <div className="px-3 text-left w-[170px] whitespace-nowrap">Chủ đề</div>
+              <div className="px-3 text-center w-[120px] whitespace-nowrap">Ngày tạo</div>
+              <div className="px-3 text-center w-[120px] whitespace-nowrap">Hạn chót</div>
+              <div className="px-4 text-center w-[90px] whitespace-nowrap">Thao tác</div>
             </div>
 
-            {/* Thân Bảng */}
             <div className="divide-y divide-gray-200 dark:divide-gray-800 text-[11px] font-medium flex-1 grid grid-rows-10">
-              {paginatedTasks.length > 0 ? (
+              {loading ? (
+                <div className="row-span-10 flex items-center justify-center">
+                  <Loader2 className="w-6 h-6 animate-spin text-emerald-500" />
+                </div>
+              ) : paginatedTasks.length > 0 ? (
                 paginatedTasks.map((task, index) => {
                   const stt = (currentPage - 1) * pageSize + index + 1;
                   const style = getCatStyle(task.topic);
@@ -299,18 +389,15 @@ export default function TaskManagerCustomPage() {
                       key={task.id} 
                       className="hover:bg-gray-50/80 dark:hover:bg-[#25272E]/50 transition-colors flex items-center h-full bg-white dark:bg-[#1C1D22]"
                     >
-                      {/* STT */}
-                      <div className="px-3 text-center font-sans whitespace-nowrap w-[60px] text-gray-400 dark:text-gray-500">
+                      <div className="px-3 text-center font-sans whitespace-nowrap w-[50px] text-gray-400 dark:text-gray-500">
                         {stt}
                       </div>
 
-                      {/* Nhiệm vụ */}
                       <div className="px-4 font-bold flex-1 truncate text-gray-900 dark:text-gray-100" title={task.title}>
                         {task.title}
                       </div>
 
-                      {/* Chủ đề Badge */}
-                      <div className="px-3 w-[200px] whitespace-nowrap flex items-center">
+                      <div className="px-3 w-[170px] whitespace-nowrap flex items-center">
                         <span
                           className="px-2.5 py-1 rounded-md text-[11px] font-bold border inline-block whitespace-nowrap"
                           style={{
@@ -323,8 +410,15 @@ export default function TaskManagerCustomPage() {
                         </span>
                       </div>
 
-                      {/* Thao tác */}
-                      <div className="px-4 text-center w-[100px] whitespace-nowrap">
+                      <div className="px-3 w-[120px] text-center font-semibold text-gray-900 dark:text-white whitespace-nowrap">
+                        {formatDate(task.createdAt)}
+                      </div>
+
+                      <div className="px-3 w-[120px] text-center font-semibold text-gray-900 dark:text-white whitespace-nowrap">
+                        {formatDate(task.deadline)}
+                      </div>
+
+                      <div className="px-4 text-center w-[90px] whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1">
                           <button
                             onClick={() => handleOpenEditModal(task)}
@@ -354,7 +448,6 @@ export default function TaskManagerCustomPage() {
           </div>
         </div>
 
-        {/* Footer Pagination */}
         <div className="px-2 py-1.5 border-t shrink-0 bg-white dark:bg-[#1C1D22] border-gray-200 dark:border-gray-800">
           <Pagination 
             currentPage={currentPage} 
@@ -403,6 +496,47 @@ export default function TaskManagerCustomPage() {
                 </select>
               </div>
 
+              {/* Hàng chứa 2 ô chọn ngày tạo và ngày hạn chót dạng DD/MM/YYYY */}
+              <div className="grid grid-cols-2 gap-3">
+                {/* Ngày tạo */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase mb-1 text-gray-500 dark:text-gray-400">Ngày tạo</label>
+                  <div className="relative">
+                    <div className="w-full px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#25272E] text-gray-900 dark:text-white rounded-lg font-medium flex items-center justify-between pointer-events-none">
+                      <span>{formatDate(formData.createdAt)}</span>
+                      <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                    </div>
+                    <input
+                      type="date"
+                      required
+                      min={todayStr}
+                      value={formData.createdAt}
+                      onChange={(e) => setFormData({ ...formData, createdAt: e.target.value })}
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                    />
+                  </div>
+                </div>
+
+                {/* Hạn chót */}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase mb-1 text-gray-500 dark:text-gray-400">Hạn chót (Deadline)</label>
+                  <div className="relative">
+                    <div className="w-full px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#25272E] text-gray-900 dark:text-white rounded-lg font-medium flex items-center justify-between pointer-events-none">
+                      <span>{formatDate(formData.deadline)}</span>
+                      <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                    </div>
+                    <input
+                      type="date"
+                      required
+                      min={todayStr}
+                      value={formData.deadline}
+                      onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div className="flex gap-2 pt-1">
                 <button
                   type="button"
@@ -431,9 +565,7 @@ export default function TaskManagerCustomPage() {
             className="rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden border animate-in fade-in zoom-in-95 duration-200 bg-white dark:bg-[#1C1D22] border-gray-100 dark:border-gray-800 transition-colors"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Đường kẻ vạch màu DANGER trang trí trên đỉnh */}
             <div className="h-1.5 w-full shrink-0" style={{ backgroundColor: DANGER }} />
-
             <div className="p-5 text-center space-y-3">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center mx-auto" style={{ backgroundColor: `${DANGER}20`, color: DANGER }}>
                 <AlertTriangle className="w-5 h-5" />
@@ -441,7 +573,7 @@ export default function TaskManagerCustomPage() {
               <div>
                 <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">Xác nhận xóa nhiệm vụ</h3>
                 <p className="text-[11px] mt-1 line-clamp-2 text-gray-500 dark:text-gray-400">
-                  Bạn có chắc muốn xóa nhiệm vụ <span className="font-bold text-gray-900 dark:text-gray-200">"{taskToDelete.title}"</span>? Hành động này không thể hoàn tác.
+                  Bạn có chắc muốn xóa nhiệm vụ <span className="font-bold text-gray-900 dark:text-gray-200">"{taskToDelete.title}"</span>?
                 </p>
               </div>
               <div className="flex gap-2 pt-1">

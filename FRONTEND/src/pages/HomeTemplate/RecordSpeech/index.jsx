@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import TaskStepper from '../../../components/TaskStepper/TaskStepper';
 import { Mic, RotateCcw, Play, Pause, Check, ArrowRight, HelpCircle } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import useWaveSurfer from '../../../hooks/useWaveSurfer';
 import { formatTime } from '../../../utils/audio';
-import { parseCodeSwitch } from '../../../components/CodeSwitchText/CodeSwitchText';
+import CodeSwitchText from '../../../components/CodeSwitchText/CodeSwitchText';
 import {
   SPEAKER_ACCENT as ACCENT,
   AUDIO_PRIMARY,
@@ -12,20 +13,17 @@ import {
   TEXT_HEADING, TEXT_BODY, TEXT_FAINT,
   BORDER_LIGHT, SURFACE_MUTED,
 } from '../../../constants/theme';
-import { CURRENT_SENTENCE } from '../../../mocks/speaker/tasks';
+import Loading from '../../../components/Loading/Loading';
+import ErrorState from '../../../components/ErrorState/ErrorState';
+import EmptyState from '../../../components/EmptyState/EmptyState';
+import { getNextScriptApi } from '../../../services/speakerApi';
+import { GET_NEXT_SCRIPT_API } from '../../../utils/queryKey';
 
 const HISTORY_LEN = 60;
 const WAVEFORM_INTERVAL_MS = 80;
 // Sóng phẳng tĩnh hiển thị khi chưa ghi âm - để card giữ đúng chiều cao như lúc đang ghi/đã ghi
 const IDLE_WAVE = Array.from({ length: HISTORY_LEN }, (_, i) => 6 + 3 * Math.sin(i / 4));
 
-// Câu đang ghi âm - tạm lấy từ dữ liệu mẫu (TODO: thay bằng dữ liệu thật từ API)
-const SENTENCE_CS = CURRENT_SENTENCE.cs_transcript;
-const SENTENCE_VI = stripLangTags(CURRENT_SENTENCE.vi_equivalent);
-
-function stripLangTags(text) {
-  return text.replace(/\[(vi|en)\]/g, '').trim();
-}
 
 /**
  * 1 card = 1 câu cần ghi âm, độc lập hoàn toàn với card kia.
@@ -114,13 +112,14 @@ function SentenceCard({ id, label, contentNode, recordingCardId, setRecordingCar
     const recorder = mediaRecorderRef.current;
     if (recorder && recorder.state !== 'inactive') {
       recorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        // Giữ đúng định dạng trình duyệt ghi ra (Chrome: audio/webm, Safari: audio/mp4) - backend tự chuyển sang WAV
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
         const url = URL.createObjectURL(blob);
         cleanupRecordingResources();
         setRecordingCardId(null);
         setStatus('recorded');
         setAudioUrl(url);
-        onRecordedChange(id, true, url);
+        onRecordedChange(id, { url, blob });
       };
       recorder.stop();
     }
@@ -130,7 +129,7 @@ function SentenceCard({ id, label, contentNode, recordingCardId, setRecordingCar
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     setAudioUrl(null);
     setStatus('idle');
-    onRecordedChange(id, false, null);
+    onRecordedChange(id, null);
   };
 
   // WaveSurfer chỉ tạo khi đã có bản ghi (khung sóng lúc đó mới hiện); ghi lại -> src null -> tự huỷ
@@ -277,19 +276,35 @@ function SentenceCard({ id, label, contentNode, recordingCardId, setRecordingCar
 
 export default function RecordSpeech() {
   const navigate = useNavigate();
-  const [csDone, setCsDone] = useState(false);
-  const [viDone, setViDone] = useState(false);
-  const [csUrl, setCsUrl] = useState(null);
-  const [viUrl, setViUrl] = useState(null);
+  const [searchParams] = useSearchParams();
+  const taskId = searchParams.get('taskId');
+
+  // Cùng key với trang Câu chờ ghi âm -> có sẵn trong cache, không gọi lại API
+  const scriptQuery = useQuery({
+    queryKey: [GET_NEXT_SCRIPT_API, Number(taskId)],
+    queryFn: () => getNextScriptApi(taskId),
+    enabled: Boolean(taskId),
+  });
+  const sentence = scriptQuery.data;
+
+  // Bản ghi của từng card: { url, blob } hoặc null (chưa ghi / ghi lại)
+  const [recordings, setRecordings] = useState({ cs: null, vi: null });
   const [recordingCardId, setRecordingCardId] = useState(null);
 
-  const onRecordedChange = useCallback((id, done, url) => {
-    if (id === 'cs') { setCsDone(done); setCsUrl(url); }
-    if (id === 'vi') { setViDone(done); setViUrl(url); }
+  const onRecordedChange = useCallback((id, recording) => {
+    setRecordings((prev) => ({ ...prev, [id]: recording }));
   }, []);
 
-  const bothDone = csDone && viDone;
-  const sentenceSegments = parseCodeSwitch(SENTENCE_CS);
+  // Vào thẳng trang mà không chọn nhiệm vụ -> quay về bước 1
+  if (!taskId) return <Navigate to="/speaker/review-text" replace />;
+  if (scriptQuery.isLoading) return <Loading />;
+  if (scriptQuery.isError) return <ErrorState message={scriptQuery.error.message} onRetry={scriptQuery.refetch} />;
+  if (!sentence) {
+    return <EmptyState title="Đã hết câu trong nhiệm vụ này" description="Quay lại Câu chờ ghi âm để chọn nhiệm vụ khác." />;
+  }
+
+  // Luôn ghi đủ cả 2 câu của cặp
+  const bothDone = Boolean(recordings.cs && recordings.vi);
 
   return (
     <div className="space-y-3 [@media(min-height:900px)]:space-y-4 text-left [@media(min-height:900px)]:pb-6 max-w-3xl mx-auto font-sans">
@@ -299,9 +314,7 @@ export default function RecordSpeech() {
       <SentenceCard
         id="cs"
         label="Câu Việt-Anh"
-        contentNode={sentenceSegments.map((seg, i) =>
-          seg.lang === 'en' ? <span key={i} style={{ color: ACCENT }}>{seg.text}</span> : <span key={i}>{seg.text}</span>
-        )}
+        contentNode={<CodeSwitchText transcript={sentence.csContent} accent={ACCENT} />}
         recordingCardId={recordingCardId}
         setRecordingCardId={setRecordingCardId}
         onRecordedChange={onRecordedChange}
@@ -309,7 +322,7 @@ export default function RecordSpeech() {
       <SentenceCard
         id="vi"
         label="Câu tiếng Việt"
-        contentNode={stripLangTags(SENTENCE_VI)}
+        contentNode={sentence.vePlain}
         recordingCardId={recordingCardId}
         setRecordingCardId={setRecordingCardId}
         onRecordedChange={onRecordedChange}
@@ -339,12 +352,13 @@ export default function RecordSpeech() {
         <button
           onClick={() =>
             bothDone &&
-            navigate('/speaker/submit-task', {
+            navigate(`/speaker/submit-task?taskId=${taskId}`, {
               state: {
-                csAudioUrl: csUrl,
-                viAudioUrl: viUrl,
-                csTranscript: SENTENCE_CS,
-                viTranscript: SENTENCE_VI,
+                scriptId: sentence.scriptId,
+                csContent: sentence.csContent,
+                vePlain: sentence.vePlain,
+                remainingVariants: sentence.remainingVariants, // bản backend còn thiếu - chỉ nộp những bản này
+                recordings, // { cs: { url, blob }, vi: { url, blob } } - Blob giữ được qua state của router
               },
             })
           }

@@ -3,131 +3,141 @@ import {
   BarChart3, 
   ListTodo,
   UserCheck,
-  Tag
+  Tag,
+  Loader2
 } from "lucide-react";
 import { SPEAKER_ACCENT, REVIEWER_ACCENT } from "../../../constants/theme";
+import { taskService } from "../../../services/taskService";
 
 // Bộ màu chủ đề
 const CATEGORY_COLORS = {
   'Hội thoại hàng ngày': { bg: '#E6F0FE', text: '#1E40AF', border: '#C9DEFB' },
   'Công nghệ thông tin': { bg: '#FBF0DA', text: '#92600A', border: '#F3E0B5' },
   'Giáo dục': { bg: '#FCE7F0', text: '#9D2662', border: '#F8CFE0' },
+  'ItTechnology': { bg: '#FBF0DA', text: '#92600A', border: '#F3E0B5' },
+  'Education': { bg: '#FCE7F0', text: '#9D2662', border: '#F8CFE0' },
+  'DailyLife': { bg: '#E6F0FE', text: '#1E40AF', border: '#C9DEFB' }
 };
 
 const getCatStyle = (cat) => CATEGORY_COLORS[cat] || { bg: '#F7F5EF', text: '#6E7078', border: '#E5E2D8' };
 
-// Các khóa lưu trữ chuẩn khớp với các màn hình
-const SPEAKER_STORAGE_KEY = "task_manager_dataset_v3";
-const REVIEWER_STORAGE_KEY = "task_manager_custom_dataset_v1";
-const ASSIGNMENT_STORAGE_KEY = "task_manager_assign_v8";
-
 export default function TaskManagerDashboard() {
-  const [speakerTasks, setSpeakerTasks] = useState([]);
-  const [reviewerTasks, setReviewerTasks] = useState([]);
-  const [assignments, setAssignments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    speakerTasksCount: 0,
+    reviewerTasksCount: 0,
+    assignedSpeakerCount: 0,
+    assignedReviewerCount: 0,
+    techTasks: 0,
+    eduTasks: 0,
+    lifeTasks: 0
+  });
 
-  // Hàm đọc dữ liệu từ localStorage chuẩn hóa
-  const parseSavedTasks = (key) => {
-    const rawData = localStorage.getItem(key);
-    if (!rawData) return [];
-
+  const loadDataFromApi = async () => {
     try {
-      const parsed = JSON.parse(rawData);
-      if (!Array.isArray(parsed)) return [];
+      setLoading(true);
+      // Gọi API lấy toàn bộ danh sách Task & Campaigns
+      const [allTasksRes, campaignsRes] = await Promise.all([
+        taskService.getTasks().catch(() => ({ items: [] })),
+        taskService.getCampaigns().catch(() => ({ items: [] }))
+      ]);
 
-      const uniqueMap = new Map();
-      parsed.forEach((item) => {
-        if (item && item.id) {
-          uniqueMap.set(item.id, item);
+      const rawTasks = allTasksRes?.items || allTasksRes?.data || [];
+      const campaigns = campaignsRes?.items || campaignsRes?.data || [];
+
+      // Map danh sách topic/domain từ Campaign để làm fallback cho Task
+      const campaignTopicMap = {};
+      campaigns.forEach(c => {
+        const cId = c.campaignId || c.id;
+        if (cId) {
+          campaignTopicMap[cId] = c.domain || c.topic || c.campaignName;
         }
       });
-      return Array.from(uniqueMap.values());
-    } catch (e) {
-      console.error(`Lỗi đọc dữ liệu từ key [${key}]:`, e);
-      return [];
-    }
-  };
 
-  const loadAllData = () => {
-    const speakers = parseSavedTasks(SPEAKER_STORAGE_KEY);
-    setSpeakerTasks(speakers);
+      // Tách nhiệm vụ Speaker (Recording) và Reviewer (Review/Editing)
+      const speakerItems = rawTasks.filter(t => 
+        t.taskType === "Recording" || t.role === "Speaker" || String(t.taskType).toLowerCase().includes("record")
+      );
 
-    const reviewers = parseSavedTasks(REVIEWER_STORAGE_KEY);
-    setReviewerTasks(reviewers);
+      const reviewerItems = rawTasks.filter(t => 
+        t.taskType === "Review" || t.taskType === "Editing" || t.role === "Reviewer" || String(t.taskType).toLowerCase().includes("review")
+      );
 
-    const savedAssign = localStorage.getItem(ASSIGNMENT_STORAGE_KEY);
-    if (savedAssign) {
-      try {
-        const parsedAssign = JSON.parse(savedAssign);
-        setAssignments(Array.isArray(parsedAssign) ? parsedAssign : []);
-      } catch (e) {
-        setAssignments([]);
-      }
-    } else {
-      setAssignments([]);
+      // Đếm số lượng nhiệm vụ đã phân công
+      const assignedSpeakers = speakerItems.filter(t => 
+        t.assignedToUserId || t.assigneeName || t.assigneeId || t.campaignId
+      ).length;
+
+      const assignedReviewers = reviewerItems.filter(t => 
+        t.assignedToUserId || t.assigneeName || t.assigneeId || t.campaignId
+      ).length;
+
+      // Đếm số lượng nhiệm vụ theo Chủ đề chính xác
+      let tech = 0;
+      let edu = 0;
+      let life = 0;
+
+      rawTasks.forEach(t => {
+        const campaignTopic = campaignTopicMap[t.campaignId] || "";
+        const combinedText = `${t.domain || ""} ${t.topic || ""} ${t.title || ""} ${t.description || ""} ${campaignTopic}`.toLowerCase();
+
+        if (
+          combinedText.includes("công nghệ") || 
+          combinedText.includes("thông tin") || 
+          combinedText.includes("ittechnology") || 
+          combinedText.includes("tech") ||
+          combinedText.includes("it")
+        ) {
+          tech++;
+        } else if (
+          combinedText.includes("giáo dục") || 
+          combinedText.includes("education") || 
+          combinedText.includes("edu")
+        ) {
+          edu++;
+        } else if (
+          combinedText.includes("hội thoại") || 
+          combinedText.includes("hàng ngày") || 
+          combinedText.includes("dailylife") || 
+          combinedText.includes("life")
+        ) {
+          life++;
+        } else {
+          // Mặc định tính vào Công nghệ thông tin nếu các nhiệm vụ hiện tại thuộc nhóm đợt CNTT
+          tech++;
+        }
+      });
+
+      setStats({
+        speakerTasksCount: speakerItems.length,
+        reviewerTasksCount: reviewerItems.length,
+        assignedSpeakerCount: assignedSpeakers,
+        assignedReviewerCount: assignedReviewers,
+        techTasks: tech,
+        eduTasks: edu,
+        lifeTasks: life
+      });
+    } catch (err) {
+      console.error("Lỗi khi tải dữ liệu Bảng điều khiển từ API:", err);
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadAllData();
-
-    const handleDataChange = () => loadAllData();
-
-    window.addEventListener("storage", handleDataChange);
-    window.addEventListener("speaker_tasks_updated", handleDataChange);
-    window.addEventListener("reviewer_tasks_updated", handleDataChange);
-    window.addEventListener("task_manager_assign_updated", handleDataChange);
-    window.addEventListener("assign_tasks_updated", handleDataChange);
-
-    return () => {
-      window.removeEventListener("storage", handleDataChange);
-      window.removeEventListener("speaker_tasks_updated", handleDataChange);
-      window.removeEventListener("reviewer_tasks_updated", handleDataChange);
-      window.removeEventListener("task_manager_assign_updated", handleDataChange);
-      window.removeEventListener("assign_tasks_updated", handleDataChange);
-    };
+    loadDataFromApi();
   }, []);
 
   const speakerColor = SPEAKER_ACCENT || "#FF4B2E";
   const reviewerColor = REVIEWER_ACCENT || "#0052CC";
 
-  // Lấy danh sách các ID nhiệm vụ Speaker hợp lệ (tập hợp không lặp)
-  const assignedSpeakerTaskIds = new Set(
-    assignments
-      .filter(
-        (a) =>
-          a.role === "Speaker" &&
-          Array.isArray(a.assignedUsers) &&
-          a.assignedUsers.length > 0 &&
-          a.taskId
-      )
-      .map((a) => a.taskId)
-  );
-  const assignedSpeakerCount = assignedSpeakerTaskIds.size;
-
-  // Lấy danh sách các ID nhiệm vụ Reviewer hợp lệ (tập hợp không lặp)
-  const assignedReviewerTaskIds = new Set(
-    assignments
-      .filter(
-        (a) =>
-          a.role === "Reviewer" &&
-          Array.isArray(a.assignedUsers) &&
-          a.assignedUsers.length > 0 &&
-          a.taskId
-      )
-      .map((a) => a.taskId)
-  );
-  const assignedReviewerCount = assignedReviewerTaskIds.size;
-
-  const countTasksByTopic = (topicName, altName) => {
-    const speakerMatch = speakerTasks.filter((t) => t.topic === topicName || t.topic === altName).length;
-    const reviewerMatch = reviewerTasks.filter((t) => t.topic === topicName || t.topic === altName).length;
-    return speakerMatch + reviewerMatch;
-  };
-
-  const techTasks = countTasksByTopic("Công nghệ thông tin", "IT/Technology");
-  const eduTasks = countTasksByTopic("Giáo dục", "Education");
-  const lifeTasks = countTasksByTopic("Hội thoại hàng ngày", "Daily Life");
+  if (loading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 text-left font-sans transition-colors">
@@ -159,7 +169,7 @@ export default function TaskManagerDashboard() {
           <div>
             <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-1">Nhiệm vụ Speaker</p>
             <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 font-sans">
-              {speakerTasks.length} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">nhiệm vụ</span>
+              {stats.speakerTasksCount} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">nhiệm vụ</span>
             </h3>
           </div>
         </div>
@@ -178,7 +188,7 @@ export default function TaskManagerDashboard() {
           <div>
             <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-1">Nhiệm vụ Reviewer</p>
             <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 font-sans">
-              {reviewerTasks.length} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">nhiệm vụ</span>
+              {stats.reviewerTasksCount} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">nhiệm vụ</span>
             </h3>
           </div>
         </div>
@@ -200,7 +210,7 @@ export default function TaskManagerDashboard() {
           <div>
             <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-1">Đã phân công Speaker</p>
             <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 font-sans">
-              {assignedSpeakerCount} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">nhiệm vụ</span>
+              {stats.assignedSpeakerCount} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">nhiệm vụ</span>
             </h3>
           </div>
         </div>
@@ -219,7 +229,7 @@ export default function TaskManagerDashboard() {
           <div>
             <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-1">Đã phân công Reviewer</p>
             <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 font-sans">
-              {assignedReviewerCount} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">nhiệm vụ</span>
+              {stats.assignedReviewerCount} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">nhiệm vụ</span>
             </h3>
           </div>
         </div>
@@ -245,7 +255,7 @@ export default function TaskManagerDashboard() {
             >
               Công nghệ thông tin
             </span>
-            <span className="font-bold text-gray-900 dark:text-white font-sans text-xs">{techTasks} nhiệm vụ</span>
+            <span className="font-bold text-gray-900 dark:text-white font-sans text-xs">{stats.techTasks} nhiệm vụ</span>
           </div>
 
           {/* GIÁO DỤC */}
@@ -260,7 +270,7 @@ export default function TaskManagerDashboard() {
             >
               Giáo dục
             </span>
-            <span className="font-bold text-gray-900 dark:text-white font-sans text-xs">{eduTasks} nhiệm vụ</span>
+            <span className="font-bold text-gray-900 dark:text-white font-sans text-xs">{stats.eduTasks} nhiệm vụ</span>
           </div>
 
           {/* HỘI THOẠI HÀNG NGÀY */}
@@ -275,7 +285,7 @@ export default function TaskManagerDashboard() {
             >
               Hội thoại hàng ngày
             </span>
-            <span className="font-bold text-gray-900 dark:text-white font-sans text-xs">{lifeTasks} nhiệm vụ</span>
+            <span className="font-bold text-gray-900 dark:text-white font-sans text-xs">{stats.lifeTasks} nhiệm vụ</span>
           </div>
         </div>
       </div>

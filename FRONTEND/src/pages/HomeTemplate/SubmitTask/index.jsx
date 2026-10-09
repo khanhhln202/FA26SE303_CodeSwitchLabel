@@ -1,25 +1,22 @@
 import { useState, useRef, useEffect } from "react";
 import TaskStepper from "../../../components/TaskStepper/TaskStepper";
 import { Send, Play, Pause, RotateCcw } from "lucide-react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { Navigate, useNavigate, useLocation, useSearchParams } from "react-router-dom";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { parseCodeSwitch } from "../../../components/CodeSwitchText/CodeSwitchText";
+import CodeSwitchText from "../../../components/CodeSwitchText/CodeSwitchText";
 import {
   SPEAKER_ACCENT as ACCENT,
   AUDIO_PRIMARY, AUDIO_SHADOW,
   TEXT_HEADING, TEXT_BODY,
   BORDER_LIGHT, SURFACE_PAGE,
 } from "../../../constants/theme";
-import { CURRENT_SENTENCE } from "../../../mocks/speaker/tasks";
 import { formatTime } from "../../../utils/audio";
+import { uploadRecordingApi } from "../../../services/recordingApi";
+import { GET_NEXT_SCRIPT_API, GET_SPEAKER_PROGRESS_API, UPLOAD_RECORDING_API } from "../../../utils/queryKey";
 
-// Fallback khi vào thẳng trang không qua RecordSpeech - tạm lấy câu mẫu (TODO: thay bằng dữ liệu thật từ API)
-const FALLBACK_CS = CURRENT_SENTENCE.cs_transcript;
-const FALLBACK_VI = CURRENT_SENTENCE.vi_equivalent;
-
-function stripLangTags(text) {
-  return text.replace(/\[(vi|en)\]/g, "").trim();
-}
+// id bản ghi trên trang <-> biến thể câu của backend
+const VARIANT_OF = { cs: "CodeSwitching", vi: "PureVietnamese" };
 
 /** Mini audio player dùng lại cho từng câu — nút play xanh dương đồng bộ với RecordSpeech. */
 function AudioBlock({ label, src }) {
@@ -32,7 +29,22 @@ function AudioBlock({ label, src }) {
     const audio = audioRef.current;
     if (!audio) return;
     const onTime = () => setCurrentTime(audio.currentTime);
-    const onLoaded = () => setDuration(audio.duration || 0);
+    // File WebM do MediaRecorder (Chrome) ghi ra không có sẵn thời lượng -> duration = Infinity.
+    // Mẹo: tua tới cuối để trình duyệt tự đo, lấy được thời lượng thật rồi tua về đầu.
+    const onLoaded = () => {
+      if (Number.isFinite(audio.duration)) {
+        setDuration(audio.duration);
+        return;
+      }
+      const onMeasured = () => {
+        if (!Number.isFinite(audio.duration)) return;
+        audio.removeEventListener("durationchange", onMeasured);
+        setDuration(audio.duration);
+        audio.currentTime = 0;
+      };
+      audio.addEventListener("durationchange", onMeasured);
+      audio.currentTime = 1e101;
+    };
     const onEnded = () => setIsPlaying(false);
     audio.addEventListener("timeupdate", onTime);
     audio.addEventListener("loadedmetadata", onLoaded);
@@ -69,7 +81,7 @@ function AudioBlock({ label, src }) {
     }
   };
 
-  const playedFraction = duration ? currentTime / duration : 0;
+  const playedFraction = duration ? Math.min(1, currentTime / duration) : 0;
 
   return (
     <div
@@ -87,7 +99,7 @@ function AudioBlock({ label, src }) {
       <div className="flex-1 min-w-0">
         <div className="flex justify-between type-caption tabular-nums mb-1">
           <span style={{ color: TEXT_BODY }}>{label}</span>
-          <span style={{ color: TEXT_HEADING }}>{formatTime(duration - currentTime)}</span>
+          <span style={{ color: TEXT_HEADING }}>{formatTime(Math.max(0, duration - currentTime))}</span>
         </div>
         <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: BORDER_LIGHT }}>
           <div
@@ -103,29 +115,68 @@ function AudioBlock({ label, src }) {
 export default function SubmitTask() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [searchParams] = useSearchParams();
+  const taskId = searchParams.get("taskId");
+  const queryClient = useQueryClient();
 
-  // Nhận từ RecordSpeech qua navigate state; fallback demo nếu vào thẳng trang
-  const {
-    csAudioUrl = "/demo-recording-cs.wav",
-    viAudioUrl = "/demo-recording-vi.wav",
-    csTranscript = FALLBACK_CS,
-    viTranscript = FALLBACK_VI,
-  } = location.state || {};
+  // Nhận từ RecordSpeech qua navigate state: câu + các bản ghi { cs?: { url, blob }, vi?: { url, blob } }
+  const { scriptId, csContent, vePlain, remainingVariants, recordings } = location.state || {};
 
-  const csSegments = parseCodeSwitch(csTranscript);
+  // Chỉ nộp bản backend còn thiếu: bản đã nộp trước đó (đang chờ duyệt / đã đạt) mà gửi lại sẽ bị 409.
+  // Trang vẫn cho ghi và nghe lại đủ 2 câu.
+  const idsToUpload = ["cs", "vi"].filter(
+    (id) => recordings?.[id] && (!remainingVariants || remainingVariants.includes(VARIANT_OF[id])),
+  );
 
-  const handleSubmit = () => {
-    setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
-      // TODO: nối API nộp bài thật (gửi kèm csAudioUrl + viAudioUrl), thay cho setTimeout mô phỏng này
+  // Nộp lần lượt từng bản (cs rồi vi). Bản trượt kiểm tra tự động vẫn được lưu, chỉ là phải thu lại.
+  const mutation = useMutation({
+    mutationKey: [UPLOAD_RECORDING_API],
+    mutationFn: async () => {
+      const results = [];
+      for (const id of idsToUpload) {
+        const result = await uploadRecordingApi({
+          audio: recordings[id].blob,
+          scriptId,
+          variant: VARIANT_OF[id],
+          taskId,
+        });
+        results.push(result);
+      }
+      return results;
+    },
+    onSuccess: (results) => {
+      // Tiến độ và câu tiếp theo đã đổi -> tải lại
+      queryClient.invalidateQueries({ queryKey: [GET_SPEAKER_PROGRESS_API] });
+      queryClient.invalidateQueries({ queryKey: [GET_NEXT_SCRIPT_API] });
+
+      const failed = results.filter((r) => !r.qcPassed);
+      if (failed.length) {
+        // Hiện đúng câu hướng dẫn của backend (quá ngắn, quá nhỏ, im lặng quá lâu...) rồi quay lại thu bản trượt
+        toast.error("Bản ghi chưa đạt kiểm tra tự động", {
+          description: failed.flatMap((r) => r.qcIssues.map((issue) => issue.message)).join(" "),
+        });
+        navigate(`/speaker/record-speech?taskId=${taskId}`, { replace: true });
+        return;
+      }
+      const skippedCs = recordings.cs && !idsToUpload.includes("cs");
+      const skippedVi = recordings.vi && !idsToUpload.includes("vi");
       toast.success("Đã gửi bản ghi!", {
-        description: "Cả 2 bản ghi đang chờ đội ngũ kiểm duyệt chất lượng.",
+        description:
+          skippedCs || skippedVi
+            ? `Bản ${skippedCs ? "Việt-Anh" : "tiếng Việt"} đã nộp trước đó nên chỉ gửi bản còn lại. Bản ghi đang chờ kiểm duyệt.`
+            : "Bản ghi đang chờ đội ngũ kiểm duyệt chất lượng.",
       });
-      navigate("/speaker/review-text");
-    }, 1200);
-  };
+      navigate(`/speaker/review-text?taskId=${taskId}`, { replace: true });
+    },
+    onError: (error) => {
+      // Có thể một bản đã lên trước khi lỗi -> tải lại để biết còn thiếu bản nào
+      queryClient.invalidateQueries({ queryKey: [GET_NEXT_SCRIPT_API] });
+      toast.error(error.message);
+    },
+  });
+
+  // Vào thẳng trang (không qua bước Ghi âm) thì không có bản ghi để gửi -> về bước 1
+  if (!scriptId || !recordings) return <Navigate to="/speaker/review-text" replace />;
 
   return (
     <div className="space-y-5 pb-6 text-left max-w-3xl mx-auto font-sans">
@@ -139,38 +190,36 @@ export default function SubmitTask() {
         <h3 className="type-card-title" style={{ color: TEXT_HEADING }}>Kiểm tra lần cuối trước khi gửi</h3>
 
         {/* Câu Việt-Anh + audio tương ứng */}
+        {recordings.cs && (
         <div className="space-y-2">
           <p className="text-caption font-label" style={{ color: AUDIO_PRIMARY }}>Câu Việt-Anh</p>
           <div className="p-4 rounded-xl" style={{ background: SURFACE_PAGE, border: `1px solid ${BORDER_LIGHT}` }}>
             <p className="type-reading-sm" style={{ color: TEXT_HEADING }}>
-              "{csSegments.map((seg, i) =>
-                seg.lang === "en" ? (
-                  <span key={i} style={{ color: ACCENT }}>{seg.text}</span>
-                ) : (
-                  <span key={i}>{seg.text}</span>
-                )
-              )}"
+              "<CodeSwitchText transcript={csContent} accent={ACCENT} />"
             </p>
           </div>
-          <AudioBlock label="ghi_am_viet_anh.webm" src={csAudioUrl} />
+          <AudioBlock label="Bản ghi Việt-Anh" src={recordings.cs.url} />
         </div>
+        )}
 
         {/* Câu tiếng Việt + audio tương ứng */}
+        {recordings.vi && (
         <div className="space-y-2">
           <p className="text-caption font-label" style={{ color: AUDIO_PRIMARY }}>Câu tiếng Việt</p>
           <div className="p-4 rounded-xl" style={{ background: SURFACE_PAGE, border: `1px solid ${BORDER_LIGHT}` }}>
             <p className="type-reading-sm" style={{ color: TEXT_HEADING }}>
-              "{stripLangTags(viTranscript)}"
+              "{vePlain}"
             </p>
           </div>
-          <AudioBlock label="ghi_am_tieng_viet.webm" src={viAudioUrl} />
+          <AudioBlock label="Bản ghi tiếng Việt" src={recordings.vi.url} />
         </div>
+        )}
       </div>
 
       {/* Hành động */}
       <div className="flex gap-3">
         <button
-          onClick={() => navigate("/speaker/record-speech")}
+          onClick={() => navigate(`/speaker/record-speech?taskId=${taskId}`)}
           className="flex-1 py-4 rounded-2xl text-ui font-label flex items-center justify-center gap-2 transition-all"
           style={{
             background: "#FFFFFF",
@@ -182,12 +231,12 @@ export default function SubmitTask() {
           <RotateCcw className="w-4 h-4" /> Quay lại kiểm tra
         </button>
         <button
-          onClick={handleSubmit}
-          disabled={isSubmitting}
+          onClick={() => mutation.mutate()}
+          disabled={mutation.isPending}
           className="flex-[2] py-4 text-white font-label text-body rounded-2xl hover:opacity-90 flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.99] transition-all"
           style={{ background: ACCENT, boxShadow: `0 10px 24px ${ACCENT}40` }}
         >
-          {isSubmitting ? <span>Đang gửi...</span> : (<><Send className="w-4 h-4" /> Gửi bản ghi</>)}
+          {mutation.isPending ? <span>Đang gửi...</span> : (<><Send className="w-4 h-4" /> Gửi bản ghi</>)}
         </button>
       </div>
     </div>

@@ -1,6 +1,9 @@
 import { useState, useMemo } from 'react';
 import { Send, Check, Trash2, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { contributeScriptApi } from '../../../services/speakerApi';
+import { CONTRIBUTE_SCRIPT_API, GET_SPEAKER_CONTRIBUTION_HISTORY_API } from '../../../utils/queryKey';
 import {
   SPEAKER_ACCENT as ACCENT,
   SUCCESS, WARNING,
@@ -12,8 +15,13 @@ import {
 
 // Màn hình cao >= 900px dùng biến thể [@media(min-height:900px)] để giãn ô nhập/khoảng cách; màn thấp (laptop 768px) giữ bản gọn vừa 1 màn hình
 // Dữ liệu lựa chọn - thêm chủ đề / số từ chỉ cần thêm phần tử ở đây, UI tự sinh theo mảng
-// TODO: có thể thay bằng dữ liệu từ API
 const CATEGORIES = ['Hội thoại hàng ngày', 'Công nghệ thông tin', 'Giáo dục'];
+// Tên chủ đề trên giao diện -> giá trị domain của backend
+const DOMAIN_OF = {
+  'Hội thoại hàng ngày': 'DailyLife',
+  'Công nghệ thông tin': 'ItTechnology',
+  'Giáo dục': 'Education',
+};
 const WORD_COUNT_OPTIONS = [1, 2, 3];
 // Số ô đối chiếu giữ chỗ sẵn = số từ lớn nhất có thể chọn, để đổi lựa chọn không làm giãn layout
 const MAX_PAIRS = Math.max(...WORD_COUNT_OPTIONS);
@@ -106,6 +114,7 @@ function RadioGroup({ label, options, value, onChange, renderLabel = (o) => o })
 }
 
 export default function ContributeText() {
+  const queryClient = useQueryClient();
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [wordCount, setWordCount] = useState(2);
   const [csTranscript, setCsTranscript] = useState('');
@@ -135,26 +144,34 @@ export default function ContributeText() {
     setPairs(emptyPairs());
   };
 
+  const mutation = useMutation({
+    mutationKey: [CONTRIBUTE_SCRIPT_API],
+    mutationFn: contributeScriptApi,
+    onSuccess: () => {
+      // Lịch sử đóng góp có thêm câu mới -> tải lại khi mở trang lịch sử
+      queryClient.invalidateQueries({ queryKey: [GET_SPEAKER_CONTRIBUTION_HISTORY_API] });
+      toast.success('Đã gửi đóng góp!', { description: 'Câu của bạn đang chờ duyệt.' });
+      resetForm();
+    },
+    // Câu trùng, sai nhãn [vi]/[en]... -> backend trả câu báo lỗi tiếng Việt
+    onError: (error) => toast.error(error.message),
+  });
+
   const handleSubmit = () => {
-    if (!allValid) return;
-    // TODO: id do backend cấp - Date.now() chỉ là placeholder tạm thời
-    const payload = {
-      id: String(Date.now()),
-      domain: category,
-      cs_transcript: csTranscript.trim(),
-      vi_equivalent: viEquivalent.trim(),
-      alignment: pairs.slice(0, wordCount).map((p) => ({
+    if (!allValid || mutation.isPending) return;
+    mutation.mutate({
+      csContent: csTranscript.trim(),
+      veContent: viEquivalent.trim(),
+      domain: DOMAIN_OF[category],
+      relation: 'DirectTranslation',
+      alignment: activePairs.map((p) => ({
         source: p.source.trim(),
         source_lang: 'en',
         target: p.target.trim(),
         target_lang: 'vi',
         relation: 'semantic_equivalent',
       })),
-    };
-    // TODO: nối API gửi đóng góp thật, thay cho console.log mô phỏng này
-    console.log('Payload gửi API (mẫu, xoá console.log này khi nối API thật):', payload);
-    toast.success('Đã gửi đóng góp!', { description: 'Câu của bạn đang chờ duyệt.' });
-    resetForm();
+    });
   };
 
   const fieldStyle = { color: TEXT_HEADING, background: SURFACE_PAGE, border: `1px solid ${BORDER_LIGHT}` };
@@ -289,7 +306,7 @@ export default function ContributeText() {
             )}
             <button
               onClick={handleSubmit}
-              disabled={!allValid}
+              disabled={!allValid || mutation.isPending}
               className="flex-1 sm:flex-none px-4 py-2.5 text-white font-label text-ui rounded-xl flex items-center justify-center gap-2 transition-all"
               style={{
                 background: allValid ? ACCENT : '#DCD9CE',
@@ -298,7 +315,7 @@ export default function ContributeText() {
               }}
             >
               <Send className="w-4 h-4" />
-              {allValid ? 'Gửi đóng góp để duyệt' : 'Hoàn thành các tiêu chuẩn để gửi'}
+              {mutation.isPending ? 'Đang gửi...' : allValid ? 'Gửi đóng góp để duyệt' : 'Hoàn thành các tiêu chuẩn để gửi'}
             </button>
           </div>
         </div>
