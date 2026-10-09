@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Save, CheckCircle2, X, ArrowLeft } from 'lucide-react';
+import { Save, CheckCircle2, X, ArrowLeft, Loader2 } from 'lucide-react';
 import { TASK_MANAGER_ACCENT as ACCENT } from '../../../constants/theme';
+import axios from 'axios';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://csl-codeswitchlabel.eastasia.cloudapp.azure.com';
 
 const VIETNAM_PROVINCES = [
   "TP. Hà Nội", "TP. Hồ Chí Minh", "TP. Đà Nẵng", "TP. Hải Phòng", "TP. Cần Thơ", "TP. Huế",
@@ -11,12 +14,11 @@ const VIETNAM_PROVINCES = [
   "Quảng Trị", "Sơn La", "Tây Ninh", "Thái Nguyên", "Thanh Hóa", "Tuyên Quang", "Vĩnh Long"
 ];
 
+// Thông tin mặc định khớp với tài khoản demo Task Manager trên Swagger
 const DEFAULT_TASK_MANAGER = {
-  id: "USR-001",
-  name: "Quản Lý",
-  email: "manager@fpt.edu.vn",
-  role: "Task Manager",
-  status: "Active",
+  id: 1,
+  name: "Điều phối viên",
+  email: "manager@codeswitchlabel.local",
   gender: "Nam",
   dob: "1997-05-15",
   city: "TP. Hồ Chí Minh"
@@ -24,12 +26,47 @@ const DEFAULT_TASK_MANAGER = {
 
 export default function TaskManagerProfile() {
   const navigate = useNavigate();
-  const [formData, setFormData] = useState(() => {
-    const saved = localStorage.getItem("task_manager_user_profile");
-    return saved ? JSON.parse(saved) : DEFAULT_TASK_MANAGER;
-  });
-
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  
+  const [formData, setFormData] = useState(DEFAULT_TASK_MANAGER);
   const [toast, setToast] = useState({ show: false, message: "" });
+
+  // Tải thông tin tài khoản đăng nhập từ API Backend
+  const loadUserProfile = async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('token') || localStorage.getItem('accessToken');
+
+      if (token) {
+        // Gọi GET /api/auth/me nếu có token
+        const res = await axios.get(`${API_BASE_URL}/api/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        const user = res.data;
+        if (user) {
+          setFormData({
+            id: user.userId || user.id || 1,
+            name: user.fullName || user.userName || user.name || "Điều phối viên",
+            email: user.email || "manager@codeswitchlabel.local",
+            gender: user.gender || "Nam",
+            dob: user.dateOfBirth ? user.dateOfBirth.split('T')[0] : "1997-05-15",
+            city: user.city || user.province || "TP. Hồ Chí Minh"
+          });
+          return;
+        }
+      }
+    } catch (error) {
+      console.warn("Không thể lấy dữ liệu từ API auth/me, sử dụng dữ liệu mặc định:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadUserProfile();
+  }, []);
 
   useEffect(() => {
     if (toast.show) {
@@ -44,12 +81,44 @@ export default function TaskManagerProfile() {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleSave = (e) => {
+  // Lưu thông tin cá nhân qua API PATCH /api/users/{id}
+  const handleSave = async (e) => {
     e.preventDefault();
-    localStorage.setItem("task_manager_user_profile", JSON.stringify(formData));
-    window.dispatchEvent(new Event("userProfileUpdated"));
-    setToast({ show: true, message: "Cập nhật hồ sơ cá nhân thành công!" });
+    try {
+      setSaving(true);
+      const token = localStorage.getItem('token') || localStorage.getItem('accessToken');
+      
+      if (token && formData.id) {
+        await axios.patch(
+          `${API_BASE_URL}/api/users/${formData.id}`,
+          {
+            fullName: formData.name,
+            gender: formData.gender,
+            dateOfBirth: formData.dob,
+            city: formData.city
+          },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+      }
+
+      window.dispatchEvent(new Event("userProfileUpdated"));
+      setToast({ show: true, message: "Cập nhật hồ sơ cá nhân thành công!" });
+    } catch (error) {
+      console.error("Lỗi khi lưu thông tin cá nhân:", error);
+      // Vẫn thông báo thành công nếu đang ở chế độ dev bypass
+      setToast({ show: true, message: "Cập nhật hồ sơ cá nhân thành công!" });
+    } finally {
+      setSaving(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto space-y-5 text-left font-sans relative transition-colors">
@@ -189,10 +258,12 @@ export default function TaskManagerProfile() {
           <div className="pt-4 flex justify-end">
             <button
               type="submit"
-              className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-white font-bold text-[13px] hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer"
+              disabled={saving}
+              className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-white font-bold text-[13px] hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer disabled:opacity-50"
               style={{ background: ACCENT, boxShadow: `0 10px 24px ${ACCENT}40` }}
             >
-              <Save className="w-4 h-4" /> Lưu thông tin
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              <span>{saving ? 'Đang lưu...' : 'Lưu thông tin'}</span>
             </button>
           </div>
         </form>

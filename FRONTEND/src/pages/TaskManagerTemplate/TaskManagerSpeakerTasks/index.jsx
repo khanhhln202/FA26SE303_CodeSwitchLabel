@@ -8,7 +8,8 @@ import {
   Edit3, 
   Trash2, 
   X, 
-  AlertTriangle
+  AlertTriangle,
+  Loader2
 } from "lucide-react";
 import Pagination from "../../../components/Pagination/Pagination";
 import {
@@ -16,62 +17,23 @@ import {
   SUCCESS,
   DANGER
 } from "../../../constants/theme";
+import { taskService } from "../../../services/taskService";
 
-// Bộ màu badge chủ đề chuẩn thiết kế giao diện nhẹ nhàng
 const CATEGORY_COLORS = {
   'Hội thoại hàng ngày': { bg: '#E6F0FE', text: '#1E40AF', border: '#C9DEFB' },
   'Công nghệ thông tin': { bg: '#FBF0DA', text: '#92600A', border: '#F3E0B5' },
   'Giáo dục': { bg: '#FCE7F0', text: '#9D2662', border: '#F8CFE0' },
+  'ItTechnology': { bg: '#FBF0DA', text: '#92600A', border: '#F3E0B5' },
+  'Education': { bg: '#FCE7F0', text: '#9D2662', border: '#F8CFE0' },
+  'DailyLife': { bg: '#E6F0FE', text: '#1E40AF', border: '#C9DEFB' }
 };
 
-const getCatStyle = (cat) => CATEGORY_COLORS[cat] || { 
-  bg: '#F3F4F6', 
-  text: '#374151', 
-  border: '#E5E7EB' 
-};
-
-const INITIAL_SPEAKER_TASKS = [
-  { id: "TSK-001", title: "Nhiệm vụ ghi âm thuật ngữ công nghệ", topic: "Công nghệ thông tin", reviewed: 65, status: "Đang thực hiện", statusType: "in-progress" },
-  { id: "TSK-002", title: "Nhiệm vụ ghi âm hội thoại giáo dục phổ thông", topic: "Giáo dục", reviewed: 80, status: "Hoàn thành", statusType: "completed" },
-  { id: "TSK-003", title: "Thu âm giao tiếp đời sống hàng ngày", topic: "Hội thoại hàng ngày", reviewed: 135, status: "Đang thực hiện", statusType: "in-progress" },
-  { id: "TSK-004", title: "Đọc ngữ liệu lệnh thoại nhà thông minh", topic: "Công nghệ thông tin", reviewed: 40, status: "Đang thực hiện", statusType: "in-progress" },
-  { id: "TSK-005", title: "Thu âm kịch bản hỏi đáp y tế cơ bản", topic: "Hội thoại hàng ngày", reviewed: 0, status: "Chưa bắt đầu", statusType: "pending" },
-  { id: "TSK-006", title: "Ghi âm bài giảng toán học trực tuyến", topic: "Giáo dục", reviewed: 110, status: "Hoàn thành", statusType: "completed" },
-  { id: "TSK-007", title: "Đọc tin tức kinh tế và thị trường tài chính", topic: "Hội thoại hàng ngày", reviewed: 20, status: "Đang thực hiện", statusType: "in-progress" },
-  { id: "TSK-008", title: "Thu âm dữ liệu hội thoại bán hàng tự động", topic: "Công nghệ thông tin", reviewed: 130, status: "Hoàn thành", statusType: "completed" },
-  { id: "TSK-009", title: "Ghi âm phát âm bảng chữ cái Tiếng Việt cho trẻ em", topic: "Giáo dục", reviewed: 0, status: "Chưa bắt đầu", statusType: "pending" },
-  { id: "TSK-010", title: "Đọc tài liệu hướng dẫn lập trình Python", topic: "Công nghệ thông tin", reviewed: 85, status: "Đang thực hiện", statusType: "in-progress" },
-  { id: "TSK-011", title: "Thu âm mẫu hội thoại đặt xe trực tuyến", topic: "Hội thoại hàng ngày", reviewed: 85, status: "Hoàn thành", statusType: "completed" },
-  { id: "TSK-012", title: "Đọc thuật ngữ trí tuệ nhân tạo nâng cao", topic: "Công nghệ thông tin", reviewed: 30, status: "Đang thực hiện", statusType: "in-progress" },
-  { id: "TSK-013", title: "Ghi âm bài luyện nói Tiếng Anh giao tiếp", topic: "Giáo dục", reviewed: 0, status: "Chưa bắt đầu", statusType: "pending" },
-  { id: "TSK-014", title: "Thu âm các đoạn hội thoại tư vấn tài chính", topic: "Hội thoại hàng ngày", reviewed: 110, status: "Hoàn thành", statusType: "completed" },
-  { id: "TSK-015", title: "Đọc lệnh điều khiển thiết bị IoT trong nhà", topic: "Công nghệ thông tin", reviewed: 50, status: "Đang thực hiện", statusType: "in-progress" },
-  { id: "TSK-016", title: "Ghi âm truyện đọc phát triển trí tuệ trẻ em", topic: "Giáo dục", reviewed: 20, status: "Đang thực hiện", statusType: "in-progress" },
-  { id: "TSK-017", title: "Thu âm kịch bản hỏi đáp dịch vụ khách sạn", topic: "Hội thoại hàng ngày", reviewed: 0, status: "Chưa bắt đầu", statusType: "pending" },
-  { id: "TSK-018", title: "Đọc tài liệu về an ninh mạng và bảo mật", topic: "Công nghệ thông tin", reviewed: 125, status: "Hoàn thành", statusType: "completed" },
-  { id: "TSK-019", title: "Ghi âm bài giảng môn Lịch Sử phổ thông", topic: "Giáo dục", reviewed: 45, status: "Đang thực hiện", statusType: "in-progress" },
-  { id: "TSK-020", title: "Thu âm giao tiếp tại sân bay và ga tàu", topic: "Hội thoại hàng ngày", reviewed: 105, status: "Hoàn thành", statusType: "completed" }
-];
-
-const TASK_STORAGE_KEY = "task_manager_dataset_v3";
+const getCatStyle = (cat) => CATEGORY_COLORS[cat] || { bg: '#F3F4F6', text: '#374151', border: '#E5E7EB' };
 
 export default function TaskManagerSpeakerTasks() {
-  const [tasks, setTasks] = useState(() => {
-    const saved = localStorage.getItem(TASK_STORAGE_KEY);
-    if (saved) {
-      try { 
-        const parsed = JSON.parse(saved);
-        return parsed.map(t => ({
-          ...t,
-          topic: t.topic === "IT/Technology" ? "Công nghệ thông tin" :
-                 t.topic === "Education" ? "Giáo dục" :
-                 t.topic === "Daily Life" ? "Hội thoại hàng ngày" : t.topic
-        }));
-      } catch (e) { console.error(e); }
-    }
-    return INITIAL_SPEAKER_TASKS;
-  });
-
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [defaultCampaignId, setDefaultCampaignId] = useState(null);
   const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [topicFilter, setTopicFilter] = useState("all");
@@ -89,9 +51,57 @@ export default function TaskManagerSpeakerTasks() {
 
   const pageSize = 10;
 
+  const loadTasksFromApi = async () => {
+    try {
+      setLoading(true);
+      // Lấy thêm danh sách Campaign để có campaignId cho Task mới
+      const [taskRes, campaignRes] = await Promise.all([
+        taskService.getTasks({ taskType: "Recording" }).catch(() => ({ items: [] })),
+        taskService.getCampaigns().catch(() => ({ items: [] }))
+      ]);
+
+      const campaignList = campaignRes?.items || campaignRes?.data || [];
+      if (campaignList.length > 0) {
+        setDefaultCampaignId(campaignList[0].campaignId || campaignList[0].id);
+      }
+
+      const campaignTopicMap = {};
+      campaignList.forEach(c => {
+        const cId = c.campaignId || c.id;
+        if (cId) campaignTopicMap[cId] = c.domain || c.topic || c.campaignName;
+      });
+
+      const items = taskRes?.items || taskRes?.data || [];
+      const mapped = items.map(t => {
+        const rawDomain = String(t.domain || t.topic || campaignTopicMap[t.campaignId] || "").toLowerCase();
+        let topicName = "Công nghệ thông tin";
+
+        if (rawDomain.includes("edu") || rawDomain.includes("giáo dục")) {
+          topicName = "Giáo dục";
+        } else if (rawDomain.includes("life") || rawDomain.includes("hội thoại") || rawDomain.includes("hàng ngày")) {
+          topicName = "Hội thoại hàng ngày";
+        } else if (rawDomain.includes("it") || rawDomain.includes("tech") || rawDomain.includes("công nghệ")) {
+          topicName = "Công nghệ thông tin";
+        }
+
+        return {
+          id: t.taskId || t.id,
+          title: t.title || t.description || "Nhiệm vụ thu âm",
+          topic: topicName,
+          rawDomain: t.domain
+        };
+      });
+      setTasks(mapped);
+    } catch (e) {
+      console.error("Lỗi lấy danh sách task speaker:", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    localStorage.setItem(TASK_STORAGE_KEY, JSON.stringify(tasks));
-  }, [tasks]);
+    loadTasksFromApi();
+  }, []);
 
   useEffect(() => {
     if (toast.show) {
@@ -117,66 +127,88 @@ export default function TaskManagerSpeakerTasks() {
 
   const handleOpenAddModal = () => {
     setEditingTask(null);
-    setFormData({
-      title: "",
-      topic: "Công nghệ thông tin"
-    });
+    setFormData({ title: "", topic: "Công nghệ thông tin" });
     setIsModalOpen(true);
   };
 
   const handleOpenEditModal = (task) => {
     setEditingTask(task);
-    setFormData({
-      title: task.title,
-      topic: task.topic
-    });
+    setFormData({ title: task.title, topic: task.topic });
     setIsModalOpen(true);
   };
 
-  const handleSubmitForm = (e) => {
+  const handleSubmitForm = async (e) => {
     e.preventDefault();
     if (!formData.title) return;
 
-    if (editingTask) {
-      setTasks((prev) =>
-        prev.map((t) =>
-          t.id === editingTask.id
-            ? {
-                ...t,
-                title: formData.title,
-                topic: formData.topic
-              }
-            : t
-        )
-      );
-      showNotification(`Đã cập nhật nhiệm vụ "${formData.title}"!`);
-    } else {
-      const created = {
-        id: `TSK-00${tasks.length + 1}`,
-        title: formData.title,
-        topic: formData.topic,
-        reviewed: 0,
-        status: "Chưa bắt đầu",
-        statusType: "pending",
+    try {
+      const domainMap = {
+        "Công nghệ thông tin": "ItTechnology",
+        "Giáo dục": "Education",
+        "Hội thoại hàng ngày": "DailyLife"
       };
-      setTasks((prev) => [...prev, created]);
-      showNotification(`Đã tạo thành công nhiệm vụ "${formData.title}"!`);
-    }
 
-    setIsModalOpen(false);
+      // Tạo ngày deadline mặc định (ví dụ: 7 ngày sau)
+      const defaultDueDate = new Date();
+      defaultDueDate.setDate(defaultDueDate.getDate() + 7);
+      const isoDueDate = defaultDueDate.toISOString();
+
+      if (editingTask) {
+        await taskService.updateTask(editingTask.id, {
+          title: formData.title,
+          description: formData.title,
+          domain: domainMap[formData.topic] || "ItTechnology",
+          dueDate: isoDueDate,
+          endDate: isoDueDate
+        });
+        showNotification(`Đã cập nhật nhiệm vụ "${formData.title}"!`);
+      } else {
+        await taskService.createTask({
+          title: formData.title,
+          description: formData.title,
+          campaignId: Number(defaultCampaignId || 1),
+          taskType: "Recording",
+          domain: domainMap[formData.topic] || "ItTechnology",
+          targetCount: 100,
+          dueDate: isoDueDate,
+          endDate: isoDueDate
+        });
+        showNotification(`Đã tạo thành công nhiệm vụ "${formData.title}"!`);
+      }
+      setIsModalOpen(false);
+      loadTasksFromApi();
+    } catch (err) {
+      console.error("Lỗi tạo/sửa nhiệm vụ:", err?.response?.data || err);
+      
+      const responseData = err?.response?.data;
+      let errorMsg = responseData?.title || responseData?.message || "Thao tác thất bại!";
+      
+      if (responseData?.errors) {
+        const firstKey = Object.keys(responseData.errors)[0];
+        if (firstKey && responseData.errors[firstKey]?.[0]) {
+          errorMsg = `${responseData.errors[firstKey][0]}`;
+        }
+      }
+      showNotification(errorMsg);
+    }
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!taskToDelete) return;
-    setTasks((prev) => prev.filter((t) => t.id !== taskToDelete.id));
-    showNotification(`Đã xóa thành công nhiệm vụ "${taskToDelete.title}"!`);
-    setTaskToDelete(null);
+    try {
+      await taskService.cancelTask(taskToDelete.id);
+      showNotification(`Đã hủy thành công nhiệm vụ "${taskToDelete.title}"!`);
+      setTaskToDelete(null);
+      loadTasksFromApi();
+    } catch (e) {
+      showNotification("Hủy nhiệm vụ thất bại!");
+    }
   };
 
   const filteredTasks = useMemo(() => {
     return tasks.filter((t) => {
       const matchSearch = t.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          t.id.toLowerCase().includes(searchTerm.toLowerCase());
+                          String(t.id).toLowerCase().includes(searchTerm.toLowerCase());
       const matchTopic = topicFilter === "all" || t.topic === topicFilter;
       return matchSearch && matchTopic;
     });
@@ -263,7 +295,7 @@ export default function TaskManagerSpeakerTasks() {
                 setTopicFilter(e.target.value);
                 setCurrentPage(1);
               }}
-              className="w-[150px] px-2.5 py-2 border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#25272E] text-gray-900 dark:text-white focus:bg-white dark:focus:bg-[#1C1D22] focus:border-gray-400 dark:focus:border-gray-500 rounded-xl text-xs font-bold outline-none cursor-pointer transition-all font-sans"
+              className="min-w-[170px] w-auto px-2.5 py-2 border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#25272E] text-gray-900 dark:text-white focus:bg-white dark:focus:bg-[#1C1D22] focus:border-gray-400 dark:focus:border-gray-500 rounded-xl text-xs font-bold outline-none cursor-pointer transition-all font-sans"
             >
               <option value="all" className="bg-white dark:bg-[#25272E]">Tất cả chủ đề</option>
               <option value="Công nghệ thông tin" className="bg-white dark:bg-[#25272E]">Công nghệ thông tin</option>
@@ -278,7 +310,6 @@ export default function TaskManagerSpeakerTasks() {
       <div className="bg-white dark:bg-[#1C1D22] rounded-xl border border-gray-200 dark:border-gray-800 shadow-xs overflow-hidden transition-colors flex-1 flex flex-col justify-between my-1.5 min-h-0">
         <div className="flex-1 flex flex-col min-h-0">
           <div className="min-w-[700px] h-full flex flex-col">
-            {/* Header Bảng */}
             <div className="bg-gray-50 dark:bg-[#25272E] text-[10px] uppercase tracking-wider text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-800 font-bold flex items-center shrink-0 h-9">
               <div className="px-3 text-center whitespace-nowrap w-[60px]">STT</div>
               <div className="px-4 text-left flex-1">Nhiệm vụ</div>
@@ -286,9 +317,12 @@ export default function TaskManagerSpeakerTasks() {
               <div className="px-4 text-center w-[100px] whitespace-nowrap">Thao tác</div>
             </div>
 
-            {/* Thân Bảng */}
             <div className="divide-y divide-gray-200 dark:divide-gray-800 text-[11px] font-medium flex-1 grid grid-rows-10">
-              {paginatedTasks.length > 0 ? (
+              {loading ? (
+                <div className="row-span-10 flex items-center justify-center">
+                  <Loader2 className="w-6 h-6 animate-spin text-emerald-500" />
+                </div>
+              ) : paginatedTasks.length > 0 ? (
                 paginatedTasks.map((task, index) => {
                   const stt = (currentPage - 1) * pageSize + index + 1;
                   const style = getCatStyle(task.topic);
@@ -298,17 +332,14 @@ export default function TaskManagerSpeakerTasks() {
                       key={task.id} 
                       className="hover:bg-gray-50/80 dark:hover:bg-[#25272E]/50 transition-colors flex items-center h-full bg-white dark:bg-[#1C1D22]"
                     >
-                      {/* STT */}
                       <div className="px-3 text-center text-gray-400 dark:text-gray-500 font-sans whitespace-nowrap w-[60px]">
                         {stt}
                       </div>
 
-                      {/* Nhiệm vụ */}
                       <div className="px-4 font-bold text-gray-900 dark:text-gray-100 flex-1 truncate" title={task.title}>
                         {task.title}
                       </div>
 
-                      {/* Chủ đề Badge */}
                       <div className="px-3 w-[200px] whitespace-nowrap flex items-center">
                         <span
                           className="px-2.5 py-1 rounded-md text-[11px] font-bold border inline-block whitespace-nowrap"
@@ -322,7 +353,6 @@ export default function TaskManagerSpeakerTasks() {
                         </span>
                       </div>
 
-                      {/* Thao tác */}
                       <div className="px-4 text-center w-[100px] whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1">
                           <button
@@ -353,7 +383,6 @@ export default function TaskManagerSpeakerTasks() {
           </div>
         </div>
 
-        {/* Footer Pagination */}
         <div className="px-2 py-1.5 border-t border-gray-200 dark:border-gray-800 shrink-0 bg-white dark:bg-[#1C1D22]">
           <Pagination 
             currentPage={currentPage} 
@@ -424,10 +453,7 @@ export default function TaskManagerSpeakerTasks() {
       {taskToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 dark:bg-black/60 backdrop-blur-[2px]" onClick={() => setTaskToDelete(null)}>
           <div className="bg-white dark:bg-[#1C1D22] border border-gray-100 dark:border-gray-800 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden transition-colors animate-in fade-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
-            
-            {/* Đường kẻ vạch màu DANGER trang trí trên đỉnh */}
             <div className="h-1.5 w-full shrink-0" style={{ backgroundColor: DANGER }} />
-
             <div className="p-5 text-center space-y-3">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center mx-auto" style={{ backgroundColor: `${DANGER}20`, color: DANGER }}>
                 <AlertTriangle className="w-5 h-5" />
@@ -435,7 +461,7 @@ export default function TaskManagerSpeakerTasks() {
               <div>
                 <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">Xác nhận xóa nhiệm vụ</h3>
                 <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">
-                  Bạn có chắc muốn xóa nhiệm vụ <span className="font-bold text-gray-900 dark:text-gray-200">"{taskToDelete.title}"</span>? Hành động này không thể hoàn tác.
+                  Bạn có chắc muốn xóa nhiệm vụ <span className="font-bold text-gray-900 dark:text-gray-200">"{taskToDelete.title}"</span>?
                 </p>
               </div>
               <div className="flex gap-2 pt-1">

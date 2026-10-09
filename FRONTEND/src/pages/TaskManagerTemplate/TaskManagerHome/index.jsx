@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import { 
-  Target, 
   ListTodo, 
   Layers, 
   Clock, 
   CheckCircle2, 
   FolderKanban,
-  ArrowRight
+  ArrowRight,
+  Loader2
 } from "lucide-react";
 import { 
   TASK_MANAGER_ACCENT, 
@@ -19,162 +19,109 @@ import {
   CHIP_WARNING_BORDER,
   CHIP_WARNING_TEXT
 } from "../../../constants/theme";
-
-// Khóa Storage đồng bộ trực tiếp với TaskManagerManagement
-const ASSIGN_TASKS_STORAGE_KEY = "task_manager_assign_v8";
-const BATCH_LIST_STORAGE_KEY = "task_manager_management_batches_v4";
-const BATCH_ASSIGNMENT_STORAGE_KEY = "task_manager_management_batch_assignments_v4";
-
-const FULL_DATASETS = [
-  { id: "TSK-001", title: "Nhiệm vụ ghi âm thuật ngữ công nghệ", topic: "IT/Technology", target: 100, reviewed: 65, status: "Đang thực hiện" },
-  { id: "TSK-002", title: "Nhiệm vụ ghi âm hội thoại giáo dục phổ thông", topic: "Education", target: 80, reviewed: 80, status: "Hoàn thành" },
-  { id: "TSK-003", title: "Thu âm giao tiếp đời sống hàng ngày", topic: "Daily Life", target: 150, reviewed: 135, status: "Đang thực hiện" },
-  { id: "TSK-004", title: "Đọc ngữ liệu lệnh thoại nhà thông minh", topic: "IT/Technology", target: 120, reviewed: 40, status: "Đang thực hiện" },
-  { id: "TSK-005", title: "Thu âm kịch bản hỏi đáp y tế cơ bản", topic: "Daily Life", target: 90, reviewed: 0, status: "Chưa bắt đầu" },
-  { id: "TSK-006", title: "Ghi âm bài giảng toán học trực tuyến", topic: "Education", target: 110, reviewed: 110, status: "Hoàn thành" },
-  { id: "TSK-007", title: "Đọc tin tức kinh tế và thị trường tài chính", topic: "Daily Life", target: 70, reviewed: 20, status: "Đang thực hiện" },
-  { id: "TSK-008", title: "Thu âm dữ liệu hội thoại bán hàng tự động", topic: "IT/Technology", target: 130, reviewed: 130, status: "Hoàn thành" }
-];
+import { taskService } from "../../../services/taskService";
 
 export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
   const [isHovered, setIsHovered] = useState(false);
-  const [datasets] = useState(() => {
-    const saved = localStorage.getItem("speaker_tasks_v1") || localStorage.getItem("task_manager_dataset_v3");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    return FULL_DATASETS;
+  const [loading, setLoading] = useState(true);
+  const [campaigns, setCampaigns] = useState([]);
+  const [assignTasks, setAssignTasks] = useState([]);
+  const [batchMapping, setBatchMapping] = useState({});
+  const [adminTargets, setAdminTargets] = useState({
+    speaker: { target: 0, completed: 0 },
+    reviewer: { target: 0, completed: 0 }
   });
 
-  // State đồng bộ từ TaskManagerManagement
-  const [batches, setBatches] = useState([]);
-  const [batchMapping, setBatchMapping] = useState({});
-  const [assignTasks, setAssignTasks] = useState([]);
-
-  // Tải toàn bộ dữ liệu quản lý đợt
-  const loadBatchManagementData = () => {
-    const savedBatches = localStorage.getItem(BATCH_LIST_STORAGE_KEY);
-    if (savedBatches) {
-      try { setBatches(JSON.parse(savedBatches)); } catch (e) { console.error(e); }
-    } else {
-      setBatches([
-        { id: "BATCH-01", name: "Đợt 1" },
-        { id: "BATCH-02", name: "Đợt 2" },
-        { id: "BATCH-03", name: "Đợt 3" }
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const [overviewData, campaignData, taskData] = await Promise.all([
+        taskService.getOverview().catch(() => null),
+        taskService.getCampaigns().catch(() => ({ items: [] })),
+        taskService.getTasks().catch(() => ({ items: [] }))
       ]);
-    }
 
-    const savedMapping = localStorage.getItem(BATCH_ASSIGNMENT_STORAGE_KEY);
-    if (savedMapping) {
-      try { setBatchMapping(JSON.parse(savedMapping)); } catch (e) { console.error(e); }
-    }
+      if (overviewData) {
+        setAdminTargets({
+          speaker: {
+            target: overviewData.speakerTarget || overviewData.totalSpeakerTarget || 0,
+            completed: overviewData.speakerCompleted || overviewData.totalSpeakerCompleted || 0
+          },
+          reviewer: {
+            target: overviewData.reviewerTarget || overviewData.totalReviewerTarget || 0,
+            completed: overviewData.reviewerCompleted || overviewData.totalReviewerCompleted || 0
+          }
+        });
+      }
 
-    const savedTasks = localStorage.getItem(ASSIGN_TASKS_STORAGE_KEY);
-    if (savedTasks) {
-      try {
-        const parsed = JSON.parse(savedTasks);
-        if (Array.isArray(parsed)) {
-          setAssignTasks(parsed);
+      const campaignList = campaignData?.items || campaignData?.data || [];
+      const rawTasks = taskData?.items || taskData?.data || [];
+
+      const mappedTasks = rawTasks.map((t) => {
+        const rawStatus = String(t.status || t.taskStatus || t.state || "").toLowerCase();
+        let calculatedStatus = "Đang thực hiện";
+        if (rawStatus === "completed" || rawStatus === "hoàn thành" || rawStatus === "done" || rawStatus === "1") {
+          calculatedStatus = "Hoàn thành";
+        } else if (rawStatus === "cancelled" || rawStatus === "canceled" || rawStatus === "đã hủy" || rawStatus === "3") {
+          calculatedStatus = "Đã hủy";
         }
-      } catch (e) { console.error(e); }
+
+        return {
+          id: t.taskId || t.id,
+          campaignId: t.campaignId,
+          status: calculatedStatus
+        };
+      });
+
+      const mapping = {};
+      mappedTasks.forEach((t) => {
+        if (t.campaignId) {
+          if (!mapping[t.campaignId]) mapping[t.campaignId] = [];
+          mapping[t.campaignId].push(t.id);
+        }
+      });
+
+      setCampaigns(campaignList);
+      setAssignTasks(mappedTasks);
+      setBatchMapping(mapping);
+    } catch (error) {
+      console.error("Lỗi tải trang Overview/Home:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadBatchManagementData();
-
-    const handleStorageChange = () => {
-      loadBatchManagementData();
-    };
-
-    window.addEventListener("storage", handleStorageChange);
-    window.addEventListener("assign_tasks_updated", handleStorageChange);
-    return () => {
-      window.removeEventListener("storage", handleStorageChange);
-      window.removeEventListener("assign_tasks_updated", handleStorageChange);
-    };
+    loadData();
   }, []);
 
-  // Điều hướng chính xác đến trang task-manager/management
   const handleNavigate = (e) => {
     if (e) e.preventDefault();
-
-    // 1. Nếu có hàm callback từ props
     if (typeof onNavigateToManagement === "function") {
       onNavigateToManagement("management");
     }
-    
-    // 2. Nếu có prop navigate của React Router
     if (typeof navigate === "function") {
       navigate("/task-manager/management");
       return;
     }
-
-    // 3. Phát Custom Event cho các Router/State Management ở Parent
     window.dispatchEvent(new CustomEvent("navigate_task_tab", { detail: "management" }));
     window.dispatchEvent(new CustomEvent("change_tab", { detail: "management" }));
-
-    // 4. Đẩy đường dẫn URL mới và kích hoạt sự kiện Router
     if (window.location.pathname !== "/task-manager/management") {
       window.history.pushState({}, "", "/task-manager/management");
       window.dispatchEvent(new PopStateEvent("popstate"));
     }
   };
 
-  // Tính toán trạng thái chính xác cho từng đợt nhiệm vụ
-  const batchDisplayList = useMemo(() => {
-    if (!batches || batches.length === 0) return [];
-
-    return batches.map((batch, index) => {
-      const mappedTaskIds = batchMapping[batch.id] || [];
-      const batchTasks = assignTasks.filter((t) => mappedTaskIds.includes(t.id || t.taskId));
-
-      const isBatchCompleted = batchTasks.length > 0 && batchTasks.every((t) => t.status === "Hoàn thành");
-
-      return {
-        batchId: batch.id,
-        name: batch.name || `Đợt ${index + 1}`,
-        status: isBatchCompleted ? "Hoàn thành" : "Đang thực hiện",
-        isCompleted: isBatchCompleted
-      };
-    });
-  }, [batches, batchMapping, assignTasks]);
-
-  // Chỉ tiêu do Admin giao cho Task Manager
-  const adminTargets = useMemo(() => {
-    const activeList = (Array.isArray(datasets) && datasets.length > 0) ? datasets : FULL_DATASETS;
-
-    let totalSpeakerTarget = activeList.reduce(
-      (sum, d) => sum + (d.target ?? d.totalSentences ?? d.total_sentences ?? 0), 
-      0
-    );
-    let totalSpeakerDone = activeList.reduce(
-      (sum, d) => sum + (d.reviewed ?? d.completedSentences ?? d.doneSentences ?? 0), 
-      0
-    );
-
-    // Fallback đảm bảo không bao giờ bị con số 0 tròn trĩnh
-    if (totalSpeakerTarget === 0) {
-      totalSpeakerTarget = FULL_DATASETS.reduce((sum, d) => sum + d.target, 0);
-      totalSpeakerDone = FULL_DATASETS.reduce((sum, d) => sum + d.reviewed, 0);
-    }
-
-    const totalReviewerTarget = Math.round(totalSpeakerTarget * 0.9);
-    const totalReviewerDone = Math.round(totalSpeakerDone * 0.85);
-
-    return {
-      speaker: { target: totalSpeakerTarget, completed: totalSpeakerDone },
-      reviewer: { target: totalReviewerTarget, completed: totalReviewerDone }
-    };
-  }, [datasets]);
-
   const speakerColor = SPEAKER_ACCENT || "#FF4B2E";
   const reviewerColor = REVIEWER_ACCENT || "#0052CC";
+
+  if (loading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
+      </div>
+    );
+  }
 
   return (
     <div className="w-full h-full flex flex-col gap-4 text-left font-sans p-1 overflow-y-auto">
@@ -258,8 +205,6 @@ export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
 
       {/* Danh sách các Đợt nhiệm vụ */}
       <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1D22] shadow-xs p-4 flex-1 flex flex-col min-h-0">
-        
-        {/* Header danh sách đợt + Link màu xám hiện đại (Màu xám Slate chuẩn UI) */}
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <Layers style={{ color: TASK_MANAGER_ACCENT }} className="w-4 h-4" />
@@ -290,39 +235,68 @@ export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-gray-200 dark:border-gray-800 text-gray-400 text-[10px] uppercase font-bold bg-gray-50 dark:bg-[#25272E]">
-                <th className="py-2.5 px-3 min-w-[200px]">Đợt nhiệm vụ</th>
+                <th className="py-2.5 px-3 w-[120px]">Đợt nhiệm vụ</th>
+                <th className="py-2.5 px-3 min-w-[200px]">Tên đợt</th>
                 <th className="py-2.5 px-3 text-center w-[160px]">Trạng thái</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-              {batchDisplayList.length === 0 ? (
+              {campaigns.length === 0 ? (
                 <tr>
-                  <td colSpan={2} className="py-8 text-center text-gray-400 font-medium">
+                  <td colSpan={3} className="py-8 text-center text-gray-400 font-medium">
                     Chưa có đợt nhiệm vụ nào được khởi tạo.
                   </td>
                 </tr>
               ) : (
-                batchDisplayList.map((item) => {
+                campaigns.map((item, index) => {
+                  const campaignId = item.campaignId || item.id;
+                  const mappedIds = batchMapping[campaignId] || [];
+                  const batchTasks = assignTasks.filter((t) => t.campaignId === campaignId || mappedIds.includes(t.id));
+
+                  const isCompleted = batchTasks.length > 0 && batchTasks.every((t) => t.status === "Hoàn thành");
+                  const isOpenStatus = batchTasks.length === 0 || item.status === "Open";
+
+                  const badgeBg = isCompleted 
+                    ? CHIP_SUCCESS_BG 
+                    : isOpenStatus 
+                      ? `${TASK_MANAGER_ACCENT}1A` 
+                      : CHIP_WARNING_BG;
+
+                  const badgeBorder = isCompleted 
+                    ? CHIP_SUCCESS_BORDER 
+                    : isOpenStatus 
+                      ? `${TASK_MANAGER_ACCENT}50` 
+                      : CHIP_WARNING_BORDER;
+
+                  const badgeText = isCompleted 
+                    ? CHIP_SUCCESS_TEXT 
+                    : isOpenStatus 
+                      ? TASK_MANAGER_ACCENT 
+                      : CHIP_WARNING_TEXT;
+
                   return (
-                    <tr key={item.batchId} className="hover:bg-gray-50/80 dark:hover:bg-[#25272E]/50 transition-colors">
-                      <td className="py-3 px-3 font-bold text-gray-900 dark:text-white">{item.name}</td>
-                      
-                      {/* Trạng thái chuẩn kích thước nhỏ 100% giống TaskManagerManagement */}
+                    <tr key={campaignId} className="hover:bg-gray-50/80 dark:hover:bg-[#25272E]/50 transition-colors">
+                      <td className="py-3 px-3 font-bold text-gray-900 dark:text-white">
+                        Đợt {campaignId || index + 1}
+                      </td>
+                      <td className="py-3 px-3 font-semibold text-gray-800 dark:text-gray-200">
+                        {item.campaignName || item.title || item.name}
+                      </td>
                       <td className="py-3 px-3 text-center">
                         <span 
                           style={{
-                            backgroundColor: item.isCompleted ? CHIP_SUCCESS_BG : CHIP_WARNING_BG,
-                            borderColor: item.isCompleted ? CHIP_SUCCESS_BORDER : CHIP_WARNING_BORDER,
-                            color: item.isCompleted ? CHIP_SUCCESS_TEXT : CHIP_WARNING_TEXT
+                            backgroundColor: badgeBg,
+                            borderColor: badgeBorder,
+                            color: badgeText
                           }}
                           className="inline-flex items-center gap-1 pl-2 pr-2.5 py-0.5 rounded-full text-[9.5px] font-bold border shrink-0 leading-tight"
                         >
-                          {item.isCompleted ? (
-                            <CheckCircle2 className="w-2.5 h-2.5 shrink-0" style={{ color: CHIP_SUCCESS_TEXT }} />
+                          {isCompleted ? (
+                            <CheckCircle2 className="w-2.5 h-2.5 shrink-0" style={{ color: badgeText }} />
                           ) : (
-                            <Clock className="w-2.5 h-2.5 shrink-0" style={{ color: CHIP_WARNING_TEXT }} />
+                            <Clock className="w-2.5 h-2.5 shrink-0" style={{ color: badgeText }} />
                           )}
-                          <span>{item.isCompleted ? "Hoàn thành" : "Đang thực hiện"}</span>
+                          <span>{isCompleted ? "Hoàn thành" : isOpenStatus ? "Đang mở" : "Đang thực hiện"}</span>
                         </span>
                       </td>
                     </tr>

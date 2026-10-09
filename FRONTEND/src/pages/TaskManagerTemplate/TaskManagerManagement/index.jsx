@@ -19,7 +19,9 @@ import {
   Target,
   Tag,
   Award,
-  AlertCircle
+  AlertCircle,
+  FolderKanban,
+  Ban
 } from "lucide-react";
 import Pagination from "../../../components/Pagination/Pagination";
 import { 
@@ -35,18 +37,19 @@ import {
   CHIP_WARNING_BORDER,
   CHIP_WARNING_TEXT
 } from "../../../constants/theme";
+import { taskService } from "../../../services/taskService";
 
 // Helper format ngày
 const formatDateToVN = (dateStr) => {
   if (!dateStr) return "";
   if (dateStr.includes("/")) return dateStr;
-  const [year, month, day] = dateStr.split("-");
+  const [year, month, day] = dateStr.split("T")[0].split("-");
   return `${day}/${month}/${year}`;
 };
 
 const formatDateToISO = (dateStr) => {
   if (!dateStr) return "";
-  if (dateStr.includes("-")) return dateStr;
+  if (dateStr.includes("-")) return dateStr.split("T")[0];
   const [day, month, year] = dateStr.split("/");
   return `${year}-${month}-${day}`;
 };
@@ -109,59 +112,6 @@ const VNFormatDatePicker = ({ label, value, onChange, minDateIso }) => {
   );
 };
 
-// Dữ liệu mẫu & Khóa Storage
-const ADMIN_USERS_STORAGE_KEY = "admin_users_list_v2";
-const ASSIGN_TASKS_STORAGE_KEY = "task_manager_assign_v8";
-const BATCH_LIST_STORAGE_KEY = "task_manager_management_batches_v4";
-const BATCH_ASSIGNMENT_STORAGE_KEY = "task_manager_management_batch_assignments_v4";
-
-const DEFAULT_USERS = [
-  { id: "USR-001", name: "Quản Lý", email: "manager@fpt.edu.vn", role: "Task Manager", status: "Active", createdAt: "15/01/2026" },
-  { id: "USR-002", name: "Trần Minh Tâm", email: "tam.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "20/01/2026" },
-  { id: "USR-005", name: "Nguyễn Văn Anh", email: "anh.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "06/02/2026" },
-  { id: "USR-006", name: "Trần Thị Bình", email: "binh.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "07/02/2026" },
-  { id: "USR-007", name: "Lê Văn Cường", email: "cuong.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "08/02/2026" },
-  { id: "USR-008", name: "Phạm Thị Dung", email: "dung.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "09/02/2026" },
-  { id: "USR-009", name: "Hoàng Văn Em", email: "em.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "10/02/2026" },
-  { id: "USR-010", name: "Vũ Thị Phương", email: "phuong.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "11/02/2026" },
-  { id: "USR-011", name: "Đặng Văn Giang", email: "giang.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "12/02/2026" },
-  { id: "USR-012", name: "Bùi Thị Hải", email: "hai.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "13/02/2026" },
-  { id: "USR-013", name: "Đinh Văn Hùng", email: "hung.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "14/02/2026" },
-  { id: "USR-003", name: "Phạm Thu Thảo", email: "thao.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "01/02/2026", performanceTag: "GOOD", performanceReason: "Thành tích tốt, ghi âm chất lượng" },
-  { id: "USR-004", name: "Lê Hoàng Nam", email: "nam.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "05/02/2026", performanceTag: "BAD", performanceReason: "Trễ deadline, micro kém" },
-  { id: "USR-014", name: "Đỗ Thị Khánh", email: "khanh.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "15/02/2026", performanceTag: "GOOD", performanceReason: "Thành tích tốt, âm thanh rõ" },
-  { id: "USR-015", name: "Hoàng Văn Lâm", email: "lam.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "16/02/2026", performanceTag: "NORMAL", performanceReason: "Bình thường" },
-  { id: "USR-016", name: "Ngô Thị Minh", email: "minh.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "17/02/2026", performanceTag: "BAD", performanceReason: "Giọng yếu, trễ deadline" },
-  { id: "USR-017", name: "Dương Văn Nghĩa", email: "nghia.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "18/02/2026", performanceTag: "GOOD", performanceReason: "Chất lượng ghi âm cao" },
-  { id: "USR-018", name: "Lý Thị Oanh", email: "oanh.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "19/02/2026", performanceTag: "NORMAL", performanceReason: "Bình thường" },
-  { id: "USR-019", name: "Võ Văn Phong", email: "phong.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "20/02/2026", performanceTag: "BAD", performanceReason: "Micro rè, trễ hạn" },
-  { id: "USR-020", name: "Đoàn Thị Quỳnh", email: "quynh.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "21/02/2026", performanceTag: "GOOD", performanceReason: "Chuẩn giọng, hoàn thành xuất sắc" },
-  { id: "USR-021", name: "Trịnh Văn Rồng", email: "rong.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "22/02/2026", performanceTag: "NORMAL", performanceReason: "Bình thường" },
-];
-
-const FULL_SPEAKER_TASKS = [
-  { id: "TSK-001", title: "Nhiệm vụ ghi âm thuật ngữ công nghệ", topic: "Công nghệ thông tin", target: 100, reviewed: 65, status: "Đang thực hiện", statusType: "in-progress" },
-  { id: "TSK-002", title: "Nhiệm vụ ghi âm hội thoại giáo dục phổ thông", topic: "Giáo dục", target: 80, reviewed: 80, status: "Hoàn thành", statusType: "completed" },
-  { id: "TSK-003", title: "Thu âm giao tiếp đời sống hàng ngày", topic: "Hội thoại hàng ngày", target: 150, reviewed: 135, status: "Đang thực hiện", statusType: "in-progress" },
-  { id: "TSK-004", title: "Đọc ngữ liệu lệnh thoại nhà thông minh", topic: "Công nghệ thông tin", target: 120, reviewed: 40, status: "Đang thực hiện", statusType: "in-progress" },
-  { id: "TSK-005", title: "Thu âm kịch bản hỏi đáp y tế cơ bản", topic: "Hội thoại hàng ngày", target: 90, reviewed: 0, status: "Chưa bắt đầu", statusType: "pending" },
-  { id: "TSK-006", title: "Ghi âm bài giảng toán học trực tuyến", topic: "Giáo dục", target: 110, reviewed: 110, status: "Hoàn thành", statusType: "completed" },
-  { id: "TSK-007", title: "Đọc tin tức kinh tế và thị trường tài chính", topic: "Hội thoại hàng ngày", target: 70, reviewed: 20, status: "Đang thực hiện", statusType: "in-progress" },
-  { id: "TSK-008", title: "Thu âm dữ liệu hội thoại bán hàng tự động", topic: "Công nghệ thông tin", target: 130, reviewed: 130, status: "Hoàn thành", statusType: "completed" },
-  { id: "TSK-009", title: "Ghi âm phát âm bảng chữ cái Tiếng Việt cho trẻ em", topic: "Giáo dục", target: 60, reviewed: 0, status: "Chưa bắt đầu", statusType: "pending" },
-  { id: "TSK-010", title: "Đọc tài liệu hướng dẫn lập trình Python", topic: "Công nghệ thông tin", target: 100, reviewed: 85, status: "Đang thực hiện", statusType: "in-progress" },
-  { id: "TSK-011", title: "Thu âm mẫu hội thoại đặt xe trực tuyến", topic: "Hội thoại hàng ngày", target: 85, reviewed: 85, status: "Hoàn thành", statusType: "completed" },
-  { id: "TSK-012", title: "Đọc thuật ngữ trí tuệ nhân tạo nâng cao", topic: "Công nghệ thông tin", target: 140, reviewed: 30, status: "Đang thực hiện", statusType: "in-progress" },
-  { id: "TSK-013", title: "Ghi âm bài luyện nói Tiếng Anh giao tiếp", topic: "Giáo dục", target: 95, reviewed: 0, status: "Chưa bắt đầu", statusType: "pending" },
-  { id: "TSK-014", title: "Thu âm các đoạn hội thoại tư vấn tài chính", topic: "Hội thoại hàng ngày", target: 110, reviewed: 110, status: "Hoàn thành", statusType: "completed" },
-  { id: "TSK-015", title: "Đọc lệnh điều khiển thiết bị IoT trong nhà", topic: "Công nghệ thông tin", target: 75, reviewed: 50, status: "Đang thực hiện", statusType: "in-progress" },
-  { id: "TSK-016", title: "Ghi âm truyện đọc phát triển trí tuệ trẻ em", topic: "Giáo dục", target: 100, reviewed: 20, status: "Đang thực hiện", statusType: "in-progress" },
-  { id: "TSK-017", title: "Thu âm kịch bản hỏi đáp dịch vụ khách sạn", topic: "Hội thoại hàng ngày", target: 90, reviewed: 0, status: "Chưa bắt đầu", statusType: "pending" },
-  { id: "TSK-018", title: "Đọc tài liệu về an ninh mạng và bảo mật", topic: "Công nghệ thông tin", target: 125, reviewed: 125, status: "Hoàn thành", statusType: "completed" },
-  { id: "TSK-019", title: "Ghi âm bài giảng môn Lịch Sử phổ thông", topic: "Giáo dục", target: 80, reviewed: 45, status: "Đang thực hiện", statusType: "in-progress" },
-  { id: "TSK-020", title: "Thu âm giao tiếp tại sân bay và ga tàu", topic: "Hội thoại hàng ngày", target: 105, reviewed: 105, status: "Hoàn thành", statusType: "completed" }
-];
-
 export default function TaskManagerManagement() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchInput, setSearchInput] = useState("");
@@ -178,7 +128,7 @@ export default function TaskManagerManagement() {
   // Form mới cho Modal Đợt
   const [batchFormData, setBatchFormData] = useState({
     name: "",
-    target: 50,
+    target: 2000,
     speakerCount: 1,
     reviewerCount: 1,
     topic: "Công nghệ thông tin",
@@ -215,124 +165,106 @@ export default function TaskManagerManagement() {
   });
   const [deletingTask, setDeletingTask] = useState(null);
 
-  // Danh sách Đợt
-  const [batches, setBatches] = useState(() => {
-    const saved = localStorage.getItem(BATCH_LIST_STORAGE_KEY);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return [
-      { id: "BATCH-01", name: "Đợt 1", target: 100, speakerCount: 5, reviewerCount: 2, topic: "Công nghệ thông tin", startDate: "01/03/2026", endDate: "15/03/2026", assignedSpeakers: [], assignedReviewers: [] },
-      { id: "BATCH-02", name: "Đợt 2", target: 80, speakerCount: 4, reviewerCount: 2, topic: "Giáo dục", startDate: "01/03/2026", endDate: "15/03/2026", assignedSpeakers: [], assignedReviewers: [] },
-      { id: "BATCH-03", name: "Đợt 3", target: 150, speakerCount: 6, reviewerCount: 3, topic: "Hội thoại hàng ngày", startDate: "01/03/2026", endDate: "15/03/2026", assignedSpeakers: [], assignedReviewers: [] }
-    ];
-  });
+  // Danh sách Đợt từ API
+  const [batches, setBatches] = useState([]);
+  const [selectedBatchId, setSelectedBatchId] = useState(null);
 
-  const [selectedBatchId, setSelectedBatchId] = useState(() => {
-    const saved = localStorage.getItem(BATCH_LIST_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed.length > 0) return parsed[0].id;
-      } catch (e) {}
-    }
-    return "BATCH-01";
-  });
-
-  // Danh sách nhiệm vụ đã phân công
+  // Danh sách nhiệm vụ từ API
   const [assignTasks, setAssignTasks] = useState([]);
+  const [batchMapping, setBatchMapping] = useState({});
 
-  // Mapping phân công Đợt cho các Nhiệm vụ
-  const [batchMapping, setBatchMapping] = useState(() => {
-    const saved = localStorage.getItem(BATCH_ASSIGNMENT_STORAGE_KEY);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return {};
-  });
+  // Gọi API kết nối Backend
+  const loadDataFromApi = async () => {
+    try {
+      // Bắt riêng lỗi 403 của getUsers để không làm ngắt đứt luồng tải Task/Campaign
+      const [campaignRes, taskRes, userRes] = await Promise.all([
+        taskService.getCampaigns().catch(() => ({ items: [] })),
+        taskService.getTasks().catch(() => ({ items: [] })),
+        taskService.getUsers().catch((err) => {
+          console.warn("Không có quyền lấy danh sách users (403):", err);
+          return { items: [] };
+        })
+      ]);
 
-  // Tải danh sách Admin Users & Task Lists
-  const reloadAdminUsers = () => {
-    const savedUsers = localStorage.getItem(ADMIN_USERS_STORAGE_KEY);
-    if (savedUsers) {
-      try { setAllAdminUsers(JSON.parse(savedUsers)); } catch (e) { setAllAdminUsers(DEFAULT_USERS); }
-    } else {
-      setAllAdminUsers(DEFAULT_USERS);
-    }
-  };
+      const campaignList = (campaignRes?.items || campaignRes?.data || []).map((c) => ({
+        id: c.campaignId || c.id,
+        name: c.campaignName || c.title || c.name || `Đợt ${c.campaignId}`,
+        campaignName: c.campaignName || c.title || c.name || `Đợt ${c.campaignId}`,
+        target: c.targetQty || c.targetCount || c.target || 2000,
+        speakerCount: c.speakerCount || 5,
+        reviewerCount: c.reviewerCount || 2,
+        topic: c.domain === "ItTechnology" ? "Công nghệ thông tin" :
+               c.domain === "Education" ? "Giáo dục" : "Hội thoại hàng ngày",
+        startDate: formatDateToVN(c.startDate || todayIso),
+        endDate: formatDateToVN(c.endDate || todayIso),
+        status: c.status || "Draft",
+        assignedSpeakers: [],
+        assignedReviewers: []
+      }));
 
-  const reloadTaskLists = () => {
-    const savedSpeaker = localStorage.getItem("speaker_tasks_v1") || localStorage.getItem("task_manager_dataset_v3");
-    if (savedSpeaker) {
-      try { setSpeakerTasksList(JSON.parse(savedSpeaker)); } catch (e) { setSpeakerTasksList(FULL_SPEAKER_TASKS); }
-    } else {
-      setSpeakerTasksList(FULL_SPEAKER_TASKS);
-    }
+      const rawTasks = taskRes?.items || taskRes?.data || [];
+      console.log("=== DỮ LIỆU TASKS TỪ SERVER GET VỀ ===", rawTasks);
 
-    const savedReviewer = localStorage.getItem("task_manager_custom_dataset_v1") || localStorage.getItem("reviewer_tasks_dataset_v1");
-    if (savedReviewer) {
-      try { setReviewerTasksList(JSON.parse(savedReviewer)); } catch (e) { setReviewerTasksList(FULL_SPEAKER_TASKS); }
-    } else {
-      setReviewerTasksList(FULL_SPEAKER_TASKS);
-    }
-  };
+      const mappedTasks = rawTasks.map((t) => {
+        console.log(`Task ID: ${t.taskId || t.id} - Title: ${t.title || t.description} - Status thật từ BE:`, t.status, t.taskStatus, t.state);
 
-  // Tải danh sách nhiệm vụ từ Storage
-  const loadAssignTasks = () => {
-    const saved = localStorage.getItem(ASSIGN_TASKS_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const normalized = parsed.map((item) => ({
-            ...item,
-            id: item.id || item.taskId || "N/A",
-            title: item.taskTitle || item.title || "Chưa có tên nhiệm vụ",
-            assignedUsers: Array.isArray(item.assignedUsers) ? item.assignedUsers : (item.assignedUsers ? [item.assignedUsers] : []),
-            status: item.status || "Đang thực hiện",
-            startDate: item.startDate || "01/03/2026",
-            endDate: item.endDate || "15/03/2026"
-          }));
-          setAssignTasks(normalized);
-          return;
+        const rawStatus = String(t.status || t.taskStatus || t.state || "").toLowerCase();
+        
+        let calculatedStatus = "Đang thực hiện";
+        if (rawStatus === "completed" || rawStatus === "hoàn thành" || rawStatus === "done" || rawStatus === "1") {
+          calculatedStatus = "Hoàn thành";
+        } else if (rawStatus === "cancelled" || rawStatus === "canceled" || rawStatus === "đã hủy" || rawStatus === "3") {
+          calculatedStatus = "Đã hủy";
         }
-      } catch (e) {
-        console.error("Lỗi đọc TaskManagerAssign data:", e);
+
+        return {
+          id: t.taskId || t.id,
+          taskId: t.taskId || t.id,
+          title: t.title || t.description || "Nhiệm vụ",
+          role: t.taskType === "Recording" ? "Speaker" : "Reviewer",
+          campaignId: t.campaignId,
+          assignedUsers: t.assigneeName ? [t.assigneeName] : [],
+          status: calculatedStatus
+        };
+      });
+
+      const rawUsers = userRes?.items || userRes?.data || [];
+      const mappedUsers = rawUsers.map((u) => ({
+        id: u.userId || u.id,
+        name: u.fullName || u.userName || u.name,
+        email: u.email,
+        role: u.roleName || (u.role === "Recording" ? "Speaker" : u.role),
+        status: "Active",
+        performanceTag: u.performanceTag || "GOOD"
+      }));
+
+      setBatches(campaignList);
+      if (campaignList.length > 0 && !selectedBatchId) {
+        setSelectedBatchId(campaignList[0].id);
       }
+
+      setAssignTasks(mappedTasks);
+      setAllAdminUsers(mappedUsers);
+
+      const mapping = {};
+      mappedTasks.forEach((t) => {
+        if (t.campaignId) {
+          if (!mapping[t.campaignId]) mapping[t.campaignId] = [];
+          mapping[t.campaignId].push(t.id);
+        }
+      });
+      setBatchMapping(mapping);
+
+      setSpeakerTasksList(mappedTasks.filter((t) => t.role === "Speaker"));
+      setReviewerTasksList(mappedTasks.filter((t) => t.role === "Reviewer"));
+    } catch (error) {
+      console.error("Lỗi khi kết nối API:", error);
     }
-    setAssignTasks([]);
   };
 
   useEffect(() => {
-    loadAssignTasks();
-    reloadAdminUsers();
-    reloadTaskLists();
-
-    const handleStorageChange = () => {
-      loadAssignTasks();
-      reloadAdminUsers();
-      reloadTaskLists();
-    };
-
-    window.addEventListener("storage", handleStorageChange);
-    window.addEventListener("assign_tasks_updated", handleStorageChange);
-    window.addEventListener("admin_users_updated", handleStorageChange);
-    window.addEventListener("reviewer_tasks_updated", handleStorageChange);
-    return () => {
-      window.removeEventListener("storage", handleStorageChange);
-      window.removeEventListener("assign_tasks_updated", handleStorageChange);
-      window.removeEventListener("admin_users_updated", handleStorageChange);
-      window.removeEventListener("reviewer_tasks_updated", handleStorageChange);
-    };
+    loadDataFromApi();
   }, []);
-
-  useEffect(() => {
-    localStorage.setItem(BATCH_LIST_STORAGE_KEY, JSON.stringify(batches));
-  }, [batches]);
-
-  useEffect(() => {
-    localStorage.setItem(BATCH_ASSIGNMENT_STORAGE_KEY, JSON.stringify(batchMapping));
-  }, [batchMapping]);
 
   useEffect(() => {
     if (toast.show) {
@@ -345,18 +277,34 @@ export default function TaskManagerManagement() {
     setToast({ show: true, message: msg });
   };
 
-  // Cập nhật Trạng thái trực tiếp của Nhiệm vụ
+  // Cập nhật Trạng thái nhiệm vụ - ĐÃ TỐI ƯU HIỆN TOAST NGAY TẬP TỨC & CHỐNG BÁO LỖI GIẢ
   const handleUpdateTaskStatus = (taskId, newStatus) => {
-    const updatedTasks = assignTasks.map((t) =>
-      t.id === taskId ? { ...t, status: newStatus } : t
+    let backendStatus = "InProgress";
+    if (newStatus === "Hoàn thành") backendStatus = "Completed";
+    if (newStatus === "Đã hủy") backendStatus = "Cancelled";
+
+    // 1. Cập nhật State UI giao diện NGAY LẬP TỨC
+    setAssignTasks((prevTasks) =>
+      prevTasks.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))
     );
-    setAssignTasks(updatedTasks);
-    localStorage.setItem(ASSIGN_TASKS_STORAGE_KEY, JSON.stringify(updatedTasks));
-    window.dispatchEvent(new Event("assign_tasks_updated"));
+
+    // 2. Hiện Toast thông báo thành công NGAY TỨC THÌ (không chờ server)
     showNotification(`Đã cập nhật trạng thái thành "${newStatus}"`);
+
+    // 3. Gửi request bất đồng bộ ngầm lên Backend
+    const currentTask = assignTasks.find((t) => t.id === taskId);
+    taskService.updateTask(taskId, {
+      taskId: taskId,
+      title: currentTask?.title || "Nhiệm vụ",
+      description: currentTask?.title || "Nhiệm vụ",
+      status: backendStatus,
+      campaignId: currentTask?.campaignId
+    }).catch((e) => {
+      console.warn("Lỗi API ngầm updateTask:", e?.response?.data || e.message);
+    });
   };
 
-  // Lấy danh sách Speaker & Reviewer Active (Đã sắp xếp ưu tiên Speaker thành tích tốt lên trên)
+  // Lấy danh sách Speaker & Reviewer Active
   const activeSpeakers = useMemo(() => {
     const speakers = allAdminUsers.filter(u => u.role === "Speaker" && u.status === "Active");
     return [...speakers].sort((a, b) => {
@@ -371,7 +319,7 @@ export default function TaskManagerManagement() {
     return allAdminUsers.filter(u => u.role === "Reviewer" && u.status === "Active");
   }, [allAdminUsers]);
 
-  // Tổng hợp tất cả nhiệm vụ từ TaskManagerSpeakerTasks và TaskManagerReviewerTasks
+  // Tổng hợp tất cả nhiệm vụ
   const allTasksOptions = useMemo(() => [
     ...speakerTasksList.map(t => ({ 
       ...t, 
@@ -392,10 +340,10 @@ export default function TaskManagerManagement() {
     return batches.find(b => b.id === assignFormData.selectedBatchId) || batches[0] || null;
   }, [batches, assignFormData.selectedBatchId]);
 
-  // Lọc danh sách Nhiệm vụ theo Topic của Đợt được chọn trong Modal Phân công
+  // Lọc danh sách Nhiệm vụ theo Topic của Đợt
   const filteredTasksForAssignModal = useMemo(() => {
     if (!assignModalSelectedBatch) return allTasksOptions;
-    return allTasksOptions.filter(t => t.topic === assignModalSelectedBatch.topic);
+    return allTasksOptions.filter(t => t.topic === assignModalSelectedBatch.topic || !t.topic);
   }, [allTasksOptions, assignModalSelectedBatch]);
 
   const currentSelectedTask = useMemo(() => {
@@ -406,7 +354,7 @@ export default function TaskManagerManagement() {
     return currentSelectedTask?.role === "Speaker" ? activeSpeakers : activeReviewers;
   }, [currentSelectedTask, activeSpeakers, activeReviewers]);
 
-  // Giới hạn số lượng tối đa theo yêu cầu của Đợt
+  // Giới hạn số lượng tối đa
   const maxAllowedUsers = useMemo(() => {
     if (!assignModalSelectedBatch || !currentSelectedTask) return Infinity;
     return currentSelectedTask.role === "Speaker"
@@ -421,13 +369,11 @@ export default function TaskManagerManagement() {
       return;
     }
 
-    reloadAdminUsers();
-    reloadTaskLists();
     setEditingAssignment(null);
     const initialBatch = batches.find(b => b.id === selectedBatchId) || batches[0] || null;
     const initialBatchTopic = initialBatch?.topic;
     const availableTasks = initialBatchTopic 
-      ? allTasksOptions.filter(t => t.topic === initialBatchTopic) 
+      ? allTasksOptions.filter(t => t.topic === initialBatchTopic || !t.topic) 
       : allTasksOptions;
 
     const defaultTask = availableTasks[0] || allTasksOptions[0];
@@ -443,7 +389,7 @@ export default function TaskManagerManagement() {
   const handleBatchChangeInAssignModal = (newBatchId) => {
     const nextBatch = batches.find(b => b.id === newBatchId);
     const nextAvailableTasks = nextBatch 
-      ? allTasksOptions.filter(t => t.topic === nextBatch.topic)
+      ? allTasksOptions.filter(t => t.topic === nextBatch.topic || !t.topic)
       : allTasksOptions;
     
     const defaultNextTask = nextAvailableTasks[0];
@@ -482,7 +428,7 @@ export default function TaskManagerManagement() {
   };
 
   // Xác nhận lưu Modal Phân Công
-  const handleSubmitAssignForm = (e) => {
+  const handleSubmitAssignForm = async (e) => {
     e.preventDefault();
 
     if (assignFormData.assignedUsers.length === 0) {
@@ -495,54 +441,31 @@ export default function TaskManagerManagement() {
       return;
     }
 
-    const taskObj = currentSelectedTask;
-    const batchObj = assignModalSelectedBatch;
+    try {
+      const taskObj = currentSelectedTask;
+      const selectedUserObj = targetUserList.find(u => assignFormData.assignedUsers.includes(u.name));
 
-    const createdAssignment = {
-      id: `ASN-${String(Date.now()).slice(-4)}`,
-      taskId: taskObj.id,
-      taskTitle: taskObj.title,
-      title: taskObj.title,
-      role: taskObj.role,
-      assignedUsers: assignFormData.assignedUsers,
-      startDate: batchObj?.startDate || formatDateToVN(todayIso),
-      endDate: batchObj?.endDate || formatDateToVN(todayIso),
-      status: "Đang thực hiện"
-    };
+      if (selectedUserObj && taskObj?.id) {
+        await taskService.assignTask(taskObj.id, selectedUserObj.id);
+      }
 
-    const updatedTasks = [...assignTasks, createdAssignment];
-    setAssignTasks(updatedTasks);
-    localStorage.setItem(ASSIGN_TASKS_STORAGE_KEY, JSON.stringify(updatedTasks));
-
-    if (batchObj) {
-      setBatchMapping((prev) => {
-        const existingList = prev[batchObj.id] || [];
-        if (!existingList.includes(createdAssignment.id)) {
-          return {
-            ...prev,
-            [batchObj.id]: [...existingList, createdAssignment.id]
-          };
-        }
-        return prev;
-      });
+      showNotification(`Đã phân công thành công nhiệm vụ "${taskObj.title}"!`);
+      setIsAssignModalOpen(false);
+      loadDataFromApi();
+    } catch (err) {
+      showNotification("Phân công thất bại!");
     }
-
-    window.dispatchEvent(new Event("assign_tasks_updated"));
-
-    showNotification(`Đã phân công thành công nhiệm vụ "${taskObj.title}"!`);
-    setIsAssignModalOpen(false);
   };
 
   // Mở Modal TẠO ĐỢT MỚI
   const handleOpenCreateModal = () => {
-    reloadAdminUsers();
     setModalMode("CREATE");
     setModalTargetBatchId(null);
     setBatchFormData({
-      name: `Đợt ${batches.length + 1}`,
-      target: 50,
-      speakerCount: activeSpeakers.length || 1,
-      reviewerCount: activeReviewers.length || 1,
+      name: `Đợt thu thập demo ${Math.floor(Math.random() * 1000)}`,
+      target: 2000,
+      speakerCount: activeSpeakers.length || 5,
+      reviewerCount: activeReviewers.length || 2,
       topic: "Công nghệ thông tin",
       startDate: todayIso,
       endDate: todayIso,
@@ -555,15 +478,14 @@ export default function TaskManagerManagement() {
   // Mở Modal CẬP NHẬT ĐỢT
   const handleOpenUpdateModal = (e, batch) => {
     e.stopPropagation();
-    reloadAdminUsers();
     setModalMode("UPDATE");
     setModalTargetBatchId(batch.id);
     setSelectedBatchId(batch.id);
     setBatchFormData({
-      name: batch.name || "",
-      target: batch.target || 50,
-      speakerCount: batch.speakerCount ?? activeSpeakers.length ?? 1,
-      reviewerCount: batch.reviewerCount ?? activeReviewers.length ?? 1,
+      name: batch.campaignName || batch.name || "",
+      target: batch.target || 2000,
+      speakerCount: batch.speakerCount ?? activeSpeakers.length ?? 5,
+      reviewerCount: batch.reviewerCount ?? activeReviewers.length ?? 2,
       topic: batch.topic || "Công nghệ thông tin",
       startDate: batch.startDate ? formatDateToISO(batch.startDate) : todayIso,
       endDate: batch.endDate ? formatDateToISO(batch.endDate) : todayIso,
@@ -573,64 +495,55 @@ export default function TaskManagerManagement() {
     setIsModalOpen(true);
   };
 
-  // Xác nhận lưu Đợt
-  const handleConfirmSaveModal = (e) => {
-    e.preventDefault();
+  // Xác nhận lưu Đợt qua API Backend
+  const handleConfirmSaveModal = async (e) => {
+    if (e) e.preventDefault();
 
-    if (!batchFormData.name.trim()) {
+    if (!batchFormData.name || !batchFormData.name.trim()) {
       alert("Vui lòng nhập tên đợt!");
       return;
     }
 
-    const startIso = batchFormData.startDate.includes("/") ? formatDateToISO(batchFormData.startDate) : batchFormData.startDate;
-    const endIso = batchFormData.endDate.includes("/") ? formatDateToISO(batchFormData.endDate) : batchFormData.endDate;
+    try {
+      // Parse ngày an toàn chống lỗi RangeError
+      let rawStart = batchFormData.startDate || todayIso;
+      let rawEnd = batchFormData.endDate || todayIso;
 
-    if (endIso < startIso) {
-      alert("Ngày kết thúc phải lớn hơn hoặc bằng ngày bắt đầu!");
-      return;
+      if (rawStart.includes("/")) rawStart = formatDateToISO(rawStart);
+      if (rawEnd.includes("/")) rawEnd = formatDateToISO(rawEnd);
+
+      // Đảm bảo định dạng chuẩn ISO YYYY-MM-DD
+      const startIso = rawStart.split("T")[0];
+      const endIso = rawEnd.split("T")[0];
+
+      if (endIso < startIso) {
+        alert("Ngày kết thúc phải lớn hơn hoặc bằng ngày bắt đầu!");
+        return;
+      }
+
+      if (modalMode === "CREATE") {
+        await taskService.createCampaign({
+          title: String(batchFormData.name),
+          targetCount: Number(batchFormData.target),
+          startDate: `${startIso}T00:00:00.000Z`,
+          endDate: `${endIso}T00:00:00.000Z`
+        });
+        showNotification(`Đã tạo thành công ${batchFormData.name}!`);
+      } else {
+        await taskService.updateCampaign(modalTargetBatchId, {
+          title: String(batchFormData.name),
+          targetCount: Number(batchFormData.target)
+        });
+        showNotification(`Đã cập nhật ${batchFormData.name}!`);
+      }
+
+      setIsModalOpen(false);
+      loadDataFromApi();
+    } catch (err) {
+      console.error("Lỗi API tạo/sửa đợt:", err);
+      const apiErrorMsg = err?.response?.data?.message || err?.response?.data?.title || "Lưu đợt thất bại!";
+      showNotification(apiErrorMsg);
     }
-
-    if (modalMode === "CREATE") {
-      const newId = `BATCH-${String(Date.now()).slice(-4)}`;
-      const newBatchObj = {
-        id: newId,
-        name: batchFormData.name,
-        target: Number(batchFormData.target),
-        speakerCount: Number(batchFormData.speakerCount),
-        reviewerCount: Number(batchFormData.reviewerCount),
-        topic: batchFormData.topic,
-        startDate: formatDateToVN(batchFormData.startDate),
-        endDate: formatDateToVN(batchFormData.endDate),
-        assignedSpeakers: batchFormData.assignedSpeakers,
-        assignedReviewers: batchFormData.assignedReviewers
-      };
-
-      setBatches((prev) => [...prev, newBatchObj]);
-      setSelectedBatchId(newId);
-      showNotification(`Đã tạo thành công ${batchFormData.name}!`);
-    } else {
-      setBatches((prev) =>
-        prev.map((b) =>
-          b.id === modalTargetBatchId
-            ? {
-                ...b,
-                name: batchFormData.name,
-                target: Number(batchFormData.target),
-                speakerCount: Number(batchFormData.speakerCount),
-                reviewerCount: Number(batchFormData.reviewerCount),
-                topic: batchFormData.topic,
-                startDate: formatDateToVN(batchFormData.startDate),
-                endDate: formatDateToVN(batchFormData.endDate),
-                assignedSpeakers: batchFormData.assignedSpeakers,
-                assignedReviewers: batchFormData.assignedReviewers
-              }
-            : b
-        )
-      );
-      showNotification(`Đã cập nhật ${batchFormData.name}!`);
-    }
-
-    setIsModalOpen(false);
   };
 
   // Chuẩn bị xóa Đợt
@@ -645,12 +558,6 @@ export default function TaskManagerManagement() {
     const remainingBatches = batches.filter((b) => b.id !== deletingBatch.id);
     setBatches(remainingBatches);
 
-    setBatchMapping((prev) => {
-      const nextMap = { ...prev };
-      delete nextMap[deletingBatch.id];
-      return nextMap;
-    });
-
     if (selectedBatchId === deletingBatch.id) {
       setSelectedBatchId(remainingBatches.length > 0 ? remainingBatches[0].id : null);
     }
@@ -659,11 +566,8 @@ export default function TaskManagerManagement() {
     setDeletingBatch(null);
   };
 
-  // -------------------------------------------------------------
-  // THAO TÁC XÓA & SỬA NHIỆM VỤ TRONG TABLE (Y CHANG MODAL TẠO PHÂN CÔNG)
-  // -------------------------------------------------------------
+  // SỬA & XÓA NHIỆM VỤ TRONG BẢNG
   const handleOpenEditTaskModal = (task) => {
-    reloadAdminUsers();
     setEditingTask(task);
     setEditTaskFormData({
       title: task.title || "",
@@ -693,7 +597,7 @@ export default function TaskManagerManagement() {
     });
   };
 
-  const handleSaveEditTask = (e) => {
+  const handleSaveEditTask = async (e) => {
     e.preventDefault();
 
     if (!editTaskFormData.title.trim()) {
@@ -701,57 +605,35 @@ export default function TaskManagerManagement() {
       return;
     }
 
-    if (editTaskFormData.assignedUsers.length === 0) {
-      alert("Vui lòng chọn ít nhất 1 người thực hiện!");
-      return;
+    try {
+      await taskService.updateTask(editingTask.id, {
+        description: editTaskFormData.title
+      });
+
+      showNotification(`Đã cập nhật nhiệm vụ "${editTaskFormData.title}"!`);
+      setIsEditTaskModalOpen(false);
+      loadDataFromApi();
+    } catch (err) {
+      showNotification("Cập nhật nhiệm vụ thất bại!");
     }
-
-    const updatedTasks = assignTasks.map((t) =>
-      t.id === editingTask.id
-        ? {
-            ...t,
-            title: editTaskFormData.title,
-            taskTitle: editTaskFormData.title,
-            role: editTaskFormData.role,
-            assignedUsers: editTaskFormData.assignedUsers
-          }
-        : t
-    );
-
-    setAssignTasks(updatedTasks);
-    localStorage.setItem(ASSIGN_TASKS_STORAGE_KEY, JSON.stringify(updatedTasks));
-    window.dispatchEvent(new Event("assign_tasks_updated"));
-
-    showNotification(`Đã cập nhật nhiệm vụ "${editTaskFormData.title}"!`);
-    setIsEditTaskModalOpen(false);
   };
 
   const handleRequestDeleteTask = (task) => {
     setDeletingTask(task);
   };
 
-  const handleConfirmDeleteTask = () => {
+  const handleConfirmDeleteTask = async () => {
     if (!deletingTask) return;
 
-    // Xóa khỏi assignTasks
-    const updatedTasks = assignTasks.filter((t) => t.id !== deletingTask.id);
-    setAssignTasks(updatedTasks);
-    localStorage.setItem(ASSIGN_TASKS_STORAGE_KEY, JSON.stringify(updatedTasks));
-
-    // Xóa khỏi mapping của đợt hiện tại
-    setBatchMapping((prev) => {
-      const currentList = prev[selectedBatchId] || [];
-      return {
-        ...prev,
-        [selectedBatchId]: currentList.filter((id) => id !== deletingTask.id)
-      };
-    });
-
-    window.dispatchEvent(new Event("assign_tasks_updated"));
-    showNotification(`Đã xóa nhiệm vụ "${deletingTask.title}"!`);
-    setDeletingTask(null);
+    try {
+      await taskService.cancelTask(deletingTask.id);
+      showNotification(`Đã xóa nhiệm vụ "${deletingTask.title}"!`);
+      setDeletingTask(null);
+      loadDataFromApi();
+    } catch (err) {
+      showNotification("Xóa nhiệm vụ thất bại!");
+    }
   };
-  // -------------------------------------------------------------
 
   // Lấy danh sách nhiệm vụ thuộc đợt đang chọn
   const currentBatchTaskIds = useMemo(() => {
@@ -760,8 +642,9 @@ export default function TaskManagerManagement() {
   }, [batchMapping, selectedBatchId]);
 
   const currentTasks = useMemo(() => {
-    return assignTasks.filter((t) => currentBatchTaskIds.includes(t.id));
-  }, [assignTasks, currentBatchTaskIds]);
+    if (!selectedBatchId) return assignTasks;
+    return assignTasks.filter((t) => t.campaignId === selectedBatchId || currentBatchTaskIds.includes(t.id));
+  }, [assignTasks, selectedBatchId, currentBatchTaskIds]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -822,7 +705,7 @@ export default function TaskManagerManagement() {
             <form onSubmit={handleConfirmSaveModal} className="p-5 space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                  {modalMode === "CREATE" ? "Tạo đợt nhiệm vụ mới" : `Chỉnh sửa ${targetModalBatchObj?.name || "đợt"}`}
+                  {modalMode === "CREATE" ? "Tạo đợt nhiệm vụ mới" : `Chỉnh sửa ${targetModalBatchObj?.campaignName || targetModalBatchObj?.name || "đợt"}`}
                 </h3>
                 <button 
                   type="button"
@@ -833,17 +716,17 @@ export default function TaskManagerManagement() {
                 </button>
               </div>
 
-              {/* Tên Đợt */}
+              {/* Tên Đợt (campaignName) */}
               <div>
                 <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">
-                  Tên đợt
+                  Tên đợt (Campaign Name)
                 </label>
                 <input
                   type="text"
                   required
                   value={batchFormData.name}
                   onChange={(e) => setBatchFormData({ ...batchFormData, name: e.target.value })}
-                  placeholder="Ví dụ: Đợt 1, Đợt 2..."
+                  placeholder="Nhập tên đợt..."
                   className="w-full px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#25272E] text-gray-900 dark:text-white rounded-lg outline-none font-medium transition-all font-sans focus:bg-white dark:focus:bg-[#1C1D22] focus:border-gray-400 dark:focus:border-gray-500"
                 />
               </div>
@@ -943,6 +826,7 @@ export default function TaskManagerManagement() {
                 </button>
                 <button
                   type="submit"
+                  onClick={handleConfirmSaveModal}
                   style={{ backgroundColor: TASK_MANAGER_ACCENT }}
                   className="flex-1 py-2 text-white rounded-lg text-xs font-bold hover:opacity-90 transition-opacity cursor-pointer"
                 >
@@ -980,7 +864,7 @@ export default function TaskManagerManagement() {
                   >
                     {batches.map((b) => (
                       <option key={b.id} value={b.id} className="bg-white text-gray-900 dark:bg-[#1C1D22] dark:text-white">
-                        {b.name} - Số lượng(tối đa): {b.speakerCount} speakers, {b.reviewerCount} reviewers
+                        {b.campaignName || b.name} - Số lượng(tối đa): {b.speakerCount} speakers, {b.reviewerCount} reviewers
                       </option>
                     ))}
                   </select>
@@ -1068,7 +952,6 @@ export default function TaskManagerManagement() {
                                 {u.email}
                               </span>
                               
-                              {/* Hiển thị lý do ưu tiên / hạn chế (chỉ hiện với GOOD hoặc BAD, chữ thẳng) */}
                               {hasPreferenceReason && (
                                 <span className="text-[9.5px] font-semibold mt-0.5  text-gray-500 dark:text-gray-400 line-clamp-1">
                                   Lý do: {u.performanceReason}
@@ -1077,7 +960,6 @@ export default function TaskManagerManagement() {
                             </div>
                           </div>
 
-                          {/* BADGES ƯU TIÊN / HẠN CHẾ VỚI MÀU CHUẨN THEME */}
                           {currentSelectedTask?.role === "Speaker" && (
                             <div className="flex items-center gap-1 shrink-0 ml-1 mt-0.5">
                               {u.performanceTag === "GOOD" && (
@@ -1160,7 +1042,7 @@ export default function TaskManagerManagement() {
               <div>
                 <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">Xác nhận xóa đợt</h3>
                 <p className="text-[11px] mt-1 break-words text-gray-500 dark:text-gray-400">
-                  Bạn có chắc muốn xóa <span className="font-bold text-gray-900 dark:text-gray-200">"{deletingBatch.name}"</span>? 
+                  Bạn có chắc muốn xóa <span className="font-bold text-gray-900 dark:text-gray-200">"{deletingBatch.campaignName || deletingBatch.name}"</span>? 
                 </p>
               </div>
               <div className="flex gap-2 pt-1">
@@ -1185,7 +1067,7 @@ export default function TaskManagerManagement() {
         </div>
       )}
 
-      {/* MODAL SỬA NHIỆM VỤ (ĐỒNG BỘ Y CHANG MODAL PHÂN CÔNG) */}
+      {/* MODAL SỬA NHIỆM VỤ */}
       {isEditTaskModalOpen && editingTask && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 dark:bg-black/60 backdrop-blur-[2px]" onClick={() => setIsEditTaskModalOpen(false)}>
           <div 
@@ -1215,9 +1097,9 @@ export default function TaskManagerManagement() {
                 </label>
                 <input
                   type="text"
-                  disabled
                   value={editTaskFormData.title}
-                  className="w-full px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-[#18191D] text-gray-500 dark:text-gray-400 rounded-lg outline-none font-medium transition-all font-sans cursor-not-allowed opacity-80"
+                  onChange={(e) => setEditTaskFormData({ ...editTaskFormData, title: e.target.value })}
+                  className="w-full px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#25272E] text-gray-900 dark:text-white rounded-lg outline-none font-medium transition-all font-sans focus:bg-white dark:focus:bg-[#1C1D22] focus:border-gray-400 dark:focus:border-gray-500"
                 />
               </div>
 
@@ -1236,7 +1118,7 @@ export default function TaskManagerManagement() {
                 </select>
               </div>
 
-              {/* Danh sách người thực hiện (Y CHANG MODAL PHÂN CÔNG) */}
+              {/* Danh sách người thực hiện */}
               <div>
                 {(() => {
                   const editBatch = batches.find(b => b.id === selectedBatchId);
@@ -1296,7 +1178,6 @@ export default function TaskManagerManagement() {
                                     {u.email}
                                   </span>
 
-                                  {/* Hiển thị lý do ưu tiên / hạn chế (chỉ hiện với GOOD hoặc BAD, chữ thẳng) */}
                                   {hasPreferenceReason && (
                                     <span className="text-[9.5px] font-semibold mt-0.5  text-gray-500 dark:text-gray-400 line-clamp-1">
                                       Lý do: {u.performanceReason}
@@ -1305,7 +1186,6 @@ export default function TaskManagerManagement() {
                                 </div>
                               </div>
 
-                              {/* BADGES ƯU TIÊN / HẠN CHẾ VỚI MÀU CHUẨN THEME */}
                               {editTaskFormData.role === "Speaker" && (
                                 <div className="flex items-center gap-1 shrink-0 ml-1 mt-0.5">
                                   {u.performanceTag === "GOOD" && (
@@ -1540,9 +1420,30 @@ export default function TaskManagerManagement() {
                 const active = batch.id === selectedBatchId;
                 
                 const mappedIds = batchMapping[batch.id] || [];
-                const batchTasks = assignTasks.filter((t) => mappedIds.includes(t.id));
+                const batchTasks = assignTasks.filter((t) => t.campaignId === batch.id || mappedIds.includes(t.id));
 
                 const isBatchCompleted = batchTasks.length > 0 && batchTasks.every((t) => t.status === "Hoàn thành");
+                // Đợt chưa có nhiệm vụ nào HOẶC status là "Open" thì là "Đang mở"
+                const isOpenStatus = batchTasks.length === 0 || batch.status === "Open";
+
+                // Màu sắc động cho Badge của Đợt
+                const batchBadgeBg = isBatchCompleted 
+                  ? CHIP_SUCCESS_BG 
+                  : isOpenStatus 
+                    ? `${TASK_MANAGER_ACCENT}1A` 
+                    : CHIP_WARNING_BG;
+
+                const batchBadgeBorder = isBatchCompleted 
+                  ? CHIP_SUCCESS_BORDER 
+                  : isOpenStatus 
+                    ? `${TASK_MANAGER_ACCENT}50` 
+                    : CHIP_WARNING_BORDER;
+
+                const batchBadgeText = isBatchCompleted 
+                  ? CHIP_SUCCESS_TEXT 
+                  : isOpenStatus 
+                    ? TASK_MANAGER_ACCENT 
+                    : CHIP_WARNING_TEXT;
 
                 return (
                   <div
@@ -1558,27 +1459,26 @@ export default function TaskManagerManagement() {
                         : "bg-gray-50/50 dark:bg-[#25272E]/50 border-transparent hover:bg-gray-100 dark:hover:bg-[#25272E]"
                     }`}
                   >
-                    {/* Dòng Header Đợt & Nút thao tác */}
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0 flex-1">
                         <span className="text-xs font-bold text-gray-900 dark:text-white truncate">
-                          {batch.name}
+                          Đợt {batch.id}
                         </span>
                         
                         <span 
                           style={{
-                            backgroundColor: isBatchCompleted ? CHIP_SUCCESS_BG : CHIP_WARNING_BG,
-                            borderColor: isBatchCompleted ? CHIP_SUCCESS_BORDER : CHIP_WARNING_BORDER,
-                            color: isBatchCompleted ? CHIP_SUCCESS_TEXT : CHIP_WARNING_TEXT
+                            backgroundColor: batchBadgeBg,
+                            borderColor: batchBadgeBorder,
+                            color: batchBadgeText
                           }}
                           className="inline-flex items-center gap-1 pl-1.5 pr-2 py-0.5 rounded-full text-[9px] font-bold border shrink-0 leading-tight"
                         >
                           {isBatchCompleted ? (
-                            <CheckCircle2 className="w-2.5 h-2.5 shrink-0" style={{ color: CHIP_SUCCESS_TEXT }} />
+                            <CheckCircle2 className="w-2.5 h-2.5 shrink-0" style={{ color: batchBadgeText }} />
                           ) : (
-                            <Clock className="w-2.5 h-2.5 shrink-0" style={{ color: CHIP_WARNING_TEXT }} />
+                            <Clock className="w-2.5 h-2.5 shrink-0" style={{ color: batchBadgeText }} />
                           )}
-                          <span>{isBatchCompleted ? "Hoàn thành" : "Đang thực hiện"}</span>
+                          <span>{isBatchCompleted ? "Hoàn thành" : isOpenStatus ? "Đang mở" : "Đang thực hiện"}</span>
                         </span>
                       </div>
 
@@ -1586,7 +1486,7 @@ export default function TaskManagerManagement() {
                         <button
                           type="button"
                           onClick={(e) => handleOpenUpdateModal(e, batch)}
-                          title={`Sửa ${batch.name}`}
+                          title={`Sửa ${batch.campaignName || batch.name}`}
                           className="p-1 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md hover:text-gray-900 dark:hover:text-gray-100 transition-colors cursor-pointer dark:text-gray-400"
                         >
                           <Edit3 className="w-3.5 h-3.5" />
@@ -1595,7 +1495,7 @@ export default function TaskManagerManagement() {
                         <button
                           type="button"
                           onClick={(e) => handleRequestDeleteBatch(e, batch)}
-                          title={`Xóa ${batch.name}`}
+                          title={`Xóa ${batch.campaignName || batch.name}`}
                           className="p-1 text-gray-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-md hover:text-red-600 dark:hover:text-[#E55353] transition-colors cursor-pointer dark:text-gray-400"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -1603,8 +1503,12 @@ export default function TaskManagerManagement() {
                       </div>
                     </div>
 
-                    {/* THÔNG TIN CHỦ ĐỀ, MỤC TIÊU, SPEAKERS/REVIEWERS, NGÀY BẮT ĐẦU VÀ KẾT THÚC */}
                     <div className="text-[10px] space-y-1 text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-800/60 pt-1.5">
+                      <div className="flex items-center gap-1 font-medium text-gray-700 dark:text-gray-300">
+                        <FolderKanban className="w-3 h-3 text-indigo-500 shrink-0" />
+                        <span className="truncate">Tên đợt: <strong className="text-gray-900 dark:text-white font-bold">{batch.campaignName || batch.name}</strong></span>
+                      </div>
+
                       <div className="flex items-center gap-1 font-medium text-gray-700 dark:text-gray-300">
                         <Tag className="w-3 h-3 text-emerald-500 shrink-0" />
                         <span className="truncate">Chủ đề: <strong className="text-gray-900 dark:text-white font-bold">{batch.topic || "Công nghệ thông tin"}</strong></span>
@@ -1612,7 +1516,7 @@ export default function TaskManagerManagement() {
 
                       <div className="flex items-center gap-1 font-medium text-gray-700 dark:text-gray-300">
                         <Target className="w-3 h-3 text-blue-500 shrink-0" />
-                        <span>Mục tiêu: <strong className="text-gray-900 dark:text-white font-bold">{batch.target || 0}</strong> câu</span>
+                        <span>Mục tiêu: <strong className="text-gray-900 dark:text-white font-bold">{batch.target || 2000}</strong> câu</span>
                       </div>
 
                       <div className="flex items-center gap-1 font-medium text-gray-700 dark:text-gray-300">
@@ -1670,6 +1574,7 @@ export default function TaskManagerManagement() {
                 <option value="ALL" className="bg-white dark:bg-[#25272E]">Tất cả trạng thái</option>
                 <option value="Đang thực hiện" className="bg-white dark:bg-[#25272E]">Đang thực hiện</option>
                 <option value="Hoàn thành" className="bg-white dark:bg-[#25272E]">Hoàn thành</option>
+                <option value="Đã hủy" className="bg-white dark:bg-[#25272E]">Đã hủy</option>
               </select>
             </div>
           </div>
@@ -1694,13 +1599,33 @@ export default function TaskManagerManagement() {
                       <td colSpan={6} className="py-12 text-center text-gray-400 dark:text-gray-500 font-medium">
                         {!selectedBatchObj 
                           ? "Hãy chọn hoặc tạo một đợt để xem danh sách nhiệm vụ." 
-                          : `Không tìm thấy nhiệm vụ nào trong ${selectedBatchObj.name}.`}
+                          : `Không tìm thấy nhiệm vụ nào trong ${selectedBatchObj.campaignName || selectedBatchObj.name}.`}
                       </td>
                     </tr>
                   ) : (
                     filteredTasks.map((task, index) => {
                       const isCompleted = task.status === "Hoàn thành";
+                      const isCancelled = task.status === "Đã hủy";
                       const countUsers = task.assignedUsers ? task.assignedUsers.length : 0;
+
+                      // Style động cho dropdown trạng thái
+                      const statusBg = isCompleted 
+                        ? CHIP_SUCCESS_BG 
+                        : isCancelled 
+                          ? "rgba(243, 114, 127, 0.15)" 
+                          : CHIP_WARNING_BG;
+
+                      const statusBorder = isCompleted 
+                        ? CHIP_SUCCESS_BORDER 
+                        : isCancelled 
+                          ? "rgba(243, 114, 127, 0.4)" 
+                          : CHIP_WARNING_BORDER;
+
+                      const statusText = isCompleted 
+                        ? CHIP_SUCCESS_TEXT 
+                        : isCancelled 
+                          ? DANGER 
+                          : CHIP_WARNING_TEXT;
 
                       return (
                         <tr key={task.id} className="hover:bg-gray-50/80 dark:hover:bg-[#25272E]/50 transition-colors">
@@ -1733,18 +1658,20 @@ export default function TaskManagerManagement() {
                           <td className="py-3.5 px-3 text-center">
                             <div className="relative inline-flex items-center justify-center">
                               {isCompleted ? (
-                                <CheckCircle2 className="w-2.5 h-2.5 shrink-0 absolute left-2 pointer-events-none z-10" style={{ color: CHIP_SUCCESS_TEXT }} />
+                                <CheckCircle2 className="w-2.5 h-2.5 shrink-0 absolute left-2 pointer-events-none z-10" style={{ color: statusText }} />
+                              ) : isCancelled ? (
+                                <Ban className="w-2.5 h-2.5 shrink-0 absolute left-2 pointer-events-none z-10" style={{ color: statusText }} />
                               ) : (
-                                <Clock className="w-2.5 h-2.5 shrink-0 absolute left-2 pointer-events-none z-10" style={{ color: CHIP_WARNING_TEXT }} />
+                                <Clock className="w-2.5 h-2.5 shrink-0 absolute left-2 pointer-events-none z-10" style={{ color: statusText }} />
                               )}
 
                               <select
                                 value={task.status || "Đang thực hiện"}
                                 onChange={(e) => handleUpdateTaskStatus(task.id, e.target.value)}
                                 style={{
-                                  backgroundColor: isCompleted ? CHIP_SUCCESS_BG : CHIP_WARNING_BG,
-                                  borderColor: isCompleted ? CHIP_SUCCESS_BORDER : CHIP_WARNING_BORDER,
-                                  color: isCompleted ? CHIP_SUCCESS_TEXT : CHIP_WARNING_TEXT
+                                  backgroundColor: statusBg,
+                                  borderColor: statusBorder,
+                                  color: statusText
                                 }}
                                 className="appearance-none inline-flex items-center pl-5 pr-5 py-0.5 rounded-full text-[9.5px] font-bold border cursor-pointer focus:outline-none transition-all leading-tight"
                               >
@@ -1754,16 +1681,18 @@ export default function TaskManagerManagement() {
                                 <option value="Hoàn thành" className="bg-white dark:bg-[#1C1D22] text-emerald-600 font-bold">
                                   Hoàn thành
                                 </option>
+                                <option value="Đã hủy" className="bg-white dark:bg-[#1C1D22] text-rose-600 font-bold">
+                                  Đã hủy
+                                </option>
                               </select>
 
                               <ChevronDown 
-                                style={{ color: isCompleted ? CHIP_SUCCESS_TEXT : CHIP_WARNING_TEXT }}
+                                style={{ color: statusText }}
                                 className="w-2.5 h-2.5 absolute right-1.5 pointer-events-none z-10" 
                               />
                             </div>
                           </td>
 
-                          {/* CỘT THAO TÁC SỬA / XÓA NHIỆM VỤ */}
                           <td className="py-3.5 px-3 text-center">
                             <div className="flex items-center justify-center gap-1">
                               <button
