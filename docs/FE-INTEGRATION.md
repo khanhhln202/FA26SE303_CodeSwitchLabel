@@ -480,15 +480,21 @@ giao) — các dòng có `canReview: false`, nộp duyệt vẫn trả 403 `task
 
 ### Task Manager
 
-**Mọi task phải thuộc một chiến dịch.** Đây là điều kiện mới, không có đường đi vòng:
+**Task có thể độc lập (không thuộc chiến dịch nào), gắn vào chiến dịch sau, hoặc gỡ ra mà không bị xoá.**
 
 1. **Admin** tạo chiến dịch (`POST /api/campaigns`) rồi **giao** cho một Task Manager
-   (`POST /api/campaigns/{id}/assign`). Task Manager không tạo được chiến dịch — gọi sẽ nhận **403**.
-2. Task Manager mở `GET /api/campaigns` để lấy danh sách chiến dịch, rồi tạo task **kèm `campaignId`**.
+   (`POST /api/campaigns/{id}/assign`). Task Manager không tạo được chiến dịch — gọi sẽ nhận **403**
+   với `code: "forbidden"`.
+2. Task Manager tạo task **không cần `campaignId`** (bỏ trống hoặc `null` = task độc lập),
+   rồi gắn sau bằng `PATCH /api/tasks/{id}/campaign`. Tạo kèm `campaignId` thì kiểm tra
+   quota/hạn như cũ. Quy tắc quota (`task_target_exceeds_campaign`) và khung hạn
+   (`task_deadline_outside_campaign`) **chỉ áp dụng khi task đang gắn với chiến dịch**.
+3. **Gỡ khác xoá:** `DELETE /api/campaigns/{id}/tasks/{taskId}` chỉ gỡ task khỏi chiến dịch
+   (task còn tồn tại với `campaignId: null`, giữ assignments/items). Chỉ màn hình Task độc lập
+   mới được xoá cứng bằng `DELETE /api/tasks/{id}`.
 
 | Lỗi | Nghĩa |
 |---|---|
-| **400** `Phải chọn chiến dịch` | Thiếu `campaignId` trong body |
 | **404** `campaign_not_found` | `campaignId` không tồn tại |
 | **422** `campaign_not_assigned_to_manager` | Chiến dịch chưa được giao, hoặc được giao cho Task Manager khác. Nhờ Admin giao trước |
 
@@ -497,9 +503,12 @@ giao) — các dòng có `canReview: false`, nộp duyệt vẫn trả 403 `task
 | Danh sách chiến dịch | `GET /api/campaigns` — lọc tuỳ chọn `status`, `page`, `pageSize`. Mỗi dòng kèm `allocatedTaskQty` (tổng chỉ tiêu đã chia cho các task), `taskCount`, `completedTaskCount`, `assignedTo` |
 | Chi tiết chiến dịch | `GET /api/campaigns/{id}` |
 | Danh sách task | `GET /api/tasks` — lọc tuỳ chọn: `taskType`, `status`, `assigneeId`, `overdue`, `page`, `pageSize`. Mỗi dòng kèm `campaignId`, `campaignName` |
-| Tạo task | `POST /api/tasks` `{ "campaignId": 2, "taskType": "Recording", "description": "…", "targetQty": 10, "deadline": "2026-09-30T17:00:00+07:00" }` |
-| Chi tiết task | `GET /api/tasks/{id}` — tiến độ, lịch sử giao, danh sách mục |
-| Sửa task | `PATCH /api/tasks/{id}` — chỉ gửi trường cần đổi |
+| Tạo task | `POST /api/tasks` `{ "campaignId": 2, "taskType": "Recording", "description": "…", "targetQty": 10, "deadline": "2026-09-30T17:00:00+07:00" }` — `campaignId` để trống/`null` = task độc lập |
+| Gắn/chuyển/gỡ chiến dịch | `PATCH /api/tasks/{id}/campaign` `{ "campaignId": 2 }` — `null` = gỡ về độc lập |
+| Gỡ task khỏi chiến dịch (giữ task) | `DELETE /api/campaigns/{id}/tasks/{taskId}` |
+| Xoá cứng task | `DELETE /api/tasks/{id}` — chỉ từ màn hình Task độc lập |
+| Chi tiết task | `GET /api/tasks/{id}` — tiến độ, lịch sử giao, danh sách mục (`campaignId`/`campaignName` có thể `null`) |
+| Sửa task | `PATCH /api/tasks/{id}` — chỉ gửi trường cần đổi (không đổi chiến dịch ở đây) |
 | Thêm mục chọn tay | `POST /api/tasks/{id}/items` `{ "ids": ["s_211000001", "s_131000002"] }` |
 | Thêm mục tự động | `POST /api/tasks/{id}/items` `{ "autoFill": { "count": 10, "domain": "ItTechnology" } }` — task duyệt thì dùng `"speakerId"` thay cho `"domain"` |
 | Gỡ mục | `DELETE /api/tasks/{id}/items/{itemId}` |
@@ -676,7 +685,7 @@ Ai đã code theo bản API trước ngày 22/09/2026 thì cần sửa:
 | — | Mới: quản lý người dùng `/api/users`, trang cá nhân `/api/me/*`, ô chọn người nhận `GET /api/tasks/assignable-users` |
 | `PUT /api/me/password` trả 204 | Trả **200 kèm token mới** — thay token đang lưu |
 | Token cấp trước bản cập nhật này | Hết hiệu lực — đăng nhập lại một lần |
-| `POST /api/tasks` không cần chiến dịch | Thêm bắt buộc **`campaignId`**, và chiến dịch phải được Admin giao cho đúng Task Manager đó |
+| `POST /api/tasks` không cần chiến dịch | Từng bắt buộc **`campaignId`** — nay **không bắt buộc** nữa: thiếu/`null` là task độc lập, gắn sau bằng `PATCH /api/tasks/{id}/campaign`. Chiến dịch (khi có) vẫn phải được Admin giao cho đúng Task Manager đó |
 | Nhập file và thêm câu tay không kiểm chủ đề | Vẫn vào `Validated`, nhưng Admin phải có đúng chủ đề của câu; nhập file thiếu chủ đề là **cả lần nhập** trả 422 `reviewer_domain_required` |
 | Ai duyệt câu cũng chốt được sang `Validated` | Chỉ **Reviewer được phân đúng chủ đề**; Speaker và Admin nhận 422 `reviewer_domain_required` |
 | — | Mới: chiến dịch `/api/campaigns/*`, phân chủ đề `/api/users/{id}/domains`, tự xem chủ đề `GET /api/me/domains` |

@@ -8,12 +8,13 @@ using CodeSwitchLabel.Services.Dtos;
 namespace CodeSwitchLabel.Services.Implementations;
 
 /// <summary>
-/// Quản lý chiến dịch thu thập — đơn vị kế hoạch mà mọi task phải thuộc về.
-/// Các ràng buộc chỉ tiêu/ngày với task con phần lớn do trigger của database chặn; ở đây
-/// kiểm trước những trường hợp dễ gặp để trả thông báo rõ ràng thay vì lỗi thô từ database.
+/// Quản lý chiến dịch thu thập — task có thể độc lập (campaign_id NULL) rồi gắn sau.
+/// Các ràng buộc chỉ tiêu/ngày với task con (khi đang gắn) phần lớn do trigger của database chặn;
+/// ở đây kiểm trước những trường hợp dễ gặp để trả thông báo rõ ràng thay vì lỗi thô từ database.
 /// </summary>
 public class CampaignService(
     ICampaignRepository campaigns,
+    ITaskService tasks,
     TimeProvider clock) : ICampaignService
 {
     public async Task<PagedResult<CampaignListItemDto>> SearchAsync(
@@ -136,6 +137,11 @@ public class CampaignService(
         await campaigns.SaveChangesAsync(ct);
         return ToDto(campaign);
     }
+
+    /// <summary>Gỡ task khỏi chiến dịch (detach): task còn tồn tại, giữ assignments/items.</summary>
+    public Task<TaskDetailDto> DetachTaskAsync(
+        long campaignId, long taskId, long? callerId, bool isAdmin, CancellationToken ct = default)
+        => tasks.DetachAsync(campaignId, taskId, ct, callerId, isAdmin);
 
     private static CampaignDto ToDto(Campaign c) =>
         new(c.CampaignId, c.CampaignName, c.TargetQty, c.StartDate, c.EndDate, c.Status, c.CreatedBy, c.AssignedTo, c.CreatedAt);

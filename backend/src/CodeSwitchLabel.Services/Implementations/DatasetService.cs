@@ -43,7 +43,7 @@ public class DatasetService(
         {
             var fromCampaigns = await db.Recordings.AsNoTracking()
                 .Where(r => r.Status == RecordingStatus.Approved)
-                .Where(r => r.Task != null && request.CampaignIds.Contains(r.Task.CampaignId))
+                .Where(r => r.Task != null && r.Task.CampaignId.HasValue && request.CampaignIds.Contains(r.Task.CampaignId.Value))
                 .Select(r => r.RecordingId)
                 .ToListAsync(ct);
 

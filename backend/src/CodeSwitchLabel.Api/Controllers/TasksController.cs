@@ -27,11 +27,13 @@ namespace CodeSwitchLabel.Api.Controllers;
 [Authorize(Roles = "TaskManager,Admin")]
 public class TasksController(ITaskService taskService) : ControllerBase
 {
-    /// <summary>Tạo task mới — ở trạng thái Draft.</summary>
+    /// <summary>Tạo task mới — ở trạng thái Draft. campaignId để trống = task độc lập, gắn sau.</summary>
     /// <remarks>
-    /// Task phải thuộc một chiến dịch đã có; hạn hoàn thành phải nằm trong khoảng ngày của chiến dịch.
-    /// Hạn gửi kèm múi giờ nào cũng được, ví dụ <c>2026-09-30T17:00:00+07:00</c>;
-    /// backend đổi sang UTC trước khi lưu.
+    /// Task gắn chiến dịch thì hạn hoàn thành phải nằm trong khoảng ngày của chiến dịch;
+    /// task độc lập bỏ qua kiểm tra này. Hạn gửi kèm múi giờ nào cũng được, ví dụ
+    /// <c>2026-09-30T17:00:00+07:00</c>; backend đổi sang UTC trước khi lưu.
+    /// Lỗi trigger do race (vượt quota/khung hạn) cũng trả mã
+    /// <c>task_target_exceeds_campaign</c> / <c>task_deadline_outside_campaign</c> (422).
     /// </remarks>
     [HttpPost]
     [Authorize(Roles = "TaskManager")]
@@ -128,6 +130,34 @@ public class TasksController(ITaskService taskService) : ControllerBase
     public async Task<ActionResult<TaskDetailDto>> Assign(
         long id, [FromBody] AssignTaskRequest request, CancellationToken ct)
         => Ok(await taskService.AssignAsync(id, request.UserId!.Value, ct, User.GetUserId(), User.IsInRole("Admin")));
+
+    /// <summary>Gắn task vào chiến dịch (attach), chuyển giữa các chiến dịch (move), hoặc gỡ ra (detach khi campaignId null).</summary>
+    /// <remarks>
+    /// Task độc lập chỉ người tạo hoặc Admin được gắn; task đang gắn thì phải là Task Manager
+    /// sở hữu chiến dịch cũ (hoặc Admin). Gắn vào chiến dịch kiểm tra quota + khung hạn như lúc tạo.
+    /// </remarks>
+    [HttpPatch("{id:long}/campaign")]
+    [ProducesResponseType(typeof(TaskDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ActionResult<TaskDetailDto>> Attach(
+        long id, [FromBody] AttachTaskRequest request, CancellationToken ct)
+        => Ok(await taskService.AttachAsync(id, request.CampaignId, ct, User.GetUserId(), User.IsInRole("Admin")));
+
+    /// <summary>Xoá cứng task — chỉ từ màn hình Task độc lập. Task trong chiến dịch chỉ được gỡ (detach).</summary>
+    /// <remarks>
+    /// Xoá task kéo theo assignments/task_script/task_recording (CASCADE); recording/review chỉ SET NULL.
+    /// Muốn gỡ task khỏi chiến dịch mà giữ lại task thì dùng
+    /// <c>DELETE /api/campaigns/{campaignId}/tasks/{taskId}</c> thay vì endpoint này.
+    /// </remarks>
+    [HttpDelete("{id:long}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Delete(long id, CancellationToken ct)
+    {
+        await taskService.DeleteAsync(id, ct, User.GetUserId(), User.IsInRole("Admin"));
+        return NoContent();
+    }
 
     /// <summary>Huỷ task — việc duy nhất phải bấm tay.</summary>
     /// <remarks>

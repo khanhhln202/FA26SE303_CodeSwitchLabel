@@ -10,7 +10,8 @@ namespace CodeSwitchLabel.Api.Controllers;
 
 /// <summary>
 /// Chiến dịch thu thập — Task Manager lập kế hoạch cho một đợt (thường 1-2 tuần / tháng).
-/// Mọi task đều thuộc một chiến dịch, nên phải có chiến dịch trước khi tạo task.
+/// Task có thể độc lập (campaign_id NULL) rồi gắn vào chiến dịch sau; gỡ task khỏi
+/// chiến dịch chỉ detach (giữ lại task), không xoá task.
 /// </summary>
 /// <remarks>
 /// Chỉ tiêu và thời gian của chiến dịch ràng buộc với các task con, phần lớn do trigger của
@@ -75,6 +76,18 @@ public class CampaignsController(ICampaignService campaignService) : ControllerB
     public async Task<ActionResult<CampaignDto>> Update(
         long id, [FromBody] UpdateCampaignRequest request, CancellationToken ct)
         => Ok(await campaignService.UpdateAsync(id, request, ct));
+
+    /// <summary>Gỡ task khỏi chiến dịch (detach): task còn tồn tại với campaign_id NULL, giữ assignments/items. Chỉ detach ở đây; xoá cứng dùng DELETE /api/tasks/{id}.</summary>
+    /// <remarks>
+    /// Không xoá task, không xoá task_script/task_recording/assignment. Xoá campaign (SQL trực tiếp)
+    /// cũng chỉ SET NULL nhờ FK ON DELETE SET NULL — không endpoint xoá campaign.
+    /// </remarks>
+    [HttpDelete("{id:long}/tasks/{taskId:long}")]
+    [ProducesResponseType(typeof(TaskDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<TaskDetailDto>> DetachTask(
+        long id, long taskId, CancellationToken ct)
+        => Ok(await campaignService.DetachTaskAsync(id, taskId, User.GetUserId(), User.IsInRole("Admin"), ct));
 
     /// <summary>Giao hoặc lấy lại chiến dịch cho Task Manager. Chỉ Admin.</summary>
     /// <remarks>
