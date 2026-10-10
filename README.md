@@ -51,16 +51,18 @@ FA26SE303_CodeSwitchLabel/
 │   ├── src/CodeSwitchLabel.Services/     # nghiệp vụ, DTO, Audio, Reviews, WorkTasks, Seeding
 │   ├── src/CodeSwitchLabel.Repositories/ # entity, DbContext, Storage/S3
 │   └── tests/
-│       ├── CodeSwitchLabel.Tests/ # xunit.v3 unit + integration (Testcontainers)
-│       └── e2e/*.e2e.mjs          # 01-core, 02-users, 03-demo (+ README)
+│       ├── CodeSwitchLabel.Tests/ # xunit.v3 unit + integration (Testcontainers): Api/, Integration/, Infrastructure/, Services/
+│       └── e2e/*.e2e.mjs          # 01-core, 02-users, 03-demo, 04-import-task-record (+ README)
 ├── FRONTEND/                     # Vite SPA (React 19), deploy Vercel
 │   ├── src/ App.jsx, main.jsx, routes/, pages/*, components/*, services/*, hooks/*, lib/*, utils/*
 │   └── README.md
 ├── docs/
 │   ├── codeswitchlabel.sql       # LƯỢC ĐỒ — nguồn sự thật duy nhất, không dùng EF migration
+│   ├── migrations/               # script SQL phát sinh sau khi chốt lược đồ (áp tay)
 │   ├── FE-INTEGRATION.md         # hợp đồng API cho frontend
 │   ├── Requirement.txt           # yêu cầu 4 actor + mẫu input_text.json
 │   └── demo-test-api.html
+├── migrations/                   # V2__task_independent_of_campaign.sql + V2__verify (tách task khỏi campaign)
 ├── deploy/                       # prod: docker-compose.prod.yml, Caddyfile, .env.example, README.md
 ├── demo/                         # input_text_demo.json (7 câu, 3 câu lỗi cố ý) + wav/m4a mẫu + test-them/
 └── .github/workflows/backend.yml # CI: build + test
@@ -191,7 +193,7 @@ Lưu ý `ObjectStorage:ServiceUrl` (API gọi MinIO trong mạng Docker, `http:/
 |---|---|
 | Backend unit + integration | `dotnet test backend/CodeSwitchLabel.sln` |
 | Bỏ qua nhóm cần ffmpeg | `dotnet test backend/CodeSwitchLabel.sln --filter "Category!=RequiresFfmpeg"` |
-| E2E (cần hệ thống chạy + DB mới) | `docker compose --profile api down -v; docker compose --profile api up -d --build` rồi `node backend/tests/e2e/01-core-flows.e2e.mjs`, `BASE=http://localhost:5053 node backend/tests/e2e/02-users.e2e.mjs` |
+| E2E (cần hệ thống chạy + DB mới) | `docker compose --profile api down -v; docker compose --profile api up -d --build` rồi `node backend/tests/e2e/01-core-flows.e2e.mjs`, `node backend/tests/e2e/02-users.e2e.mjs`, `node backend/tests/e2e/03-demo-scenario.e2e.mjs`, `node backend/tests/e2e/04-import-task-record.e2e.mjs` (mặc định `BASE=http://localhost:5053`) |
 | Nghiệm thu prod | `PASSWORD='<SEED_PASSWORD>' BASE=https://api.<domain> node backend/tests/e2e/01-core-flows.e2e.mjs` |
 
 File mẫu cho test nằm ở `demo/`: `input_text_demo.json`, `*.wav/*.m4a`, `test-them/` (JSON lỗi, file rỗng/giả, bản 35s).
