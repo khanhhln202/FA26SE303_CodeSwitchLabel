@@ -135,10 +135,21 @@ public record AssigneeSummaryDto(
     int Percent,
     int OverdueTasks);
 
+/// <param name="TaskTitle">Tên nhiệm vụ (task.description) — cùng nghĩa với `taskTitle` ở lịch sử ghi âm.</param>
+public record SpeakerActiveTaskDto(
+    long TaskId,
+    string? TaskTitle,
+    string? Description,
+    string? CampaignName,
+    TaskType TaskType,
+    WorkTaskStatus Status,
+    DateTimeOffset? Deadline,
+    TaskProgressDto Progress);
+
 public record SpeakerProgressDto(
     int TotalSubmitted,
     int TotalApproved,
-    IReadOnlyList<TaskListItemDto> ActiveTasks);
+    IReadOnlyList<SpeakerActiveTaskDto> ActiveTasks);
 
 /// <summary>Tổng quan cho trang chủ Task Manager: chiến dịch của mình + tải của từng người nhận.</summary>
 public record TaskManagerOverviewDto(

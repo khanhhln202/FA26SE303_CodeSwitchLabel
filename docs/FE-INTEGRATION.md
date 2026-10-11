@@ -352,7 +352,7 @@ Bản trượt kiểm tra **vẫn được lưu** kèm toàn bộ số đo (th�
 
 Câu phải có từ 1 đến 9 từ tiếng Anh, vì con số này nằm trong mã câu. Câu thuần Việt không được có nhãn `[en]`.
 
-**Tiến độ** — `GET /api/speaker/progress`: tổng bản đã nộp, số bản đạt, và các task thu âm đang giao.
+**Tiến độ** — `GET /api/speaker/progress`: tổng bản đã nộp, số bản đạt, và các task thu âm đang giao. Mỗi task trong `activeTasks` có `taskTitle` (tên nhiệm vụ — **không phụ thuộc** task có thuộc chiến dịch hay không), cùng `description` và `campaignName`.
 
 **Đợt, bảng xếp hạng, đăng ký (mới — thay `CURRENT_ROUND`, `ROUND_LEADERBOARD`, `NEXT_ROUND`)**
 
