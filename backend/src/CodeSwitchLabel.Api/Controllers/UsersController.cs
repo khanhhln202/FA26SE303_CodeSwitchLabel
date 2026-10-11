@@ -148,6 +148,13 @@ public class MeController(IUserService userService) : ControllerBase
         [FromBody] ChangePasswordRequest request, CancellationToken ct)
         => Ok(await userService.ChangeOwnPasswordAsync(User.GetUserId(), request, ct));
 
+    /// <summary>Sửa họ tên, số điện thoại của chính mình. Trường nào không gửi thì giữ nguyên; gửi chuỗi rỗng để xoá số điện thoại.</summary>
+    [HttpPatch]
+    [ProducesResponseType(typeof(UserDetailDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<UserDetailDto>> UpdateOwn(
+        [FromBody] UpdateUserRequest request, CancellationToken ct)
+        => Ok(await userService.UpdateAsync(User.GetUserId(), request, ct));
+
     /// <summary>Hồ sơ người đọc của chính mình: năm sinh, tỉnh, trình độ tiếng Anh, nghề nghiệp, chuyên ngành.</summary>
     [HttpGet("speaker-profile")]
     [Authorize(Roles = "Speaker")]
