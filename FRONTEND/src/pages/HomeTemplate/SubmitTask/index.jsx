@@ -13,7 +13,7 @@ import {
 } from "../../../constants/theme";
 import { formatTime } from "../../../utils/audio";
 import { uploadRecordingApi } from "../../../services/recordingApi";
-import { GET_NEXT_SCRIPT_API, GET_SPEAKER_PROGRESS_API, UPLOAD_RECORDING_API } from "../../../utils/queryKey";
+import { GET_NEXT_SCRIPT_API, GET_SPEAKER_PROGRESS_API, GET_SPEAKER_RECORDING_HISTORY_API, UPLOAD_RECORDING_API } from "../../../utils/queryKey";
 
 // id bản ghi trên trang <-> biến thể câu của backend
 const VARIANT_OF = { cs: "CodeSwitching", vi: "PureVietnamese" };
@@ -129,7 +129,8 @@ export default function SubmitTask() {
   );
 
   // Nộp lần lượt từng bản (cs rồi vi). Bản trượt kiểm tra tự động vẫn được lưu, chỉ là phải thu lại.
-  const mutation = useMutation({
+  // Mutation nộp bản ghi (lần lượt từng bản)
+  const { mutate: uploadRecordings, isPending: isUploading } = useMutation({
     mutationKey: [UPLOAD_RECORDING_API],
     mutationFn: async () => {
       const results = [];
@@ -145,9 +146,10 @@ export default function SubmitTask() {
       return results;
     },
     onSuccess: (results) => {
-      // Tiến độ và câu tiếp theo đã đổi -> tải lại
+      // Tiến độ, câu tiếp theo và lịch sử ghi âm đã đổi -> tải lại
       queryClient.invalidateQueries({ queryKey: [GET_SPEAKER_PROGRESS_API] });
       queryClient.invalidateQueries({ queryKey: [GET_NEXT_SCRIPT_API] });
+      queryClient.invalidateQueries({ queryKey: [GET_SPEAKER_RECORDING_HISTORY_API] });
 
       const failed = results.filter((r) => !r.qcPassed);
       if (failed.length) {
@@ -231,12 +233,12 @@ export default function SubmitTask() {
           <RotateCcw className="w-4 h-4" /> Quay lại kiểm tra
         </button>
         <button
-          onClick={() => mutation.mutate()}
-          disabled={mutation.isPending}
+          onClick={() => uploadRecordings()}
+          disabled={isUploading}
           className="flex-[2] py-4 text-white font-label text-body rounded-2xl hover:opacity-90 flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.99] transition-all"
           style={{ background: ACCENT, boxShadow: `0 10px 24px ${ACCENT}40` }}
         >
-          {mutation.isPending ? <span>Đang gửi...</span> : (<><Send className="w-4 h-4" /> Gửi bản ghi</>)}
+          {isUploading ? <span>Đang gửi...</span> : (<><Send className="w-4 h-4" /> Gửi bản ghi</>)}
         </button>
       </div>
     </div>

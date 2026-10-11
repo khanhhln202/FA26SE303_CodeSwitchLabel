@@ -21,7 +21,7 @@ import {
 import Loading from "../../../../components/Loading/Loading";
 import ErrorState from "../../../../components/ErrorState/ErrorState";
 import EmptyState from "../../../../components/EmptyState/EmptyState";
-import { getSpeakerRecordingHistoryApi } from "../../../../services/speakerApi";
+import { getAllSpeakerRecordingHistoryApi } from "../../../../services/speakerApi";
 import { getRecordingAudioUrlApi } from "../../../../services/recordingApi";
 import { GET_SPEAKER_RECORDING_HISTORY_API, GET_RECORDING_AUDIO_URL_API } from "../../../../utils/queryKey";
 
@@ -81,7 +81,8 @@ function groupByPair(recordings) {
 
 /** Sóng âm của 1 bản ghi: link nghe chỉ lấy khi dòng đang hiện (link hết hạn sau 15 phút nên giữ cache 10 phút). */
 function RecordingAudio({ recording, variant, transcript }) {
-  const { data } = useQuery({
+  // Call API lấy link nghe tạm của bản ghi
+  const { data: audio } = useQuery({
     queryKey: [GET_RECORDING_AUDIO_URL_API, recording?.recordingId],
     queryFn: () => getRecordingAudioUrlApi(recording.recordingId),
     enabled: Boolean(recording),
@@ -95,7 +96,7 @@ function RecordingAudio({ recording, variant, transcript }) {
     <WaveformInline
       compact
       label={variant === "cs" ? "VI-EN" : "VI"}
-      src={data?.url}
+      src={audio?.url}
       demoSeed={`${variant}-${transcript}`}
       demoDuration={recording.durationSec}
     />
@@ -171,21 +172,13 @@ export default function RecordingHistory() {
   const [searchTerm, setSearchTerm] = useState("");
   const [taskFilter, setTaskFilter] = useState("all");
 
-  // Lấy hết lịch sử (mỗi lần tối đa 100 bản) rồi gộp theo cặp - lọc, tìm, phân trang làm ở FE như bảng cũ
-  const historyQuery = useQuery({
+  // Call API lấy hết lịch sử (mỗi lần tối đa 100 bản) rồi gộp theo cặp - lọc, tìm, phân trang làm ở FE như bảng cũ
+  const { data: recordings, isLoading, isError, error, refetch } = useQuery({
     queryKey: [GET_SPEAKER_RECORDING_HISTORY_API],
-    queryFn: async () => {
-      const all = [];
-      for (let page = 1; ; page += 1) {
-        const result = await getSpeakerRecordingHistoryApi({ page, pageSize: 100 });
-        all.push(...result.items);
-        if (!result.hasNext) break;
-      }
-      return all;
-    },
+    queryFn: getAllSpeakerRecordingHistoryApi,
   });
 
-  const withStatus = useMemo(() => groupByPair(historyQuery.data ?? []), [historyQuery.data]);
+  const withStatus = useMemo(() => groupByPair(recordings ?? []), [recordings]);
 
   const stats = useMemo(() => {
     const total = withStatus.length;
@@ -222,9 +215,9 @@ export default function RecordingHistory() {
   const startIndex = (currentPage - 1) * itemsPerPage;
   const pageItems = filteredData.slice(startIndex, startIndex + itemsPerPage);
 
-  if (historyQuery.isLoading) return <Loading />;
-  if (historyQuery.isError) {
-    return <ErrorState message={historyQuery.error.message} onRetry={historyQuery.refetch} />;
+  if (isLoading) return <Loading />;
+  if (isError) {
+    return <ErrorState message={error.message} onRetry={refetch} />;
   }
 
   return (
@@ -366,7 +359,8 @@ export default function RecordingHistory() {
                 return (
                   <tbody
                     key={item.id}
-                    className="border-b border-[#F0EEE6] last:border-b-0 type-ui"
+                    // Dòng cuối vẫn có đường kẻ khi trang chưa đầy; trang đủ 10 dòng thì bỏ để không chồng lên viền của thanh phân trang
+                    className={`border-b border-[#F0EEE6] type-ui ${pageItems.length === itemsPerPage ? "last:border-b-0" : ""}`}
                   >
                     {["cs", "vi"].map((variant) => {
                       const transcript =

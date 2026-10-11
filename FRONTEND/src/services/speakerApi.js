@@ -104,3 +104,23 @@ export const getSpeakerContributionHistoryApi = async ({ page = 1, pageSize = 10
     throw new Error(message, { cause: error });
   }
 };
+
+// Lấy HẾT lịch sử ghi âm (gọi lần lượt từng trang 100 bản tới khi hết) - bảng lịch sử lọc / phân trang ở FE
+export const getAllSpeakerRecordingHistoryApi = async () => {
+  const all = [];
+  for (let page = 1; ; page += 1) {
+    const result = await getSpeakerRecordingHistoryApi({ page, pageSize: 100 });
+    all.push(...result.items);
+    if (!result.hasNext) return all;
+  }
+};
+
+// Lấy HẾT lịch sử đóng góp câu (gọi lần lượt từng trang 100 câu tới khi hết)
+export const getAllSpeakerContributionHistoryApi = async () => {
+  const all = [];
+  for (let page = 1; ; page += 1) {
+    const result = await getSpeakerContributionHistoryApi({ page, pageSize: 100 });
+    all.push(...result.items);
+    if (!result.hasNext) return all;
+  }
+};

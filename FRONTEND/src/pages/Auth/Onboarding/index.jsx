@@ -61,7 +61,8 @@ export default function Onboarding() {
   const user = getCurrentUser();
 
   const queryClient = useQueryClient();
-  const mutation = useMutation({
+  // Mutation lưu hồ sơ người đọc
+  const { mutate: saveProfile, isPending: isSaving } = useMutation({
     mutationKey: [UPDATE_SPEAKER_PROFILE_API],
     mutationFn: updateSpeakerProfileApi,
     onSuccess: (profile) => {
@@ -82,8 +83,8 @@ export default function Onboarding() {
     initialValues: { gender: "", birthYear: "", province: "", occupation: "", major: "", englishLevel: "", agreed: false },
     validationSchema: profileSchema,
     onSubmit: (values) => {
-      if (mutation.isPending) return;
-      mutation.mutate({
+      if (isSaving) return;
+      saveProfile({
         birthYear: Number(values.birthYear),
         province: values.province,
         occupation: values.occupation,
@@ -204,8 +205,8 @@ export default function Onboarding() {
           {errorOf("agreed") && <p className="type-caption text-[var(--auth-error)] mt-1.5 ml-7" role="alert">{errorOf("agreed")}</p>}
         </div>
 
-        <PrimaryButton type="submit" disabled={mutation.isPending} className="mt-1">
-          {mutation.isPending ? "Đang lưu..." : <>Lưu và bắt đầu <ArrowRight className="w-4 h-4" /></>}
+        <PrimaryButton type="submit" disabled={isSaving} className="mt-1">
+          {isSaving ? "Đang lưu..." : <>Lưu và bắt đầu <ArrowRight className="w-4 h-4" /></>}
         </PrimaryButton>
       </form>
     </AuthSplitLayout>
