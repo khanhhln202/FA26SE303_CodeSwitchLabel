@@ -1,0 +1,21 @@
+# File phai giong nhau tren may chay Linux, khong duoc phai chay CRLF.
+#
+# Script shell va SQL chay tren may chay that (Ubuntu). CRLF trong deploy.sh lam
+# bash bao loi "bad interpreter"; CRLF trong file SQL ma PostgreSQL doc lai
+# khong sao, nhung SQL neu them tu khoa `\` o cuoi dong se hong.
+#
+# Repo dung core.autocrlf=true nen file do mo tren Windows se CRLF. Khai bao
+# o day de Git luôn luu LF trong index, bat ke ai edit tren may nao.
+* text=auto
+
+*.sh    text eol=lf
+*.sql   text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+
+# File nhi phai giu nguyen byte (khong dung chua nhin doi dong)
+*.docx      binary
+*.png       binary
+*.jpg       binary
+*.wav       binary
+*.m4a       binary
