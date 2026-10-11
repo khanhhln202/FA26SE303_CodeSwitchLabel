@@ -73,6 +73,20 @@ export const getSpeakerRecordingHistoryApi = async ({ page = 1, pageSize = 100 }
   }
 };
 
+// Thống kê bản ghi của chính mình: GET /api/speaker/stats
+// Trả về { total, approved, rejected, pending } - pending gồm cả bản chờ duyệt và bản trượt QC
+export const getSpeakerStatsApi = async () => {
+  try {
+    const response = await httpClient.get("/api/speaker/stats");
+    return response.data;
+  } catch (error) {
+    const message =
+      error.response?.data?.title ||
+      "Không lấy được thống kê bản ghi!";
+    throw new Error(message, { cause: error });
+  }
+};
+
 // Đóng góp một cặp câu mới: POST /api/speaker/scripts/contribute
 // values: { csContent, veContent (có nhãn [vi]/[en]), domain: "DailyLife" | "ItTechnology" | "Education",
 //           relation: "DirectTranslation", alignment: [{ source, source_lang, target, target_lang, relation }] }

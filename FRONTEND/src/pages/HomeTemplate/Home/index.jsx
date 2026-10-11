@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mic, Trophy, Play, Pause, CircleCheck } from 'lucide-react';
+import { Mic, Trophy, CircleCheck } from 'lucide-react';
 import CodeSwitchText from '../../../components/CodeSwitchText/CodeSwitchText';
 import {
   SURFACE_CARD,
@@ -199,26 +198,7 @@ function Leaderboard({ rows, hasRound }) {
 
 function RejectedList({ items }) {
   const navigate = useNavigate();
-  const audioRef = useRef(null);
-  const [playingId, setPlayingId] = useState(null);
   const slots = [...items.slice(0, LIST_SLOTS), ...Array(Math.max(0, LIST_SLOTS - items.length)).fill(null)];
-
-  // Dừng âm thanh khi rời trang
-  useEffect(() => () => audioRef.current?.pause(), []);
-
-  const togglePlay = (item) => {
-    if (playingId === item.id) {
-      audioRef.current?.pause();
-      setPlayingId(null);
-      return;
-    }
-    audioRef.current?.pause();
-    const audio = new Audio(item.audioUrl);
-    audio.onended = () => setPlayingId(null);
-    audio.play().catch(() => setPlayingId(null));
-    audioRef.current = audio;
-    setPlayingId(item.id);
-  };
 
   return (
     <section className="rounded-[20px] flex flex-col min-h-0" style={cardStyle}>
@@ -243,27 +223,21 @@ function RejectedList({ items }) {
         <div className="flex-1 min-h-0 flex flex-col px-2 pb-2">
           {slots.map((item, i) => {
             if (!item) {
-              return <div key={`empty-${i}`} className="flex-1 min-h-[52px]" style={i > 0 ? { borderTop: `1px dashed ${HOME_BORDER}` } : undefined} />;
+              return <div key={`empty-${i}`} className="flex-1 min-h-[64px]" style={i > 0 ? { borderTop: `1px dashed ${HOME_BORDER}` } : undefined} />;
             }
-            const isPlaying = playingId === item.id;
-            const PlayIcon = isPlaying ? Pause : Play;
             return (
               <div
                 key={item.id}
-                className="flex-1 min-h-[52px] flex items-center gap-2.5 px-2.5"
+                className="flex-1 min-h-[64px] flex items-center gap-2.5 px-2.5"
                 style={i > 0 ? { borderTop: `1px dashed ${HOME_BORDER}` } : undefined}
               >
-                <button
-                  onClick={() => togglePlay(item)}
-                  aria-label={isPlaying ? 'Dừng' : 'Nghe bản ghi'}
-                  className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center bg-white cursor-pointer hover:bg-black/[0.03]"
-                  style={{ border: `1px solid ${HOME_BORDER}`, color: HOME_ACCENT }}
-                >
-                  <PlayIcon className="w-3.5 h-3.5" />
-                </button>
                 <div className="flex-1 min-w-0">
+                  {/* Cặp câu: Việt-Anh rồi tiếng Việt */}
                   <p className="type-ui truncate" style={{ color: HOME_TEXT_HEADING }} title={item.transcript.replace(/\[(vi|en)\]/g, '')}>
                     <CodeSwitchText transcript={item.transcript} accent={HOME_ACCENT_HOVER} />
+                  </p>
+                  <p className="text-meta font-regular truncate" style={{ color: HOME_TEXT_BODY }} title={item.viTranscript.replace(/\[(vi|en)\]/g, '')}>
+                    {item.viTranscript.replace(/\[(vi|en)\]/g, '')}
                   </p>
                   <p className="text-caption font-regular mt-0.5" style={{ color: HOME_URGENT_TEXT }}>{item.reason}</p>
                 </div>

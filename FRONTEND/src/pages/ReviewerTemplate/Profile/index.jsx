@@ -2,7 +2,7 @@ import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import { Save } from 'lucide-react';
 import { toast } from 'sonner';
-import { REVIEWER_ACCENT as ACCENT } from '../../../constants/theme';
+import { SPEAKER_ACCENT_ACTIVE_ICON as ACCENT } from '../../../constants/theme'; // xanh lá thương hiệu
 import { REVIEWER_PROFILE } from '../../../mocks/reviewer/profile';
 
 const GENDERS = ['Nam', 'Nữ', 'Khác'];
@@ -71,7 +71,7 @@ export default function ReviewerProfile() {
     `${FIELD_BASE} ${
       hasError(name)
         ? 'border-[#C63B3B] focus:ring-4 focus:ring-[#C63B3B]/10'
-        : 'border-[#E5E2D8] hover:border-[#D8D5C9] focus:border-[#0052CC] focus:ring-4 focus:ring-[#0052CC]/10'
+        : 'border-[#E5E2D8] hover:border-[#D8D5C9] focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10'
     }`;
   const errorText = (name) =>
     hasError(name) && <p className="type-label text-[#C63B3B] mt-1">{formik.errors[name]}</p>;

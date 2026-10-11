@@ -33,7 +33,21 @@ export const UPLOAD_RECORDING_API = 'UPLOAD_RECORDING_API'
 export const GET_RECORDING_AUDIO_URL_API = 'GET_RECORDING_AUDIO_URL_API'
 // Lịch sử ghi âm của Speaker (GET /api/speaker/recordings/history)
 export const GET_SPEAKER_RECORDING_HISTORY_API = 'GET_SPEAKER_RECORDING_HISTORY_API'
+// Thống kê bản ghi của Speaker (GET /api/speaker/stats)
+export const GET_SPEAKER_STATS_API = 'GET_SPEAKER_STATS_API'
 
 // ===== Config (tham số hệ thống) =====
 // Danh sách chủ đề cố định (GET /api/config/topics)
 export const GET_TOPICS_API = 'GET_TOPICS_API'
+
+// ===== Reviewer (duyệt bản ghi) =====
+// Tiến độ + nhiệm vụ duyệt đang giao (GET /api/reviewer/progress)
+export const GET_REVIEWER_PROGRESS_API = 'GET_REVIEWER_PROGRESS_API'
+// Danh sách bản ghi của một task duyệt (GET /api/reviewer/tasks/{taskId}/recordings)
+export const GET_REVIEW_TASK_RECORDINGS_API = 'GET_REVIEW_TASK_RECORDINGS_API'
+// Mở một bản ghi để duyệt (GET /api/reviewer/recordings/{id})
+export const GET_REVIEW_RECORDING_API = 'GET_REVIEW_RECORDING_API'
+// Lý do từ chối bản ghi âm (GET /api/rejection-reasons)
+export const GET_REJECTION_REASONS_API = 'GET_REJECTION_REASONS_API'
+// Nộp kết quả duyệt (POST /api/recordings/{id}/reviews)
+export const SUBMIT_REVIEW_API = 'SUBMIT_REVIEW_API'

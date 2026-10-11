@@ -63,7 +63,7 @@ export const TASK_MANAGER_ACCENT_SOFT_BG = "rgba(0,82,204,0.14)";
 // ═══════════════════════════════════════════════════
 export const SIDEBAR_BG_SPEAKER = '#FFFFFF';          // sidebar trắng, ngăn với nội dung bằng viền phải
 export const SIDEBAR_IDLE_TEXT_SPEAKER = '#435A57';   // chữ mục chưa chọn trên nền trắng
-export const SIDEBAR_BORDER_SPEAKER = '#DCEAE8';      // viền phải sidebar + đường kẻ trong sidebar
+export const SIDEBAR_BORDER_SPEAKER = '#E5E2D8';      // viền phải sidebar + đường kẻ trong sidebar (cùng họ xám ấm với viền thẻ)
 export const SIDEBAR_ACTIVE_TEXT_SPEAKER = '#15803D'; // chữ mục đang chọn (xanh lá đậm)
 export const SIDEBAR_HOVER_BG_SPEAKER = 'rgba(22,163,74,0.06)';
 export const SIDEBAR_HOVER_TEXT_SPEAKER = '#13211F';

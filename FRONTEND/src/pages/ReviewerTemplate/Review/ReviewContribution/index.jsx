@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, XCircle, Search, X, AlertTriangle, ArrowRight, ArrowLeft, ClipboardCheck, FolderKanban, Filter, Check, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { REVIEWER_ACCENT as ACCENT } from '../../../../constants/theme';
+import { SPEAKER_ACCENT_ACTIVE_ICON as ACCENT, AUDIO_PRIMARY } from '../../../../constants/theme'; // ACCENT = xanh lá thương hiệu, AUDIO_PRIMARY = màu phần tiếng Anh
 import { PROPOSAL_TASK as TASK, CONTRIBUTION_QUEUE, ISSUE_QUEUE } from '../../../../mocks/reviewer/proposals';
 
 const CATEGORIES = ['Hội thoại hàng ngày', 'Công nghệ thông tin', 'Giáo dục'];
@@ -33,11 +33,12 @@ const contentOf = (it) => (it.type === 'issue' ? it.proposed || it.original : it
 
 // Nhãn pill (VI-EN / VI) đứng đầu mỗi câu - đồng bộ với InlineLabel bên trang Kiểm duyệt ghi âm.
 function InlineLabel({ variant }) {
-  const bg = variant === 'cs' ? ACCENT : '#8B8D95';
   return (
     <span
-      className="text-tag font-emphasis w-9 h-4 text-center shrink-0 rounded inline-flex items-center justify-center text-white"
-      style={{ background: bg, letterSpacing: '0.02em' }}
+      className="text-tag font-emphasis w-9 h-4 text-center shrink-0 rounded inline-flex items-center justify-center"
+      style={variant === 'cs'
+        ? { background: `${AUDIO_PRIMARY}1A`, color: AUDIO_PRIMARY, letterSpacing: '0.02em' }
+        : { background: '#F0EEE6', color: '#6E7078', letterSpacing: '0.02em' }}
     >
       {variant === 'cs' ? 'VI-EN' : 'VI'}
     </span>
@@ -157,7 +158,7 @@ export default function ReviewContribution() {
           <select
             defaultValue={TASK.title}
             aria-label="Chọn nhiệm vụ"
-            className="type-label border border-[#E5E2D8] rounded-lg px-2 py-1 bg-white text-[#16171C] outline-none focus:border-[#818CF8]"
+            className="type-label border border-[#E5E2D8] rounded-lg px-2 py-1 bg-white text-[#16171C] outline-none focus:border-[#16A34A]"
           >
             <option value={TASK.title}>{TASK.title}</option>
           </select>
@@ -166,7 +167,7 @@ export default function ReviewContribution() {
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             aria-label="Lọc loại câu"
-            className="type-label border border-[#E5E2D8] rounded-lg px-2 py-1 bg-white text-[#16171C] outline-none focus:border-[#818CF8]"
+            className="type-label border border-[#E5E2D8] rounded-lg px-2 py-1 bg-white text-[#16171C] outline-none focus:border-[#16A34A]"
           >
             {FILTERS.map((f) => <option key={f.key} value={f.key}>{f.label} ({counts[f.key]})</option>)}
           </select>
@@ -176,7 +177,7 @@ export default function ReviewContribution() {
               value={filterCategory}
               onChange={(e) => setFilterCategory(e.target.value)}
               aria-label="Lọc chủ đề"
-              className="type-label border border-[#E5E2D8] rounded-lg px-2 py-1 bg-white text-[#16171C] outline-none focus:border-[#818CF8]"
+              className="type-label border border-[#E5E2D8] rounded-lg px-2 py-1 bg-white text-[#16171C] outline-none focus:border-[#16A34A]"
             >
               <option value="all">Tất cả chủ đề</option>
               {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -190,7 +191,7 @@ export default function ReviewContribution() {
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Tìm người gửi, nội dung..."
               aria-label="Tìm kiếm"
-              className="w-56 type-label border border-[#E5E2D8] rounded-lg pl-7 pr-2 py-1 bg-white text-[#16171C] placeholder:text-[#9A9CA3] placeholder:font-regular outline-none focus:border-[#818CF8]"
+              className="w-56 type-label border border-[#E5E2D8] rounded-lg pl-7 pr-2 py-1 bg-white text-[#16171C] placeholder:text-[#9A9CA3] placeholder:font-regular outline-none focus:border-[#16A34A]"
             />
           </div>
         </div>
@@ -288,7 +289,7 @@ export default function ReviewContribution() {
                     <div className="flex flex-wrap gap-2">
                       {selected.alignment.map((a, i) => (
                         <span key={i} className="h-7 flex items-center gap-1.5 bg-[#F4F3EE] rounded-md px-2">
-                          <span className="type-ui font-mono" style={{ color: ACCENT }}>{a.source}</span>
+                          <span className="type-ui font-mono" style={{ color: AUDIO_PRIMARY }}>{a.source}</span>
                           <ArrowRight className="w-3 h-3 text-[#B7B4A9] shrink-0" />
                           <span className="type-ui text-[#16171C]">{a.target}</span>
                         </span>
@@ -371,7 +372,7 @@ export default function ReviewContribution() {
                                     placeholder="Từ tiếng Anh"
                                     aria-label={`Từ tiếng Anh ${i + 1}`}
                                     className={`h-7 px-2 rounded-md border type-ui font-mono outline-none focus:border-[#3FA66B] focus:ring-4 focus:ring-[#3FA66B]/10 transition-all min-w-0 ${pair.source.trim() ? 'border-[#E5E2D8]' : 'border-[#E0564F]'}`}
-                                    style={{ color: ACCENT }}
+                                    style={{ color: AUDIO_PRIMARY }}
                                   />
                                   <ArrowRight className="w-3 h-3 text-[#B7B4A9]" />
                                   <input

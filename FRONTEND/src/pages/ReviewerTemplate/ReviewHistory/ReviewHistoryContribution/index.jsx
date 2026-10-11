@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import Pagination from "../../../../components/Pagination/Pagination";
 import { CheckCircle2, XCircle, Clock, AlertCircle, Search, X, BarChart3, ArrowRight } from "lucide-react";
-import { REVIEWER_ACCENT as ACCENT } from "../../../../constants/theme";
+import { SPEAKER_ACCENT_ACTIVE_ICON as ACCENT, AUDIO_PRIMARY } from "../../../../constants/theme"; // ACCENT = xanh lá thương hiệu, AUDIO_PRIMARY = màu phần tiếng Anh
 import { REVIEWED_PROPOSALS as TEXT_HISTORY } from "../../../../mocks/reviewer/history";
 
 // Reviewer đang đăng nhập (mock) - dùng để lấy quyết định "của bạn" trong 3 phiếu
@@ -42,7 +42,7 @@ const TYPE_FILTERS = [
 
 function InlineLabel({ variant }) {
   return (
-    <span className="text-tag font-emphasis w-9 h-4 text-center shrink-0 rounded inline-flex items-center justify-center text-white" style={{ background: variant === "cs" ? ACCENT : "#8B8D95", letterSpacing: "0.02em" }}>
+    <span className="text-tag font-emphasis w-9 h-4 text-center shrink-0 rounded inline-flex items-center justify-center" style={variant === "cs" ? { background: `${AUDIO_PRIMARY}1A`, color: AUDIO_PRIMARY, letterSpacing: "0.02em" } : { background: "#F0EEE6", color: "#6E7078", letterSpacing: "0.02em" }}>
       {variant === "cs" ? "VI-EN" : "VI"}
     </span>
   );
@@ -243,7 +243,7 @@ export default function ReviewHistoryContribution() {
             </div>
             <div className="relative flex-1 min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#9A9CA3]" />
-              <input aria-label="Tìm câu" value={searchTerm} onChange={(event) => changeFilter(setSearchTerm)(event.target.value)} placeholder="Tìm người gửi, lý do, nội dung..." className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-[#E5E2D8] text-ui leading-4 focus:outline-none focus:border-blue-500" />
+              <input aria-label="Tìm câu" value={searchTerm} onChange={(event) => changeFilter(setSearchTerm)(event.target.value)} placeholder="Tìm người gửi, lý do, nội dung..." className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-[#E5E2D8] text-ui leading-4 focus:outline-none focus:border-[#16A34A]" />
             </div>
             {typeFilter === "contribution" && (
               <select aria-label="Lọc phân loại" value={categoryFilter} onChange={(event) => changeFilter(setCategoryFilter)(event.target.value)} className="min-w-0 rounded-lg border border-[#E5E2D8] px-3 py-1.5 bg-white text-meta text-[#16171C]">
@@ -315,7 +315,7 @@ export default function ReviewHistoryContribution() {
         </div>
 
         <div className="px-3 border-t border-[#E5E2D8] bg-white shrink-0">
-          <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={(page) => setCurrentPage(page)} accent={ACCENT} />
+          <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={(page) => setCurrentPage(page)} accent={ACCENT} variant="soft" />
         </div>
       </div>
 
