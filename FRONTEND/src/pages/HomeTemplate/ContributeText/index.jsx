@@ -9,7 +9,8 @@ import Loading from '../../../components/Loading/Loading';
 import ErrorState from '../../../components/ErrorState/ErrorState';
 import { CONTRIBUTE_SCRIPT_API, GET_SPEAKER_CONTRIBUTION_HISTORY_API, GET_TOPICS_API } from '../../../utils/queryKey';
 import {
-  SPEAKER_ACCENT as ACCENT,
+  SPEAKER_ACCENT_ACTIVE_ICON as ACCENT, // xanh lá thương hiệu
+  AUDIO_PRIMARY, // màu phần tiếng Anh
   SUCCESS, WARNING,
   CHIP_SUCCESS_TEXT,
   CHIP_DANGER_BG, CHIP_DANGER_BORDER, CHIP_DANGER_TEXT,
@@ -270,7 +271,7 @@ export default function ContributeText() {
                     onChange={(e) => updatePair(i, 'source', e.target.value)}
                     placeholder="từ tiếng Anh"
                     className="min-w-0 flex-1 px-3 py-1.5 text-ui font-mono font-label rounded-lg outline-none transition-all"
-                    style={{ ...fieldStyle, color: ACCENT }}
+                    style={{ ...fieldStyle, color: AUDIO_PRIMARY }}
                     onFocus={focusField}
                     onBlur={blurField}
                   />

@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Pagination from "../../../../components/Pagination/Pagination";
 import { CheckCircle2, XCircle, Clock, AlertCircle, X, BarChart3, Search, ArrowRight } from "lucide-react";
-import { SPEAKER_ACCENT as ACCENT, SUCCESS, DANGER, WARNING, AUDIO_PRIMARY } from "../../../../constants/theme";
+import { SPEAKER_ACCENT_ACTIVE_ICON as ACCENT, SUCCESS, DANGER, WARNING, AUDIO_PRIMARY } from "../../../../constants/theme"; // ACCENT = xanh lá thương hiệu, AUDIO_PRIMARY = màu phần tiếng Anh
 import CodeSwitchText from "../../../../components/CodeSwitchText/CodeSwitchText";
 import { stripTags } from "../../../../utils/codeSwitch";
 import Loading from "../../../../components/Loading/Loading";
@@ -48,9 +48,9 @@ function toRow(item) {
 function SentenceContent({ item }) {
   return (
     <>
-      {[{ label: "VI-EN", text: item.cs_transcript, color: ACCENT }, { label: "VI", text: item.vi_equivalent, color: "#8B8D95" }].map(({ label, text, color }) => (
+      {[{ label: "VI-EN", text: item.cs_transcript, pill: { background: `${AUDIO_PRIMARY}1A`, color: AUDIO_PRIMARY } }, { label: "VI", text: item.vi_equivalent, pill: { background: "#F0EEE6", color: "#6E7078" } }].map(({ label, text, pill }) => (
         <div key={label} className="bg-[#F7F5EF] p-3.5 rounded-xl border border-[#E5E2D8] mb-2.5 flex items-center gap-2.5">
-          <span className="text-tag font-emphasis w-9 h-4 shrink-0 rounded inline-flex items-center justify-center text-white" style={{ background: color }}>{label}</span>
+          <span className="text-tag font-emphasis w-9 h-4 shrink-0 rounded inline-flex items-center justify-center" style={pill}>{label}</span>
           <p className="type-body text-[#16171C] break-words min-w-0"><CodeSwitchText transcript={text} accent={AUDIO_PRIMARY} /></p>
         </div>
       ))}
@@ -60,7 +60,7 @@ function SentenceContent({ item }) {
           <div className="flex flex-wrap gap-2">
             {item.alignment.map((a, i) => (
               <div key={i} className="flex items-center gap-1.5 bg-[#F0EEE6] border border-[#E5E2D8] rounded-lg px-2.5 py-1.5">
-                <span className="type-label font-mono" style={{ color: ACCENT }}>{a.source}</span>
+                <span className="type-label font-mono" style={{ color: AUDIO_PRIMARY }}>{a.source}</span>
                 <ArrowRight className="w-3 h-3 text-[#B7B4A9] shrink-0" />
                 <span className="type-meta text-[#16171C]">{a.target}</span>
               </div>
@@ -195,7 +195,7 @@ export default function ContributionHistory() {
                   setCurrentPage(1);
                 }}
                 placeholder="Tìm phân loại, nội dung..."
-                className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-[#E5E2D8] text-ui leading-4 focus:outline-none focus:border-blue-500"
+                className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-[#E5E2D8] text-ui leading-4 focus:outline-none focus:border-[#16A34A]"
               />
             </div>
             <select
@@ -279,7 +279,7 @@ export default function ContributionHistory() {
         </div>
 
         <div className="px-3 border-t border-[#E5E2D8] bg-white shrink-0">
-          <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={(page) => setCurrentPage(page)} accent={ACCENT} />
+          <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={(page) => setCurrentPage(page)} accent={ACCENT} variant="soft" />
         </div>
       </div>
 

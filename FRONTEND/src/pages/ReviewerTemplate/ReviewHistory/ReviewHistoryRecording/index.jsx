@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { parseCodeSwitch, stripTags } from "../../../../utils/codeSwitch";
 import {
-  REVIEWER_ACCENT as ACCENT,
+  SPEAKER_ACCENT_ACTIVE_ICON as ACCENT, // xanh lá thương hiệu
   AUDIO_PRIMARY,
 } from "../../../../constants/theme";
 import { REVIEWED_RECORDINGS as AUDIO_HISTORY } from "../../../../mocks/reviewer/history";
@@ -36,7 +36,7 @@ function votedCountOf(reviews) {
 }
 
 function InlineLabel({ variant }) {
-  return <span className="text-tag font-emphasis w-9 h-4 shrink-0 rounded inline-flex items-center justify-center text-white" style={{ background: variant === "cs" ? ACCENT : "#8B8D95" }}>{variant === "cs" ? "VI-EN" : "VI"}</span>;
+  return <span className="text-tag font-emphasis w-9 h-4 shrink-0 rounded inline-flex items-center justify-center" style={variant === "cs" ? { background: `${AUDIO_PRIMARY}1A`, color: AUDIO_PRIMARY } : { background: "#F0EEE6", color: "#6E7078" }}>{variant === "cs" ? "VI-EN" : "VI"}</span>;
 }
 
 function StatCard({ icon: Icon, label, value, pct, accent, bg }) {
@@ -209,7 +209,7 @@ export default function ReviewHistoryRecording() {
                   setCurrentPage(1);
                 }}
                 placeholder="Tìm nhiệm vụ, speaker, nội dung..."
-                className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-[#E5E2D8] text-ui leading-4 focus:outline-none focus:border-blue-500"
+                className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-[#E5E2D8] text-ui leading-4 focus:outline-none focus:border-[#16A34A]"
               />
             </div>
             <select
@@ -412,6 +412,7 @@ export default function ReviewHistoryRecording() {
             totalPages={totalPages}
             onPageChange={setCurrentPage}
             accent={ACCENT}
+            variant="soft"
           />
         </div>
       </section>

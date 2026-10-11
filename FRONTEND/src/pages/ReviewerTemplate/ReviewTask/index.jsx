@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { Search, Filter, ArrowRight, UserCheck, Headphones, FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Pagination from '../../../components/Pagination/Pagination';
-import { REVIEWER_ACCENT as ACCENT } from '../../../constants/theme';
+import { SPEAKER_ACCENT_ACTIVE_ICON as ACCENT } from '../../../constants/theme'; // xanh lá thương hiệu
 import { ASSIGNED_TASKS } from '../../../mocks/reviewer/tasks';
 
 // Thứ tự ưu tiên hiển thị theo nhóm trạng thái
@@ -46,7 +46,7 @@ export default function ReviewTasks() {
   // Style trạng thái theo hệ màu app
   const statusStyle = (type) => {
     if (type === 'completed') return { chip: 'bg-[#3FA66B]/10 text-[#1F5C3F]', dot: '#3FA66B' };
-    if (type === 'in-progress') return { chip: 'text-[#4C4D9E]', dot: ACCENT, chipBg: 'rgba(129,140,248,0.14)' };
+    if (type === 'in-progress') return { chip: 'text-[#15803D]', dot: ACCENT, chipBg: 'rgba(22,163,74,0.10)' };
     return { chip: 'bg-[#F0EEE6] text-[#6E7078]', dot: '#B7B4A9' };
   };
 
@@ -62,7 +62,7 @@ export default function ReviewTasks() {
             value={searchTerm}
             onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
             placeholder="Tìm theo tên nhiệm vụ..."
-            className="w-full pl-9 pr-4 py-2 text-meta border border-[#E5E2D8] rounded-xl outline-none focus:border-[#818CF8] focus:ring-4 focus:ring-[#818CF8]/10 transition-all"
+            className="w-full pl-9 pr-4 py-2 text-meta border border-[#E5E2D8] rounded-xl outline-none focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10 transition-all"
           />
         </div>
         <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto justify-end">
@@ -71,7 +71,7 @@ export default function ReviewTasks() {
             <select
               value={filterAssignee}
               onChange={(e) => { setFilterAssignee(e.target.value); setCurrentPage(1); }}
-              className="text-meta border border-[#E5E2D8] rounded-xl px-3 py-2 bg-white text-[#16171C] font-label outline-none focus:border-[#818CF8]"
+              className="text-meta border border-[#E5E2D8] rounded-xl px-3 py-2 bg-white text-[#16171C] font-label outline-none focus:border-[#16A34A]"
             >
               <option value="all">Tất cả người giao</option>
               <option value="Nguyễn Hoàng">Task Manager - Nguyễn Hoàng</option>
@@ -81,7 +81,7 @@ export default function ReviewTasks() {
           <select
             value={filterStatus}
             onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1); }}
-            className="text-meta border border-[#E5E2D8] rounded-xl px-3 py-2 bg-white text-[#16171C] font-label outline-none focus:border-[#818CF8]"
+            className="text-meta border border-[#E5E2D8] rounded-xl px-3 py-2 bg-white text-[#16171C] font-label outline-none focus:border-[#16A34A]"
           >
             <option value="all">Tất cả trạng thái</option>
             <option value="in-progress">Đang thực hiện</option>
@@ -97,13 +97,13 @@ export default function ReviewTasks() {
           <table className={`w-full border-collapse ${paginatedTasks.length === pageSize ? 'h-full' : ''}`}>
             <thead>
               <tr className="bg-[#F7F5EF] type-label text-[#9A9CA3] border-b border-[#E5E2D8] whitespace-nowrap">
-                <th className="py-2.5 px-3 text-center w-12">STT</th>
-                <th className="py-2.5 px-3 text-left w-[26%]">Nhiệm vụ</th>
-                <th className="py-2.5 px-3 text-left">Người giao</th>
-                <th className="py-2.5 px-3 text-left min-w-[140px]">Mục tiêu (Target)</th>
-                <th className="py-2.5 px-3 text-left">Hạn chót</th>
-                <th className="py-2.5 px-3 text-left">Trạng thái</th>
-                <th className="py-2.5 px-3 text-left">Hành động</th>
+                <th className="py-2 px-3 text-center w-12">STT</th>
+                <th className="py-2 px-3 text-left w-[26%]">Nhiệm vụ</th>
+                <th className="py-2 px-3 text-left">Người giao</th>
+                <th className="py-2 px-3 text-left min-w-[140px]">Mục tiêu (Target)</th>
+                <th className="py-2 px-3 text-left">Hạn chót</th>
+                <th className="py-2 px-3 text-left">Trạng thái</th>
+                <th className="py-2 px-3 text-left">Hành động</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0EEE6] type-ui">
@@ -114,21 +114,21 @@ export default function ReviewTasks() {
                 const TypeIcon = type.icon;
                 return (
                   <tr key={task.id} className="hover:bg-[#F7F5EF]/70 transition-colors">
-                    <td className="py-2 px-3 text-center whitespace-nowrap">
+                    <td className="py-1.5 px-3 text-center whitespace-nowrap">
                       <span className="text-[#9A9CA3] type-meta">{(currentPage - 1) * pageSize + idx + 1}</span>
                     </td>
-                    <td className="py-2 px-3 text-left">
+                    <td className="py-1.5 px-3 text-left">
                       <p className="text-ui font-emphasis text-[#16171C] break-words">{task.title}</p>
                       <span className="mt-0.5 flex items-center gap-1 type-meta text-[#6E7078]">
                         <TypeIcon className="w-3 h-3" /> {type.label}
                       </span>
                     </td>
-                    <td className="py-2 px-3 text-left whitespace-nowrap">
+                    <td className="py-1.5 px-3 text-left whitespace-nowrap">
                       <span className="flex items-center gap-1.5 min-w-0 text-[#6E7078]">
                         <UserCheck className="w-3.5 h-3.5 text-[#9A9CA3] shrink-0" /> <span className="truncate" title={task.assignedBy}>{task.assignedBy.replace(/^Task Manager - /, '')}</span>
                       </span>
                     </td>
-                    <td className="py-2 px-3 text-left">
+                    <td className="py-1.5 px-3 text-left">
                       <div className="flex flex-col gap-1 max-w-[180px]">
                         <div className="flex justify-between gap-2 whitespace-nowrap type-meta text-[#6E7078]">
                           <span>{task.reviewed}/{task.target} {type.unit}</span>
@@ -139,16 +139,16 @@ export default function ReviewTasks() {
                         </div>
                       </div>
                     </td>
-                    <td className="py-2 px-3 text-left whitespace-nowrap">
+                    <td className="py-1.5 px-3 text-left whitespace-nowrap">
                       <span className="type-meta text-[#6E7078]">{task.deadline}</span>
                     </td>
-                    <td className="py-2 px-3 text-left whitespace-nowrap">
+                    <td className="py-1.5 px-3 text-left whitespace-nowrap">
                       <span className={`inline-flex items-center gap-1.5 px-2.5 h-6 rounded-full type-caption ${st.chip}`} style={st.chipBg ? { background: st.chipBg } : {}}>
                         <span className="w-1.5 h-1.5 rounded-full" style={{ background: st.dot }} />
                         {task.status}
                       </span>
                     </td>
-                    <td className="py-2 px-3 text-left whitespace-nowrap">
+                    <td className="py-1.5 px-3 text-left whitespace-nowrap">
                       <button
                         onClick={() => navigate(type.path(task))}
                         className="h-7 px-3 rounded-lg border bg-white type-label flex items-center gap-1 text-(--accent) border-(--accent) hover:bg-(--accent) hover:text-white transition-colors cursor-pointer"
@@ -169,7 +169,7 @@ export default function ReviewTasks() {
         </div>
 
         <div className="shrink-0 px-3 border-t border-[#E5E2D8]">
-          <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={(page) => setCurrentPage(page)} accent={ACCENT} />
+          <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={(page) => setCurrentPage(page)} accent={ACCENT} variant="soft" />
         </div>
       </div>
     </div>

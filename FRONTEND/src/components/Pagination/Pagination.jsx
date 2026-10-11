@@ -2,7 +2,10 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 // accent: màu của trang active — mặc định cam (Speaker). Các vai khác truyền màu riêng:
 // Reviewer -> "#6366D8", Task Manager / Admin -> màu tương ứng.
-export default function Pagination({ currentPage = 1, totalPages = 3, onPageChange, accent = '#FF4B2E' }) {
+// variant: "solid" (mặc định, tô đặc + bóng) | "soft" (nền nhạt + viền + chữ màu, không bóng) - dùng khi
+// phân trang không nên là thứ nổi nhất màn hình. accent phải là mã hex 6 số (#RRGGBB).
+export default function Pagination({ currentPage = 1, totalPages = 3, onPageChange, accent = '#FF4B2E', variant = 'solid' }) {
+  const soft = variant === 'soft';
   const pages = Array.from({ length: totalPages }, (_, i) => i + 1);
 
   // đổi hex -> rgba cho box-shadow theo accent
@@ -31,13 +34,14 @@ export default function Pagination({ currentPage = 1, totalPages = 3, onPageChan
           <button
             key={page}
             onClick={() => onPageChange && onPageChange(page)}
-            style={{
-              backgroundColor: isActive ? accent : 'transparent',
-              boxShadow: isActive ? shadow(accent) : 'none',
-            }}
+            style={
+              isActive && soft
+                ? { backgroundColor: `${accent}1A`, color: accent, boxShadow: `inset 0 0 0 1px ${accent}59` }
+                : { backgroundColor: isActive ? accent : 'transparent', boxShadow: isActive ? shadow(accent) : 'none' }
+            }
             className={`w-8 h-8 rounded-lg text-meta font-label transition-all ${
               isActive
-                ? 'text-white'
+                ? soft ? '' : 'text-white'
                 : 'border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#25272E] text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 dark:hover:text-white'
             }`}
           >

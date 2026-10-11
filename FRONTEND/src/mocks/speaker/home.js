@@ -35,35 +35,36 @@ export const REJECTION_REASONS = {
 };
 
 // Bản ghi bị Reviewer từ chối, Speaker cần ghi lại (trang chủ hiện tối đa 5)
+// Mỗi mục là 1 cặp câu: transcript = câu Việt-Anh, viTranscript = câu tiếng Việt (tạm hardcode, chưa có API)
 export const REJECTED_RECORDINGS = [
   {
     id: 'REC-0412',
     transcript: '[vi]Team mình sẽ [en]deploy [vi]bản mới tối nay nhé.',
+    viTranscript: '[vi]Nhóm mình sẽ triển khai bản mới tối nay nhé.',
     reason: REJECTION_REASONS.PRONUNCIATION,
-    audioUrl: '/review-recording-first-sample.m4a',
   },
   {
     id: 'REC-0398',
     transcript: '[vi]Anh [en]clear cache [vi]rồi thử lại giúp em.',
+    viTranscript: '[vi]Anh xoá bộ nhớ đệm rồi thử lại giúp em.',
     reason: REJECTION_REASONS.NOISE,
-    audioUrl: '/review-recording-first-sample.m4a',
   },
   {
     id: 'REC-0371',
     transcript: '[vi]Em gửi [en]pull request [vi]trước 5 giờ chiều nha.',
+    viTranscript: '[vi]Em gửi yêu cầu hợp nhất mã trước 5 giờ chiều nha.',
     reason: REJECTION_REASONS.OTHER,
-    audioUrl: '/review-recording-first-sample.m4a',
   },
   {
     id: 'REC-0355',
     transcript: '[vi]Mình cần [en]review [vi]lại phần [en]API [vi]trước khi [en]merge.',
+    viTranscript: '[vi]Mình cần xem lại phần giao diện lập trình trước khi gộp mã.',
     reason: REJECTION_REASONS.MISREAD,
-    audioUrl: '/review-recording-first-sample.m4a',
   },
   {
     id: 'REC-0342',
     transcript: '[vi]Server đang bị [en]timeout [vi]nên em [en]restart [vi]lại rồi.',
+    viTranscript: '[vi]Máy chủ đang bị quá thời gian chờ nên em khởi động lại rồi.',
     reason: REJECTION_REASONS.OTHER,
-    audioUrl: '/review-recording-first-sample.m4a',
   },
 ];

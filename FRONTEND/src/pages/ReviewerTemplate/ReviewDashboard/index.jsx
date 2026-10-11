@@ -2,13 +2,24 @@ import { useState } from 'react';
 import { ArrowRight, PieChart, FolderKanban, CircleCheck, CircleX, Clock, FileWarning, UserX, Eye, X, AlertTriangle, BarChart3 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Pagination from '../../../components/Pagination/Pagination';
-import { REVIEWER_ACCENT as ACCENT } from '../../../constants/theme';
+import {
+  SPEAKER_ACCENT_ACTIVE_ICON as ACCENT, // màu thương hiệu xanh lá (cùng logo, sidebar) - dùng cho mọi chỗ "đang chọn / bấm được"
+  SIDEBAR_ACTIVE_TEXT_SPEAKER as ACCENT_TEXT, // xanh lá đậm cho chữ trên nền nhạt
+  AUDIO_PRIMARY,
+} from '../../../constants/theme';
+
+// Nền nhạt của màu thương hiệu (hover nút, tab đang chọn)
+const ACCENT_SOFT = 'rgba(22,163,74,0.08)';
+// Xanh dương chỉ dùng cho phần "tiếng Anh" (từ tiếng Anh, nhãn VI-EN) - cùng AUDIO_PRIMARY như các trang khác
+const ENGLISH_BLUE = AUDIO_PRIMARY;
+const ENGLISH_BLUE_SOFT = `${AUDIO_PRIMARY}1A`;
 import { TOP_REJECTED_SENTENCES, TOP_REJECTED_SPEAKERS, REJECT_STATS_DATA, ONGOING_TASKS, REVIEW_TOTALS } from '../../../mocks/reviewer/dashboard';
 
 const ITEMS_PER_PAGE = 5;
 
-// Thang màu xếp hạng cho "Lý do từ chối phổ biến": hạng 1 đỏ, 2 cam, 3 vàng, 4 xanh lá.
-const RANK_COLORS = ['#C63B3B', '#E8763C', '#D9A441', '#3FA66B'];
+// "Lý do từ chối phổ biến" cùng một loại dữ liệu (đều là từ chối) -> MỘT màu đỏ, đậm nhạt theo thứ hạng.
+// (Trước đây đỏ-cam-vàng-xanh lá kiểu đèn giao thông: xanh lá dễ hiểu nhầm là "tốt".)
+const RANK_COLORS = ['#C63B3B', '#D46B6B', '#E29A9A', '#EDBDBD'];
 
 // Màu chủ đạo của 2 popup chi tiết (câu & người) - khớp đúng màu icon ở panel ngoài dashboard
 // ("Câu bị từ chối nhiều nhất" / "Người bị từ chối nhiều nhất" dùng #C63B3B đỏ).
@@ -36,7 +47,7 @@ function SentenceText({ sentence }) {
   const words = sentence.englishWords || [];
   if (!words.length) return sentence.text;
   return sentence.text.split(new RegExp(`(${words.join('|')})`, 'g')).map((part, index) =>
-    words.includes(part) ? <span key={index} className="text-[#2563EB]">{part}</span> : part
+    words.includes(part) ? <span key={index} style={{ color: ENGLISH_BLUE }}>{part}</span> : part
   );
 }
 
@@ -45,7 +56,13 @@ function SentencePair({ sentence, detail = false }) {
     <div className={detail ? 'space-y-3 mb-4' : 'space-y-0.5'}>
       {['VI-EN', 'VI'].map((label, index) => (
         <div key={label} className={`flex items-center gap-2 ${detail ? 'bg-[#F7F5EF] border border-[#E5E2D8] rounded-xl p-3.5' : ''}`}>
-          <span className="w-11 shrink-0 rounded text-center text-caption leading-4 font-label text-white" style={{ background: index === 0 ? ACCENT : '#8C8D96' }}>{label}</span>
+          {/* Nhãn nền nhạt + chữ màu (thay vì tô đặc) để không giành chú ý với nội dung câu */}
+          <span
+            className="w-11 shrink-0 rounded text-center text-caption leading-4 font-label"
+            style={index === 0 ? { background: ENGLISH_BLUE_SOFT, color: ENGLISH_BLUE } : { background: '#F0EEE6', color: '#6E7078' }}
+          >
+            {label}
+          </span>
           <p className={detail ? 'type-body' : 'truncate type-ui'}>
             {index === 0 ? <SentenceText sentence={sentence} /> : sentence.viText || sentence.text}
           </p>
@@ -122,7 +139,7 @@ export default function ReviewDashboard() {
     <div className="flex flex-col gap-2 text-left font-sans min-[850px]:min-h-[calc(100dvh-129px)] lg:[@media(max-height:800px)]:-my-[22px]">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {[
-          { label: 'Đã kiểm duyệt', value: totalReviewed, detail: 'Tổng số bản đã xử lý', icon: BarChart3, color: ACCENT, background: '#EDF3FF' },
+          { label: 'Đã kiểm duyệt', value: totalReviewed, detail: 'Tổng số bản đã xử lý', icon: BarChart3, color: '#16171C', background: '#F0EEE6' },
           { label: 'Đã phê duyệt', value: approvedCount, detail: `${approvedPercent}% tổng số đã kiểm duyệt`, icon: CircleCheck, color: '#3FA66B', background: '#EAF7EF' },
           { label: 'Đã từ chối', value: rejectedCount, detail: `${rejectedPercent}% tổng số đã kiểm duyệt`, icon: CircleX, color: '#C63B3B', background: '#FDEAEA' },
         ].map(({ label, value, detail, icon: Icon, color, background }) => (
@@ -141,7 +158,7 @@ export default function ReviewDashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 items-stretch lg:flex-[0.75_0_auto]">
         <Panel className="lg:col-span-3 flex flex-col">
-          <PanelHeader icon={FolderKanban} iconColor={ACCENT} title="Tiến độ nhiệm vụ"
+          <PanelHeader icon={FolderKanban} iconColor="#6E7078" title="Tiến độ nhiệm vụ"
             right={<span className="type-meta text-[#6E7078]">{incompleteTasks.length} nhiệm vụ đang thực hiện</span>} />
           <div className="grid auto-rows-fr gap-2 flex-1">
             {[...ongoingTasks].sort((a, b) => a.daysLeft - b.daysLeft).map((task) => {
@@ -157,12 +174,12 @@ export default function ReviewDashboard() {
                         {urgent && <span className="flex items-center gap-1 font-label text-[#A85E12]"><AlertTriangle className="w-3 h-3" /> Còn {task.daysLeft} ngày</span>}
                       </div>
                     </div>
-                    <button onClick={() => navigate(`/reviewer/recording?task=${encodeURIComponent(task.title)}`)} className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#EDF3FF]" style={{ color: ACCENT }} aria-label={`Kiểm duyệt ${task.title}`}>
+                    <button onClick={() => navigate(`/reviewer/recording?task=${encodeURIComponent(task.title)}`)} className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[var(--accent-soft)]" style={{ color: ACCENT, '--accent-soft': ACCENT_SOFT }} aria-label={`Kiểm duyệt ${task.title}`}>
                       <ArrowRight className="w-4 h-4" />
                     </button>
                   </div>
                   <div className="flex items-center gap-3 mt-2 lg:mt-0 lg:w-[32%] lg:flex-col lg:items-stretch lg:gap-1">
-                    <div className="w-full h-1.5 rounded-full bg-[#EAE7DF] overflow-hidden"><div className="h-full rounded-full" style={{ width: `${percent}%`, background: percent > 50 ? RANK_COLORS[3] : RANK_COLORS[2] }} /></div>
+                    <div className="w-full h-1.5 rounded-full bg-[#EAE7DF] overflow-hidden"><div className="h-full rounded-full" style={{ width: `${percent}%`, background: urgent ? '#D9A441' : ACCENT }} /></div>
                     <span className="type-meta text-[#6E7078] shrink-0">{task.reviewed}/{task.target} bản · <span className="font-emphasis text-[#16171C]">{percent}%</span></span>
                   </div>
                 </div>
@@ -171,7 +188,7 @@ export default function ReviewDashboard() {
           </div>
         </Panel>
         <Panel className="lg:col-span-2 flex flex-col">
-          <PanelHeader icon={PieChart} iconColor={ACCENT} title="Lý do từ chối phổ biến" right={<span className="type-meta text-[#9A9CA3]">Hệ thống</span>} />
+          <PanelHeader icon={PieChart} iconColor="#6E7078" title="Lý do từ chối phổ biến" right={<span className="type-meta text-[#9A9CA3]">Hệ thống</span>} />
           <div className="flex flex-col justify-between gap-3 mt-2 flex-1">
             {REJECT_STATS.map((stat) => <StatBar key={stat.label} label={stat.label} count={stat.count} percent={stat.percentage} color={stat.color} compact />)}
           </div>
@@ -182,16 +199,22 @@ export default function ReviewDashboard() {
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-1">
           <div role="tablist" aria-label="Thống kê từ chối" className="flex flex-wrap gap-1 rounded-lg bg-[#F7F5EF] p-1">
             {[['sentences', 'Câu bị từ chối nhiều nhất'], ['speakers', 'Người bị từ chối nhiều nhất']].map(([key, label]) => (
-              <button key={key} id={`rejection-tab-${key}`} role="tab" aria-selected={rejectionTab === key} aria-controls="rejection-panel" onClick={() => setRejectionTab(key)} className={`px-3 py-2 rounded-md text-meta font-label transition-colors ${rejectionTab === key ? 'bg-white shadow-sm' : 'text-[#6E7078] hover:text-[#16171C]'}`} style={rejectionTab === key ? { color: ACCENT } : undefined}>{label}</button>
+              <button key={key} id={`rejection-tab-${key}`} role="tab" aria-selected={rejectionTab === key} aria-controls="rejection-panel" onClick={() => setRejectionTab(key)} className={`px-3 py-2 rounded-md text-meta font-label transition-colors ${rejectionTab === key ? 'bg-white shadow-sm' : 'text-[#6E7078] hover:text-[#16171C]'}`} style={rejectionTab === key ? { color: ACCENT_TEXT } : undefined}>{label}</button>
             ))}
           </div>
           <span className="type-meta text-[#9A9CA3]">7 ngày qua</span>
         </div>
         <div id="rejection-panel" role="tabpanel" aria-labelledby={`rejection-tab-${rejectionTab}`} className="min-h-[225px] flex-1 grid auto-rows-fr divide-y divide-[#F0EEE6]">
-          {(rejectionTab === 'sentences' ? pagedSentences : pagedSpeakers).map((item, idx) => (
+          {/* Luôn đủ ITEMS_PER_PAGE ô: trang cuối thiếu dòng thì thêm ô trống cùng chiều cao -> khung không đổi, các dòng không giãn */}
+          {[...(rejectionTab === 'sentences' ? pagedSentences : pagedSpeakers), ...Array(ITEMS_PER_PAGE).fill(null)]
+            .slice(0, ITEMS_PER_PAGE)
+            .map((item, idx) => !item ? (
+            <div key={`empty-${idx}`} className="px-4 py-1" aria-hidden="true"><div className="min-h-[42px]" /></div>
+          ) : (
             <div key={item.id || item.name} className="flex items-center gap-3 px-4 py-1 hover:bg-[#FAF9F6]">
               <span className="w-5 text-center text-meta tabular-nums text-[#9A9CA3] shrink-0">{((rejectionTab === 'sentences' ? sentencePage : speakerPage) - 1) * ITEMS_PER_PAGE + idx + 1}</span>
-              <div className="min-w-0 flex-1">
+              {/* Cao tối thiểu bằng dòng "Câu" (2 câu VI-EN/VI = 42px) -> đổi tab không làm khung co/giãn, các thẻ phía trên không nhảy */}
+              <div className="min-w-0 flex-1 min-h-[42px] flex flex-col justify-center">
                 {rejectionTab === 'sentences' ? (
                   <SentencePair sentence={item} />
                 ) : (
@@ -202,12 +225,12 @@ export default function ReviewDashboard() {
                 )}
               </div>
               <span className="type-label tabular-nums text-[#16171C] bg-[#F0EEE6] rounded-md px-2 py-1 shrink-0">{item.count} lần</span>
-              <button onClick={() => rejectionTab === 'sentences' ? setSentenceDetail(item) : setSpeakerDetail(item)} className="w-8 h-8 rounded-lg flex items-center justify-center text-[#6E7078] hover:bg-[#EDF3FF] shrink-0" aria-label={`Xem thống kê ${item.text || item.name}`}><Eye className="w-4 h-4" /></button>
+              <button onClick={() => rejectionTab === 'sentences' ? setSentenceDetail(item) : setSpeakerDetail(item)} className="w-8 h-8 rounded-lg flex items-center justify-center text-[#6E7078] hover:bg-[#F0EEE6] shrink-0" aria-label={`Xem thống kê ${item.text || item.name}`}><Eye className="w-4 h-4" /></button>
             </div>
           ))}
         </div>
         <div className="border-t border-[#F0EEE6] py-1 [&>div]:py-1">
-          <Pagination currentPage={rejectionTab === 'sentences' ? sentencePage : speakerPage} totalPages={rejectionTab === 'sentences' ? sentenceTotalPages : speakerTotalPages} onPageChange={rejectionTab === 'sentences' ? setSentencePage : setSpeakerPage} accent={ACCENT} />
+          <Pagination currentPage={rejectionTab === 'sentences' ? sentencePage : speakerPage} totalPages={rejectionTab === 'sentences' ? sentenceTotalPages : speakerTotalPages} onPageChange={rejectionTab === 'sentences' ? setSentencePage : setSpeakerPage} accent={ACCENT} variant="soft" />
         </div>
       </Panel>
 

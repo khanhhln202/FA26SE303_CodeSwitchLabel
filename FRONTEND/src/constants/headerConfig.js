@@ -1,4 +1,4 @@
-import { SPEAKER_HEADER_ACCENT, REVIEWER_ACCENT } from './theme';
+import { SPEAKER_HEADER_ACCENT } from './theme';
 
 /**
  * Cấu hình Header theo role - cùng kiểu với SIDEBAR_CONFIG.
@@ -13,7 +13,7 @@ export const HEADER_CONFIG = {
     profilePath: '/speaker/profile',
   },
   reviewer: {
-    accent: REVIEWER_ACCENT,
+    accent: SPEAKER_HEADER_ACCENT, // cùng màu Speaker (sidebar Reviewer giờ cũng trắng + xanh lá)
     profilePath: '/reviewer/profile',
   },
 };

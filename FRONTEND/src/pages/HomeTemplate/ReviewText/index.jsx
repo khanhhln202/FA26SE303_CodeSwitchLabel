@@ -18,6 +18,8 @@ import CodeSwitchText from "../../../components/CodeSwitchText/CodeSwitchText";
 import { editChecks } from "../../../utils/sentenceValidation";
 import {
   SPEAKER_ACCENT as ACCENT,
+  SPEAKER_ACCENT_ACTIVE_ICON as BRAND, // xanh lá thương hiệu cho popup sửa câu
+  AUDIO_PRIMARY,
   SUCCESS,
   WARNING,
   SURFACE_PAGE,
@@ -352,7 +354,7 @@ export default function ReviewText() {
             <div className="text-center">
               <span
                 className="inline-block type-caption px-2 py-0.5 rounded-full mb-3"
-                style={{ background: `${ACCENT}14`, color: ACCENT }}
+                style={{ background: `${AUDIO_PRIMARY}1A`, color: AUDIO_PRIMARY }}
               >
                 Việt – Anh
               </span>
@@ -458,17 +460,17 @@ export default function ReviewText() {
             style={{ boxShadow: "0 20px 50px rgba(16,17,20,0.25)" }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="h-1.5 w-full" style={{ background: ACCENT }} />
+            <div className="h-1.5 w-full" style={{ background: BRAND }} />
             <div className="p-6">
               <div className="flex items-center justify-between mb-5">
                 <div className="flex items-center gap-2.5">
                   <div
                     className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
-                    style={{ background: `${ACCENT}1A` }}
+                    style={{ background: `${BRAND}1A` }}
                   >
                     <Edit3
                       className="w-[18px] h-[18px]"
-                      style={{ color: ACCENT }}
+                      style={{ color: BRAND }}
                     />
                   </div>
                   <span
@@ -505,8 +507,8 @@ export default function ReviewText() {
                   background: "#FFFFFF",
                 }}
                 onFocus={(e) => {
-                  e.target.style.borderColor = ACCENT;
-                  e.target.style.boxShadow = `0 0 0 4px ${ACCENT}1A`;
+                  e.target.style.borderColor = BRAND;
+                  e.target.style.boxShadow = `0 0 0 4px ${BRAND}1A`;
                 }}
                 onBlur={(e) => {
                   e.target.style.borderColor = BORDER_LIGHT;
@@ -530,8 +532,8 @@ export default function ReviewText() {
                   background: "#FFFFFF",
                 }}
                 onFocus={(e) => {
-                  e.target.style.borderColor = ACCENT;
-                  e.target.style.boxShadow = `0 0 0 4px ${ACCENT}1A`;
+                  e.target.style.borderColor = BRAND;
+                  e.target.style.boxShadow = `0 0 0 4px ${BRAND}1A`;
                 }}
                 onBlur={(e) => {
                   e.target.style.borderColor = BORDER_LIGHT;
@@ -561,7 +563,7 @@ export default function ReviewText() {
                   }
                   disabled={editPairs.length >= sentence.enWordCount}
                   className="inline-flex items-center gap-1 text-meta font-label hover:underline disabled:opacity-40 disabled:cursor-not-allowed disabled:no-underline"
-                  style={{ color: ACCENT }}
+                  style={{ color: BRAND }}
                 >
                   <Plus className="w-3.5 h-3.5" /> Thêm từ
                 </button>
@@ -580,7 +582,7 @@ export default function ReviewText() {
                       aria-label={`Từ tiếng Anh ${i + 1}`}
                       className="px-3 py-2 rounded-[10px] text-ui font-mono font-label outline-none min-w-0"
                       style={{
-                        color: ACCENT,
+                        color: AUDIO_PRIMARY,
                         border: `1px solid ${pair.source.trim() ? BORDER_LIGHT : DANGER}`,
                         background: "#FFFFFF",
                       }}
@@ -656,8 +658,8 @@ export default function ReviewText() {
                   disabled={checks.some((c) => !c.ok) || isReviewing}
                   className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-full type-button text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                   style={{
-                    background: ACCENT,
-                    boxShadow: `0 4px 10px ${ACCENT}4D`,
+                    background: BRAND,
+                    boxShadow: `0 4px 10px ${BRAND}4D`,
                   }}
                 >
                   <Check className="w-4 h-4" /> {isReviewing ? "Đang lưu..." : "Lưu thay đổi"}

@@ -13,7 +13,7 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import WaveformInline from "../../../../components/AudioPlayer/WaveformInline";
 import { parseCodeSwitch, stripTags } from "../../../../utils/codeSwitch";
 import {
-  REVIEWER_ACCENT as ACCENT,
+  SPEAKER_ACCENT_ACTIVE_ICON as ACCENT, // xanh lá thương hiệu
   AUDIO_PRIMARY,
 } from "../../../../constants/theme";
 import { TASK_TOTALS, RECORDING_QUEUE } from "../../../../mocks/reviewer/recordings";
@@ -40,13 +40,14 @@ function CodeSwitchPreview({ transcript }) {
 
 /** Nhãn pill (VI-EN / VI) đứng đầu mỗi dòng sparkline - cs dùng AUDIO_PRIMARY, vi dùng xám trung tính. */
 function InlineLabel({ variant }) {
-  const bg = variant === "cs" ? AUDIO_PRIMARY : "#8B8D95";
   return (
     <span
-      className="text-tag font-emphasis w-9 h-4 text-center shrink-0 rounded inline-flex items-center justify-center text-white"
-      style={{ background: bg, letterSpacing: "0.02em" }}
+      className="text-tag font-emphasis w-9 h-4 text-center shrink-0 rounded inline-flex items-center justify-center"
+      style={variant === 'cs'
+        ? { background: `${AUDIO_PRIMARY}1A`, color: AUDIO_PRIMARY, letterSpacing: '0.02em' }
+        : { background: '#F0EEE6', color: '#6E7078', letterSpacing: '0.02em' }}
     >
-      {variant === "cs" ? "VI-EN" : "VI"}
+      {variant === 'cs' ? 'VI-EN' : 'VI'}
     </span>
   );
 }
@@ -132,7 +133,7 @@ export default function ReviewRecording() {
             value={filterTask}
             onChange={(e) => setFilterTask(e.target.value)}
             aria-label="Chọn nhiệm vụ"
-            className="type-label border border-[#E5E2D8] rounded-lg px-2 py-1 bg-white text-[#16171C] outline-none focus:border-[#818CF8]"
+            className="type-label border border-[#E5E2D8] rounded-lg px-2 py-1 bg-white text-[#16171C] outline-none focus:border-[#16A34A]"
           >
             {Object.keys(TASK_TOTALS).map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
@@ -141,7 +142,7 @@ export default function ReviewRecording() {
             value={filterSpeaker}
             onChange={(e) => setFilterSpeaker(e.target.value)}
             aria-label="Lọc speaker"
-            className="type-label border border-[#E5E2D8] rounded-lg px-2 py-1 bg-white text-[#16171C] outline-none focus:border-[#818CF8]"
+            className="type-label border border-[#E5E2D8] rounded-lg px-2 py-1 bg-white text-[#16171C] outline-none focus:border-[#16A34A]"
           >
             <option value="all">Tất cả speaker</option>
             {[...new Set(RECORDING_QUEUE.map((r) => r.speaker))].map((sp) => <option key={sp} value={sp}>{sp}</option>)}

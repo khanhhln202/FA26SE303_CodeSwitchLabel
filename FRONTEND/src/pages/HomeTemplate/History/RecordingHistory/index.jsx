@@ -15,20 +15,22 @@ import {
 import CodeSwitchText from "../../../../components/CodeSwitchText/CodeSwitchText";
 import { stripTags } from "../../../../utils/codeSwitch";
 import {
-  SPEAKER_ACCENT as ACCENT,
+  SPEAKER_ACCENT_ACTIVE_ICON as ACCENT, // xanh lá thương hiệu
   AUDIO_PRIMARY,
 } from "../../../../constants/theme";
 import Loading from "../../../../components/Loading/Loading";
 import ErrorState from "../../../../components/ErrorState/ErrorState";
 import EmptyState from "../../../../components/EmptyState/EmptyState";
-import { getAllSpeakerRecordingHistoryApi } from "../../../../services/speakerApi";
-import { getRecordingAudioUrlApi } from "../../../../services/recordingApi";
-import { GET_SPEAKER_RECORDING_HISTORY_API, GET_RECORDING_AUDIO_URL_API } from "../../../../utils/queryKey";
+import { getAllSpeakerRecordingHistoryApi, getSpeakerStatsApi } from "../../../../services/speakerApi";
+import { GET_SPEAKER_RECORDING_HISTORY_API, GET_SPEAKER_STATS_API } from "../../../../utils/queryKey";
 
 const VARIANT_LABEL = { cs: "Bản Việt-Anh", vi: "Bản tiếng Việt" };
 
 // Mã bản ghi có dạng r_cs_111000003 / r_vi_111000003 (thu lại thì thêm _t2...) -> biết là bản nào
 const variantOf = (recordingId) => (recordingId.includes("_vi_") ? "vi" : "cs");
+
+// Bản ghi tự do (không thuộc nhiệm vụ) thì API trả taskTitle = null
+const taskOf = (recording) => recording.taskTitle || "Thu âm tự do";
 
 // "2026-09-07T03:15:00Z" -> "07/09/2026 - 10:15" (giờ máy người dùng)
 function formatDateTime(iso) {
@@ -37,74 +39,29 @@ function formatDateTime(iso) {
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} - ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-/**
- * API trả từng bản ghi (bản Việt-Anh, bản tiếng Việt riêng) -> gộp theo cặp câu để hiện 1 dòng / cặp như bảng cũ.
- * Mỗi biến thể chỉ lấy lần thu mới nhất (API đã xếp mới nhất trước).
- * Trạng thái cặp: có bản bị từ chối -> Rejected; cả 2 bản đạt -> Approved; còn lại (đang chờ, trượt QC, thiếu bản) -> Pending.
- */
-function groupByPair(recordings) {
-  const pairs = new Map();
-  for (const rec of recordings) {
-    const pair = pairs.get(rec.scriptId) ?? {
-      id: rec.scriptId,
-      task: rec.taskTitle || "Thu âm tự do",
-      csText: rec.csText,
-      viText: rec.viText,
-      date: formatDateTime(rec.recordedAt),
-      cs: null,
-      vi: null,
-    };
-    const variant = variantOf(rec.recordingId);
-    if (!pair[variant]) pair[variant] = rec;
-    pairs.set(rec.scriptId, pair);
-  }
-
-  return [...pairs.values()].map((pair) => {
-    const recs = [pair.cs, pair.vi].filter(Boolean);
-    const status = recs.some((r) => r.status === "Rejected")
-      ? "Rejected"
-      : pair.cs?.status === "Approved" && pair.vi?.status === "Approved"
-        ? "Approved"
-        : "Pending";
-    // Lượt duyệt của cả 2 bản (chỉ có khi bản đã chốt), ghi rõ thuộc bản nào cho popup Kết quả
-    const reviews = ["cs", "vi"].flatMap((v) =>
-      (pair[v]?.reviews ?? []).map((r) => ({
-        reviewer: `R${r.round}`,
-        decision: r.decision === "Approved" ? "approve" : "reject",
-        reason: r.reason ? `${VARIANT_LABEL[v]}: ${r.reason}` : VARIANT_LABEL[v],
-      })),
+/** Sóng âm của 1 bản (Việt-Anh / tiếng Việt): dùng đúng link API trả (csAudioUrl / viAudioUrl), null thì báo không có audio. */
+function RecordingAudio({ url, variant, duration }) {
+  if (!url) {
+    return (
+      <div className="h-5 flex items-center gap-2">
+        <InlineLabel variant={variant} />
+        <span className="type-caption text-[#9A9CA3]">Không có audio</span>
+      </div>
     );
-    const votedCount = Math.max(0, ...recs.map((r) => r.reviews?.length ?? 0));
-    return { ...pair, status, reviews, votedCount };
-  });
-}
-
-/** Sóng âm của 1 bản ghi: link nghe chỉ lấy khi dòng đang hiện (link hết hạn sau 15 phút nên giữ cache 10 phút). */
-function RecordingAudio({ recording, variant, transcript }) {
-  // Call API lấy link nghe tạm của bản ghi
-  const { data: audio } = useQuery({
-    queryKey: [GET_RECORDING_AUDIO_URL_API, recording?.recordingId],
-    queryFn: () => getRecordingAudioUrlApi(recording.recordingId),
-    enabled: Boolean(recording),
-    staleTime: 10 * 60 * 1000,
-  });
-
-  if (!recording) {
-    return <span className="type-caption text-[#9A9CA3]">{VARIANT_LABEL[variant]} chưa ghi</span>;
   }
   return (
     <WaveformInline
       compact
       label={variant === "cs" ? "VI-EN" : "VI"}
-      src={audio?.url}
-      demoSeed={`${variant}-${transcript}`}
-      demoDuration={recording.durationSec}
+      src={url}
+      demoSeed={url}
+      demoDuration={duration}
     />
   );
 }
 
 function InlineLabel({ variant }) {
-  return <span className="text-tag font-emphasis w-9 h-4 shrink-0 rounded inline-flex items-center justify-center text-white" style={{ background: variant === "cs" ? ACCENT : "#8B8D95" }}>{variant === "cs" ? "VI-EN" : "VI"}</span>;
+  return <span className="text-tag font-emphasis w-9 h-4 shrink-0 rounded inline-flex items-center justify-center" style={variant === "cs" ? { background: `${AUDIO_PRIMARY}1A`, color: AUDIO_PRIMARY } : { background: "#F0EEE6", color: "#6E7078" }}>{variant === "cs" ? "VI-EN" : "VI"}</span>;
 }
 
 function StatCard({ icon: Icon, label, value, pct, accent, bg }) {
@@ -134,13 +91,17 @@ function StatCard({ icon: Icon, label, value, pct, accent, bg }) {
   );
 }
 
-// Kết quả (trạng thái + số phiếu đã bỏ) - gộp "Trạng thái" và "Phản hồi" cũ, bấm để xem chi tiết
+// Trạng thái bản ghi đúng theo API: QcFailed | PendingReview | Approved | Rejected
+const STATUS_STYLE = {
+  Approved: { bg: "#EAF7EF", border: "rgba(63,166,107,0.25)", text: "#1F5C3F", accent: "#3FA66B", icon: CheckCircle2, label: "Đã duyệt" },
+  Rejected: { bg: "#FDEAEA", border: "#F3C9C9", text: "#C63B3B", accent: "#C63B3B", icon: XCircle, label: "Từ chối" },
+  PendingReview: { bg: "#FFF1DE", border: "#F5DFC0", text: "#A85E12", accent: "#A85E12", icon: Clock, label: "Chờ duyệt" },
+  QcFailed: { bg: "#F0EEE6", border: "#E5E2D8", text: "#6E7078", accent: "#6E7078", icon: AlertCircle, label: "Lỗi chất lượng" },
+};
+
+// Kết quả (trạng thái + số lượt duyệt API trả về), bấm để xem chi tiết
 function ResultButton({ status, votedCount, onClick, ariaLabel }) {
-  const s = {
-    Approved: { bg: "#EAF7EF", border: "rgba(63,166,107,0.25)", text: "#1F5C3F", icon: CheckCircle2, label: "Đã duyệt" },
-    Rejected: { bg: "#FDEAEA", border: "#F3C9C9", text: "#C63B3B", icon: XCircle, label: "Từ chối" },
-    Pending: { bg: "#FFF1DE", border: "#F5DFC0", text: "#A85E12", icon: Clock, label: "Chờ duyệt" },
-  }[status];
+  const s = STATUS_STYLE[status];
   const Icon = s.icon;
   return (
     <button
@@ -150,7 +111,7 @@ function ResultButton({ status, votedCount, onClick, ariaLabel }) {
       style={{ background: s.bg, borderColor: s.border, color: s.text }}
     >
       <Icon className="w-3 h-3 shrink-0" />
-      <span>{s.label} · {votedCount}/3</span>
+      <span>{status === "QcFailed" ? s.label : `${s.label} · ${votedCount}/3`}</span>
     </button>
   );
 }
@@ -159,7 +120,8 @@ const FILTER_OPTIONS = [
   { value: "all", label: "Tất cả trạng thái" },
   { value: "Approved", label: "Đã duyệt" },
   { value: "Rejected", label: "Từ chối" },
-  { value: "Pending", label: "Chờ duyệt" },
+  { value: "PendingReview", label: "Chờ duyệt" },
+  { value: "QcFailed", label: "Lỗi chất lượng" },
 ];
 
 export default function RecordingHistory() {
@@ -172,43 +134,33 @@ export default function RecordingHistory() {
   const [searchTerm, setSearchTerm] = useState("");
   const [taskFilter, setTaskFilter] = useState("all");
 
-  // Call API lấy hết lịch sử (mỗi lần tối đa 100 bản) rồi gộp theo cặp - lọc, tìm, phân trang làm ở FE như bảng cũ
+  // Call API lấy hết lịch sử (mỗi lần tối đa 100 bản) - mỗi phần tử API là 1 dòng; lọc, tìm, phân trang làm ở FE
   const { data: recordings, isLoading, isError, error, refetch } = useQuery({
     queryKey: [GET_SPEAKER_RECORDING_HISTORY_API],
     queryFn: getAllSpeakerRecordingHistoryApi,
   });
 
-  const withStatus = useMemo(() => groupByPair(recordings ?? []), [recordings]);
+  // Call API lấy thống kê bản ghi cho các thẻ trên cùng
+  const { data: stats } = useQuery({
+    queryKey: [GET_SPEAKER_STATS_API],
+    queryFn: getSpeakerStatsApi,
+  });
 
-  const stats = useMemo(() => {
-    const total = withStatus.length;
-    const approved = withStatus.filter((i) => i.status === "Approved").length;
-    const rejected = withStatus.filter((i) => i.status === "Rejected").length;
-    const pending = withStatus.filter((i) => i.status === "Pending").length;
-    const pct = (n) => (total ? Math.round((n / total) * 100) : 0);
-    return {
-      total,
-      approved,
-      rejected,
-      pending,
-      approvedPct: pct(approved),
-      rejectedPct: pct(rejected),
-      pendingPct: pct(pending),
-    };
-  }, [withStatus]);
+  const pct = (n) => (stats?.total ? Math.round((n / stats.total) * 100) : 0);
 
-  const tasks = [...new Set(withStatus.map((item) => item.task))];
+  const allRecordings = recordings ?? [];
+  const tasks = [...new Set(allRecordings.map((item) => taskOf(item)))];
   const filteredData = useMemo(() => {
     const query = searchTerm.trim().toLocaleLowerCase("vi");
-    return withStatus.filter(
+    return (recordings ?? []).filter(
       (item) =>
         (statusFilter === "all" || item.status === statusFilter) &&
-        (taskFilter === "all" || item.task === taskFilter) &&
-        [item.task, stripTags(item.csText), stripTags(item.viText)].some(
+        (taskFilter === "all" || taskOf(item) === taskFilter) &&
+        [taskOf(item), stripTags(item.csText ?? ""), stripTags(item.viText ?? "")].some(
           (value) => value.toLocaleLowerCase("vi").includes(query),
         ),
     );
-  }, [withStatus, statusFilter, taskFilter, searchTerm]);
+  }, [recordings, statusFilter, taskFilter, searchTerm]);
   // Cố định 10 mục mỗi trang; trang đầy thì các dòng giãn đều hết khung (màn thấp thì bảng cuộn bên trong)
   const itemsPerPage = 10;
   const totalPages = Math.max(1, Math.ceil(filteredData.length / itemsPerPage));
@@ -227,31 +179,31 @@ export default function RecordingHistory() {
         <StatCard
           icon={BarChart3}
           label="Tổng bản ghi"
-          value={stats.total}
+          value={stats?.total ?? 0}
           accent="#16171C"
           bg="#F0EEE6"
         />
         <StatCard
           icon={CheckCircle2}
           label="Đã duyệt"
-          value={stats.approved}
-          pct={stats.approvedPct}
+          value={stats?.approved ?? 0}
+          pct={pct(stats?.approved ?? 0)}
           accent="#3FA66B"
           bg="#EAF7EF"
         />
         <StatCard
           icon={XCircle}
           label="Từ chối"
-          value={stats.rejected}
-          pct={stats.rejectedPct}
+          value={stats?.rejected ?? 0}
+          pct={pct(stats?.rejected ?? 0)}
           accent="#C63B3B"
           bg="#FDEAEA"
         />
         <StatCard
           icon={Clock}
           label="Chờ duyệt"
-          value={stats.pending}
-          pct={stats.pendingPct}
+          value={stats?.pending ?? 0}
+          pct={pct(stats?.pending ?? 0)}
           accent="#A85E12"
           bg="#FFF1DE"
         />
@@ -270,7 +222,7 @@ export default function RecordingHistory() {
                   setCurrentPage(1);
                 }}
                 placeholder="Tìm nhiệm vụ, nội dung..."
-                className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-[#E5E2D8] text-ui leading-4 focus:outline-none focus:border-blue-500"
+                className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-[#E5E2D8] text-ui leading-4 focus:outline-none focus:border-[#16A34A]"
               />
             </div>
             <select
@@ -313,9 +265,9 @@ export default function RecordingHistory() {
           >
             <colgroup>
               <col className="w-[4%]" />
-              <col className="w-[11%]" />
+              <col className="w-[13%]" />
               <col className="w-[17%]" />
-              <col className="w-[34%]" />
+              <col className="w-[32%]" />
               <col className="w-[20%]" />
               <col className="w-[14%]" />
             </colgroup>
@@ -344,7 +296,7 @@ export default function RecordingHistory() {
               <tbody className="type-ui">
                 <tr>
                   <td colSpan={6}>
-                    {withStatus.length === 0 ? (
+                    {allRecordings.length === 0 ? (
                       <EmptyState title="Chưa có bản ghi nào" description="Ghi âm câu đầu tiên ở mục Câu chờ ghi âm." />
                     ) : (
                       <EmptyState title="Không có bản ghi phù hợp bộ lọc" description="Thử đổi từ khoá hoặc bộ lọc." />
@@ -353,95 +305,67 @@ export default function RecordingHistory() {
                 </tr>
               </tbody>
             ) : (
-              pageItems.map((item, index) => {
-                const [date, time] = item.date.split(" - ");
-                const { votedCount } = item;
-                return (
-                  <tbody
-                    key={item.id}
+              <tbody className="type-ui">
+                {pageItems.map((item, index) => (
+                  <tr
+                    key={item.recordingId}
                     // Dòng cuối vẫn có đường kẻ khi trang chưa đầy; trang đủ 10 dòng thì bỏ để không chồng lên viền của thanh phân trang
-                    className={`border-b border-[#F0EEE6] type-ui ${pageItems.length === itemsPerPage ? "last:border-b-0" : ""}`}
+                    className={`border-b border-[#F0EEE6] ${pageItems.length === itemsPerPage ? "last:border-b-0" : ""}`}
                   >
-                    {["cs", "vi"].map((variant) => {
-                      const transcript =
-                        variant === "cs" ? item.csText : item.viText;
-                      const cellSpacing =
-                        variant === "cs" ? "pt-px pb-0" : "pt-0 pb-px";
-                      return (
-                        <tr key={variant}>
-                          {variant === "cs" && (
-                            <>
-                              <td
-                                rowSpan={2}
-                                className="px-3 text-center type-meta text-[#9A9CA3]"
-                              >
-                                {startIndex + index + 1}
-                              </td>
-                              <td rowSpan={2} className="px-3">
-                                <p className="type-meta text-[#6E7078]">
-                                  {date} - {time}
-                                </p>
-                              </td>
-                              <td rowSpan={2} className="px-3">
-                                <span title={item.task} className="flex w-full h-6 items-center justify-center rounded-md border border-[#E5E2D8] bg-[#F0EEE6] px-2 type-caption text-[#6E7078]"><span className="truncate">
-                                  {item.task}</span>
-                                </span>
-                              </td>
-                            </>
-                          )}
-                          {variant === "cs" && (
-                            <td rowSpan={2} className="px-3 py-0">
-                              {/* Căn icon mắt về cùng một mép cột như bảng lịch sử câu đóng góp. */}
-                              <div className="flex items-center gap-2">
-                                <div className="min-w-0 flex-1">
-                                  {[item.csText, item.viText].map(
-                                    (text, textIndex) => (
-                                      <p
-                                        key={textIndex}
-                                        className="text-meta font-regular text-[#16171C] truncate leading-5"
-                                      >
-                                        <CodeSwitchText transcript={text} accent={AUDIO_PRIMARY} />
-                                      </p>
-                                    ),
-                                  )}
-                                </div>
-                                {/* Icon này CHỈ mở popup xem 2 câu - không hiện phản hồi/vote ở đây */}
-                                <button
-                                  onClick={() => setSentenceItem(item)}
-                                  aria-label={`Xem cả hai câu của ${item.id}`}
-                                  title="Xem đầy đủ hai câu"
-                                  className="shrink-0 w-6 h-6 rounded-md flex items-center justify-center text-[#9A9CA3] hover:text-[#16171C] hover:bg-[#F0EEE6] transition-colors cursor-pointer"
-                                >
-                                  <Eye className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </td>
-                          )}
-                          <td className={`px-3 ${cellSpacing}`}>
-                            <RecordingAudio
-                              recording={item[variant]}
-                              variant={variant}
-                              transcript={transcript}
-                            />
-                          </td>
-                          {variant === "cs" && (
-                            <>
-                              <td rowSpan={2} className="px-3">
-                                <ResultButton
-                                  status={item.status}
-                                  votedCount={votedCount}
-                                  onClick={() => setDetailItem(item)}
-                                  ariaLabel={`Xem kết quả kiểm duyệt ${item.id}`}
-                                />
-                              </td>
-                            </>
-                          )}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                );
-              })
+                    <td className="px-3 text-center type-meta text-[#9A9CA3]">
+                      {startIndex + index + 1}
+                    </td>
+                    <td className="px-3">
+                      {/* Ngày giờ trên 1 hàng, không xuống dòng; số đều nhau (tabular-nums) để mọi dòng dài như nhau */}
+                      <p className="type-meta text-[#6E7078] tabular-nums whitespace-nowrap">{formatDateTime(item.recordedAt)}</p>
+                    </td>
+                    <td className="px-3">
+                      <span title={taskOf(item)} className="flex w-full h-6 items-center justify-center rounded-md border border-[#E5E2D8] bg-[#F0EEE6] px-2 type-caption text-[#6E7078]"><span className="truncate">
+                        {taskOf(item)}</span>
+                      </span>
+                    </td>
+                    <td className="px-3 py-1">
+                      {/* Căn icon mắt về cùng một mép cột như bảng lịch sử câu đóng góp. */}
+                      <div className="flex items-center gap-2">
+                        <div className="min-w-0 flex-1">
+                          {[item.csText, item.viText].map((text, textIndex) => (
+                            <p
+                              key={textIndex}
+                              className="text-meta font-regular text-[#16171C] truncate leading-5"
+                            >
+                              <CodeSwitchText transcript={text ?? ""} accent={AUDIO_PRIMARY} />
+                            </p>
+                          ))}
+                        </div>
+                        {/* Icon này CHỈ mở popup xem 2 câu - không hiện phản hồi/vote ở đây */}
+                        <button
+                          onClick={() => setSentenceItem(item)}
+                          aria-label={`Xem cả hai câu của ${item.recordingId}`}
+                          title="Xem đầy đủ hai câu"
+                          className="shrink-0 w-6 h-6 rounded-md flex items-center justify-center text-[#9A9CA3] hover:text-[#16171C] hover:bg-[#F0EEE6] transition-colors cursor-pointer"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                    <td className="px-3">
+                      {/* 2 dòng sóng âm khớp 2 dòng câu bên cạnh: bản Việt-Anh rồi bản tiếng Việt */}
+                      <div className="flex flex-col gap-1">
+                        <RecordingAudio url={item.csAudioUrl} variant="cs" duration={item.durationSec} />
+                        <RecordingAudio url={item.viAudioUrl} variant="vi" duration={item.durationSec} />
+                      </div>
+                    </td>
+                    <td className="px-3">
+                      <ResultButton
+                        status={item.status}
+                        votedCount={item.reviews?.length ?? 0}
+                        onClick={() => setDetailItem(item)}
+                        ariaLabel={`Xem kết quả kiểm duyệt ${item.recordingId}`}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
             )}
           </table>
         </div>
@@ -451,6 +375,7 @@ export default function RecordingHistory() {
             totalPages={totalPages}
             onPageChange={setCurrentPage}
             accent={ACCENT}
+            variant="soft"
           />
         </div>
       </section>
@@ -512,13 +437,8 @@ export default function RecordingHistory() {
       {/* POPUP PHẢN HỒI - 3 reviewer */}
       {detailItem &&
         (() => {
-          const ResultIcon = detailItem.status === "Approved" ? CheckCircle2 : detailItem.status === "Rejected" ? AlertCircle : Clock;
-          const accent =
-            detailItem.status === "Rejected"
-              ? "#C63B3B"
-              : detailItem.status === "Approved"
-                ? "#3FA66B"
-                : "#A85E12";
+          const { icon: ResultIcon, accent } = STATUS_STYLE[detailItem.status];
+          const reviews = detailItem.reviews ?? [];
           return (
             <div
               className="fixed inset-0 z-50 flex items-center justify-center p-4 lg:pl-64"
@@ -562,26 +482,29 @@ export default function RecordingHistory() {
                     </button>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 mb-3">
-                    <span className="px-2.5 py-1 rounded-md text-caption font-label border border-[#E5E2D8] bg-[#F0EEE6] text-[#6E7078]">{detailItem.task}</span>
-                    <span className="type-meta text-[#9A9CA3]">{detailItem.date}</span>
+                    <span className="px-2.5 py-1 rounded-md text-caption font-label border border-[#E5E2D8] bg-[#F0EEE6] text-[#6E7078]">{taskOf(detailItem)}</span>
+                    <span className="px-2.5 py-1 rounded-md text-caption font-label border border-[#E5E2D8] bg-white text-[#6E7078]">{VARIANT_LABEL[variantOf(detailItem.recordingId)]}</span>
+                    <span className="type-meta text-[#9A9CA3]">{formatDateTime(detailItem.recordedAt)}</span>
                   </div>
                   <div className="bg-[#F7F5EF] p-3.5 rounded-xl border border-[#E5E2D8] mb-2.5 flex items-center gap-2.5">
                     <InlineLabel variant="cs" />
-                    <p className="type-body text-[#16171C] break-words min-w-0">{stripTags(detailItem.csText)}</p>
+                    <p className="type-body text-[#16171C] break-words min-w-0">{stripTags(detailItem.csText ?? "")}</p>
                   </div>
                   <div className="bg-[#F7F5EF] p-3.5 rounded-xl border border-[#E5E2D8] mb-4 flex items-center gap-2.5">
                     <InlineLabel variant="vi" />
-                    <p className="type-body text-[#16171C] break-words min-w-0">{stripTags(detailItem.viText)}</p>
+                    <p className="type-body text-[#16171C] break-words min-w-0">{stripTags(detailItem.viText ?? "")}</p>
                   </div>
-                  {detailItem.reviews.length === 0 && (
+                  {reviews.length === 0 && (
                     <p className="type-meta text-[#6E7078]">
-                      Bản ghi đang chờ duyệt. Kết quả và nhận xét hiện khi đủ lượt duyệt.
+                      {detailItem.status === "QcFailed"
+                        ? "Bản ghi không đạt kiểm tra chất lượng tự động nên chưa được gửi đi duyệt."
+                        : "Bản ghi đang chờ duyệt. Kết quả và nhận xét hiện khi đủ lượt duyệt."}
                     </p>
                   )}
                   <div className="flex flex-col gap-2">
-                    {detailItem.reviews.filter((r) => r.decision !== "not_needed" && (detailItem.status === "Pending" || r.decision === "approve" || r.decision === "reject")).map((r, i) => {
-                      const isReject = r.decision === "reject";
-                      const isApprove = r.decision === "approve";
+                    {reviews.map((r, i) => {
+                      const isReject = r.decision === "Rejected";
+                      const isApprove = r.decision === "Approved";
                       const c = isReject
                         ? "#C63B3B"
                         : isApprove
@@ -607,18 +530,14 @@ export default function RecordingHistory() {
                             className="w-6 h-6 rounded-full text-white text-caption font-label flex items-center justify-center flex-shrink-0"
                             style={{ background: c }}
                           >
-                            {r.reviewer}
+                            R{r.round}
                           </span>
                           <div className="min-w-0">
                             <p
                               className="type-label"
                               style={{ color: isApprove ? "#1F5C3F" : c }}
                             >
-                              {isReject
-                                ? `Từ chối${r.errorCategory ? " · " + r.errorCategory : ""}`
-                                : isApprove
-                                  ? "Đã duyệt"
-                                  : "Chưa đánh giá"}
+                              {isReject ? "Từ chối" : isApprove ? "Đã duyệt" : r.decision}
                             </p>
                             {r.reason && (
                               <p className="text-meta text-[#6E7078] mt-0.5">

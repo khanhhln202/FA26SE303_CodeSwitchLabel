@@ -2,12 +2,14 @@ import { queryClient } from '../lib/queryClient';
 import {
   getSpeakerProgressApi,
   getAllSpeakerRecordingHistoryApi,
+  getSpeakerStatsApi,
   getAllSpeakerContributionHistoryApi,
 } from '../services/speakerApi';
 import { getTopicsApi } from '../services/configApi';
 import {
   GET_SPEAKER_PROGRESS_API,
   GET_SPEAKER_RECORDING_HISTORY_API,
+  GET_SPEAKER_STATS_API,
   GET_SPEAKER_CONTRIBUTION_HISTORY_API,
   GET_TOPICS_API,
 } from '../utils/queryKey';
@@ -35,6 +37,7 @@ const ROUTE_PREFETCH = {
   '/speaker/recording-history': () => {
     import('../pages/HomeTemplate/History/RecordingHistory/index');
     prefetchData({ queryKey: [GET_SPEAKER_RECORDING_HISTORY_API], queryFn: getAllSpeakerRecordingHistoryApi });
+    prefetchData({ queryKey: [GET_SPEAKER_STATS_API], queryFn: getSpeakerStatsApi });
   },
   '/speaker/contribution-history': () => {
     import('../pages/HomeTemplate/History/ContributionHistory/index');
