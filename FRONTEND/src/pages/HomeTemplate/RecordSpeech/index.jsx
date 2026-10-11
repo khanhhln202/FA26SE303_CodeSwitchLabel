@@ -280,12 +280,12 @@ export default function RecordSpeech() {
   const taskId = searchParams.get('taskId');
 
   // Cùng key với trang Câu chờ ghi âm -> có sẵn trong cache, không gọi lại API
-  const scriptQuery = useQuery({
+  // Call API lấy cặp câu đang ghi (cùng key với trang Câu chờ ghi âm -> có sẵn trong cache)
+  const { data: sentence, isLoading, isError, error, refetch } = useQuery({
     queryKey: [GET_NEXT_SCRIPT_API, Number(taskId)],
     queryFn: () => getNextScriptApi(taskId),
     enabled: Boolean(taskId),
   });
-  const sentence = scriptQuery.data;
 
   // Bản ghi của từng card: { url, blob } hoặc null (chưa ghi / ghi lại)
   const [recordings, setRecordings] = useState({ cs: null, vi: null });
@@ -297,8 +297,8 @@ export default function RecordSpeech() {
 
   // Vào thẳng trang mà không chọn nhiệm vụ -> quay về bước 1
   if (!taskId) return <Navigate to="/speaker/review-text" replace />;
-  if (scriptQuery.isLoading) return <Loading />;
-  if (scriptQuery.isError) return <ErrorState message={scriptQuery.error.message} onRetry={scriptQuery.refetch} />;
+  if (isLoading) return <Loading />;
+  if (isError) return <ErrorState message={error.message} onRetry={refetch} />;
   if (!sentence) {
     return <EmptyState title="Đã hết câu trong nhiệm vụ này" description="Quay lại Câu chờ ghi âm để chọn nhiệm vụ khác." />;
   }

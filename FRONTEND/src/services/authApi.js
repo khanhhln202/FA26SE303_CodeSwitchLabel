@@ -5,7 +5,9 @@ import { httpClient } from "../utils/setting";
 export const loginApi = async (values) => {
   try {
     // skipAuthRedirect: sai mật khẩu thì báo lỗi tại chỗ, không bị interceptor đẩy về /login
-    const response = await httpClient.post("/api/auth/login", values, { skipAuthRedirect: true });
+    const response = await httpClient.post("/api/auth/login", values, {
+      skipAuthRedirect: true,
+    });
     return response.data;
   } catch (error) {
     const message =
@@ -22,8 +24,7 @@ export const getMeApi = async () => {
     return response.data;
   } catch (error) {
     const message =
-      error.response?.data?.title ||
-      "Không lấy được thông tin tài khoản!";
+      error.response?.data?.title || "Không lấy được thông tin tài khoản!";
     throw new Error(message, { cause: error });
   }
 };

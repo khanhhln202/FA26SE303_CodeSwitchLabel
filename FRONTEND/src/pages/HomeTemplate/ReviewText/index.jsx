@@ -15,6 +15,7 @@ import {
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import CodeSwitchText from "../../../components/CodeSwitchText/CodeSwitchText";
+import { editChecks } from "../../../utils/sentenceValidation";
 import {
   SPEAKER_ACCENT as ACCENT,
   SUCCESS,
@@ -42,46 +43,8 @@ import {
   REVIEW_SCRIPT_API,
 } from "../../../utils/queryKey";
 
-// Lý do báo lỗi lấy từ GET /api/script-error-reasons; backend chỉ có mô tả tiếng Anh -> dịch theo reasonCode.
-// Mã nào chưa có ở đây thì hiện tạm mô tả gốc của backend.
-const REPORT_REASON_LABELS = {
-  meaningless: { label: "Câu vô nghĩa", desc: "Câu không có nghĩa rõ ràng" },
-  unnatural: { label: "Chen tiếng Anh không tự nhiên", desc: "Người Việt thường không nói như vậy" },
-  grammar: { label: "Sai ngữ pháp", desc: "Câu sai cấu trúc, ngữ pháp" },
-  spelling: { label: "Sai chính tả", desc: "Từ viết sai, gõ nhầm" },
-  mismatch: { label: "Hai câu không cùng nghĩa", desc: "Câu Việt-Anh và câu tiếng Việt khác nghĩa nhau" },
-  duplicate: { label: "Trùng câu đã có", desc: null },
-  other: { label: "Khác", desc: null },
-};
-
 // "2026-10-20T00:00:00Z" -> "20/10/2026"
 const formatDate = (iso) => (iso ? new Date(iso).toLocaleDateString("vi-VN") : "—");
-
-// Kiểm tra cặp câu trước khi lưu - cùng tiêu chuẩn với trang duyệt câu của Reviewer
-function editChecks(cs, vi, pairs) {
-  const c = cs.trim();
-  const v = vi.trim();
-  return [
-    {
-      ok: /^\[(vi|en)\]/.test(c) && c.includes("[vi]") && c.includes("[en]"),
-      label: "Câu Việt-Anh bắt đầu bằng thẻ và có đủ [vi], [en]",
-    },
-    {
-      ok: v.startsWith("[vi]") && !v.includes("[en]"),
-      label: "Câu tiếng Việt bắt đầu bằng [vi] và không có [en]",
-    },
-    {
-      ok: /[.?!]$/.test(c) && /[.?!]$/.test(v),
-      label: "Hai câu kết thúc bằng dấu . ! ?",
-    },
-    {
-      ok:
-        pairs.length > 0 &&
-        pairs.every((p) => p.source.trim() && p.target.trim()),
-      label: "Mỗi dòng nghĩa từ có đủ từ tiếng Anh và nghĩa tiếng Việt",
-    },
-  ];
-}
 
 export default function ReviewText() {
   const navigate = useNavigate();
@@ -91,22 +54,33 @@ export default function ReviewText() {
 
   const queryClient = useQueryClient();
 
-  // Nhiệm vụ ghi âm đang giao - chọn theo ?taskId= trên URL, mặc định nhiệm vụ đầu tiên
-  const progressQuery = useQuery({
+  // Call API lấy nhiệm vụ ghi âm đang giao - chọn theo ?taskId= trên URL, mặc định nhiệm vụ đầu tiên
+  const {
+    data: progress,
+    isLoading: isLoadingProgress,
+    isError: isProgressError,
+    error: progressError,
+    refetch: refetchProgress,
+  } = useQuery({
     queryKey: [GET_SPEAKER_PROGRESS_API],
     queryFn: getSpeakerProgressApi,
   });
-  const activeTasks = (progressQuery.data?.activeTasks ?? []).filter((t) => t.taskType === "Recording");
+  const activeTasks = (progress?.activeTasks ?? []).filter((t) => t.taskType === "Recording");
   const selectedTask = activeTasks.find((t) => String(t.taskId) === currentTaskId) ?? activeTasks[0];
   const taskId = selectedTask?.taskId;
 
-  // Cặp câu tiếp theo trong nhiệm vụ đang chọn (null = đã hết câu)
-  const scriptQuery = useQuery({
+  // Call API lấy cặp câu tiếp theo trong nhiệm vụ đang chọn (null = đã hết câu)
+  const {
+    data: sentence,
+    isLoading: isLoadingScript,
+    isError: isScriptError,
+    error: scriptError,
+    refetch: refetchScript,
+  } = useQuery({
     queryKey: [GET_NEXT_SCRIPT_API, taskId],
     queryFn: () => getNextScriptApi(taskId),
     enabled: Boolean(taskId),
   });
-  const sentence = scriptQuery.data;
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [editCs, setEditCs] = useState("");
@@ -122,24 +96,29 @@ export default function ReviewText() {
   const [reportReason, setReportReason] = useState(null);
   const [reportOther, setReportOther] = useState("");
 
-  // Lý do báo lỗi: chỉ tải khi mở popup, danh sách ít thay đổi nên giữ cache suốt phiên
-  const reasonsQuery = useQuery({
+  // Call API lấy lý do báo lỗi: chỉ tải khi mở popup, danh sách ít thay đổi nên giữ cache suốt phiên
+  const {
+    data: reasons = [],
+    isLoading: isLoadingReasons,
+    isError: isReasonsError,
+    error: reasonsError,
+    refetch: refetchReasons,
+  } = useQuery({
     queryKey: [GET_SCRIPT_ERROR_REASONS_API],
     queryFn: getScriptErrorReasonsApi,
     enabled: showReportModal,
     staleTime: Infinity,
   });
-  const reportReasons = (reasonsQuery.data ?? []).map((r) => ({
-    id: r.reasonCode,
-    ...(REPORT_REASON_LABELS[r.reasonCode] ?? { label: r.description, desc: null }),
-  }));
+  // Hiện đúng mô tả backend trả về (tạm thời chưa dịch); gửi đi bằng reasonCode
+  const reportReasons = reasons.map((r) => ({ id: r.reasonCode, label: r.description, desc: null }));
 
-  // Sửa / báo lỗi câu: POST /api/scripts/{id}/review. Xong thì tải lại câu (câu bị loại sẽ được thay câu khác)
-  const reviewMutation = useMutation({
+  // Mutation sửa / báo lỗi câu. Xong thì tải lại câu (câu bị loại sẽ được thay câu khác) và tiến độ nhiệm vụ
+  const { mutate: reviewScript, isPending: isReviewing } = useMutation({
     mutationKey: [REVIEW_SCRIPT_API],
     mutationFn: reviewScriptApi,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [GET_NEXT_SCRIPT_API] });
+      queryClient.invalidateQueries({ queryKey: [GET_SPEAKER_PROGRESS_API] });
     },
     // Câu đã có bản ghi, đổi số từ tiếng Anh... -> backend trả câu báo lỗi tiếng Việt
     onError: (error) => toast.error(error.message),
@@ -161,7 +140,7 @@ export default function ReviewText() {
     setShowEditModal(true);
     // Nghĩa của từ tiếng Anh (alignment) không có trong câu tiếp theo -> lấy từ chi tiết cặp câu
     try {
-      const detail = await queryClient.fetchQuery({
+      const detail = await queryClient.query({
         queryKey: [GET_SCRIPT_DETAIL_API, sentence.scriptId],
         queryFn: () => getScriptDetailApi(sentence.scriptId),
       });
@@ -172,7 +151,7 @@ export default function ReviewText() {
   };
 
   const handleSaveEdit = () => {
-    reviewMutation.mutate(
+    reviewScript(
       {
         scriptId: sentence.scriptId,
         action: "Edited",
@@ -197,7 +176,7 @@ export default function ReviewText() {
 
   const handleSubmitReport = () => {
     if (!reportReason) return;
-    reviewMutation.mutate(
+    reviewScript(
       {
         scriptId: sentence.scriptId,
         action: "Rejected",
@@ -216,9 +195,9 @@ export default function ReviewText() {
   };
 
   // Chưa có nhiệm vụ: đang tải / lỗi / chưa được giao nhiệm vụ ghi âm nào
-  if (progressQuery.isLoading) return <Loading />;
-  if (progressQuery.isError) {
-    return <ErrorState message={progressQuery.error.message} onRetry={progressQuery.refetch} />;
+  if (isLoadingProgress) return <Loading />;
+  if (isProgressError) {
+    return <ErrorState message={progressError.message} onRetry={refetchProgress} />;
   }
   if (!selectedTask) {
     return (
@@ -307,10 +286,10 @@ export default function ReviewText() {
       </div>
 
       {/* Câu đang tải / lỗi / hết câu */}
-      {scriptQuery.isLoading ? (
+      {isLoadingScript ? (
         <Loading />
-      ) : scriptQuery.isError ? (
-        <ErrorState message={scriptQuery.error.message} onRetry={scriptQuery.refetch} />
+      ) : isScriptError ? (
+        <ErrorState message={scriptError.message} onRetry={refetchScript} />
       ) : !sentence ? (
         <EmptyState
           title="Đã hết câu trong nhiệm vụ này"
@@ -378,7 +357,8 @@ export default function ReviewText() {
                 Việt – Anh
               </span>
               <h2
-                className="text-headline font-label sm:type-reading max-w-[650px] mx-auto"
+                // Luôn giữ chỗ 2 dòng (như câu mẫu) để thẻ không co lại khi câu ngắn - câu căn giữa trong khung
+                className="text-headline font-label sm:type-reading max-w-[650px] mx-auto min-h-14 sm:min-h-20 flex items-center justify-center"
                 style={{ color: TEXT_HEADING, textWrap: "pretty" }}
               >
                 <CodeSwitchText
@@ -399,7 +379,7 @@ export default function ReviewText() {
                 Tiếng Việt
               </span>
               <p
-                className="text-headline font-label sm:type-reading max-w-[600px] mx-auto"
+                className="text-headline font-label sm:type-reading max-w-[600px] mx-auto min-h-14 sm:min-h-20 flex items-center justify-center"
                 style={{ color: TEXT_HEADING, textWrap: "pretty" }}
               >
                 {sentence.vePlain}
@@ -673,14 +653,14 @@ export default function ReviewText() {
                 </button>
                 <button
                   onClick={handleSaveEdit}
-                  disabled={checks.some((c) => !c.ok) || reviewMutation.isPending}
+                  disabled={checks.some((c) => !c.ok) || isReviewing}
                   className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-full type-button text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                   style={{
                     background: ACCENT,
                     boxShadow: `0 4px 10px ${ACCENT}4D`,
                   }}
                 >
-                  <Check className="w-4 h-4" /> {reviewMutation.isPending ? "Đang lưu..." : "Lưu thay đổi"}
+                  <Check className="w-4 h-4" /> {isReviewing ? "Đang lưu..." : "Lưu thay đổi"}
                 </button>
               </div>
             </div>
@@ -740,9 +720,9 @@ export default function ReviewText() {
                 Chọn loại lỗi bạn gặp phải
               </p>
 
-              {reasonsQuery.isLoading && <Loading text="Đang tải lý do..." className="py-6" />}
-              {reasonsQuery.isError && (
-                <ErrorState message={reasonsQuery.error.message} onRetry={reasonsQuery.refetch} className="py-6" />
+              {isLoadingReasons && <Loading text="Đang tải lý do..." className="py-6" />}
+              {isReasonsError && (
+                <ErrorState message={reasonsError.message} onRetry={refetchReasons} className="py-6" />
               )}
               <div className="flex flex-col gap-2">
                 {reportReasons.map((r) => (
@@ -823,14 +803,14 @@ export default function ReviewText() {
                 </button>
                 <button
                   onClick={handleSubmitReport}
-                  disabled={!reportReason || reviewMutation.isPending}
+                  disabled={!reportReason || isReviewing}
                   className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-full text-white type-button disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                   style={{
                     background: DANGER,
                     boxShadow: `0 4px 10px ${DANGER}4D`,
                   }}
                 >
-                  <Flag className="w-4 h-4" /> {reviewMutation.isPending ? "Đang gửi..." : "Gửi báo lỗi"}
+                  <Flag className="w-4 h-4" /> {isReviewing ? "Đang gửi..." : "Gửi báo lỗi"}
                 </button>
               </div>
             </div>

@@ -33,3 +33,7 @@ export const UPLOAD_RECORDING_API = 'UPLOAD_RECORDING_API'
 export const GET_RECORDING_AUDIO_URL_API = 'GET_RECORDING_AUDIO_URL_API'
 // Lịch sử ghi âm của Speaker (GET /api/speaker/recordings/history)
 export const GET_SPEAKER_RECORDING_HISTORY_API = 'GET_SPEAKER_RECORDING_HISTORY_API'
+
+// ===== Config (tham số hệ thống) =====
+// Danh sách chủ đề cố định (GET /api/config/topics)
+export const GET_TOPICS_API = 'GET_TOPICS_API'

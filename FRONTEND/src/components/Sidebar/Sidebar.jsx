@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
+import { prefetchRoute } from '../../routes/prefetch';
 import { X, ChevronDown, HelpCircle } from 'lucide-react';
 import Logo from '../Logo/Logo';
 import { SIDEBAR_CONFIG } from '../../constants/sidebarConfig';
@@ -110,6 +111,9 @@ export default function Sidebar({ role, isOpen, onClose }) {
                         to={item.to}
                         end={item.end}
                         onClick={onClose}
+                        // Rê chuột / focus là tải sẵn code + dữ liệu của trang (routes/prefetch.js)
+                        onMouseEnter={() => prefetchRoute(item.to)}
+                        onFocus={() => prefetchRoute(item.to)}
                         className={({ isActive }) => `${itemBase} ${isActive || inFlow ? activeCls : idleCls}`}
                         style={({ isActive }) => (isActive || inFlow ? activeStyle : {})}
                       >

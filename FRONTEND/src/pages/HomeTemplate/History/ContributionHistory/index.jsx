@@ -8,7 +8,7 @@ import { stripTags } from "../../../../utils/codeSwitch";
 import Loading from "../../../../components/Loading/Loading";
 import ErrorState from "../../../../components/ErrorState/ErrorState";
 import EmptyState from "../../../../components/EmptyState/EmptyState";
-import { getSpeakerContributionHistoryApi } from "../../../../services/speakerApi";
+import { getAllSpeakerContributionHistoryApi } from "../../../../services/speakerApi";
 import { GET_SPEAKER_CONTRIBUTION_HISTORY_API } from "../../../../utils/queryKey";
 
 // "2026-09-05T07:20:00Z" -> "05/09/2026 - 14:20" (giờ máy người dùng)
@@ -132,21 +132,13 @@ export default function ContributionHistory() {
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Lấy hết lịch sử (mỗi lần tối đa 100 câu) - lọc, tìm, phân trang làm ở FE như bảng cũ
-  const historyQuery = useQuery({
+  // Call API lấy hết lịch sử (mỗi lần tối đa 100 câu) - lọc, tìm, phân trang làm ở FE như bảng cũ
+  const { data: contributions, isLoading, isError, error, refetch } = useQuery({
     queryKey: [GET_SPEAKER_CONTRIBUTION_HISTORY_API],
-    queryFn: async () => {
-      const all = [];
-      for (let page = 1; ; page += 1) {
-        const result = await getSpeakerContributionHistoryApi({ page, pageSize: 100 });
-        all.push(...result.items);
-        if (!result.hasNext) break;
-      }
-      return all;
-    },
+    queryFn: getAllSpeakerContributionHistoryApi,
   });
 
-  const withStatus = useMemo(() => (historyQuery.data ?? []).map(toRow), [historyQuery.data]);
+  const withStatus = useMemo(() => (contributions ?? []).map(toRow), [contributions]);
 
   const stats = useMemo(() => {
     const total = withStatus.length;
@@ -173,9 +165,9 @@ export default function ContributionHistory() {
   const totalPages = Math.max(1, Math.ceil(filteredData.length / itemsPerPage));
   const pageItems = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  if (historyQuery.isLoading) return <Loading />;
-  if (historyQuery.isError) {
-    return <ErrorState message={historyQuery.error.message} onRetry={historyQuery.refetch} />;
+  if (isLoading) return <Loading />;
+  if (isError) {
+    return <ErrorState message={error.message} onRetry={refetch} />;
   }
 
   return (
@@ -247,7 +239,8 @@ export default function ContributionHistory() {
                 <th className="py-2 px-3 text-left w-[14%]">Kết quả</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#F0EEE6] type-ui">
+            {/* Đường kẻ dưới mỗi dòng; dòng cuối vẫn có khi trang chưa đầy, trang đủ 10 dòng thì bỏ để không chồng lên viền thanh phân trang */}
+            <tbody className="type-ui">
               {filteredData.length === 0 ? (
                 <tr>
                   <td colSpan={5}>
@@ -261,7 +254,7 @@ export default function ContributionHistory() {
               ) : pageItems.map((item, idx) => {
                 const votedCount = item.reviews.filter((r) => r.decision === "approve" || r.decision === "reject").length;
                 return (
-                  <tr key={item.id} onClick={() => setDetailItem(item)} className="hover:bg-[#F7F5EF]/70 transition-colors group h-11 cursor-pointer">
+                  <tr key={item.id} onClick={() => setDetailItem(item)} className={`border-b border-[#F0EEE6] hover:bg-[#F7F5EF]/70 transition-colors group h-11 cursor-pointer ${pageItems.length === itemsPerPage ? "last:border-b-0" : ""}`}>
                     <td className="px-3 text-center whitespace-nowrap align-middle">
                       <span className="text-[#9A9CA3] type-meta">{(currentPage - 1) * itemsPerPage + idx + 1}</span>
                     </td>

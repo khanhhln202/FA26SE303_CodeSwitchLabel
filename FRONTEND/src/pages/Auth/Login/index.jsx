@@ -43,7 +43,8 @@ export default function Login({ onLoginSuccess }) {
   }, [isExpiredRedirect]);
 
   const queryClient = useQueryClient();
-  const mutation = useMutation({
+  // Mutation đăng nhập
+  const { mutate: login, isPending: isLoggingIn } = useMutation({
     mutationKey: [LOGIN_API],
     mutationFn: loginApi,
     onSuccess: (data) => {
@@ -65,8 +66,8 @@ export default function Login({ onLoginSuccess }) {
     initialValues: { email: "", password: "" },
     validationSchema: loginSchema,
     onSubmit: (values) => {
-      if (mutation.isPending) return;
-      mutation.mutate({ email: values.email.trim().toLowerCase(), password: values.password });
+      if (isLoggingIn) return;
+      login({ email: values.email.trim().toLowerCase(), password: values.password });
     },
   });
 
@@ -112,8 +113,8 @@ export default function Login({ onLoginSuccess }) {
           />
         </FormField>
 
-        <PrimaryButton type="submit" disabled={mutation.isPending} className="mt-1">
-          {mutation.isPending ? "Đang đăng nhập..." : "Đăng nhập"}
+        <PrimaryButton type="submit" disabled={isLoggingIn} className="mt-1">
+          {isLoggingIn ? "Đang đăng nhập..." : "Đăng nhập"}
         </PrimaryButton>
       </form>
       <p className="type-meta mt-5 text-center text-[var(--auth-body)]">

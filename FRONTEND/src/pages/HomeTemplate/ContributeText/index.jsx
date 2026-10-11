@@ -1,9 +1,13 @@
 import { useState, useMemo } from 'react';
 import { Send, Check, Trash2, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { contributeScriptApi } from '../../../services/speakerApi';
-import { CONTRIBUTE_SCRIPT_API, GET_SPEAKER_CONTRIBUTION_HISTORY_API } from '../../../utils/queryKey';
+import { getTopicsApi } from '../../../services/configApi';
+import { evaluateSentence } from '../../../utils/sentenceValidation';
+import Loading from '../../../components/Loading/Loading';
+import ErrorState from '../../../components/ErrorState/ErrorState';
+import { CONTRIBUTE_SCRIPT_API, GET_SPEAKER_CONTRIBUTION_HISTORY_API, GET_TOPICS_API } from '../../../utils/queryKey';
 import {
   SPEAKER_ACCENT as ACCENT,
   SUCCESS, WARNING,
@@ -14,41 +18,12 @@ import {
 } from '../../../constants/theme';
 
 // Màn hình cao >= 900px dùng biến thể [@media(min-height:900px)] để giãn ô nhập/khoảng cách; màn thấp (laptop 768px) giữ bản gọn vừa 1 màn hình
-// Dữ liệu lựa chọn - thêm chủ đề / số từ chỉ cần thêm phần tử ở đây, UI tự sinh theo mảng
-const CATEGORIES = ['Hội thoại hàng ngày', 'Công nghệ thông tin', 'Giáo dục'];
-// Tên chủ đề trên giao diện -> giá trị domain của backend
-const DOMAIN_OF = {
-  'Hội thoại hàng ngày': 'DailyLife',
-  'Công nghệ thông tin': 'ItTechnology',
-  'Giáo dục': 'Education',
-};
+// Chủ đề lấy từ GET /api/config/topics; số từ tiếng Anh vẫn chọn ở đây (backend không có API riêng)
 const WORD_COUNT_OPTIONS = [1, 2, 3];
 // Số ô đối chiếu giữ chỗ sẵn = số từ lớn nhất có thể chọn, để đổi lựa chọn không làm giãn layout
 const MAX_PAIRS = Math.max(...WORD_COUNT_OPTIONS);
 
 const emptyPairs = () => Array.from({ length: MAX_PAIRS }, () => ({ source: '', target: '' }));
-
-/**
- * Kiểm tra 1 câu theo 3 tiêu chí dùng chung cho cả 2 câu: độ dài 5-20 từ, nhãn đúng loại câu, kết thúc bằng dấu câu.
- * mixed = true: câu Việt-Anh (phải có cả [vi] và [en]); false: câu tiếng Việt (chỉ [vi], không có [en]).
- */
-function evaluateSentence(text, mixed) {
-  const trimmed = text.trim();
-  const stripped = trimmed.replace(/\[(vi|en)\]/g, '').trim();
-  const words = stripped ? stripped.split(/\s+/).length : 0;
-  const tagOk = mixed
-    ? /\[vi\]/.test(trimmed) && /\[en\]/.test(trimmed)
-    : /\[vi\]/.test(trimmed) && !/\[en\]/.test(trimmed);
-  return {
-    empty: !trimmed,
-    words,
-    rules: [
-      { ok: words >= 5 && words <= 20, label: '5-20 từ' },
-      { ok: tagOk, label: mixed ? 'Có [vi] và [en]' : 'Chỉ có [vi]' },
-      { ok: /[.!?…]$/.test(stripped), label: 'Kết thúc . ! ?' },
-    ],
-  };
-}
 
 /** 1 tiêu chí - 3 trạng thái: chưa gõ (○ xám), đạt (✓ xanh), đã gõ nhưng chưa đạt (! đỏ). */
 function RuleItem({ ok, touched, label }) {
@@ -115,7 +90,23 @@ function RadioGroup({ label, options, value, onChange, renderLabel = (o) => o })
 
 export default function ContributeText() {
   const queryClient = useQueryClient();
-  const [category, setCategory] = useState(CATEGORIES[0]);
+
+  // Call API lấy danh sách chủ đề (cố định, ít khi đổi nên giữ cache suốt phiên)
+  const {
+    data: topics = [],
+    isLoading: isLoadingTopics,
+    isError: isTopicsError,
+    error: topicsError,
+    refetch: refetchTopics,
+  } = useQuery({
+    queryKey: [GET_TOPICS_API],
+    queryFn: getTopicsApi,
+    staleTime: Infinity,
+  });
+  const topicName = (code) => topics.find((t) => t.code === code)?.name ?? code;
+  // Chưa chọn thì mặc định chủ đề đầu tiên trong danh sách
+  const [selectedTopic, setSelectedTopic] = useState(null);
+  const category = selectedTopic ?? topics[0]?.code;
   const [wordCount, setWordCount] = useState(2);
   const [csTranscript, setCsTranscript] = useState('');
   const [viEquivalent, setViEquivalent] = useState('');
@@ -135,7 +126,8 @@ export default function ContributeText() {
   const sentenceRules = [...cs.rules, ...vi.rules];
   const totalRules = sentenceRules.length + 1;
   const passedCount = sentenceRules.filter((r) => r.ok).length + (pairsOk ? 1 : 0);
-  const allValid = passedCount === totalRules;
+  // Chưa tải được chủ đề thì chưa gửi được (không có domain để gửi)
+  const allValid = passedCount === totalRules && Boolean(category);
   const hasContent = csTranscript || viEquivalent || pairs.some((pair) => pair.source || pair.target);
 
   const resetForm = () => {
@@ -144,7 +136,8 @@ export default function ContributeText() {
     setPairs(emptyPairs());
   };
 
-  const mutation = useMutation({
+  // Mutation gửi câu đóng góp
+  const { mutate: contributeScript, isPending: isSubmitting } = useMutation({
     mutationKey: [CONTRIBUTE_SCRIPT_API],
     mutationFn: contributeScriptApi,
     onSuccess: () => {
@@ -158,11 +151,11 @@ export default function ContributeText() {
   });
 
   const handleSubmit = () => {
-    if (!allValid || mutation.isPending) return;
-    mutation.mutate({
+    if (!allValid || isSubmitting) return;
+    contributeScript({
       csContent: csTranscript.trim(),
       veContent: viEquivalent.trim(),
-      domain: DOMAIN_OF[category],
+      domain: category,
       relation: 'DirectTranslation',
       alignment: activePairs.map((p) => ({
         source: p.source.trim(),
@@ -226,7 +219,19 @@ export default function ContributeText() {
 
         {/* Chủ đề | Số từ tiếng Anh - 2 nhóm cạnh nhau, mỗi nhóm xếp dọc */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-5 px-4 sm:px-5 py-2 [@media(min-height:900px)]:py-3.5 border-b" style={{ borderColor: BORDER_LIGHT }}>
-          <RadioGroup label="Chủ đề của câu" options={CATEGORIES} value={category} onChange={setCategory} />
+          {isLoadingTopics ? (
+            <Loading text="Đang tải chủ đề..." className="py-4" />
+          ) : isTopicsError ? (
+            <ErrorState message={topicsError.message} onRetry={refetchTopics} className="py-4" />
+          ) : (
+            <RadioGroup
+              label="Chủ đề của câu"
+              options={topics.map((t) => t.code)}
+              value={category}
+              onChange={setSelectedTopic}
+              renderLabel={topicName}
+            />
+          )}
           {/* Số từ tiếng Anh - quyết định số cặp đối chiếu bên dưới */}
           <RadioGroup
             label="Số từ tiếng Anh trong câu"
@@ -306,7 +311,7 @@ export default function ContributeText() {
             )}
             <button
               onClick={handleSubmit}
-              disabled={!allValid || mutation.isPending}
+              disabled={!allValid || isSubmitting}
               className="flex-1 sm:flex-none px-4 py-2.5 text-white font-label text-ui rounded-xl flex items-center justify-center gap-2 transition-all"
               style={{
                 background: allValid ? ACCENT : '#DCD9CE',
@@ -315,7 +320,7 @@ export default function ContributeText() {
               }}
             >
               <Send className="w-4 h-4" />
-              {mutation.isPending ? 'Đang gửi...' : allValid ? 'Gửi đóng góp để duyệt' : 'Hoàn thành các tiêu chuẩn để gửi'}
+              {isSubmitting ? 'Đang gửi...' : allValid ? 'Gửi đóng góp để duyệt' : 'Hoàn thành các tiêu chuẩn để gửi'}
             </button>
           </div>
         </div>
