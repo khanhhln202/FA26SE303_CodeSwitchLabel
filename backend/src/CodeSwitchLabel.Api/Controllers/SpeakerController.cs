@@ -63,7 +63,9 @@ public class SpeakerController(
 
     /// <summary>Tiến độ thu âm của chính mình.</summary>
     /// <remarks>
-    /// Tổng số bản đã nộp, số bản được duyệt đạt, và từng task thu âm đang giao.
+    /// Tổng số bản đã nộp, số bản được duyệt đạt, và từng task thu âm đang giao. Mỗi task có
+    /// `taskTitle` (tên nhiệm vụ, cùng nghĩa với `taskTitle` ở `GET /api/speaker/recordings/history`)
+    /// cùng `description` và `campaignName` — tên nhiệm vụ không phụ thuộc vào việc task có thuộc chiến dịch hay không.
     /// Chỉ tiêu task thu âm đếm theo **cặp câu**: một cặp chỉ tính là xong khi **cả hai** bản
     /// cs và vi đều được duyệt đạt.
     /// </remarks>

@@ -273,7 +273,7 @@ Các mã còn lại: `alignment_incomplete`, `alignment_word_missing`, `already_
 
 1. `GET /api/scripts?status=PendingValidation` — danh sách câu chờ duyệt.
 2. `GET /api/scripts/{id}` — chi tiết cặp câu, kèm `alignment` và lịch sử duyệt.
-3. `GET /api/script-error-reasons` — danh sách lý do cho ô chọn khi từ chối.
+3. `GET /api/script-error-reasons` — danh sách lý do cho ô chọn khi từ chối. `description` trả về **tiếng Việt**, hiện thẳng ra UI được.
 4. `POST /api/scripts/{id}/review`:
 
 ```json
@@ -352,7 +352,7 @@ Bản trượt kiểm tra **vẫn được lưu** kèm toàn bộ số đo (th�
 
 Câu phải có từ 1 đến 9 từ tiếng Anh, vì con số này nằm trong mã câu. Câu thuần Việt không được có nhãn `[en]`.
 
-**Tiến độ** — `GET /api/speaker/progress`: tổng bản đã nộp, số bản đạt, và các task thu âm đang giao.
+**Tiến độ** — `GET /api/speaker/progress`: tổng bản đã nộp, số bản đạt, và các task thu âm đang giao. Mỗi task trong `activeTasks` có `taskTitle` (tên nhiệm vụ — **không phụ thuộc** task có thuộc chiến dịch hay không), cùng `description` và `campaignName`.
 
 **Đợt, bảng xếp hạng, đăng ký (mới — thay `CURRENT_ROUND`, `ROUND_LEADERBOARD`, `NEXT_ROUND`)**
 
@@ -400,7 +400,7 @@ Câu phải có từ 1 đến 9 từ tiếng Anh, vì con số này nằm trong 
 }
 ```
 
-2. `GET /api/rejection-reasons` — danh sách lý do từ chối, chia theo `category`.
+2. `GET /api/rejection-reasons` — danh sách lý do từ chối, chia theo `category`. `description` trả về **tiếng Việt**.
 3. `POST /api/recordings/{recordingId}/reviews`:
 
 ```json

@@ -14,6 +14,17 @@ namespace CodeSwitchLabel.Services.Implementations;
 
 internal static class TaskMapper
 {
+    public static TaskProgressDto ProgressOf(this TaskRow r, DateTimeOffset now) =>
+        new(r.TaskType == TaskType.Recording ? "cặp câu" : "bản ghi",
+            r.TargetQty,
+            r.Done,
+            r.Started,
+            r.UsableItems,
+            r.TotalItems,
+            TaskStateMachine.Percent(r.Done, r.TargetQty),
+            r.Deadline.HasValue ? Math.Round((r.Deadline.Value - now).TotalHours, 1) : null,
+            r.Deadline.HasValue && r.Deadline.Value < now && TaskStateMachine.AcceptsWork(r.Status));
+
     public static TaskListItemDto ToListItem(this TaskRow r, DateTimeOffset now) =>
         new(r.TaskId,
             r.CampaignId,
@@ -25,16 +36,18 @@ internal static class TaskMapper
             r.AssigneeName,
             r.Deadline,
             r.CreatedAt,
-            new TaskProgressDto(
-                r.TaskType == TaskType.Recording ? "cặp câu" : "bản ghi",
-                r.TargetQty,
-                r.Done,
-                r.Started,
-                r.UsableItems,
-                r.TotalItems,
-                TaskStateMachine.Percent(r.Done, r.TargetQty),
-                r.Deadline.HasValue ? Math.Round((r.Deadline.Value - now).TotalHours, 1) : null,
-                r.Deadline.HasValue && r.Deadline.Value < now && TaskStateMachine.AcceptsWork(r.Status)));
+            r.ProgressOf(now));
+
+    // Speaker thấy task của chính mình nên không cần người nhận / thời điểm tạo.
+    public static SpeakerActiveTaskDto ToSpeakerActiveTask(this TaskRow r, DateTimeOffset now) =>
+        new(r.TaskId,
+            r.Description,
+            r.Description,
+            r.CampaignName,
+            r.TaskType,
+            r.Status,
+            r.Deadline,
+            r.ProgressOf(now));
 }
 
 public class TaskService(
@@ -525,7 +538,7 @@ public class TaskService(
         var rows = await tasks.GetActiveRowsForAssigneeAsync(speakerId, TaskType.Recording, ct);
         var (submitted, approved) = await tasks.GetSpeakerTotalsAsync(speakerId, ct);
 
-        return new SpeakerProgressDto(submitted, approved, [.. rows.Select(r => r.ToListItem(now))]);
+        return new SpeakerProgressDto(submitted, approved, [.. rows.Select(r => r.ToSpeakerActiveTask(now))]);
     }
 
     public async Task<IReadOnlyList<AssignableUserDto>> GetAssignableUsersAsync(
