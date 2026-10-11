@@ -132,15 +132,30 @@ docker compose -f deploy/docker-compose.prod.yml logs -f api
 
 ## Nghiệm thu bản deploy
 
-Không nghiệm thu bằng cảm giác. Chạy chính bộ kiểm thử đầu–cuối của dự án, trỏ vào máy chủ:
+**Lần chạy đầu tiên** (database vừa tạo, chưa có dữ liệu thật) thì nghiệm thu bằng cả bộ kiểm thử
+đầu–cuối — hai kịch bản này ghi sẵn mã nên chỉ đúng khi dữ liệu bắt đầu từ đầu:
 
 ```bash
 PASSWORD='<SEED_PASSWORD trong deploy/.env>' BASE=https://api.<tên-miền> node backend/tests/e2e/01-core-flows.e2e.mjs
 PASSWORD='<SEED_PASSWORD trong deploy/.env>' BASE=https://api.<tên-miền> node backend/tests/e2e/02-users.e2e.mjs
 ```
 
-Hai kịch bản này cần **database vừa tạo lần đầu**, nên chạy ngay sau khi deploy, trước khi đội frontend
-nhập dữ liệu thật. Sau đó kiểm thêm bằng tay:
+**Mọi lần sau**, khi máy đã có dữ liệu thật, **đừng chạy hai kịch bản đó** — chúng cần database rỗng
+(`backend/tests/e2e/README.md`) và sẽ hỏng, hoặc làm bẩn dữ liệu đang có. Dùng smoke test sau,
+`deploy/deploy.sh` cũng tự chạy đúng các bước này ở bước 7:
+
+```bash
+BASE=https://api.<tên-miền>
+curl -s $BASE/health                                    # {"status":"ok",...}
+curl -s -o /dev/null -w '%{http_code}\n' $BASE/swagger/v1/swagger.json   # 200
+TOKEN=$(curl -s -H 'Content-Type: application/json' \
+  -d '{"email":"admin@codeswitchlabel.local","password":"'"$SEED_PASSWORD"'"}' \
+  $BASE/api/auth/login | grep -o '"accessToken":"[^"]*"' | cut -d'"' -f4)
+curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $TOKEN" $BASE/api/campaigns   # 200
+curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $TOKEN" $BASE/api/tasks       # 200
+```
+
+Kiểm tra bằng tay:
 
 - Mở `https://api.<tên-miền>` thấy trang Swagger.
 - Đăng nhập, nộp thử một bản ghi, mở link nghe: địa chỉ phải bắt đầu bằng `https://files.<tên-miền>`.
@@ -152,10 +167,53 @@ nhập dữ liệu thật. Sau đó kiểm thêm bằng tay:
 # Sao lưu database (đặt lịch chạy hằng ngày bằng cron)
 docker exec csl-postgres pg_dump -U csl codeswitchlabel | gzip > backup-$(date +%F).sql.gz
 
-# Cập nhật khi có code mới
-git pull
-docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build
+# Cập nhật khi có code mới — script tự sao lưu, chạy migration, dựng lại, kiểm tra
+./deploy/deploy.sh
 ```
+
+### Cập nhật bằng `deploy/deploy.sh`
+
+Một lệnh duy nhất, chạy từ thư mục gốc của repo trên máy chủ. Script làm theo đúng thứ tự này:
+
+| Bước | Việc | Dừng ngay nếu |
+|---|---|---|
+| 1. Kiểm tra | Có `deploy/.env`? đang ở nhánh `main`? thư mục làm việc sạch? volume `pg-data` còn không? còn ≥ 5 GB đĩa? | sai nhánh, có file sửa chưa commit, **mất volume** |
+| 2. Chờ | `pg_isready` (tối đa 30 giây) | postgres không dậy |
+| 3. Sao lưu | `pg_dump` → `gzip`, kiểm tra bằng `gzip -t`; tar volume MinIO; giữ 7 bản gần nhất | dump rỗng hoặc gzip hỏng |
+| 4. Kéo code | `git pull --ff-only` | git lỗi |
+| 5. Migration | Chạy file `migrations/V*.sql` **chưa có** trong bảng `schema_migration` | migration lỗi (file tự rollback) |
+| 6. Dựng lại | `docker compose up -d --build` | — |
+| 7. Kiểm tra | `/health`, đăng nhập `admin@`, `GET /api/campaigns`; ghi commit vào `deploy/.deployed-sha` | API không lên, sai mật khẩu |
+
+**Bảng `schema_migration`** là sổ ghi những migration đã chạy, do script tự tạo ở bước 5. Nhờ đó
+"migration nào đã áp rồi" trả lời bằng truy vấn thay vì đọc lại tài liệu:
+
+```bash
+docker exec csl-postgres psql -U csl -d codeswitchlabel -c "SELECT * FROM schema_migration ORDER BY applied_at;"
+```
+
+Lần chạy đầu tiên bảng còn trống nên **V2 sẽ chạy lại**. Điều đó an toàn: file V2 idempotent
+(`IF EXISTS`, `CREATE OR REPLACE`, `DROP`+`CREATE` trong một transaction).
+
+Điều chỉnh được bằng biến môi trường:
+
+```bash
+BACKUP_DIR=/mnt/lon/thu_muc_sao_luu ./deploy/deploy.sh       # chỗ chứa bản sao lưu (mặc định /var/backups/codeswitchlabel)
+HEALTH_MAX_TRIES=120 HEALTH_INTERVAL=5 ./deploy/deploy.sh    # máy yếu, API lên lâu hơn
+```
+
+**Khi script báo lỗi, nó không tự sửa gì cả** — chỉ in ra các lệnh hoàn tác để bạn tự chạy. Đặc biệt
+nó **không tự phục hồi database**: phục hồi bản sao lưu tạo vài phút trước sẽ xoá mất dữ liệu
+ghi trong khoảng đó.
+
+**Lần đầu dùng script**: script nằm trong repo nên máy chủ phải có nó trước. Kéo code bằng tay một
+lần (`git pull`), hoặc `scp deploy/deploy.sh <user>@<máy-chủ>:~/deploy/` — từ lần sau script tự kéo
+chính nó.
+
+> **Migration phải tương thích ngược** với code đang chạy (kiểu expand/contract: thêm cột/bảng mới,
+> chưa xoá cái cũ). Vì vậy mới áp migration *trước* khi dựng lại container — code cũ vẫn chạy được
+> với lược đồ mới. Migration phá vỡ tương thích (xoá cột, đổi kiểu) thì phải làm ngược lại và sửa
+> thứ tự trong `deploy/deploy.sh`.
 
 File âm thanh nằm trong volume `codeswitchlabel_minio-data`; sao lưu volume này cùng với database,
 vì mất file audio là mất dữ liệu nghiên cứu, không tạo lại được.
@@ -165,14 +223,18 @@ vì mất file audio là mất dữ liệu nghiên cứu, không tạo lại đ�
 `docs/codeswitchlabel.sql` chỉ chạy **một lần** qua `/docker-entrypoint-initdb.d/` lúc volume
 `pg-data` còn trống. DB đã có dữ liệu **không** tự nhận lược đồ mới khi `up -d --build`,
 và `DatabaseSeeder.EnsureSchemaAsync` chỉ tự vá bảng `campaign_registration` — nên mỗi file
-trong `migrations/` phải chạy tay đúng một lần. **Không bao giờ `down -v` trên máy deploy**
+trong `migrations/` phải chạy đúng một lần. **Không bao giờ `down -v` trên máy deploy**
 (vì xoá sạch `pg-data` + metadata bản ghi).
+
+`deploy/deploy.sh` lo hết phần này: nó chạy mỗi file chưa có trong bảng `schema_migration` rồi ghi
+lại, nên bình thường không phải làm gì tay. Mục này giữ lại để hiểu script đang làm gì và để chạy
+tay khi cần (ví dụ muốn xem trước migration trước khi deploy).
 
 ```bash
 # 0. Trên máy deploy: sao lưu TRƯỚC khi chạm vào DB
 docker exec csl-postgres pg_dump -U csl codeswitchlabel | gzip > backup-$(date +%F)-preMigrate.sql.gz
 
-# 1. Kéo code mới (phải thấy file migration, ví dụ migrations/V2__*.sql)
+# 1. Trên máy deploy: kéo code mới (phải thấy file migration, ví dụ migrations/V2__*.sql)
 git pull
 ls -lh migrations/
 
@@ -187,7 +249,9 @@ cat migrations/V2__verify_task_independent.sql | docker exec -i csl-postgres psq
 docker exec csl-postgres psql -U csl -d codeswitchlabel -c "SELECT column_name,is_nullable FROM information_schema.columns WHERE table_name='task' AND column_name='campaign_id';"
 docker exec csl-postgres psql -U csl -d codeswitchlabel -c "SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid='task'::regclass AND contype='f';"
 
-# 5. Rebuild API rồi xem log tới khi sẵn sàng
+# 5. Ghi vào sổ để deploy.sh không chạy lại V2, rồi rebuild API
+docker exec -i csl-postgres psql -U csl -d codeswitchlabel -v ON_ERROR_STOP=1 \
+  -c "INSERT INTO schema_migration (version, checksum, duration_ms) SELECT 'V2', '', 0 WHERE NOT EXISTS (SELECT 1 FROM schema_migration WHERE version='V2');"
 docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build
 docker compose -f deploy/docker-compose.prod.yml logs -f api
 ```

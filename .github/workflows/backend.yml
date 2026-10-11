@@ -1,8 +1,9 @@
 name: Backend
 
-# Repo dùng chung cho cả frontend lẫn backend, nên chỉ chạy khi phần backend, lược đồ database
-# hoặc file migration thay đổi. Commit của đội frontend không kích hoạt workflow này.
+# Repo dùng chung cho cả frontend lẫn backend, nên chỉ chạy khi phần backend, lược đồ database,
+# file migration hoặc script deploy thay đổi. Commit của đội frontend không kích hoạt workflow này.
 # migrations/** bắt buộc có mặt: migration hỏng mà CI không chạy là lọt thẳng lên máy deploy.
+# deploy/** có mặt vì deploy/deploy.sh chạy tay trên máy chủ, CI chỉ kiểm tra cú pháp cho nó.
 on:
   pull_request:
     branches: [dev, main]
@@ -11,6 +12,7 @@ on:
       - 'docs/codeswitchlabel.sql'
       - 'migrations/**'
       - 'global.json'
+      - 'deploy/**'
       - '.github/workflows/backend.yml'
   push:
     branches: [dev, main]
@@ -19,6 +21,7 @@ on:
       - 'docs/codeswitchlabel.sql'
       - 'migrations/**'
       - 'global.json'
+      - 'deploy/**'
       - '.github/workflows/backend.yml'
 
 jobs:
@@ -30,6 +33,12 @@ jobs:
     steps:
       - name: Lấy mã nguồn
         uses: actions/checkout@v5
+
+      # deploy/deploy.sh chạy trực tiếp trên máy chủ, không qua CI. Nên CI phải
+      # bắt lỗi cú pháp trước khi nó tới được máy đó — một lỗi `bash -n` tới
+      # lúc deploy là mất cả buổi chiều.
+      - name: Kiểm tra cú pháp script deploy
+        run: bash -n deploy/deploy.sh
 
       - name: Cài .NET 10
         uses: actions/setup-dotnet@v5
