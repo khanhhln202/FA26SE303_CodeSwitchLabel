@@ -42,7 +42,7 @@ public static partial class DatabaseSeeder
 
         // Dữ liệu để thao tác thử: câu của người đọc và hai task mẫu.
         await SeedSpeakerScriptsAsync(db, ids, ct);
-        await SeedTasksAsync(db, ids, ct);
+        await SeedTasksAsync(db, ids, logger, ct);
 
         logger.LogInformation("Seed dữ liệu phát triển hoàn tất.");
     }

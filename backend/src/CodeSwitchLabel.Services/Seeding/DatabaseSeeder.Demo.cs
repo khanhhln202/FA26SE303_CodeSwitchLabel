@@ -2,6 +2,7 @@
 using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Repositories.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace CodeSwitchLabel.Services.Seeding;
 
@@ -93,17 +94,33 @@ public static partial class DatabaseSeeder
     /// Một task thu âm và một task duyệt, đã giao cho người nhận và đã có mục.
     /// </summary>
     private static async Task SeedTasksAsync(
-        CodeSwitchLabelDbContext db, DemoUserIds ids, CancellationToken ct)
+        CodeSwitchLabelDbContext db,
+        DemoUserIds ids,
+        ILogger? logger,
+        CancellationToken ct)
     {
         // Chặn theo tên task mẫu chứ không phải "đã có task nào chưa": máy đang dùng có sẵn
         // task do người thao tác tạo, và dữ liệu mẫu vẫn phải thêm vào được bên cạnh chúng.
         if (await db.WorkTasks.AnyAsync(t => t.Description == RecordingTaskName, ct)) return;
 
+        // Chỉ dùng chiến dịch mà CHÍNH manager demo được giao. Trigger
+        // trg_task_creator_assigned đòi created_by = campaign.assigned_to, nên lấy "chiến
+        // dịch nhỏ campaign_id nhất" là lấy nhầm khi máy đã có chiến dịch của người khác:
+        // database của test đúng là tình huống đó (Test Campaign giao cho
+        // manager@test.local, còn task thì do manager@codeswitchlabel.local tạo).
         var campaign = await db.Campaigns.AsNoTracking()
+            .Where(c => c.AssignedTo == ids.Manager)
             .OrderBy(c => c.CampaignId)
             .FirstOrDefaultAsync(ct);
 
-        if (campaign is null) return;
+        if (campaign is null)
+        {
+            logger?.LogWarning(
+                "Bỏ qua task mẫu: chưa có chiến dịch nào được giao cho manager demo (user {ManagerId}). " +
+                "Tạo một chiến dịch rồi giao cho manager demo, khởi động lại API là có task mẫu.",
+                ids.Manager);
+            return;
+        }
 
         var now = DateTimeOffset.UtcNow;
 
