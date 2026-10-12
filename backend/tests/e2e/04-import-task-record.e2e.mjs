@@ -95,19 +95,28 @@ console.log(`\n  Đăng nhập xong: admin #${admin.userId} · reviewer #${revie
 man('MÀN 1 · NHẬP CÂU TỪ FILE JSON  (Admin)');
 
 const dau = Date.now().toString().slice(-6);
+
+// Hệ thống chống trùng theo NỘI DUNG câu, không theo mã id. Nên câu phải khác nhau ở mỗi lần
+// chạy, nếu không lần thứ hai trở đi sẽ bị bỏ qua hết với mã duplicate_content. Cách rẻ nhất
+// mà câu vẫn đọc lên tự nhiên: nhét giờ chạy vào chính nội dung câu.
+const bayGio = new Date();
+const gio = bayGio.getHours();
+const phut = String(bayGio.getMinutes()).padStart(2, '0');
+const giay = String(bayGio.getSeconds()).padStart(2, '0');
+
 const cauNhap = [
   {
     id: `demo-${dau}-1`,
     domain: 'IT/Technology',
-    cs_transcript: '[vi]Anh gửi em cái [en]link [vi]họp lúc hai giờ nhé.',
-    vi_equivalent: '[vi]Anh gửi em cái đường dẫn họp lúc hai giờ nhé.',
+    cs_transcript: `[vi]Anh gửi em cái [en]link [vi]họp lúc ${gio} giờ ${phut} nhé.`,
+    vi_equivalent: `[vi]Anh gửi em cái đường dẫn họp lúc ${gio} giờ ${phut} nhé.`,
     alignment: [{ source: 'link', source_lang: 'en', target: 'đường dẫn', target_lang: 'vi', relation: 'semantic_equivalent' }]
   },
   {
     id: `demo-${dau}-2`,
     domain: 'Education',
-    cs_transcript: '[vi]Em nộp [en]assignment [vi]trước thứ sáu nhé.',
-    vi_equivalent: '[vi]Em nộp bài tập trước thứ sáu nhé.',
+    cs_transcript: `[vi]Em nộp [en]assignment [vi]trước ${gio} giờ ${giay} hôm nay nhé.`,
+    vi_equivalent: `[vi]Em nộp bài tập trước ${gio} giờ ${giay} hôm nay nhé.`,
     alignment: [{ source: 'assignment', source_lang: 'en', target: 'bài tập', target_lang: 'vi', relation: 'semantic_equivalent' }]
   }
 ];
@@ -122,7 +131,13 @@ const nhap = B('1.1', 'admin', 'POST', '/api/scripts/import',
   await goi(admin.token, 'POST', '/api/scripts/import', form), 200,
   (b) => ({ daNhap: b.imported, boQua: b.skipped?.length ?? 0, maCau: b.scriptIds }));
 
-if (nhap.status !== 200) { console.log('\nDừng: bước nhập câu thất bại.'); process.exit(1); }
+if (nhap.status !== 200 || !nhap.body?.scriptIds?.length) {
+  console.log('\nDừng: không nhập được câu nào, các màn sau không có dữ liệu để chạy.');
+  for (const bo of nhap.body?.skipped ?? []) {
+    console.log(`  bỏ qua ${bo.id}: ${bo.code} — ${bo.reason}`);
+  }
+  process.exit(1);
+}
 const maCau = nhap.body.scriptIds;
 
 sql('Số câu SAU khi nhập', 'select count(*) as tong_so_cau from script;');
