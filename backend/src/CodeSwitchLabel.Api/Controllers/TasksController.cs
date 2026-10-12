@@ -157,6 +157,19 @@ public class TasksController(ITaskService taskService) : ControllerBase
     public async Task<ActionResult<TaskDetailDto>> Cancel(long id, CancellationToken ct)
         => Ok(await taskService.CancelAsync(id, ct, User.GetUserId(), User.IsInRole("Admin")));
 
+    // TEAM_003: Xoá cứng nhiệm vụ rảnh (chưa gắn đợt và chưa có việc)
+    /// <summary>Xoá nhiệm vụ. Chỉ xoá được task rảnh (chưa gắn vào đợt nào và chưa có việc/mục/người nhận).</summary>
+    [HttpDelete("{id:long}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Delete(long id, CancellationToken ct)
+    {
+        await taskService.DeleteAsync(id, ct, User.GetUserId(), User.IsInRole("Admin"));
+        return NoContent();
+    }
+
     /// <summary>Những người giao được một loại task, kèm khối lượng đang nhận.</summary>
     /// <remarks>
     /// Dùng cho ô chọn người nhận khi giao task. Chỉ trả người **đang hoạt động** và **đúng vai**:

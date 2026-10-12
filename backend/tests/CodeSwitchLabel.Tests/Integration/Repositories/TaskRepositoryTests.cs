@@ -53,7 +53,7 @@ public class TaskRepositoryTests : IntegrationTestBase
         await CreateTaskAsync(CampaignId, TaskType.Review, 30, ManagerUserId);
 
         // Act
-        var (items, total) = await Tasks.SearchAsync(null, null, null, null, DateTimeOffset.UtcNow, 1, 10, TestContext.Current.CancellationToken);
+        var (items, total) = await Tasks.SearchAsync(null, null, null, null, null, DateTimeOffset.UtcNow, 1, 10, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(total >= 2);

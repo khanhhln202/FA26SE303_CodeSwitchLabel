@@ -149,6 +149,10 @@ public class CampaignProgress
 {
     public long CampaignId { get; set; }
     public string CampaignName { get; set; } = string.Empty;
+
+    /// <summary>Chủ đề của đợt; mọi task gắn vào đều phải cùng chủ đề.</summary>
+    public ScriptDomain Domain { get; set; }
+
     public int CampaignTargetQty { get; set; }
     public DateOnly StartDate { get; set; }
     public DateOnly EndDate { get; set; }

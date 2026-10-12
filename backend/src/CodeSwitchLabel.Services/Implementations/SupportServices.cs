@@ -214,7 +214,7 @@ public class StatisticsService(IStatisticsRepository repository, ICampaignReposi
     public async Task<IReadOnlyList<CampaignProgressDto>> GetCampaignProgressAsync(
         CancellationToken ct = default) =>
         [.. (await campaigns.GetProgressAsync(null, ct)).Select(p => new CampaignProgressDto(
-            p.CampaignId, p.CampaignName, p.CampaignTargetQty, p.StartDate, p.EndDate,
+            p.CampaignId, p.CampaignName, p.Domain, p.CampaignTargetQty, p.StartDate, p.EndDate,
             p.CampaignStatus, p.AssignedTo, p.AllocatedTaskQty, p.RemainingTaskQty,
             p.TaskCount, p.CompletedTaskCount))];
 }

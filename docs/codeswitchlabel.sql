@@ -200,9 +200,12 @@ CREATE INDEX idx_script_review_user   ON script_review (user_id);
 -- ------------------------------------------------------------
 -- A campaign is the planning unit created by the Task Manager for a
 -- collection period (typically 1-2 weeks / month).
+-- TEAM_003: domain = chủ đề của cả đợt. Một đợt chỉ đi trên MỘT chủ đề;
+-- trg_task_campaign_domain chặn gắn task khác chủ đề vào đợt này.
 CREATE TABLE campaign (
     campaign_id   BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     campaign_name VARCHAR(255) NOT NULL,
+    domain        script_domain NOT NULL DEFAULT 'it_technology',
     target_qty    INT NOT NULL,
     start_date    DATE NOT NULL,
     end_date      DATE NOT NULL,
@@ -218,6 +221,7 @@ CREATE INDEX idx_campaign_created_by ON campaign (created_by);
 CREATE INDEX idx_campaign_status     ON campaign (status);
 CREATE INDEX idx_campaign_dates      ON campaign (start_date, end_date);
 CREATE INDEX idx_campaign_assigned_to ON campaign (assigned_to);
+CREATE INDEX idx_campaign_domain     ON campaign (domain);
 
 -- Speaker đăng ký tham gia một chiến dịch ("Đợt" ở FE) — không giới hạn số người.
 CREATE TABLE campaign_registration (
@@ -232,11 +236,14 @@ CREATE INDEX idx_campaign_registration_speaker ON campaign_registration (speaker
 -- attached to a campaign later, or detached back). Deleting a campaign
 -- keeps its tasks: FK is ON DELETE SET NULL; use the campaign-scoped
 -- detach endpoint to remove a task from a campaign without deleting it.
+-- TEAM_003: domain = chủ đề của nhiệm vụ. Task độc lập thì tự do; task gắn
+-- vào đợt thì phải trùng chủ đề với đợt (trg_task_campaign_domain).
 CREATE TABLE task (
     task_id      BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     campaign_id  BIGINT REFERENCES campaign(campaign_id) ON DELETE SET NULL,
     created_by   BIGINT NOT NULL REFERENCES app_user(user_id),
     task_type    task_type NOT NULL,
+    domain       script_domain NOT NULL DEFAULT 'it_technology',
     description  TEXT,
     target_qty   INT NOT NULL CHECK (target_qty > 0),
     deadline     TIMESTAMPTZ,
@@ -245,6 +252,7 @@ CREATE TABLE task (
 );
 
 CREATE INDEX idx_task_campaign ON task (campaign_id);
+CREATE INDEX idx_task_domain   ON task (domain);
 
 CREATE TABLE task_assignment (
     assignment_id     BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,  -- surrogate: keeps history
@@ -419,8 +427,11 @@ CREATE TRIGGER trg_script_touch        BEFORE UPDATE ON script
 CREATE TRIGGER trg_system_config_touch BEFORE UPDATE ON system_config
     FOR EACH ROW EXECUTE FUNCTION fn_touch_updated_at();
 
--- [ERD / CAMPAIGN] Campaign creators must be Admin.
+-- [ERD / CAMPAIGN] Campaign creators must be Admin or Task Manager.
 -- Task creators must be Task Manager.
+-- TEAM_003: Task Manager tự lập kế hoạch cho đợt của mình nên cũng được
+-- tạo chiến dịch. Việc gán đợt cho ai vẫn do trg_task_creator_assigned
+-- kiểm tra tầng dưới (task trong đợt do đúng người được giao đợt tạo).
 CREATE OR REPLACE FUNCTION fn_require_task_manager_creator() RETURNS trigger AS $$
 DECLARE
     v_role_name VARCHAR(32);
@@ -432,8 +443,9 @@ BEGIN
      WHERE u.user_id = NEW.created_by;
 
     IF TG_TABLE_NAME = 'campaign' THEN
-        IF v_role_name IS DISTINCT FROM 'admin' THEN
-            RAISE EXCEPTION 'campaign creator (user %) must have admin role', NEW.created_by;
+        IF v_role_name IS DISTINCT FROM 'admin'
+           AND v_role_name IS DISTINCT FROM 'task_manager' THEN
+            RAISE EXCEPTION 'campaign creator (user %) must have admin or task_manager role', NEW.created_by;
         END IF;
     ELSIF TG_TABLE_NAME = 'task' THEN
         IF v_role_name IS DISTINCT FROM 'task_manager' THEN
@@ -682,6 +694,72 @@ END $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_task_creator_assigned
     BEFORE INSERT OR UPDATE OF campaign_id, created_by ON task
     FOR EACH ROW EXECUTE FUNCTION fn_validate_task_creator_assigned();
+
+-- [TEAM_003 / CAMPAIGN] A task may only join a campaign of the SAME domain.
+-- Một đợt đi trên một chủ đề, nên không gắn được nhiệm vụ chủ đề khác vào —
+-- nếu không, báo cáo cuối đợt sẽ trộn nhiều chủ đề và số liệu sai nghĩa.
+-- Standalone task (campaign_id NULL) has no campaign to compare against.
+-- The service layer returns a friendly 422 first; this trigger is the safety net.
+CREATE OR REPLACE FUNCTION fn_validate_task_campaign_domain() RETURNS trigger AS $$
+DECLARE
+    v_campaign_domain script_domain;
+BEGIN
+    -- Detached task: any domain is fine.
+    IF NEW.campaign_id IS NULL THEN
+        RETURN NEW;
+    END IF;
+
+    SELECT c.domain
+      INTO v_campaign_domain
+      FROM campaign c
+     WHERE c.campaign_id = NEW.campaign_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'campaign % does not exist', NEW.campaign_id;
+    END IF;
+
+    IF NEW.domain IS DISTINCT FROM v_campaign_domain THEN
+        RAISE EXCEPTION
+            'task % domain % must match campaign % domain %',
+            NEW.task_id, NEW.domain, NEW.campaign_id, v_campaign_domain;
+    END IF;
+
+    RETURN NEW;
+END $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_task_campaign_domain
+    BEFORE INSERT OR UPDATE OF campaign_id, domain ON task
+    FOR EACH ROW EXECUTE FUNCTION fn_validate_task_campaign_domain();
+
+-- [TEAM_003 / CAMPAIGN] Changing a campaign's domain must not orphan its tasks:
+-- all attached tasks have to follow, otherwise the campaign would keep tasks of
+-- a different domain (and trg_task_campaign_domain would then block the update
+-- with a message about the wrong task). Reject instead of silently detaching.
+CREATE OR REPLACE FUNCTION fn_validate_campaign_domain_change() RETURNS trigger AS $$
+DECLARE
+    v_mismatched INT;
+BEGIN
+    IF NEW.domain IS NOT DISTINCT FROM OLD.domain THEN
+        RETURN NEW;
+    END IF;
+
+    SELECT COUNT(*) INTO v_mismatched
+      FROM task t
+     WHERE t.campaign_id = NEW.campaign_id
+       AND t.domain IS DISTINCT FROM NEW.domain;
+
+    IF v_mismatched > 0 THEN
+        RAISE EXCEPTION
+            'campaign % still has % task(s) of another domain; move or detach them before changing its domain',
+            NEW.campaign_id, v_mismatched;
+    END IF;
+
+    RETURN NEW;
+END $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_campaign_domain_change
+    BEFORE UPDATE OF domain ON campaign
+    FOR EACH ROW EXECUTE FUNCTION fn_validate_campaign_domain_change();
 
 -- [ERD / CAMPAIGN] Do not lower a campaign target below the
 -- quantities already allocated to its tasks.
@@ -1121,6 +1199,7 @@ SELECT
     t.campaign_id,
     c.campaign_name,
     t.task_type,
+    t.domain,
     t.status        AS task_status,
     t.target_qty,
     t.deadline,
@@ -1136,6 +1215,7 @@ CREATE VIEW v_campaign_progress AS
 SELECT
     c.campaign_id,
     c.campaign_name,
+    c.domain,
     c.target_qty AS campaign_target_qty,
     c.start_date,
     c.end_date,
@@ -1150,6 +1230,7 @@ LEFT JOIN task t ON t.campaign_id = c.campaign_id
 GROUP BY
     c.campaign_id,
     c.campaign_name,
+    c.domain,
     c.target_qty,
     c.start_date,
     c.end_date,

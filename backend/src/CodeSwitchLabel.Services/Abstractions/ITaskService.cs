@@ -37,9 +37,17 @@ public interface ITaskService
         long taskId, long? campaignId, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false);
 
-    /// <summary>Gỡ task khỏi chiến dịch nhưng giữ lại task (C2). Task không bao giờ bị xoá cứng qua API.</summary>
+    /// <summary>Gỡ task khỏi chiến dịch nhưng giữ lại task (C2).</summary>
     Task<TaskDetailDto> DetachAsync(
         long campaignId, long taskId, CancellationToken ct = default,
+        long? callerId = null, bool isAdmin = false);
+
+    // TEAM_003: Xoá cứng task rảnh (độc lập + chưa có việc).
+    /// <summary>
+    /// Xoá cứng một nhiệm vụ. Chỉ xoá được task rảnh (chưa gắn đợt nào và chưa có việc/lượt giao/mục nào).
+    /// </summary>
+    Task DeleteAsync(
+        long taskId, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false);
 
     Task<IReadOnlyList<AssigneeSummaryDto>> GetAssigneeSummaryAsync(CancellationToken ct = default);

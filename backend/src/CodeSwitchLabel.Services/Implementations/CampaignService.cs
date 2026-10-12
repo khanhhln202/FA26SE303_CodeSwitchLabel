@@ -37,8 +37,9 @@ public class CampaignService(
         {
             progress.TryGetValue(c.CampaignId, out var p);
 
+            // TEAM_003: Truyền c.Domain sang CampaignListItemDto
             return new CampaignListItemDto(
-                c.CampaignId, c.CampaignName, c.TargetQty, c.StartDate, c.EndDate, c.Status, c.CreatedAt,
+                c.CampaignId, c.CampaignName, c.Domain, c.TargetQty, c.StartDate, c.EndDate, c.Status, c.CreatedAt,
                 p?.AllocatedTaskQty ?? 0, (int)(p?.TaskCount ?? 0), (int)(p?.CompletedTaskCount ?? 0), c.AssignedTo);
         }).ToList();
 
@@ -51,8 +52,9 @@ public class CampaignService(
         return ToDto(campaign);
     }
 
+    // TEAM_003: Hỗ trợ Task Manager tạo đợt (auto-assign cho chính mình nếu không phải Admin)
     public async Task<CampaignDto> CreateAsync(
-        CreateCampaignRequest request, long createdById, CancellationToken ct = default)
+        CreateCampaignRequest request, long createdById, bool isAdmin, CancellationToken ct = default)
     {
         var start = request.StartDate!.Value;
         var end = request.EndDate!.Value;
@@ -66,11 +68,14 @@ public class CampaignService(
         var campaign = new Campaign
         {
             CampaignName = request.CampaignName.Trim(),
+            Domain = request.Domain ?? ScriptDomain.ItTechnology,
             TargetQty = request.TargetQty!.Value,
             StartDate = start,
             EndDate = end,
             Status = CampaignStatus.Draft,
             CreatedBy = createdById,
+            // Task Manager tự tạo đợt thì tự động gán cho chính mình để có quyền tạo/gắn task
+            AssignedTo = isAdmin ? null : createdById,
             CreatedAt = clock.GetUtcNow()
         };
 
@@ -80,12 +85,15 @@ public class CampaignService(
         return ToDto(campaign);
     }
 
+    // TEAM_003: Kiểm tra quyền sở hữu khi sửa đợt (TaskManager chỉ sửa đợt của mình)
     public async Task<CampaignDto> UpdateAsync(
-        long campaignId, UpdateCampaignRequest request, CancellationToken ct = default)
+        long campaignId, UpdateCampaignRequest request, long? callerId, bool isAdmin, CancellationToken ct = default)
     {
         var campaign = await campaigns.GetForUpdateAsync(campaignId, ct) ?? throw NotFound(campaignId);
+        EnsureCampaignOwner(campaign, callerId, isAdmin);
 
         if (request.CampaignName is not null) campaign.CampaignName = request.CampaignName.Trim();
+        if (request.Domain.HasValue) campaign.Domain = request.Domain.Value;
         if (request.Status.HasValue) campaign.Status = request.Status.Value;
         if (request.StartDate.HasValue) campaign.StartDate = request.StartDate.Value;
         if (request.EndDate.HasValue) campaign.EndDate = request.EndDate.Value;
@@ -116,6 +124,17 @@ public class CampaignService(
         return ToDto(campaign);
     }
 
+    // TEAM_003: Xoá chiến dịch — task con thành độc lập nhờ ON DELETE SET NULL
+    public async Task DeleteAsync(
+        long campaignId, long? callerId, bool isAdmin, CancellationToken ct = default)
+    {
+        var campaign = await campaigns.GetForUpdateAsync(campaignId, ct) ?? throw NotFound(campaignId);
+        EnsureCampaignOwner(campaign, callerId, isAdmin);
+
+        campaigns.Remove(campaign);
+        await campaigns.SaveChangesAsync(ct);
+    }
+
     public async Task<CampaignDto> AssignAsync(
         long campaignId, long? assignedToUserId, CancellationToken ct = default)
     {
@@ -143,8 +162,18 @@ public class CampaignService(
         long campaignId, long taskId, long? callerId, bool isAdmin, CancellationToken ct = default)
         => tasks.DetachAsync(campaignId, taskId, ct, callerId, isAdmin);
 
+    private static void EnsureCampaignOwner(Campaign campaign, long? callerId, bool isAdmin)
+    {
+        if (!callerId.HasValue || isAdmin) return;
+        if (campaign.AssignedTo == callerId.Value || campaign.CreatedBy == callerId.Value) return;
+
+        throw new ForbiddenException(
+            "campaign_not_owned",
+            $"Chiến dịch #{campaign.CampaignId} không thuộc quyền quản lý của bạn.");
+    }
+
     private static CampaignDto ToDto(Campaign c) =>
-        new(c.CampaignId, c.CampaignName, c.TargetQty, c.StartDate, c.EndDate, c.Status, c.CreatedBy, c.AssignedTo, c.CreatedAt);
+        new(c.CampaignId, c.CampaignName, c.Domain, c.TargetQty, c.StartDate, c.EndDate, c.Status, c.CreatedBy, c.AssignedTo, c.CreatedAt);
 
     private static NotFoundException NotFound(long campaignId) =>
         new("campaign_not_found", $"Không tìm thấy chiến dịch #{campaignId}.");

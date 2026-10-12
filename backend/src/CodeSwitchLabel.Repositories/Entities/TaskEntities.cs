@@ -13,6 +13,12 @@ public class Campaign
     public long CampaignId { get; set; }
     public string CampaignName { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Chủ đề của cả đợt. Một đợt chỉ đi trên một chủ đề — trigger
+    /// trg_task_campaign_domain chặn gắn nhiệm vụ khác chủ đề vào đợt này.
+    /// </summary>
+    public ScriptDomain Domain { get; set; }
+
     /// <summary>Chỉ tiêu cặp câu cho cả chiến dịch; lược đồ giới hạn 2000..5000.</summary>
     public int TargetQty { get; set; }
 
@@ -20,7 +26,10 @@ public class Campaign
     public DateOnly EndDate { get; set; }
     public CampaignStatus Status { get; set; }
 
-    /// <summary>Người tạo phải mang vai admin, do trigger của database chặn.</summary>
+    /// <summary>
+    /// Người tạo phải mang vai admin hoặc task_manager, do trigger của database chặn.
+    /// TEAM_003: Task Manager tự lập kế hoạch cho đợt của mình nên cũng tạo được đợt.
+    /// </summary>
     public long CreatedBy { get; set; }
 
     /// <summary>Task Manager được giao phụ trách chiến dịch (NULL = chưa giao). Chỉ Admin mới được set.</summary>
@@ -42,6 +51,13 @@ public class WorkTask
 
     public long CreatedBy { get; set; }
     public TaskType TaskType { get; set; }
+
+    /// <summary>
+    /// Chủ đề của nhiệm vụ. Task độc lập thì tự do; task gắn vào đợt thì phải
+    /// trùng <see cref="Campaign.Domain"/> — database chặn, không chỉ service.
+    /// </summary>
+    public ScriptDomain Domain { get; set; }
+
     public string? Description { get; set; }
 
     /// <summary>Task thu âm đếm theo CẶP CÂU; task duyệt đếm theo bản ghi.</summary>

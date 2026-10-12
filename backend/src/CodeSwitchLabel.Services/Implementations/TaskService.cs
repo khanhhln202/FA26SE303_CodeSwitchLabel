@@ -33,18 +33,42 @@ internal static class TaskMapper
             r.Deadline.HasValue && r.Deadline.Value < now && TaskStateMachine.AcceptsWork(r.Status));
     }
 
-    public static TaskListItemDto ToListItem(this TaskRow r, DateTimeOffset now) =>
-        new(r.TaskId,
+    // TEAM_003: Tính toán khả năng xoá của task (chỉ task rảnh: chưa gắn đợt + chưa có việc)
+    public static (bool CanDelete, string? Reason) EvaluateCanDelete(this TaskRow r)
+    {
+        if (r.CampaignId.HasValue)
+            return (false, $"Nhiệm vụ đang nằm trong đợt \"{r.CampaignName ?? ("#" + r.CampaignId)}\". Hãy gỡ khỏi đợt trước khi xoá.");
+
+        if (r.Status == WorkTaskStatus.Completed)
+            return (false, "Nhiệm vụ đã hoàn thành, không xoá được.");
+
+        if (r.AssigneeId.HasValue)
+            return (false, $"Nhiệm vụ đã giao cho {r.AssigneeName}. Dùng chức năng Huỷ nếu muốn dừng việc.");
+
+        if (r.TotalItems > 0 || r.Started > 0)
+            return (false, "Nhiệm vụ đã có mục công việc hoặc dữ liệu nộp về. Dùng chức năng Huỷ để giữ dấu vết.");
+
+        return (true, null);
+    }
+
+    public static TaskListItemDto ToListItem(this TaskRow r, DateTimeOffset now)
+    {
+        var (canDelete, reason) = r.EvaluateCanDelete();
+        return new(r.TaskId,
             r.CampaignId,
             r.CampaignName,
             r.TaskType,
+            r.Domain,
             r.Description,
             r.Status,
             r.AssigneeId,
             r.AssigneeName,
             r.Deadline,
             r.CreatedAt,
-            r.ProgressOf(now));
+            r.ProgressOf(now),
+            canDelete,
+            reason);
+    }
 
     // Speaker thấy task của chính mình nên không cần người nhận / thời điểm tạo.
     // Tiến độ đếm cặp câu đã THU ĐỦ, không đợi duyệt: gửi xong hai bản là cộng 1.
@@ -118,6 +142,16 @@ public class TaskService(
                     $"{campaign.StartDate:yyyy-MM-dd} đến {campaign.EndDate:yyyy-MM-dd}.");
             }
 
+            var domain = request.Domain ?? ScriptDomain.ItTechnology;
+
+            // TEAM_003: Nhiệm vụ phải cùng chủ đề với chiến dịch
+            if (domain != campaign.Domain)
+            {
+                throw new UnprocessableException(
+                    "task_domain_mismatch_campaign",
+                    $"Chủ đề nhiệm vụ ({domain}) không khớp với chủ đề của chiến dịch #{campaignId} ({campaign.Domain}).");
+            }
+
             // Tổng chỉ tiêu các task không được vượt chỉ tiêu chiến dịch.
             var allocated = await campaigns.SumAllocatedAsync(campaignId, ct);
 
@@ -135,6 +169,7 @@ public class TaskService(
             CampaignId = request.CampaignId,
             CreatedBy = createdById,
             TaskType = request.TaskType!.Value,
+            Domain = request.Domain ?? ScriptDomain.ItTechnology, // TEAM_003
             Description = Clean(request.Description),
             TargetQty = targetQty,
             Deadline = deadline,
@@ -175,6 +210,14 @@ public class TaskService(
                 throw new UnprocessableException(
                     "campaign_not_accepting_tasks",
                     $"Chiến dịch #{campaignId} đang ở trạng thái {campaign.Status} nên không nhận thêm task.");
+            }
+
+            // TEAM_003: Nhiệm vụ phải cùng chủ đề với chiến dịch
+            if (task.Domain != campaign.Domain)
+            {
+                throw new UnprocessableException(
+                    "task_domain_mismatch_campaign",
+                    $"Chủ đề nhiệm vụ ({task.Domain}) không khớp với chủ đề của chiến dịch #{campaignId.Value} ({campaign.Domain}).");
             }
 
             if (task.Deadline.HasValue)
@@ -228,8 +271,9 @@ public class TaskService(
     {
         var now = clock.GetUtcNow();
 
+        // TEAM_003: Truyền request.Domain xuống repository
         var (rows, total) = await tasks.SearchAsync(
-            request.TaskType, request.Status, request.AssigneeId, request.Overdue,
+            request.TaskType, request.Status, request.AssigneeId, request.Domain, request.Overdue,
             now, request.Page, request.PageSize, ct);
 
         return new PagedResult<TaskListItemDto>(
@@ -248,6 +292,23 @@ public class TaskService(
         await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
 
         if (request.Description is not null) task.Description = Clean(request.Description);
+
+        // TEAM_003: Cập nhật chủ đề (nếu task đang gắn chiến dịch thì phải khớp chủ đề chiến dịch)
+        if (request.Domain.HasValue)
+        {
+            var newDomain = request.Domain.Value;
+            if (task.CampaignId.HasValue)
+            {
+                var campaign = await campaigns.GetAsync(task.CampaignId.Value, ct);
+                if (campaign is not null && campaign.Domain != newDomain)
+                {
+                    throw new UnprocessableException(
+                        "task_domain_mismatch_campaign",
+                        $"Chủ đề nhiệm vụ ({newDomain}) không khớp với chủ đề của chiến dịch #{task.CampaignId.Value} ({campaign.Domain}).");
+                }
+            }
+            task.Domain = newDomain;
+        }
 
         if (request.Deadline.HasValue)
         {
@@ -551,6 +612,44 @@ public class TaskService(
         return await LoadDetailAsync(taskId, ct);
     }
 
+    // TEAM_003: Xoá cứng task rảnh (chưa gắn đợt nào và chưa có việc/mục/lượt giao)
+    public async Task DeleteAsync(
+        long taskId, CancellationToken ct = default,
+        long? callerId = null, bool isAdmin = false)
+    {
+        await using var transaction = await BeginTransactionIfNeededAsync(ct);
+        var task = await tasks.GetForUpdateAsync(taskId, ct) ?? throw NotFound(taskId);
+        await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
+
+        // 1. Chặn xoá khi task vẫn đang nằm trong chiến dịch
+        if (task.CampaignId.HasValue)
+        {
+            var cName = (await campaigns.GetAsync(task.CampaignId.Value, ct))?.CampaignName;
+            throw new ConflictException(
+                "task_in_campaign",
+                $"Nhiệm vụ đang nằm trong đợt \"{cName ?? ("#" + task.CampaignId)}\". Hãy gỡ khỏi đợt trước khi xoá.");
+        }
+
+        // 2. Chặn xoá khi task đã hoàn thành
+        if (task.Status == WorkTaskStatus.Completed)
+        {
+            throw new ConflictException("task_completed", $"Nhiệm vụ #{taskId} đã hoàn thành, không xoá được.");
+        }
+
+        // 3. Chặn xoá khi task đã có việc (lượt giao, mục script/bản ghi, bản ghi nộp về)
+        var hasWork = await tasks.HasWorkAsync(taskId, ct);
+        if (hasWork)
+        {
+            throw new ConflictException(
+                "task_has_work",
+                $"Nhiệm vụ #{taskId} đã có người nhận, mục công việc hoặc dữ liệu nộp về. Dùng chức năng Huỷ nếu không làm nữa để giữ dấu vết.");
+        }
+
+        tasks.RemoveTask(task);
+        await SaveTasksAsync(ct);
+        if (transaction is not null) await transaction.CommitAsync(ct);
+    }
+
     public async Task<IReadOnlyList<AssigneeSummaryDto>> GetAssigneeSummaryAsync(CancellationToken ct = default)
     {
         var rows = await tasks.GetAssigneeSummaryAsync(clock.GetUtcNow(), ct);
@@ -598,7 +697,7 @@ public class TaskService(
         var mine = progress
             .Where(p => isAdmin || p.AssignedTo == managerId)
             .Select(p => new CampaignProgressDto(
-                p.CampaignId, p.CampaignName, p.CampaignTargetQty, p.StartDate, p.EndDate,
+                p.CampaignId, p.CampaignName, p.Domain, p.CampaignTargetQty, p.StartDate, p.EndDate,
                 p.CampaignStatus, p.AssignedTo, p.AllocatedTaskQty, p.RemainingTaskQty,
                 p.TaskCount, p.CompletedTaskCount))
             .ToList();
@@ -607,15 +706,15 @@ public class TaskService(
 
         // Đếm task còn chạy theo loại + quá hạn: chỉ cần Total nên pageSize = 1.
         var (_, openRec) = await tasks.SearchAsync(
-            TaskType.Recording, WorkTaskStatus.Open, null, null, now, 1, 1, ct);
+            TaskType.Recording, WorkTaskStatus.Open, null, null, null, now, 1, 1, ct);
         var (_, progRec) = await tasks.SearchAsync(
-            TaskType.Recording, WorkTaskStatus.InProgress, null, null, now, 1, 1, ct);
+            TaskType.Recording, WorkTaskStatus.InProgress, null, null, null, now, 1, 1, ct);
         var (_, openRev) = await tasks.SearchAsync(
-            TaskType.Review, WorkTaskStatus.Open, null, null, now, 1, 1, ct);
+            TaskType.Review, WorkTaskStatus.Open, null, null, null, now, 1, 1, ct);
         var (_, progRev) = await tasks.SearchAsync(
-            TaskType.Review, WorkTaskStatus.InProgress, null, null, now, 1, 1, ct);
+            TaskType.Review, WorkTaskStatus.InProgress, null, null, null, now, 1, 1, ct);
         var (_, overdue) = await tasks.SearchAsync(
-            null, null, null, true, now, 1, 1, ct);
+            null, null, null, null, true, now, 1, 1, ct);
 
         return new TaskManagerOverviewDto(mine, byAssignee, openRec + progRec, openRev + progRev, overdue);
     }

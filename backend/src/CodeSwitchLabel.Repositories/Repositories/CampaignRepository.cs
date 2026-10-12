@@ -9,6 +9,12 @@ public interface ICampaignRepository
 {
     void Add(Campaign campaign);
 
+    /// <summary>
+    /// Xoá chiến dịch. Task gắn vào KHÔNG bị xoá: FK task.campaign_id là
+    /// ON DELETE SET NULL nên chúng tự thành task độc lập.
+    /// </summary>
+    void Remove(Campaign campaign);
+
     Task<Campaign?> GetForUpdateAsync(long campaignId, CancellationToken ct = default);
     Task<Campaign?> GetAsync(long campaignId, CancellationToken ct = default);
 
@@ -31,6 +37,8 @@ public interface ICampaignRepository
 public class CampaignRepository(CodeSwitchLabelDbContext db) : ICampaignRepository
 {
     public void Add(Campaign campaign) => db.Campaigns.Add(campaign);
+
+    public void Remove(Campaign campaign) => db.Campaigns.Remove(campaign);
 
     public Task<Campaign?> GetForUpdateAsync(long campaignId, CancellationToken ct = default) =>
         db.Campaigns.FirstOrDefaultAsync(c => c.CampaignId == campaignId, ct);

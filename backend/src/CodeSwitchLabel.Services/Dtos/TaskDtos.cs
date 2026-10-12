@@ -13,6 +13,12 @@ public record CreateTaskRequest
     [Required(ErrorMessage = "Phải chọn loại task: Recording hoặc Review.")]
     public TaskType? TaskType { get; init; }
 
+    /// <summary>
+    /// Chủ đề của nhiệm vụ. Khi gắn vào chiến dịch, phải trùng chủ đề của chiến dịch —
+    /// nếu không thì 422 task_domain_mismatch_campaign.
+    /// </summary>
+    public ScriptDomain? Domain { get; init; } = ScriptDomain.ItTechnology;
+
     [StringLength(1000)]
     public string? Description { get; init; }
 
@@ -29,6 +35,9 @@ public record CreateTaskRequest
 /// <summary>Trường nào để trống thì giữ nguyên.</summary>
 public record UpdateTaskRequest
 {
+    /// <summary>Đổi chủ đề được khi đổi cả chủ đề chiến dịch, hoặc khi task chưa gắn đợt nào.</summary>
+    public ScriptDomain? Domain { get; init; }
+
     [StringLength(1000)]
     public string? Description { get; init; }
 
@@ -86,18 +95,23 @@ public record AttachTaskRequest
     public long? CampaignId { get; init; }
 }
 
+/// <param name="CanDelete">Task rảnh (chưa gắn đợt, chưa có ai nhận, chưa có mục) thì xoá cứng được.</param>
+/// <param name="DeleteBlockedReason">Vì sao không xoá được — tiếng Việt để frontend hiện thẳng cho người dùng.</param>
 public record TaskListItemDto(
     long TaskId,
     long? CampaignId,
     string? CampaignName,
     TaskType TaskType,
+    ScriptDomain Domain,
     string? Description,
     WorkTaskStatus Status,
     long? AssigneeId,
     string? AssigneeName,
     DateTimeOffset? Deadline,
     DateTimeOffset CreatedAt,
-    TaskProgressDto Progress);
+    TaskProgressDto Progress,
+    bool CanDelete,
+    string? DeleteBlockedReason);
 
 public record TaskAssignmentDto(
     long AssignmentId, long UserId, string FullName, AssignmentStatus Status, DateTimeOffset AssignedAt);
@@ -120,6 +134,9 @@ public record TaskSearchRequest : PageRequest
     public TaskType? TaskType { get; init; }
     public WorkTaskStatus? Status { get; init; }
     public long? AssigneeId { get; init; }
+
+    /// <summary>Lọc theo chủ đề.</summary>
+    public ScriptDomain? Domain { get; init; }
 
     /// <summary>true: chỉ task còn đang làm mà đã quá hạn.</summary>
     public bool? Overdue { get; init; }
