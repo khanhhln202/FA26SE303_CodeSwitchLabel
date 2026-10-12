@@ -811,7 +811,7 @@ Ai đã code theo bản API trước ngày 22/09/2026 thì cần sửa:
 | — | Mới: chiến dịch `/api/campaigns/*`, phân chủ đề `/api/users/{id}/domains`, tự xem chủ đề `GET /api/me/domains` |
 | — | Mới: Reviewer xem danh sách bản ghi trong task `GET /api/reviewer/tasks/{taskId}/recordings` và mở một bản `GET /api/reviewer/recordings/{id}` |
 | `GET /api/speaker/stats` → `{total,approved,rejected,pending}` | → `{ recording: {total,approved,rejected,pending}, contribution: {total,validated,rejected,pending} }` |
-| `GET /api/speaker/recordings/history` → `csAudioUrl`, `viAudioUrl` (luôn null) | → `audioUrl` + `audioUrlExpiresAt` (mỗi dòng là **một** bản ghi) và thêm `sentenceVariant` |
+| `GET /api/speaker/recordings/history` → `csAudioUrl`, `viAudioUrl` (luôn null), `recordingId` là khoá dòng | → `scriptId` là khoá dòng (mỗi dòng là **một cặp**), `csAudioUrl`/`viAudioUrl` **có thật** (hết hạn sau 15 phút), thêm `csRecordingId`/`viRecordingId` (null = cặp mới ghi được một bản). Bỏ `recordingId`, `sentenceVariant`, `audioUrl`, `audioUrlExpiresAt`. `status` giờ là **trạng thái của cặp**: có bản từ chối → `Rejected`, cả hai bản đạt → `Approved`, trượt QC hết → `QcFailed`, còn lại → `PendingReview`. Phân trang theo **cặp**, `total` là số cặp. |
 | Duyệt bản ghi chỉ thấy **một câu** | Thêm `pair`: **cả hai bản** của cặp câu (cs + vi). Các trường cũ giữ nguyên, trỏ vào bản đang mở |
 | Danh sách task duyệt không thấy bản kia | Thêm `sibling` (không kèm link nghe) |
 | Thêm câu vào task bị báo `Cặp câu đang nằm trong một task khác đang chạy.` | Câu **chưa có bản ghi nào** được **chuyển** sang task mới; chỉ tiêu task cũ tự hạ |

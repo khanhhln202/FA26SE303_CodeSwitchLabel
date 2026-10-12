@@ -184,52 +184,84 @@ public class SpeakerRoundsService(
                 || r.Script.ViContent.Contains(needle));
         }
 
-        var total = await q.CountAsync(ct);
+        // Một dòng là MỘT CẶP bản ghi, nên phân trang theo cặp chứ không theo bản ghi:
+        // gom scriptId theo mốc bản ghi mới nhất rồi mới kéo bản ghi của đúng các cặp đó.
+        // (Distinct + OrderBy RecordedAt thì Postgres không nhận, nên gom bằng GroupBy/Max.)
+        var total = await q.Select(r => r.ScriptId).Distinct().CountAsync(ct);
 
-        var rows = await q
-            .OrderByDescending(r => r.RecordedAt)
+        var pageScripts = await q
+            .GroupBy(r => r.ScriptId)
+            .Select(g => new { ScriptId = g.Key, Last = g.Max(r => r.RecordedAt) })
+            .OrderByDescending(x => x.Last)
             .Skip((query.Page - 1) * query.PageSize)
             .Take(query.PageSize)
+            .Select(x => x.ScriptId)
             .ToListAsync(ct);
 
-        // Link nghe sinh sau khi đã lấy đủ dòng: mỗi bản ghi một lần gọi kho lưu trữ, và bản
-        // trỏ sang kho khác thì để AudioUrl null chứ không làm hỏng cả trang lịch sử.
-        var items = new List<SpeakerRecordingHistoryDto>(rows.Count);
+        var rows = await q
+            .Where(r => pageScripts.Contains(r.ScriptId))
+            .OrderByDescending(r => r.RecordedAt)
+            .ToListAsync(ct);
 
-        foreach (var r in rows)
+        // Mỗi biến thể lấy lần thu mới nhất; link nghe cấp sau khi đã lấy đủ dòng, và mỗi
+        // bản một lần gọi kho lưu trữ — bản trỏ sang kho khác thì để null chứ không làm
+        // hỏng cả dòng lịch sử.
+        var items = new List<SpeakerRecordingHistoryDto>(pageScripts.Count);
+
+        foreach (var pair in rows.GroupBy(r => r.ScriptId))
         {
-            string? url = null;
-            DateTimeOffset? expiresAt = null;
+            var cs = pair.Where(r => r.SentenceVariant == SentenceVariant.CodeSwitching)
+                .OrderByDescending(r => r.RecordedAt).FirstOrDefault();
+            var vi = pair.Where(r => r.SentenceVariant == SentenceVariant.PureVietnamese)
+                .OrderByDescending(r => r.RecordedAt).FirstOrDefault();
 
-            try
-            {
-                var key = storage.GetObjectKey(r.CloudLink);
-                if (key is not null) (url, expiresAt) = await storage.GetDownloadUrlAsync(key, ct);
-            }
-            catch { /* xem như không nghe được, vẫn trả dòng lịch sử */ }
+            var takes = new[] { cs, vi }.OfType<Recording>().ToArray();
 
             items.Add(new SpeakerRecordingHistoryDto(
-                r.RecordingId,
-                r.ScriptId,
-                r.Task?.Description,
-                r.SentenceVariant,
-                r.Script.CsContent,
-                r.Script.ViContent,
-                url,
-                expiresAt,
-                r.DurationSec,
-                r.Status,
-                r.RecordedAt,
+                pair.Key,
+                (cs ?? vi)?.Task?.Description,
+                (cs ?? vi)!.Script.CsContent,
+                (cs ?? vi)!.Script.ViContent,
+                cs?.RecordingId,
+                vi?.RecordingId,
+                await SignAsync(cs, ct),
+                await SignAsync(vi, ct),
+                cs?.DurationSec ?? vi?.DurationSec ?? 0,
+                // Trạng thái của cặp: có bản bị từ chối thì cặp đó từ chối; đủ cả hai bản
+                // đạt thì mới là đạt; trượt QC hết thì báo lỗi chất lượng; còn lại là đang
+                // chờ (thiếu bản, hoặc đã nộp chưa có kết quả).
+                takes.Any(r => r.Status == RecordingStatus.Rejected)
+                    ? RecordingStatus.Rejected
+                    : cs?.Status == RecordingStatus.Approved && vi?.Status == RecordingStatus.Approved
+                        ? RecordingStatus.Approved
+                        : takes.Length > 0 && takes.All(r => r.Status == RecordingStatus.QcFailed)
+                            ? RecordingStatus.QcFailed
+                            : RecordingStatus.PendingReview,
+                takes.Max(r => r.RecordedAt),
                 // Giống GET /api/recordings/{id}/reviews: chỉ hiện lượt duyệt khi bản đã chốt.
-                r.Status is RecordingStatus.Approved or RecordingStatus.Rejected
-                    ? [.. r.Reviews.OrderBy(v => v.ReviewRound).Select(v => new HistoryReviewDto(
-                        v.ReviewRound,
-                        v.Decision.ToString(),
-                        v.Comment))]
-                    : []));
+                // Hai bản có thể chốt ở hai trạng thái khác nhau, nên mỗi lượt tính một lần.
+                [.. takes
+                    .Where(r => r.Status is RecordingStatus.Approved or RecordingStatus.Rejected)
+                    .SelectMany(r => r.Reviews)
+                    .GroupBy(v => v.ReviewRound)
+                    .Select(g => g.First())
+                    .OrderBy(v => v.ReviewRound)
+                    .Select(v => new HistoryReviewDto(v.ReviewRound, v.Decision.ToString(), v.Comment))]));
         }
 
         return new PagedResult<SpeakerRecordingHistoryDto>(items, query.Page, query.PageSize, total);
+    }
+
+    /// <summary>Link nghe tạm của một bản ghi; hỏng thì để null chứ không làm hỏng cả dòng lịch sử.</summary>
+    private async Task<string?> SignAsync(Recording? rec, CancellationToken ct)
+    {
+        if (rec is null) return null;
+        try
+        {
+            var key = storage.GetObjectKey(rec.CloudLink);
+            return key is null ? null : (await storage.GetDownloadUrlAsync(key, ct)).Url;
+        }
+        catch { return null; }
     }
 
     public async Task<PagedResult<SpeakerContributionHistoryDto>> GetContributionHistoryAsync(
