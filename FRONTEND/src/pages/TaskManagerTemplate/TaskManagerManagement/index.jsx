@@ -173,17 +173,14 @@ export default function TaskManagerManagement() {
   const [assignTasks, setAssignTasks] = useState([]);
   const [batchMapping, setBatchMapping] = useState({});
 
-  // Gọi API kết nối Backend
+  // Gọi API kết nối Backend chuẩn xác
   const loadDataFromApi = async () => {
     try {
-      // Bắt riêng lỗi 403 của getUsers để không làm ngắt đứt luồng tải Task/Campaign
-      const [campaignRes, taskRes, userRes] = await Promise.all([
+      const [campaignRes, taskRes, speakerUsersRes, reviewerUsersRes] = await Promise.all([
         taskService.getCampaigns().catch(() => ({ items: [] })),
         taskService.getTasks().catch(() => ({ items: [] })),
-        taskService.getUsers().catch((err) => {
-          console.warn("Không có quyền lấy danh sách users (403):", err);
-          return { items: [] };
-        })
+        taskService.getAssignableUsers("Recording").catch(() => []),
+        taskService.getAssignableUsers("Review").catch(() => [])
       ]);
 
       const campaignList = (campaignRes?.items || campaignRes?.data || []).map((c) => ({
@@ -221,16 +218,26 @@ export default function TaskManagerManagement() {
           role: t.taskType === "Recording" ? "Speaker" : "Reviewer",
           campaignId: t.campaignId,
           assignedUsers: t.assigneeName ? [t.assigneeName] : [],
+          assignedToUserId: t.assignedToUserId || t.assigneeId,
           status: calculatedStatus
         };
       });
 
-      const rawUsers = userRes?.items || userRes?.data || [];
-      const mappedUsers = rawUsers.map((u) => ({
+      // Gộp danh sách người dùng có thể giao việc (Speakers & Reviewers)
+      const mappedSpeakers = (speakerUsersRes || []).map((u) => ({
         id: u.userId || u.id,
         name: u.fullName || u.userName || u.name,
         email: u.email,
-        role: u.roleName || (u.role === "Recording" ? "Speaker" : u.role),
+        role: "Speaker",
+        status: "Active",
+        performanceTag: u.performanceTag || "GOOD"
+      }));
+
+      const mappedReviewers = (reviewerUsersRes || []).map((u) => ({
+        id: u.userId || u.id,
+        name: u.fullName || u.userName || u.name,
+        email: u.email,
+        role: "Reviewer",
         status: "Active",
         performanceTag: u.performanceTag || "GOOD"
       }));
@@ -241,7 +248,7 @@ export default function TaskManagerManagement() {
       }
 
       setAssignTasks(mappedTasks);
-      setAllAdminUsers(mappedUsers);
+      setAllAdminUsers([...mappedSpeakers, ...mappedReviewers]);
 
       const mapping = {};
       mappedTasks.forEach((t) => {
@@ -288,11 +295,8 @@ export default function TaskManagerManagement() {
 
     const currentTask = assignTasks.find((t) => t.id === taskId);
     taskService.updateTask(taskId, {
-      taskId: taskId,
-      title: currentTask?.title || "Nhiệm vụ",
       description: currentTask?.title || "Nhiệm vụ",
-      status: backendStatus,
-      campaignId: currentTask?.campaignId
+      status: backendStatus
     }).catch((e) => {
       console.warn("Lỗi API ngầm updateTask:", e?.response?.data || e.message);
     });
@@ -421,34 +425,27 @@ export default function TaskManagerManagement() {
     });
   };
 
-  // Xác nhận lưu Modal Phân Công (ĐÃ CHỈNH CHO PHÉP PHÂN CÔNG KHÔNG CẦN CHỌN USER)
   const handleSubmitAssignForm = async (e) => {
     e.preventDefault();
 
-    if (assignFormData.assignedUsers.length > maxAllowedUsers) {
-      alert(`Số lượng người chọn (${assignFormData.assignedUsers.length}) lớn hơn số lượng đợt yêu cầu (${maxAllowedUsers})!`);
-      return;
-    }
-
     try {
       const taskObj = currentSelectedTask;
-      const targetBatchId = assignFormData.selectedBatchId;
+      const targetBatchId = Number(assignFormData.selectedBatchId);
+      const taskId = Number(taskObj?.id || taskObj?.taskId);
 
-      if (!taskObj?.id) {
-        showNotification("Vui lòng chọn nhiệm vụ hợp lệ!");
+      if (!taskId || isNaN(targetBatchId)) {
+        showNotification("Vui lòng chọn đợt và nhiệm vụ hợp lệ!");
         return;
       }
 
-      // 1. Cập nhật gán Task vào Đợt (campaignId)
-      await taskService.updateTask(taskObj.id, {
-        campaignId: Number(targetBatchId)
-      });
+      // 1. Gắn Task vào Đợt qua API chuẩn C#
+      await taskService.attachTaskToCampaign(taskId, targetBatchId);
 
-      // 2. Nếu có chọn người dùng thì thực hiện gán user
+      // 2. Giao người thực hiện nếu có chọn
       if (assignFormData.assignedUsers.length > 0) {
         const selectedUserObj = targetUserList.find(u => assignFormData.assignedUsers.includes(u.name));
-        if (selectedUserObj) {
-          await taskService.assignTask(taskObj.id, selectedUserObj.id).catch(err => {
+        if (selectedUserObj?.id) {
+          await taskService.assignTask(taskId, selectedUserObj.id).catch(err => {
             console.warn("Lỗi ngầm assignTask:", err);
           });
         }
@@ -456,10 +453,11 @@ export default function TaskManagerManagement() {
 
       showNotification(`Đã phân công nhiệm vụ "${taskObj.title}" vào đợt thành công!`);
       setIsAssignModalOpen(false);
-      loadDataFromApi();
+      await loadDataFromApi();
     } catch (err) {
-      console.error("Lỗi khi phân công nhiệm vụ vào đợt:", err);
-      showNotification("Phân công thất bại!");
+      console.error("Lỗi khi phân công nhiệm vụ vào đợt:", err?.response?.data || err);
+      const msg = err?.response?.data?.title || err?.response?.data?.message || "Phân công thất bại!";
+      showNotification(msg);
     }
   };
 
@@ -501,7 +499,7 @@ export default function TaskManagerManagement() {
     setIsModalOpen(true);
   };
 
-  // Xác nhận lưu Đợt qua API Backend (ĐÃ FIX SỬA BỎ CÁC TRƯỜNG THIẾU BỊ TỪ CHỐI)
+  // Xác nhận lưu Đợt qua API Backend
   const handleConfirmSaveModal = async (e) => {
     if (e) e.preventDefault();
 
@@ -533,17 +531,17 @@ export default function TaskManagerManagement() {
 
       if (modalMode === "CREATE") {
         await taskService.createCampaign({
-        name: String(batchFormData.name), // Thêm trường name chuẩn
-        campaignName: String(batchFormData.name),
-        title: String(batchFormData.name),
-        domain: domainMap[batchFormData.topic] || "ItTechnology",
-        targetQty: Number(batchFormData.target),
-        targetCount: Number(batchFormData.target),
-        speakerCount: Number(batchFormData.speakerCount || 1),
-        reviewerCount: Number(batchFormData.reviewerCount || 1),
-        startDate: `${startIso}T00:00:00.000Z`,
-        endDate: `${endIso}T00:00:00.000Z`
-      });
+          name: String(batchFormData.name),
+          campaignName: String(batchFormData.name),
+          title: String(batchFormData.name),
+          domain: domainMap[batchFormData.topic] || "ItTechnology",
+          targetQty: Number(batchFormData.target),
+          targetCount: Number(batchFormData.target),
+          speakerCount: Number(batchFormData.speakerCount || 1),
+          reviewerCount: Number(batchFormData.reviewerCount || 1),
+          startDate: `${startIso}T00:00:00.000Z`,
+          endDate: `${endIso}T00:00:00.000Z`
+        });
         showNotification(`Đã tạo thành công ${batchFormData.name}!`);
       } else {
         await taskService.updateCampaign(modalTargetBatchId, {
@@ -575,18 +573,22 @@ export default function TaskManagerManagement() {
     setDeletingBatch(batchToDelete);
   };
 
-  const handleConfirmDeleteBatch = () => {
+  const handleConfirmDeleteBatch = async () => {
     if (!deletingBatch) return;
 
-    const remainingBatches = batches.filter((b) => b.id !== deletingBatch.id);
-    setBatches(remainingBatches);
+    try {
+      // Xóa hiển thị đợt trên UI Local
+      const remainingBatches = batches.filter((b) => b.id !== deletingBatch.id);
+      setBatches(remainingBatches);
 
-    if (selectedBatchId === deletingBatch.id) {
-      setSelectedBatchId(remainingBatches.length > 0 ? remainingBatches[0].id : null);
+      if (selectedBatchId === deletingBatch.id) {
+        setSelectedBatchId(remainingBatches.length > 0 ? remainingBatches[0].id : null);
+      }
+
+      showNotification(`Đã xóa đợt ${deletingBatch.name}!`);
+    } finally {
+      setDeletingBatch(null);
     }
-
-    showNotification(`Đã xóa thành công ${deletingBatch.name}!`);
-    setDeletingBatch(null);
   };
 
   // SỬA & XÓA NHIỆM VỤ TRONG BẢNG
@@ -629,14 +631,24 @@ export default function TaskManagerManagement() {
     }
 
     try {
+      // 1. Sửa tên/mô tả nhiệm vụ
       await taskService.updateTask(editingTask.id, {
         description: editTaskFormData.title
       });
 
-      showNotification(`Đã cập nhật nhiệm vụ "${editTaskFormData.title}"!`);
+      // 2. Cập nhật phân công người thực hiện
+      if (editTaskFormData.assignedUsers.length > 0) {
+        const userObj = activeSpeakers.concat(activeReviewers).find(u => editTaskFormData.assignedUsers.includes(u.name));
+        if (userObj?.id) {
+          await taskService.assignTask(editingTask.id, userObj.id);
+        }
+      }
+
+      showNotification(`Đã cập nhật nhiệm vụ "${editTaskFormData.title}" thành công!`);
       setIsEditTaskModalOpen(false);
-      loadDataFromApi();
+      await loadDataFromApi();
     } catch (err) {
+      console.error("Lỗi cập nhật nhiệm vụ:", err?.response?.data || err);
       showNotification("Cập nhật nhiệm vụ thất bại!");
     }
   };
@@ -646,27 +658,23 @@ export default function TaskManagerManagement() {
   };
 
   const handleConfirmDeleteTask = async () => {
-    if (!deletingTask) return;
-    const targetId = deletingTask.id || deletingTask.taskId;
+    if (!deletingTask || !selectedBatchId) return;
+    const targetTaskId = Number(deletingTask.id || deletingTask.taskId);
 
     try {
-      await taskService.updateTask(targetId, {
-        campaignId: null
-      });
-
-      setAssignTasks((prev) =>
-        prev.map((t) => (t.id === targetId ? { ...t, campaignId: null } : t))
-      );
-
+      // Gọi Endpoint chuẩn C#: DELETE /api/campaigns/{id}/tasks/{taskId}
+      await taskService.detachTaskFromCampaign(Number(selectedBatchId), targetTaskId);
       showNotification(`Đã gỡ nhiệm vụ "${deletingTask.title}" khỏi đợt thành công!`);
-      setDeletingTask(null);
     } catch (err) {
-      console.warn("Lỗi API updateTask gỡ đợt, tiến hành gỡ khỏi UI đợt:", err?.response?.data || err);
-      setAssignTasks((prev) =>
-        prev.map((t) => (t.id === targetId ? { ...t, campaignId: null } : t))
-      );
+      console.warn("Lỗi gỡ task khỏi đợt:", err?.response?.data || err);
       showNotification(`Đã gỡ nhiệm vụ "${deletingTask.title}" khỏi đợt!`);
+    } finally {
+      // Cập nhật giao diện UI
+      setAssignTasks((prev) =>
+        prev.map((t) => (t.id === targetTaskId ? { ...t, campaignId: null } : t))
+      );
       setDeletingTask(null);
+      await loadDataFromApi();
     }
   };
 
@@ -676,10 +684,11 @@ export default function TaskManagerManagement() {
     return batchMapping[selectedBatchId] || [];
   }, [batchMapping, selectedBatchId]);
 
+  // Lấy danh sách nhiệm vụ thuộc đợt đang chọn
   const currentTasks = useMemo(() => {
     if (!selectedBatchId) return assignTasks;
-    return assignTasks.filter((t) => t.campaignId === selectedBatchId || currentBatchTaskIds.includes(t.id));
-  }, [assignTasks, selectedBatchId, currentBatchTaskIds]);
+    return assignTasks.filter((t) => Number(t.campaignId) === Number(selectedBatchId));
+  }, [assignTasks, selectedBatchId]);
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -936,11 +945,11 @@ export default function TaskManagerManagement() {
                 </div>
               </div>
 
-              {/* DANH SÁCH SPEAKER / REVIEWER CHỌN (TÙY CHỌN, KHÔNG BẮT BUỘC) */}
+              {/* DANH SÁCH SPEAKER / REVIEWER CHỌN */}
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-[10px] font-bold uppercase text-gray-500 dark:text-gray-400">
-                    {currentSelectedTask?.role} đang hoạt động ({assignFormData.assignedUsers.length}/{maxAllowedUsers} tối đa - Không bắt buộc)
+                    {currentSelectedTask?.role} đang hoạt động ({assignFormData.assignedUsers.length}/{maxAllowedUsers} tối đa)
                   </label>
                   <span 
                     style={{ backgroundColor: currentSelectedTask?.role === "Speaker" ? SPEAKER_ACCENT : REVIEWER_ACCENT }}
@@ -988,7 +997,7 @@ export default function TaskManagerManagement() {
                               </span>
                               
                               {hasPreferenceReason && (
-                                <span className="text-[9.5px] font-semibold mt-0.5  text-gray-500 dark:text-gray-400 line-clamp-1">
+                                <span className="text-[9.5px] font-semibold mt-0.5 text-gray-500 dark:text-gray-400 line-clamp-1">
                                   Lý do: {u.performanceReason}
                                 </span>
                               )}
@@ -1214,7 +1223,7 @@ export default function TaskManagerManagement() {
                                   </span>
 
                                   {hasPreferenceReason && (
-                                    <span className="text-[9.5px] font-semibold mt-0.5  text-gray-500 dark:text-gray-400 line-clamp-1">
+                                    <span className="text-[9.5px] font-semibold mt-0.5 text-gray-500 dark:text-gray-400 line-clamp-1">
                                       Lý do: {u.performanceReason}
                                     </span>
                                   )}
@@ -1282,7 +1291,7 @@ export default function TaskManagerManagement() {
         </div>
       )}
 
-      {/* MODAL XÓA NHIỆM VỤ */}
+      {/* MODAL XÓA NHIỆM VỤ CỦA ĐỢT */}
       {deletingTask && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 dark:bg-black/60 backdrop-blur-[2px]" onClick={() => setDeletingTask(null)}>
           <div 
@@ -1298,9 +1307,9 @@ export default function TaskManagerManagement() {
                 <AlertTriangle className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">Xác nhận xóa nhiệm vụ</h3>
+                <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">Xác nhận gỡ nhiệm vụ</h3>
                 <p className="text-[11px] mt-1 break-words text-gray-500 dark:text-gray-400">
-                  Bạn có chắc muốn xóa nhiệm vụ <span className="font-bold text-gray-900 dark:text-gray-200">"{deletingTask.title}"</span> khỏi đợt này?
+                  Bạn có chắc muốn gỡ nhiệm vụ <span className="font-bold text-gray-900 dark:text-gray-200">"{deletingTask.title}"</span> khỏi đợt này?
                 </p>
               </div>
               <div className="flex gap-2 pt-1">
@@ -1317,7 +1326,7 @@ export default function TaskManagerManagement() {
                   style={{ backgroundColor: DANGER }}
                   className="flex-1 py-2 text-white rounded-lg text-xs font-bold hover:opacity-90 transition-opacity cursor-pointer"
                 >
-                  Xóa ngay
+                  Gỡ ngay
                 </button>
               </div>
             </div>
@@ -1458,10 +1467,8 @@ export default function TaskManagerManagement() {
                 const batchTasks = assignTasks.filter((t) => t.campaignId === batch.id || mappedIds.includes(t.id));
 
                 const isBatchCompleted = batchTasks.length > 0 && batchTasks.every((t) => t.status === "Hoàn thành");
-                // Đợt chưa có nhiệm vụ nào HOẶC status là "Open" thì là "Đang mở"
                 const isOpenStatus = batchTasks.length === 0 || batch.status === "Open";
 
-                // Màu sắc động cho Badge của Đợt
                 const batchBadgeBg = isBatchCompleted 
                   ? CHIP_SUCCESS_BG 
                   : isOpenStatus 
@@ -1643,7 +1650,6 @@ export default function TaskManagerManagement() {
                       const isCancelled = task.status === "Đã hủy";
                       const countUsers = task.assignedUsers ? task.assignedUsers.length : 0;
 
-                      // Style động cho dropdown trạng thái
                       const statusBg = isCompleted 
                         ? CHIP_SUCCESS_BG 
                         : isCancelled 
@@ -1741,7 +1747,7 @@ export default function TaskManagerManagement() {
                               <button
                                 type="button"
                                 onClick={() => handleRequestDeleteTask(task)}
-                                title="Xóa nhiệm vụ"
+                                title="Gỡ nhiệm vụ khỏi đợt"
                                 className="p-1 text-gray-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-md hover:text-red-600 dark:hover:text-[#E55353] transition-colors cursor-pointer dark:text-gray-400"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />

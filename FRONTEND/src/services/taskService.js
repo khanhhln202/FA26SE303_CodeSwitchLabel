@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_BASE_URL = '';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -8,7 +9,6 @@ const apiClient = axios.create({
   },
 });
 
-// Interceptor tự động gắn JWT Token nếu có
 apiClient.interceptors.request.use((config) => {
   const token = localStorage.getItem('token') || localStorage.getItem('accessToken');
   if (token) {
@@ -18,15 +18,20 @@ apiClient.interceptors.request.use((config) => {
 });
 
 export const taskService = {
-  // 1. Lấy overview trang chủ Task Manager
+  // 1. Overview
   getOverview: async () => {
     const res = await apiClient.get('/api/task-manager/overview');
     return res.data;
   },
 
-  // 2. Danh sách chiến dịch (Đợt)
+  // 2. Campaigns (Chiến dịch / Đợt)
   getCampaigns: async (params) => {
     const res = await apiClient.get('/api/campaigns', { params });
+    return res.data;
+  },
+
+  getCampaignById: async (id) => {
+    const res = await apiClient.get(`/api/campaigns/${id}`);
     return res.data;
   },
 
@@ -40,12 +45,13 @@ export const taskService = {
     return res.data;
   },
 
-  assignCampaign: async (id, assignedToUserId) => {
-    const res = await apiClient.post(`/api/campaigns/${id}/assign`, { assignedToUserId });
+  // Gỡ Task khỏi Đợt (Chuẩn endpoint C# CampaignsController)
+  detachTaskFromCampaign: async (campaignId, taskId) => {
+    const res = await apiClient.delete(`/api/campaigns/${campaignId}/tasks/${taskId}`);
     return res.data;
   },
 
-  // 3. Danh sách nhiệm vụ (Tasks)
+  // 3. Tasks (Nhiệm vụ)
   getTasks: async (params) => {
     const res = await apiClient.get('/api/tasks', { params });
     return res.data;
@@ -67,12 +73,15 @@ export const taskService = {
   },
 
   assignTask: async (id, userId) => {
-    const res = await apiClient.post(`/api/tasks/${id}/assign`, { userId });
+    const res = await apiClient.post(`/api/tasks/${id}/assign`, { userId: Number(userId) });
     return res.data;
   },
 
-  cancelTask: async (id) => {
-    const res = await apiClient.post(`/api/tasks/${id}/cancel`);
+  // Gắn Task vào Chiến dịch (Chuẩn TasksController: PATCH /api/tasks/{id}/campaign)
+  attachTaskToCampaign: async (taskId, campaignId) => {
+    const res = await apiClient.patch(`/api/tasks/${Number(taskId)}/campaign`, { 
+      campaignId: Number(campaignId) 
+    });
     return res.data;
   },
 
@@ -81,7 +90,6 @@ export const taskService = {
     return res.data;
   },
 
-  // 4. Lấy danh sách Users (Speaker / Reviewer)
   getUsers: async (params) => {
     const res = await apiClient.get('/api/users', { params });
     return res.data;

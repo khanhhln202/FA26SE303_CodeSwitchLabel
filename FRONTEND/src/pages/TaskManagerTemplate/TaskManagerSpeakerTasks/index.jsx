@@ -59,7 +59,6 @@ const toInputDateFormat = (dateStr) => {
 export default function TaskManagerSpeakerTasks() {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [defaultCampaignId, setDefaultCampaignId] = useState(null);
   const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [topicFilter, setTopicFilter] = useState("all");
@@ -90,10 +89,6 @@ export default function TaskManagerSpeakerTasks() {
       ]);
 
       const campaignList = campaignRes?.items || campaignRes?.data || [];
-      if (campaignList.length > 0) {
-        setDefaultCampaignId(campaignList[0].campaignId || campaignList[0].id);
-      }
-
       const campaignTopicMap = {};
       campaignList.forEach(c => {
         const cId = c.campaignId || c.id;
@@ -115,7 +110,7 @@ export default function TaskManagerSpeakerTasks() {
 
         return {
           id: t.taskId || t.id,
-          title: t.title || t.description || "Nhiệm vụ thu âm",
+          title: t.description || t.title || "Nhiệm vụ thu âm",
           topic: topicName,
           rawDomain: t.domain,
           createdAt: t.createdAt || t.createdDate,
@@ -182,29 +177,20 @@ export default function TaskManagerSpeakerTasks() {
 
   const handleSubmitForm = async (e) => {
     e.preventDefault();
-    if (!formData.title) return;
+    if (!formData.title.trim()) return;
 
     try {
-      const domainMap = {
-        "Công nghệ thông tin": "ItTechnology",
-        "Giáo dục": "Education",
-        "Hội thoại hàng ngày": "DailyLife"
-      };
-
-      const isoCreatedAt = formData.createdAt ? new Date(formData.createdAt).toISOString() : new Date().toISOString();
-      const isoDeadline = formData.deadline ? new Date(formData.deadline).toISOString() : new Date().toISOString();
+      // Set deadline về cuối ngày UTC (23:59:59) để không bị lùi ngày làm hỏng validation C#
+      const selectedDate = new Date(formData.deadline);
+      selectedDate.setHours(23, 59, 59, 999);
+      const isoDeadline = selectedDate.toISOString();
 
       if (editingTask) {
         await taskService.updateTask(editingTask.id, {
+          taskId: Number(editingTask.id),
           title: formData.title,
           description: formData.title,
-          domain: domainMap[formData.topic] || "ItTechnology",
           targetQty: 10,
-          targetQuantity: 10,
-          targetCount: 10,
-          createdAt: isoCreatedAt,
-          dueDate: isoDeadline,
-          endDate: isoDeadline,
           deadline: isoDeadline
         });
         showNotification(`Đã cập nhật nhiệm vụ "${formData.title}"!`);
@@ -212,21 +198,15 @@ export default function TaskManagerSpeakerTasks() {
         await taskService.createTask({
           title: formData.title,
           description: formData.title,
-          campaignId: null, // Tạo nhiệm vụ chưa gắn vào đợt nào
-          taskType: "Recording",
-          domain: domainMap[formData.topic] || "ItTechnology",
+          taskType: "Recording", // C# Enum Recording
+          campaignId: null,
           targetQty: 10,
-          targetQuantity: 10,
-          targetCount: 10,
-          createdAt: isoCreatedAt,
-          dueDate: isoDeadline,
-          endDate: isoDeadline,
           deadline: isoDeadline
         });
         showNotification(`Đã tạo thành công nhiệm vụ "${formData.title}"!`);
       }
       setIsModalOpen(false);
-      loadTasksFromApi();
+      await loadTasksFromApi();
     } catch (err) {
       console.error("Lỗi tạo/sửa nhiệm vụ:", err?.response?.data || err);
       
@@ -245,17 +225,18 @@ export default function TaskManagerSpeakerTasks() {
 
   const handleConfirmDelete = async () => {
     if (!taskToDelete) return;
-    const targetId = taskToDelete.id || taskToDelete.taskId;
+    const targetId = Number(taskToDelete.id || taskToDelete.taskId);
 
     try {
       await taskService.cancelTask(targetId);
       setTasks((prev) => prev.filter((t) => t.id !== targetId));
-      showNotification(`Đã xóa thành công nhiệm vụ "${taskToDelete.title}"!`);
+      showNotification(`Đã hủy thành công nhiệm vụ "${taskToDelete.title}"!`);
       setTaskToDelete(null);
+      await loadTasksFromApi();
     } catch (e) {
-      console.warn("Lỗi API cancel, tiến hành xóa khỏi UI:", e?.response?.data || e);
-      setTasks((prev) => prev.filter((t) => t.id !== targetId));
-      showNotification(`Đã xóa nhiệm vụ "${taskToDelete.title}"!`);
+      console.warn("Lỗi API cancel:", e?.response?.data || e);
+      const msg = e?.response?.data?.title || e?.response?.data?.message || "Hủy nhiệm vụ thất bại!";
+      showNotification(msg);
       setTaskToDelete(null);
     }
   };
@@ -469,7 +450,7 @@ export default function TaskManagerSpeakerTasks() {
               </h3>
               
               <div>
-                <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Tên nhiệm vụ</label>
+                <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Mô tả nhiệm vụ</label>
                 <input
                   type="text"
                   required
@@ -480,20 +461,7 @@ export default function TaskManagerSpeakerTasks() {
                 />
               </div>
 
-              <div>
-                <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Chủ đề (Topic)</label>
-                <select
-                  value={formData.topic}
-                  onChange={(e) => setFormData({ ...formData, topic: e.target.value })}
-                  className="w-full px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#25272E] text-gray-900 dark:text-white rounded-lg outline-none font-bold transition-all font-sans truncate cursor-pointer focus:bg-white dark:focus:bg-[#1C1D22] focus:border-gray-400 dark:focus:border-gray-500"
-                >
-                  <option value="Công nghệ thông tin" className="dark:bg-[#1C1D22]">Công nghệ thông tin</option>
-                  <option value="Giáo dục" className="dark:bg-[#1C1D22]">Giáo dục</option>
-                  <option value="Hội thoại hàng ngày" className="dark:bg-[#1C1D22]">Hội thoại hàng ngày</option>
-                </select>
-              </div>
-
-              {/* Hàng chứa 2 ô chọn ngày tạo và ngày hạn chót dạng DD/MM/YYYY */}
+              {/* Hàng chứa 2 ô chọn ngày tạo và ngày hạn chót */}
               <div className="grid grid-cols-2 gap-3">
                 {/* Ngày tạo */}
                 <div>
@@ -505,11 +473,9 @@ export default function TaskManagerSpeakerTasks() {
                     </div>
                     <input
                       type="date"
-                      required
-                      min={todayStr}
+                      disabled
                       value={formData.createdAt}
-                      onChange={(e) => setFormData({ ...formData, createdAt: e.target.value })}
-                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                      className="absolute inset-0 opacity-0 cursor-not-allowed w-full h-full"
                     />
                   </div>
                 </div>
@@ -555,7 +521,7 @@ export default function TaskManagerSpeakerTasks() {
         </div>
       )}
 
-      {/* Modal Xác nhận Xóa */}
+      {/* Modal Xác nhận Xóa/Hủy */}
       {taskToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 dark:bg-black/60 backdrop-blur-[2px]" onClick={() => setTaskToDelete(null)}>
           <div className="bg-white dark:bg-[#1C1D22] border border-gray-100 dark:border-gray-800 rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden transition-colors animate-in fade-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
@@ -565,9 +531,9 @@ export default function TaskManagerSpeakerTasks() {
                 <AlertTriangle className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">Xác nhận xóa nhiệm vụ</h3>
+                <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">Xác nhận hủy nhiệm vụ</h3>
                 <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">
-                  Bạn có chắc muốn xóa nhiệm vụ <span className="font-bold text-gray-900 dark:text-gray-200">"{taskToDelete.title}"</span>?
+                  Bạn có chắc muốn hủy nhiệm vụ <span className="font-bold text-gray-900 dark:text-gray-200">"{taskToDelete.title}"</span>?
                 </p>
               </div>
               <div className="flex gap-2 pt-1">
@@ -582,7 +548,7 @@ export default function TaskManagerSpeakerTasks() {
                   style={{ backgroundColor: DANGER }}
                   className="flex-1 py-2 text-white rounded-lg text-xs font-bold hover:opacity-90 transition-colors cursor-pointer"
                 >
-                  Xóa ngay
+                  Xác nhận hủy
                 </button>
               </div>
             </div>

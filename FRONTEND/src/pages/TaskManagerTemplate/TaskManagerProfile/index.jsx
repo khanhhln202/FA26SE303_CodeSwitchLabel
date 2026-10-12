@@ -2,9 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Save, CheckCircle2, X, ArrowLeft, Loader2 } from 'lucide-react';
 import { TASK_MANAGER_ACCENT as ACCENT } from '../../../constants/theme';
-import axios from 'axios';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://csl-codeswitchlabel.eastasia.cloudapp.azure.com';
+import { getMeApi } from '../../../services/authApi';
+import { httpClient } from '../../../utils/setting';
 
 const VIETNAM_PROVINCES = [
   "TP. Hà Nội", "TP. Hồ Chí Minh", "TP. Đà Nẵng", "TP. Hải Phòng", "TP. Cần Thơ", "TP. Huế",
@@ -14,7 +13,7 @@ const VIETNAM_PROVINCES = [
   "Quảng Trị", "Sơn La", "Tây Ninh", "Thái Nguyên", "Thanh Hóa", "Tuyên Quang", "Vĩnh Long"
 ];
 
-// Thông tin mặc định khớp với tài khoản demo Task Manager trên Swagger
+// Thông tin mặc định
 const DEFAULT_TASK_MANAGER = {
   id: 1,
   name: "Điều phối viên",
@@ -32,30 +31,20 @@ export default function TaskManagerProfile() {
   const [formData, setFormData] = useState(DEFAULT_TASK_MANAGER);
   const [toast, setToast] = useState({ show: false, message: "" });
 
-  // Tải thông tin tài khoản đăng nhập từ API Backend
+  // Tải thông tin tài khoản đăng nhập từ GET /api/auth/me
   const loadUserProfile = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token') || localStorage.getItem('accessToken');
-
-      if (token) {
-        // Gọi GET /api/auth/me nếu có token
-        const res = await axios.get(`${API_BASE_URL}/api/auth/me`, {
-          headers: { Authorization: `Bearer ${token}` }
+      const user = await getMeApi();
+      if (user) {
+        setFormData({
+          id: user.userId || user.id || 1,
+          name: user.fullName || user.userName || user.name || "Điều phối viên",
+          email: user.email || "manager@codeswitchlabel.local",
+          gender: user.gender || "Nam",
+          dob: user.dateOfBirth ? user.dateOfBirth.split('T')[0] : "1997-05-15",
+          city: user.city || user.province || "TP. Hồ Chí Minh"
         });
-        
-        const user = res.data;
-        if (user) {
-          setFormData({
-            id: user.userId || user.id || 1,
-            name: user.fullName || user.userName || user.name || "Điều phối viên",
-            email: user.email || "manager@codeswitchlabel.local",
-            gender: user.gender || "Nam",
-            dob: user.dateOfBirth ? user.dateOfBirth.split('T')[0] : "1997-05-15",
-            city: user.city || user.province || "TP. Hồ Chí Minh"
-          });
-          return;
-        }
       }
     } catch (error) {
       console.warn("Không thể lấy dữ liệu từ API auth/me, sử dụng dữ liệu mặc định:", error);
@@ -81,32 +70,24 @@ export default function TaskManagerProfile() {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  // Lưu thông tin cá nhân qua API PATCH /api/users/{id}
+  // Lưu thông tin cá nhân qua API PATCH /api/me (Tự quản lý tài khoản)
   const handleSave = async (e) => {
     e.preventDefault();
     try {
       setSaving(true);
-      const token = localStorage.getItem('token') || localStorage.getItem('accessToken');
-      
-      if (token && formData.id) {
-        await axios.patch(
-          `${API_BASE_URL}/api/users/${formData.id}`,
-          {
-            fullName: formData.name,
-            gender: formData.gender,
-            dateOfBirth: formData.dob,
-            city: formData.city
-          },
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-      }
+      await httpClient.patch("/api/me", {
+        fullName: formData.name,
+        gender: formData.gender,
+        dateOfBirth: formData.dob,
+        city: formData.city
+      });
 
       window.dispatchEvent(new Event("userProfileUpdated"));
       setToast({ show: true, message: "Cập nhật hồ sơ cá nhân thành công!" });
     } catch (error) {
       console.error("Lỗi khi lưu thông tin cá nhân:", error);
-      // Vẫn thông báo thành công nếu đang ở chế độ dev bypass
-      setToast({ show: true, message: "Cập nhật hồ sơ cá nhân thành công!" });
+      const msg = error?.response?.data?.title || "Cập nhật hồ sơ cá nhân thất bại!";
+      setToast({ show: true, message: msg });
     } finally {
       setSaving(false);
     }
