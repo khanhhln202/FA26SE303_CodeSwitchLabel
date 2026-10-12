@@ -21,6 +21,7 @@ public record TaskRow(
     long? CampaignId,
     string? CampaignName,
     TaskType TaskType,
+    ScriptDomain Domain,
     string? Description,
     WorkTaskStatus Status,
     int TargetQty,
@@ -51,6 +52,20 @@ public interface ITaskRepository
     void Remove(TaskScript item);
     void Remove(TaskRecording item);
 
+    /// <summary>
+    /// Xoá cứng một task đã nạp sẵn (tracked). Chỉ dùng cho task rảnh —
+    /// task_assignment / task_script / task_recording đều ON DELETE CASCADE,
+    /// còn recording.task_id là SET NULL.
+    /// </summary>
+    void RemoveTask(WorkTask task);
+
+    /// <summary>
+    /// Task còn "việc" để bảo toàn dấu vết hay không: đã có lượt giao cho ai,
+    /// đã có mục (script/bản ghi), hoặc đã có bản ghi nộp về. Task có việc thì
+    /// không xoá cứng được — dùng cancel để giữ lịch sử.
+    /// </summary>
+    Task<bool> HasWorkAsync(long taskId, CancellationToken ct = default);
+
     Task<WorkTask?> GetForUpdateAsync(long taskId, CancellationToken ct = default);
     Task<TaskAssignment?> GetActiveAssignmentAsync(long taskId, CancellationToken ct = default);
     Task<List<TaskAssignment>> GetAssignmentHistoryAsync(long taskId, CancellationToken ct = default);
@@ -58,7 +73,7 @@ public interface ITaskRepository
     Task<TaskRow?> GetRowAsync(long taskId, CancellationToken ct = default);
 
     Task<(IReadOnlyList<TaskRow> Items, int Total)> SearchAsync(
-        TaskType? type, WorkTaskStatus? status, long? assigneeId, bool? overdue,
+        TaskType? type, WorkTaskStatus? status, long? assigneeId, ScriptDomain? domain, bool? overdue,
         DateTimeOffset now, int page, int pageSize, CancellationToken ct = default);
 
     Task<List<TaskRow>> GetActiveRowsForAssigneeAsync(long userId, TaskType type, CancellationToken ct = default);
@@ -135,6 +150,15 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
     public void Remove(TaskScript item) => db.TaskScripts.Remove(item);
     public void Remove(TaskRecording item) => db.TaskRecordings.Remove(item);
 
+    public void RemoveTask(WorkTask task) => db.WorkTasks.Remove(task);
+
+    public async Task<bool> HasWorkAsync(long taskId, CancellationToken ct = default) =>
+        await db.TaskAssignments.AnyAsync(a => a.TaskId == taskId, ct)
+            || await db.TaskScripts.AnyAsync(ts => ts.TaskId == taskId, ct)
+            || await db.TaskRecordings.AnyAsync(tr => tr.TaskId == taskId, ct)
+            || await db.Recordings.AnyAsync(r => r.TaskId == taskId, ct)
+            || await db.Reviews.AnyAsync(rv => rv.TaskId == taskId, ct);
+
     /// <summary>
     /// Khoá dòng task để hai người sửa cùng lúc không ghi đè nhau.
     /// </summary>
@@ -163,13 +187,14 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         ProjectRows(db.WorkTasks.AsNoTracking().Where(t => t.TaskId == taskId)).FirstOrDefaultAsync(ct);
 
     public async Task<(IReadOnlyList<TaskRow> Items, int Total)> SearchAsync(
-        TaskType? type, WorkTaskStatus? status, long? assigneeId, bool? overdue,
+        TaskType? type, WorkTaskStatus? status, long? assigneeId, ScriptDomain? domain, bool? overdue,
         DateTimeOffset now, int page, int pageSize, CancellationToken ct = default)
     {
         var query = db.WorkTasks.AsNoTracking();
 
         if (type.HasValue) query = query.Where(t => t.TaskType == type.Value);
         if (status.HasValue) query = query.Where(t => t.Status == status.Value);
+        if (domain.HasValue) query = query.Where(t => t.Domain == domain.Value);
 
         if (assigneeId.HasValue)
         {
@@ -602,6 +627,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
             t.CampaignId,
             t.Campaign!.CampaignName,
             t.TaskType,
+            t.Domain,
             t.Description,
             t.Status,
             t.TargetQty,

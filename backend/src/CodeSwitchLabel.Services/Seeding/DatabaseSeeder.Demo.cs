@@ -1,4 +1,4 @@
-﻿using CodeSwitchLabel.Repositories.Entities;
+using CodeSwitchLabel.Repositories.Entities;
 using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Repositories.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -133,6 +133,7 @@ public static partial class DatabaseSeeder
             CampaignId = campaign.CampaignId,
             CreatedBy = ids.Manager,
             TaskType = TaskType.Recording,
+            Domain = campaign.Domain, // TEAM_003
             Description = RecordingTaskName,
             TargetQty = 8,
             Deadline = deadline,
@@ -145,6 +146,7 @@ public static partial class DatabaseSeeder
             CampaignId = campaign.CampaignId,
             CreatedBy = ids.Manager,
             TaskType = TaskType.Review,
+            Domain = campaign.Domain, // TEAM_003
             Description = ReviewTaskName,
             TargetQty = 4,
             Deadline = deadline,

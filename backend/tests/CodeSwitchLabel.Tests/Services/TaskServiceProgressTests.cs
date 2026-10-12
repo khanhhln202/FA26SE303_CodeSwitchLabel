@@ -30,7 +30,7 @@ public sealed class TaskServiceProgressTests
 
     /// <summary>Speaker vừa gửi đủ hai bản, chưa có bản nào được duyệt.</summary>
     private static TaskRow Row(int done = 0, int submittedPairs = 4, int target = 10) => new(
-        7, 1, "Chiến dịch", TaskType.Recording, "Thu âm", WorkTaskStatus.InProgress, target,
+        7, 1, "Chiến dịch", TaskType.Recording, ScriptDomain.ItTechnology, "Thu âm", WorkTaskStatus.InProgress, target,
         null, DateTimeOffset.UtcNow, 9, "Người đọc",
         Started: 8, Done: done, SubmittedPairs: submittedPairs, UsableItems: 10, TotalItems: 10);
 
@@ -70,7 +70,7 @@ public sealed class TaskServiceProgressTests
     {
         // Cùng dữ liệu đó, nhưng Task Manager nhìn số đã duyệt — không tự nhảy lên 4.
         _tasks.Setup(t => t.SearchAsync(
-                TaskType.Recording, null, null, null, It.IsAny<DateTimeOffset>(),
+                TaskType.Recording, null, null, null, null, It.IsAny<DateTimeOffset>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(([Row(done: 0)], 1));
 

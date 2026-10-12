@@ -306,6 +306,7 @@ public static partial class DatabaseSeeder
         db.Campaigns.Add(new Campaign
         {
             CampaignName = "Đợt thu thập mẫu",
+            Domain = ScriptDomain.ItTechnology, // TEAM_003
             TargetQty = 2000,
             StartDate = today,
             EndDate = today.AddDays(30),
