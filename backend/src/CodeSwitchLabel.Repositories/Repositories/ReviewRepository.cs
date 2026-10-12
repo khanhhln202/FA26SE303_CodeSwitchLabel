@@ -26,6 +26,16 @@ public record TaskReviewRow(
     int ReviewsDone,
     bool MyReviewDone);
 
+/// <summary>Bản ghi của một cặp câu, rút gọn để dựng nhanh danh sách hai bản cạnh nhau.</summary>
+public record RecordingSummaryRow(
+    string RecordingId,
+    string ScriptId,
+    SentenceVariant SentenceVariant,
+    string ScriptTagged,
+    RecordingStatus Status,
+    int ReviewsDone,
+    bool MyReviewDone);
+
 public interface IReviewRepository
 {
     Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken ct = default);
@@ -72,6 +82,12 @@ public interface IReviewRepository
     Task<(List<TaskReviewRow> Rows, int Total)> GetTaskReviewRowsAsync(
         long taskId, long reviewerId, bool onlyReviewable, int roundsRequired,
         int page, int pageSize, CancellationToken ct = default);
+
+    Task<List<Recording>> GetByScriptAsync(string scriptId, CancellationToken ct = default);
+
+    /// <summary>Rút gọn nhiều cặp câu cùng lúc, để dựng danh sách hai bản mà không gọi N lần.</summary>
+    Task<List<RecordingSummaryRow>> GetSummariesByScriptsAsync(
+        string[] scriptIds, long viewerId, CancellationToken ct = default);
 
     Task<List<ReviewTaskProgress>> GetActiveTaskProgressAsync(
         long reviewerId, CancellationToken ct = default);
@@ -222,6 +238,37 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
             .ToListAsync(ct);
 
         return (rows, total);
+    }
+
+    public async Task<List<Recording>> GetByScriptAsync(
+        string scriptId, CancellationToken ct = default) =>
+        await db.Recordings
+            .AsNoTracking()
+            .Include(r => r.Script)
+            .Where(r => r.ScriptId == scriptId)
+            .OrderBy(r => r.SentenceVariant)
+            .ToListAsync(ct);
+
+    public Task<List<RecordingSummaryRow>> GetSummariesByScriptsAsync(
+        string[] scriptIds, long viewerId, CancellationToken ct = default)
+    {
+        if (scriptIds.Length == 0) return Task.FromResult(new List<RecordingSummaryRow>());
+
+        return db.Recordings
+            .AsNoTracking()
+            .Where(r => scriptIds.Contains(r.ScriptId))
+            .OrderBy(r => r.ScriptId).ThenBy(r => r.SentenceVariant)
+            .Select(r => new RecordingSummaryRow(
+                r.RecordingId,
+                r.ScriptId,
+                r.SentenceVariant,
+                r.SentenceVariant == SentenceVariant.CodeSwitching
+                    ? r.Script.CsContent
+                    : r.Script.ViContent,
+                r.Status,
+                r.Reviews.Count,
+                r.Reviews.Any(v => v.ReviewerId == viewerId)))
+            .ToListAsync(ct);
     }
 
     public Task<List<ReviewTaskProgress>> GetActiveTaskProgressAsync(

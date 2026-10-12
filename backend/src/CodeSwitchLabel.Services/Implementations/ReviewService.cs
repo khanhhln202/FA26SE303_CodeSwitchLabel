@@ -53,7 +53,7 @@ public class ReviewService(
 
         var existing = await reviews.GetReviewsAsync(recording.RecordingId, ct);
 
-        return await BuildPayloadAsync(recording, existing.Count, roundsRequired, ct);
+        return await BuildPayloadAsync(recording, existing.Count, roundsRequired, reviewerId, ct);
     }
 
     public async Task<PagedResult<TaskReviewItemDto>> GetTaskRecordingsAsync(
@@ -74,21 +74,40 @@ public class ReviewService(
         var (rows, total) = await reviews.GetTaskReviewRowsAsync(
             taskId, reviewerId, query.OnlyReviewable, roundsRequired, query.Page, query.PageSize, ct);
 
+        // Một lần lấy đủ hai bản của mọi cặp câu trên trang, thay vì gọi N lần cho từng dòng.
+        var pairs = (await reviews.GetSummariesByScriptsAsync(
+                [.. rows.Select(r => r.ScriptId).Distinct()], reviewerId, ct))
+            .GroupBy(r => r.ScriptId)
+            .ToDictionary(g => g.Key, g => g.ToDictionary(r => r.SentenceVariant));
+
         var items = rows
-            .Select(x => new TaskReviewItemDto(
-                x.RecordingId,
-                x.SpeakerId,
-                x.ScriptId,
-                x.SentenceVariant,
-                CodeSwitchText.Strip(x.ScriptTagged),
-                x.DurationSec,
-                x.Status,
-                x.QueueStatus,
-                x.ReviewsDone,
-                roundsRequired,
-                x.MyReviewDone,
-                ReviewRules.BlockerFor(
-                    x.SpeakerId == reviewerId, x.MyReviewDone, x.Status, x.ReviewsDone, roundsRequired)))
+            .Select(x =>
+            {
+                var other = x.SentenceVariant == SentenceVariant.CodeSwitching
+                    ? SentenceVariant.PureVietnamese
+                    : SentenceVariant.CodeSwitching;
+
+                return new TaskReviewItemDto(
+                    x.RecordingId,
+                    x.SpeakerId,
+                    x.ScriptId,
+                    x.SentenceVariant,
+                    CodeSwitchText.Strip(x.ScriptTagged),
+                    x.DurationSec,
+                    x.Status,
+                    x.QueueStatus,
+                    x.ReviewsDone,
+                    roundsRequired,
+                    x.MyReviewDone,
+                    ReviewRules.BlockerFor(
+                        x.SpeakerId == reviewerId, x.MyReviewDone, x.Status, x.ReviewsDone, roundsRequired),
+                    pairs.TryGetValue(x.ScriptId, out var pair) && pair.TryGetValue(other, out var sibling)
+                        ? new ReviewSiblingDto(
+                            sibling.RecordingId, sibling.SentenceVariant,
+                            CodeSwitchText.Strip(sibling.ScriptTagged),
+                            sibling.Status, sibling.ReviewsDone)
+                        : null);
+            })
             .ToList();
 
         return new PagedResult<TaskReviewItemDto>(items, query.Page, query.PageSize, total);
@@ -134,7 +153,7 @@ public class ReviewService(
                     "no_more_rounds", $"Bản ghi {recordingId} đã đủ {roundsRequired} lượt duyệt.");
         }
 
-        return await BuildPayloadAsync(recording, existing.Count, roundsRequired, ct);
+        return await BuildPayloadAsync(recording, existing.Count, roundsRequired, reviewerId, ct);
     }
 
     public async Task<SubmitReviewResult> SubmitAsync(
@@ -323,9 +342,10 @@ public class ReviewService(
     /// <summary>
     /// Dữ liệu một Reviewer cần để duyệt: câu đối chiếu và link nghe tạm. Dùng chung cho bản do
     /// hệ thống phát (GET next) và bản người ta tự chọn trong task — hai đường vào phải trả y như nhau.
+    /// Kèm luôn cặp câu đầy đủ (bản cs + bản vi) để người duyệt nghe được cả hai với một lần gọi.
     /// </summary>
     private async Task<NextReviewDto> BuildPayloadAsync(
-        Recording recording, int reviewsSoFar, int roundsRequired, CancellationToken ct)
+        Recording recording, int reviewsSoFar, int roundsRequired, long reviewerId, CancellationToken ct)
     {
         var key = storage.GetObjectKey(recording.CloudLink);
 
@@ -339,9 +359,7 @@ public class ReviewService(
         var (url, expiresAt) = await storage.GetDownloadUrlAsync(key, ct);
 
         // Bản cs đọc câu chen tiếng Anh, bản vi đọc câu thuần Việt — đưa đúng câu cần đối chiếu.
-        var tagged = recording.SentenceVariant == SentenceVariant.CodeSwitching
-            ? recording.Script.CsContent
-            : recording.Script.ViContent;
+        var tagged = TextOf(recording);
 
         return new NextReviewDto(
             recording.RecordingId,
@@ -355,8 +373,79 @@ public class ReviewService(
             tagged,
             recording.DurationSec,
             url,
-            expiresAt);
+            expiresAt,
+            await BuildPairAsync(recording, reviewerId, url, expiresAt, ct));
     }
+
+    /// <summary>
+    /// Gom hai bản ghi của cùng cặp câu thành một danh sách, đúng thứ tự cs rồi vi.
+    /// Bản chưa thu vẫn có mặt với <c>Status = null</c> để giao diện biết cặp câu còn thiếu gì.
+    /// </summary>
+    private async Task<IReadOnlyList<ReviewVariantDto>> BuildPairAsync(
+        Recording recording, long reviewerId,
+        string currentUrl, DateTimeOffset currentExpiresAt,
+        CancellationToken ct)
+    {
+        var siblings = await reviews.GetByScriptAsync(recording.ScriptId, ct);
+
+        var variants = new List<ReviewVariantDto>(2);
+
+        foreach (var variant in new[] { SentenceVariant.CodeSwitching, SentenceVariant.PureVietnamese })
+        {
+            var row = siblings.FirstOrDefault(r => r.SentenceVariant == variant);
+
+            if (row is null)
+            {
+                // Chưa có bản ghi nào cho biến thể này: vẫn hiện câu tương ứng để người duyệt
+                // thấy cặp câu còn thiếu đúng bản nào, thay vì một ô trống không rõ lý do.
+                var pendingText = variant == SentenceVariant.CodeSwitching
+                    ? recording.Script.CsContent
+                    : recording.Script.ViContent;
+
+                variants.Add(new ReviewVariantDto(
+                    "", variant, CodeSwitchText.Strip(pendingText), pendingText,
+                    null, null, null, null, 0, false));
+                continue;
+            }
+
+            // Bản đang mở đã có link nghe rồi, dùng lại để khỏi gọi kho lưu trữ hai lần.
+            var isCurrent = row.RecordingId == recording.RecordingId;
+            string? audioUrl = isCurrent ? currentUrl : null;
+            DateTimeOffset? audioExpiresAt = isCurrent ? currentExpiresAt : null;
+
+            if (!isCurrent)
+            {
+                var siblingKey = storage.GetObjectKey(row.CloudLink);
+                if (siblingKey is not null)
+                {
+                    // Bản kia hỏng link không được làm hỏng cả câu đang duyệt — bỏ ô nghe thôi.
+                    try { (audioUrl, audioExpiresAt) = await storage.GetDownloadUrlAsync(siblingKey, ct); }
+                    catch { }
+                }
+            }
+
+            var done = await reviews.GetReviewsAsync(row.RecordingId, ct);
+            var text = TextOf(row);
+
+            variants.Add(new ReviewVariantDto(
+                row.RecordingId,
+                row.SentenceVariant,
+                CodeSwitchText.Strip(text),
+                text,
+                row.DurationSec,
+                audioUrl,
+                audioExpiresAt,
+                row.Status,
+                done.Count,
+                done.Any(v => v.ReviewerId == reviewerId)));
+        }
+
+        return variants;
+    }
+
+    /// <summary>Câu của bản ghi này, tuỳ biến thể: cs đọc câu chen, vi đọc câu thuần Việt.</summary>
+    private static string TextOf(Recording r) =>
+        r.SentenceVariant == SentenceVariant.CodeSwitching ? r.Script.CsContent : r.Script.ViContent;
 
     /// <summary>
     /// Số lượt duyệt cần có. Trigger của database ghim cứng con số 3, nên đặt tham số khác đi

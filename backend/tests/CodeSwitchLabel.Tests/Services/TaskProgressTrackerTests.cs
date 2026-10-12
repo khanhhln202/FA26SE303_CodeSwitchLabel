@@ -28,7 +28,7 @@ public sealed class TaskProgressTrackerTests
 
     private static TaskRow Row(long id = 7, long? assignee = 9, int started = 1, int done = 0, int target = 10) => new(
         id, 1, "Chiến dịch", TaskType.Recording, null, WorkTaskStatus.Open, target,
-        null, DateTimeOffset.UtcNow, assignee, "Người nhận", started, done, 1, 1);
+        null, DateTimeOffset.UtcNow, assignee, "Người nhận", started, done, started, 1, 1);
 
     [Fact]
     public async Task RefreshStatus_DatChiTieu_ChuyenCompletedVaLuu()

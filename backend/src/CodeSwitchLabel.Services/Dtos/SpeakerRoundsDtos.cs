@@ -39,15 +39,17 @@ public record RejectedRecordingDto(
     string AudioUrl,
     DateTimeOffset AudioUrlExpiresAt);
 
-/// <summary>Dòng lịch sử ghi âm của Speaker: cả hai biến thể gộp theo cặp câu ghi.</summary>
+/// <summary>Dòng lịch sử ghi âm của Speaker: mỗi dòng là MỘT bản ghi.</summary>
+/// <param name="AudioUrl">Link nghe tạm, hết hạn sau <c>AudioUrlExpiresAt</c>.</param>
 public record SpeakerRecordingHistoryDto(
     string RecordingId,
     string ScriptId,
     string? TaskTitle,
+    SentenceVariant SentenceVariant,
     string CsText,
     string ViText,
-    string? CsAudioUrl,
-    string? ViAudioUrl,
+    string? AudioUrl,
+    DateTimeOffset? AudioUrlExpiresAt,
     decimal DurationSec,
     RecordingStatus Status,
     DateTimeOffset RecordedAt,
@@ -55,7 +57,17 @@ public record SpeakerRecordingHistoryDto(
 
 public record HistoryReviewDto(int Round, string Decision, string? Reason);
 
-public record SpeakerStatsDto(int Total, int Approved, int Rejected, int Pending);
+/// <summary>
+/// Số liệu của một nhóm việc của Speaker. Cả hai nhóm đều đếm bản ghi / câu, không đếm theo cặp.
+/// </summary>
+public record SpeakerStatsDto(RecordingStats Recording, ContributionStats Contribution);
+
+/// <param name="Pending">Đã nộp nhưng chưa có kết quả duyệt, cộng cả bản trượt QC.</param>
+public record RecordingStats(int Total, int Approved, int Rejected, int Pending);
+
+/// <param name="Validated">Câu đã qua bước duyệt nội dung và có thể giao đi thu âm.</param>
+/// <param name="Rejected">Câu bị từ chối, cộng cả câu đã bị ẩn.</param>
+public record ContributionStats(int Total, int Validated, int Rejected, int Pending);
 
 /// <summary>Dòng lịch sử đóng góp câu của Speaker.</summary>
 public record SpeakerContributionHistoryDto(

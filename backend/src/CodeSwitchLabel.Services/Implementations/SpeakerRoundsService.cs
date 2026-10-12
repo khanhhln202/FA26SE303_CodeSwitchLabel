@@ -27,17 +27,9 @@ public class SpeakerRoundsService(
 
         long? campaignId = task?.CampaignId;
 
-        // Chưa có task thì lấy đợt đã đăng ký còn đang chạy.
-        if (campaignId is null)
-        {
-            campaignId = await db.CampaignRegistrations.AsNoTracking()
-                .Where(r => r.SpeakerId == speakerId)
-                .Where(r => r.Campaign.Status == CampaignStatus.Open || r.Campaign.Status == CampaignStatus.InProgress)
-                .OrderBy(r => r.Campaign.EndDate)
-                .Select(r => (long?)r.CampaignId)
-                .FirstOrDefaultAsync(ct);
-        }
-
+        // Không đăng ký chiến dịch nào cũng ghi âm được — việc thu dẫn ra từ task được giao.
+        // Nên "đợt đang làm" cũng lấy theo task: không có task thì không có đợt, thay vì dựng
+        // một đợt từ việc đăng ký mà việc đăng ký không còn là điều kiện gì.
         if (campaignId is null) return null;
 
         return await BuildRoundAsync(campaignId.Value, speakerId, ct);
@@ -200,24 +192,42 @@ public class SpeakerRoundsService(
             .Take(query.PageSize)
             .ToListAsync(ct);
 
-        var items = rows.Select(r => new SpeakerRecordingHistoryDto(
-            r.RecordingId,
-            r.ScriptId,
-            r.Task?.Description,
-            r.Script.CsContent,
-            r.Script.ViContent,
-            null,
-            null,
-            r.DurationSec,
-            r.Status,
-            r.RecordedAt,
-            // Giống GET /api/recordings/{id}/reviews: chỉ hiện lượt duyệt khi bản đã chốt.
-            r.Status is RecordingStatus.Approved or RecordingStatus.Rejected
-                ? [.. r.Reviews.OrderBy(v => v.ReviewRound).Select(v => new HistoryReviewDto(
-                    v.ReviewRound,
-                    v.Decision.ToString(),
-                    v.Comment))]
-                : [])).ToList();
+        // Link nghe sinh sau khi đã lấy đủ dòng: mỗi bản ghi một lần gọi kho lưu trữ, và bản
+        // trỏ sang kho khác thì để AudioUrl null chứ không làm hỏng cả trang lịch sử.
+        var items = new List<SpeakerRecordingHistoryDto>(rows.Count);
+
+        foreach (var r in rows)
+        {
+            string? url = null;
+            DateTimeOffset? expiresAt = null;
+
+            try
+            {
+                var key = storage.GetObjectKey(r.CloudLink);
+                if (key is not null) (url, expiresAt) = await storage.GetDownloadUrlAsync(key, ct);
+            }
+            catch { /* xem như không nghe được, vẫn trả dòng lịch sử */ }
+
+            items.Add(new SpeakerRecordingHistoryDto(
+                r.RecordingId,
+                r.ScriptId,
+                r.Task?.Description,
+                r.SentenceVariant,
+                r.Script.CsContent,
+                r.Script.ViContent,
+                url,
+                expiresAt,
+                r.DurationSec,
+                r.Status,
+                r.RecordedAt,
+                // Giống GET /api/recordings/{id}/reviews: chỉ hiện lượt duyệt khi bản đã chốt.
+                r.Status is RecordingStatus.Approved or RecordingStatus.Rejected
+                    ? [.. r.Reviews.OrderBy(v => v.ReviewRound).Select(v => new HistoryReviewDto(
+                        v.ReviewRound,
+                        v.Decision.ToString(),
+                        v.Comment))]
+                    : []));
+        }
 
         return new PagedResult<SpeakerRecordingHistoryDto>(items, query.Page, query.PageSize, total);
     }
@@ -272,19 +282,35 @@ public class SpeakerRoundsService(
 
     public async Task<SpeakerStatsDto> GetStatsAsync(long speakerId, CancellationToken ct = default)
     {
-        var groups = await db.Recordings.AsNoTracking()
+        var recordings = await db.Recordings.AsNoTracking()
             .Where(r => r.SpeakerId == speakerId)
             .GroupBy(r => r.Status)
             .Select(g => new { g.Key, Count = g.Count() })
             .ToListAsync(ct);
 
-        var byStatus = groups.ToDictionary(x => x.Key, x => x.Count);
-        var approved = byStatus.GetValueOrDefault(RecordingStatus.Approved);
-        var rejected = byStatus.GetValueOrDefault(RecordingStatus.Rejected);
-        var pending = byStatus.GetValueOrDefault(RecordingStatus.PendingReview)
-            + byStatus.GetValueOrDefault(RecordingStatus.QcFailed);
+        var byRecordingStatus = recordings.ToDictionary(x => x.Key, x => x.Count);
+        var approved = byRecordingStatus.GetValueOrDefault(RecordingStatus.Approved);
+        var rejected = byRecordingStatus.GetValueOrDefault(RecordingStatus.Rejected);
+        var pending = byRecordingStatus.GetValueOrDefault(RecordingStatus.PendingReview)
+            + byRecordingStatus.GetValueOrDefault(RecordingStatus.QcFailed);
 
-        return new SpeakerStatsDto(approved + rejected + pending, approved, rejected, pending);
+        // Câu do chính người đọc nộp: cùng cách gom theo trạng thái như bản ghi.
+        var scripts = await db.Scripts.AsNoTracking()
+            .Where(s => s.CreatedBy == speakerId)
+            .GroupBy(s => s.Status)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToListAsync(ct);
+
+        var byScriptStatus = scripts.ToDictionary(x => x.Key, x => x.Count);
+        var validated = byScriptStatus.GetValueOrDefault(ScriptStatus.Validated);
+        var scriptsRejected = byScriptStatus.GetValueOrDefault(ScriptStatus.Rejected)
+            + byScriptStatus.GetValueOrDefault(ScriptStatus.Deactivated);
+        var scriptsPending = byScriptStatus.GetValueOrDefault(ScriptStatus.PendingValidation);
+
+        return new SpeakerStatsDto(
+            new RecordingStats(approved + rejected + pending, approved, rejected, pending),
+            new ContributionStats(
+                validated + scriptsRejected + scriptsPending, validated, scriptsRejected, scriptsPending));
     }
 
     // ----------------------------------------------------------------- nội bộ
