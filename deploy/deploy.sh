@@ -101,10 +101,14 @@ docker volume inspect "$PG_VOLUME" >/dev/null 2>&1 \
   || die "Khong tim thay volume '$PG_VOLUME'. Database co the da bi xoá.
 KHONG chay 'docker compose down -v' tren may chay that. Hay khoi phuc tu ban sao luu."
 
-AVAIL_GB="$(df -BG --output=avail "$BACKUP_DIR" 2>/dev/null | tail -1 | tr -dc '0-9')"
+# "|| true" o cuoi hai phep gan duoi day la bat buoc, khong phai thua. Voi "set -e" va
+# "pipefail", khi $BACKUP_DIR chua ton tai thi df that bai -> ca duong ong that bai -> phep
+# gan mang chinh ma loi do -> script chet NGAY TAI DAY va khong bao gio chay toi nhanh mkdir
+# ben duoi. Trieu chung: deploy dung o buoc "kiem tra" ma khong in ra dong nao.
+AVAIL_GB="$(df -BG --output=avail "$BACKUP_DIR" 2>/dev/null | tail -1 | tr -dc '0-9' || true)"
 if [ -z "$AVAIL_GB" ]; then
   mkdir -p "$BACKUP_DIR" 2>/dev/null || die "Khong tao duoc thu muc sao luu $BACKUP_DIR. Dat BACKUP_DIR=/duong/dan/khac."
-  AVAIL_GB="$(df -BG --output=avail "$BACKUP_DIR" | tail -1 | tr -dc '0-9')"
+  AVAIL_GB="$(df -BG --output=avail "$BACKUP_DIR" | tail -1 | tr -dc '0-9' || true)"
 fi
 [ "${AVAIL_GB:-0}" -ge 5 ] || die "Con ${AVAIL_GB}GB o dia $BACKUP_DIR, can it nhat 5GB cho sao lưu + image Docker."
 
