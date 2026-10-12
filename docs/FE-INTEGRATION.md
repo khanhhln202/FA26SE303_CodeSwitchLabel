@@ -42,6 +42,26 @@ https://fa-26-se-303-code-swit-git-d93afa-...vercel.app         (alias theo nhá
 URL riêng của từng lần deploy (dạng `...-dk27tfim6.vercel.app`) **không** nằm trong danh sách, vì nó đổi
 mỗi lần push. Cần thêm domain nào thì báo backend — sửa một dòng cấu hình, mất 30 giây.
 
+`http://localhost:5173` cũng đã được mở, nên **chạy `npm run dev` rồi trỏ thẳng vào máy chủ là được**,
+không cần dựng backend trên máy mình nữa. Trong `FRONTEND/.env.local`:
+
+```
+VITE_API_BASE_URL=https://csl-codeswitchlabel.eastasia.cloudapp.azure.com
+```
+
+Hai điều nên biết khi làm vậy:
+
+- `utils/setting.js` đặt `DOMAIN = ""` ở chế độ dev, nên `httpClient` gọi đường dẫn tương đối và đi qua
+  **proxy của Vite** — trình duyệt chỉ nói chuyện với `localhost:5173`, không đụng tới CORS. Đây là
+  đường chạy ổn nhất vì không phụ thuộc cổng nào được mở.
+- Riêng `services/taskService.js` dùng thẳng `VITE_API_BASE_URL` làm `baseURL`, kể cả ở chế độ dev, nên
+  nó **bỏ qua proxy và gọi trực tiếp máy chủ**. Chỗ này dựa vào CORS. Chạy FE ở cổng khác 5173 thì các
+  lời gọi của riêng file đó sẽ bị chặn — báo backend để thêm cổng, hoặc sửa nó theo cùng kiểu với
+  `setting.js` cho thống nhất.
+
+Dữ liệu trên máy chủ là **dùng chung**: bạn tạo task thì cả nhóm thấy, và ngược lại. Muốn nghịch thoải
+mái thì vẫn nên chạy backend trên máy mình theo mục 1.
+
 **Tài khoản mẫu** vẫn là `admin@`, `manager@`, `reviewer@`, `reviewer2@`, `reviewer3@`, `speaker1@`,
 `speaker2@` đuôi `@codeswitchlabel.local`, nhưng **mật khẩu khác bản dev**. Mật khẩu máy chủ không ghi
 vào tài liệu này — backend gửi riêng trong nhóm, vì ai có nó là vào được cả vai Admin từ Internet.
