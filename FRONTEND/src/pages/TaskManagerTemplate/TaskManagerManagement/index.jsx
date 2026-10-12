@@ -183,21 +183,31 @@ export default function TaskManagerManagement() {
         taskService.getAssignableUsers("Review").catch(() => [])
       ]);
 
-      const campaignList = (campaignRes?.items || campaignRes?.data || []).map((c) => ({
-        id: c.campaignId || c.id,
-        name: c.campaignName || c.title || c.name || `Đợt ${c.campaignId}`,
-        campaignName: c.campaignName || c.title || c.name || `Đợt ${c.campaignId}`,
-        target: c.targetQty || c.targetCount || c.target || 2000,
-        speakerCount: c.speakerCount || 5,
-        reviewerCount: c.reviewerCount || 2,
-        topic: c.domain === "ItTechnology" ? "Công nghệ thông tin" :
-               c.domain === "Education" ? "Giáo dục" : "Hội thoại hàng ngày",
-        startDate: formatDateToVN(c.startDate || todayIso),
-        endDate: formatDateToVN(c.endDate || todayIso),
-        status: c.status || "Draft",
-        assignedSpeakers: [],
-        assignedReviewers: []
-      }));
+      const rawCampaigns = campaignRes?.items || campaignRes?.data || [];
+
+      // Map và sắp xếp tăng dần 1, 2, 3, 4 theo số hiển thị của Đợt
+      const campaignList = rawCampaigns
+        .map((c) => ({
+          id: c.campaignId || c.id,
+          name: c.campaignName || c.title || c.name || `Đợt ${c.campaignId || c.id}`,
+          campaignName: c.campaignName || c.title || c.name || `Đợt ${c.campaignId || c.id}`,
+          target: c.targetQty || c.targetCount || c.target || 2000,
+          speakerCount: c.speakerCount || 5,
+          reviewerCount: c.reviewerCount || 2,
+          topic: c.domain === "ItTechnology" ? "Công nghệ thông tin" :
+                 c.domain === "Education" ? "Giáo dục" : "Hội thoại hàng ngày",
+          startDate: formatDateToVN(c.startDate || todayIso),
+          endDate: formatDateToVN(c.endDate || todayIso),
+          status: c.status || "Draft",
+          assignedSpeakers: [],
+          assignedReviewers: []
+        }))
+        .sort((a, b) => {
+          // Bóc tách số trong tên (vd: "Đợt 1", "test campaing 07" -> 1, 7)
+          const numA = parseInt((a.campaignName || a.name || "").replace(/\D/g, "")) || Number(a.id) || 0;
+          const numB = parseInt((b.campaignName || b.name || "").replace(/\D/g, "")) || Number(b.id) || 0;
+          return numA - numB;
+        });
 
       const rawTasks = taskRes?.items || taskRes?.data || [];
 
@@ -279,27 +289,6 @@ export default function TaskManagerManagement() {
 
   const showNotification = (msg) => {
     setToast({ show: true, message: msg });
-  };
-
-  // Cập nhật Trạng thái nhiệm vụ
-  const handleUpdateTaskStatus = (taskId, newStatus) => {
-    let backendStatus = "InProgress";
-    if (newStatus === "Hoàn thành") backendStatus = "Completed";
-    if (newStatus === "Đã hủy") backendStatus = "Cancelled";
-
-    setAssignTasks((prevTasks) =>
-      prevTasks.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))
-    );
-
-    showNotification(`Đã cập nhật trạng thái thành "${newStatus}"`);
-
-    const currentTask = assignTasks.find((t) => t.id === taskId);
-    taskService.updateTask(taskId, {
-      description: currentTask?.title || "Nhiệm vụ",
-      status: backendStatus
-    }).catch((e) => {
-      console.warn("Lỗi API ngầm updateTask:", e?.response?.data || e.message);
-    });
   };
 
   // Lấy danh sách Speaker & Reviewer Active
@@ -438,10 +427,8 @@ export default function TaskManagerManagement() {
         return;
       }
 
-      // 1. Gắn Task vào Đợt qua API chuẩn C#
       await taskService.attachTaskToCampaign(taskId, targetBatchId);
 
-      // 2. Giao người thực hiện nếu có chọn
       if (assignFormData.assignedUsers.length > 0) {
         const selectedUserObj = targetUserList.find(u => assignFormData.assignedUsers.includes(u.name));
         if (selectedUserObj?.id) {
@@ -577,7 +564,6 @@ export default function TaskManagerManagement() {
     if (!deletingBatch) return;
 
     try {
-      // Xóa hiển thị đợt trên UI Local
       const remainingBatches = batches.filter((b) => b.id !== deletingBatch.id);
       setBatches(remainingBatches);
 
@@ -631,12 +617,10 @@ export default function TaskManagerManagement() {
     }
 
     try {
-      // 1. Sửa tên/mô tả nhiệm vụ
       await taskService.updateTask(editingTask.id, {
         description: editTaskFormData.title
       });
 
-      // 2. Cập nhật phân công người thực hiện
       if (editTaskFormData.assignedUsers.length > 0) {
         const userObj = activeSpeakers.concat(activeReviewers).find(u => editTaskFormData.assignedUsers.includes(u.name));
         if (userObj?.id) {
@@ -662,14 +646,12 @@ export default function TaskManagerManagement() {
     const targetTaskId = Number(deletingTask.id || deletingTask.taskId);
 
     try {
-      // Gọi Endpoint chuẩn C#: DELETE /api/campaigns/{id}/tasks/{taskId}
       await taskService.detachTaskFromCampaign(Number(selectedBatchId), targetTaskId);
       showNotification(`Đã gỡ nhiệm vụ "${deletingTask.title}" khỏi đợt thành công!`);
     } catch (err) {
       console.warn("Lỗi gỡ task khỏi đợt:", err?.response?.data || err);
       showNotification(`Đã gỡ nhiệm vụ "${deletingTask.title}" khỏi đợt!`);
     } finally {
-      // Cập nhật giao diện UI
       setAssignTasks((prev) =>
         prev.map((t) => (t.id === targetTaskId ? { ...t, campaignId: null } : t))
       );
@@ -678,13 +660,11 @@ export default function TaskManagerManagement() {
     }
   };
 
-  // Lấy danh sách nhiệm vụ thuộc đợt đang chọn
   const currentBatchTaskIds = useMemo(() => {
     if (!selectedBatchId) return [];
     return batchMapping[selectedBatchId] || [];
   }, [batchMapping, selectedBatchId]);
 
-  // Lấy danh sách nhiệm vụ thuộc đợt đang chọn
   const currentTasks = useMemo(() => {
     if (!selectedBatchId) return assignTasks;
     return assignTasks.filter((t) => Number(t.campaignId) === Number(selectedBatchId));
@@ -702,7 +682,6 @@ export default function TaskManagerManagement() {
     }
   };
 
-  // Lọc nhiệm vụ
   const filteredTasks = useMemo(() => {
     const q = (searchQuery || "").toLowerCase();
     return currentTasks.filter((task) => {
@@ -760,7 +739,6 @@ export default function TaskManagerManagement() {
                 </button>
               </div>
 
-              {/* Tên Đợt (campaignName) */}
               <div>
                 <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">
                   Tên đợt (Campaign Name)
@@ -775,7 +753,6 @@ export default function TaskManagerManagement() {
                 />
               </div>
 
-              {/* Chủ đề & Mục tiêu */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1 flex items-center justify-between">
@@ -812,7 +789,6 @@ export default function TaskManagerManagement() {
                 </div>
               </div>
 
-              {/* SỐ LƯỢNG SPEAKERS VÀ REVIEWERS */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">
@@ -843,7 +819,6 @@ export default function TaskManagerManagement() {
                 </div>
               </div>
 
-              {/* Ngày Bắt đầu & Kết thúc */}
               <div className="grid grid-cols-2 gap-3">
                 <VNFormatDatePicker
                   label="Ngày bắt đầu"
@@ -895,7 +870,6 @@ export default function TaskManagerManagement() {
                 Phân công nhiệm vụ mới
               </h3>
 
-              {/* Select Chọn Đợt */}
               <div>
                 <label className="block text-[10px] font-bold uppercase mb-1 text-gray-500 dark:text-gray-400">
                   Chọn đợt
@@ -916,7 +890,6 @@ export default function TaskManagerManagement() {
                 </div>
               </div>
               
-              {/* Select Chọn Nhiệm Vụ */}
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-[10px] font-bold uppercase text-gray-500 dark:text-gray-400">
@@ -945,7 +918,6 @@ export default function TaskManagerManagement() {
                 </div>
               </div>
 
-              {/* DANH SÁCH SPEAKER / REVIEWER CHỌN */}
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-[10px] font-bold uppercase text-gray-500 dark:text-gray-400">
@@ -1134,7 +1106,6 @@ export default function TaskManagerManagement() {
                 </button>
               </div>
 
-              {/* Tên nhiệm vụ */}
               <div>
                 <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1 flex items-center justify-between">
                   <span>Tên nhiệm vụ</span>
@@ -1147,7 +1118,6 @@ export default function TaskManagerManagement() {
                 />
               </div>
 
-              {/* Vai trò */}
               <div>
                 <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1 flex items-center justify-between">
                   <span>Vai trò thực hiện</span>
@@ -1162,7 +1132,6 @@ export default function TaskManagerManagement() {
                 </select>
               </div>
 
-              {/* Danh sách người thực hiện */}
               <div>
                 {(() => {
                   const editBatch = batches.find(b => b.id === selectedBatchId);
@@ -1444,7 +1413,7 @@ export default function TaskManagerManagement() {
       {/* Grid Layout chính */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 flex-1 min-h-0">
         
-        {/* Cột trái: Danh sách các Đợt */}
+        {/* Cột trái: Danh sách các Đợt (Sắp xếp tăng dần Đợt 1 -> Đợt n) */}
         <div className="lg:col-span-1 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1D22] p-3 shadow-xs flex flex-col gap-2 min-h-0">
           
           <div className="flex items-center justify-between px-1 pb-1 border-b border-gray-100 dark:border-gray-800">
@@ -1513,7 +1482,7 @@ export default function TaskManagerManagement() {
                             borderColor: batchBadgeBorder,
                             color: batchBadgeText
                           }}
-                          className="inline-flex items-center gap-1 pl-1.5 pr-2 py-0.5 rounded-full text-[9px] font-bold border shrink-0 leading-tight"
+                          className="inline-flex items-center gap-1 pl-1.5 pr-2 py-0.5 rounded-full text-[9px] font-bold border shrink-0 leading-tight whitespace-nowrap"
                         >
                           {isBatchCompleted ? (
                             <CheckCircle2 className="w-2.5 h-2.5 shrink-0" style={{ color: batchBadgeText }} />
@@ -1631,7 +1600,7 @@ export default function TaskManagerManagement() {
                     <th className="py-3 px-3 min-w-[200px]">NHIỆM VỤ</th>
                     <th className="py-3 px-3 text-center w-[100px]">VAI TRÒ</th>
                     <th className="py-3 px-3 text-center w-[200px]">NGƯỜI ĐƯỢC PHÂN CÔNG</th>
-                    <th className="py-3 px-3 text-center w-[140px]">TRẠNG THÁI</th>
+                    <th className="py-3 px-3 text-center w-[150px]">TRẠNG THÁI</th>
                     <th className="py-3 px-3 text-center w-[100px]">THAO TÁC</th>
                   </tr>
                 </thead>
@@ -1696,42 +1665,25 @@ export default function TaskManagerManagement() {
                             </button>
                           </td>
                           
-                          <td className="py-3.5 px-3 text-center">
-                            <div className="relative inline-flex items-center justify-center">
+                          {/* TRẠNG THÁI HIỂN THỊ CỐ ĐỊNH, KHÔNG XUỐNG DÒNG */}
+                          <td className="py-3.5 px-3 text-center whitespace-nowrap">
+                            <span
+                              style={{
+                                backgroundColor: statusBg,
+                                borderColor: statusBorder,
+                                color: statusText
+                              }}
+                              className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold border leading-tight select-none whitespace-nowrap"
+                            >
                               {isCompleted ? (
-                                <CheckCircle2 className="w-2.5 h-2.5 shrink-0 absolute left-2 pointer-events-none z-10" style={{ color: statusText }} />
+                                <CheckCircle2 className="w-3 h-3 shrink-0" style={{ color: statusText }} />
                               ) : isCancelled ? (
-                                <Ban className="w-2.5 h-2.5 shrink-0 absolute left-2 pointer-events-none z-10" style={{ color: statusText }} />
+                                <Ban className="w-3 h-3 shrink-0" style={{ color: statusText }} />
                               ) : (
-                                <Clock className="w-2.5 h-2.5 shrink-0 absolute left-2 pointer-events-none z-10" style={{ color: statusText }} />
+                                <Clock className="w-3 h-3 shrink-0" style={{ color: statusText }} />
                               )}
-
-                              <select
-                                value={task.status || "Đang thực hiện"}
-                                onChange={(e) => handleUpdateTaskStatus(task.id, e.target.value)}
-                                style={{
-                                  backgroundColor: statusBg,
-                                  borderColor: statusBorder,
-                                  color: statusText
-                                }}
-                                className="appearance-none inline-flex items-center pl-5 pr-5 py-0.5 rounded-full text-[9.5px] font-bold border cursor-pointer focus:outline-none transition-all leading-tight"
-                              >
-                                <option value="Đang thực hiện" className="bg-white dark:bg-[#1C1D22] text-amber-600 font-bold">
-                                  Đang thực hiện
-                                </option>
-                                <option value="Hoàn thành" className="bg-white dark:bg-[#1C1D22] text-emerald-600 font-bold">
-                                  Hoàn thành
-                                </option>
-                                <option value="Đã hủy" className="bg-white dark:bg-[#1C1D22] text-rose-600 font-bold">
-                                  Đã hủy
-                                </option>
-                              </select>
-
-                              <ChevronDown 
-                                style={{ color: statusText }}
-                                className="w-2.5 h-2.5 absolute right-1.5 pointer-events-none z-10" 
-                              />
-                            </div>
+                              <span>{task.status || "Đang thực hiện"}</span>
+                            </span>
                           </td>
 
                           <td className="py-3.5 px-3 text-center">
