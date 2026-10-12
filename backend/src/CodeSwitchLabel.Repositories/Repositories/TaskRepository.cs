@@ -11,6 +11,10 @@ namespace CodeSwitchLabel.Repositories.Repositories;
 /// </summary>
 /// <param name="Started">Task thu âm: số bản ghi đã nộp, không tính bản trượt QC. Task duyệt: số lượt đã duyệt.</param>
 /// <param name="Done">Task thu âm: số CẶP CÂU đã đủ hai bản duyệt đạt. Task duyệt: số bản ghi đã duyệt.</param>
+/// <param name="SubmittedPairs">
+/// Task thu âm: số CẶP CÂU đã gửi đủ cả hai bản, chưa cần chờ duyệt. Task duyệt: luôn 0.
+/// Đây là con số Speaker nhìn thấy — nộp xong là cộng 1, không bị treo ở việc người duyệt.
+/// </param>
 /// <param name="UsableItems">Số mục còn làm được — không tính mục đã bị loại.</param>
 public record TaskRow(
     long TaskId,
@@ -26,6 +30,7 @@ public record TaskRow(
     string? AssigneeName,
     int Started,
     int Done,
+    int SubmittedPairs,
     int UsableItems,
     int TotalItems);
 
@@ -78,6 +83,13 @@ public interface ITaskRepository
         string recordingId, long excludeTaskId, CancellationToken ct = default);
 
     Task<HashSet<string>> FindScriptsQueuedInOtherActiveTasksAsync(
+        string[] scriptIds, long excludeTaskId, long? assigneeId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Các mục cùng câu đang nằm trong task khác còn chạy, để chuyển sang task này thay vì báo lỗi.
+    /// Cùng điều kiện với <see cref="FindScriptsQueuedInOtherActiveTasksAsync"/>, có theo dõi thay đổi.
+    /// </summary>
+    Task<List<TaskScript>> GetQueuedScriptItemsInOtherActiveTasksAsync(
         string[] scriptIds, long excludeTaskId, long? assigneeId, CancellationToken ct = default);
 
     Task<HashSet<string>> FindRecordingsQueuedInOtherActiveTasksAsync(
@@ -378,6 +390,28 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         return [.. rows];
     }
 
+    public Task<List<TaskScript>> GetQueuedScriptItemsInOtherActiveTasksAsync(
+        string[] scriptIds, long excludeTaskId, long? assigneeId, CancellationToken ct = default)
+    {
+        if (scriptIds.Length == 0) return Task.FromResult(new List<TaskScript>());
+
+        var query = db.TaskScripts
+            .Where(ts => scriptIds.Contains(ts.ScriptId) && ts.TaskId != excludeTaskId &&
+                         ts.Status == TaskScriptStatus.Pending &&
+                         (ts.Task.Status == WorkTaskStatus.Draft ||
+                          ts.Task.Status == WorkTaskStatus.Open ||
+                          ts.Task.Status == WorkTaskStatus.InProgress));
+
+        if (assigneeId.HasValue)
+        {
+            var uid = assigneeId.Value;
+            query = query.Where(ts => ts.Task.Assignments.Any(a =>
+                a.UserId == uid && a.AssignmentStatus == AssignmentStatus.Active));
+        }
+
+        return query.ToListAsync(ct);
+    }
+
     public async Task<HashSet<string>> FindRecordingsQueuedInOtherActiveTasksAsync(
         string[] recordingIds, long excludeTaskId, CancellationToken ct = default)
     {
@@ -587,6 +621,14 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
             t.TaskType == TaskType.Recording
                 ? t.TaskScripts.Count(ts => ts.Status == TaskScriptStatus.Completed)
                 : t.TaskRecordings.Count(tr => tr.Status == TaskRecordingStatus.Reviewed),
+            t.TaskType == TaskType.Recording
+                ? t.TaskScripts.Count(ts =>
+                    ts.Status != TaskScriptStatus.Rejected &&
+                    ts.Script.Recordings.Any(r =>
+                        r.SentenceVariant == SentenceVariant.CodeSwitching && r.Status != RecordingStatus.QcFailed) &&
+                    ts.Script.Recordings.Any(r =>
+                        r.SentenceVariant == SentenceVariant.PureVietnamese && r.Status != RecordingStatus.QcFailed))
+                : 0,
             t.TaskType == TaskType.Recording
                 ? t.TaskScripts.Count(ts => ts.Status != TaskScriptStatus.Rejected)
                 : t.TaskRecordings.Count(tr => tr.Status != TaskRecordingStatus.Skipped),

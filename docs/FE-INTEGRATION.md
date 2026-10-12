@@ -87,6 +87,31 @@ Cần ba Reviewer vì mỗi bản ghi phải được **ba người khác nhau**
 
 Dữ liệu mẫu phân sẵn **cả ba chủ đề** cho ba tài khoản Reviewer, và tạo sẵn **một chiến dịch đã giao cho `manager`,** nên luồng duyệt câu và luồng tạo task chạy được ngay sau khi dựng hệ thống. Tạo Reviewer mếi thì phải tự phân chủ đề.
 
+### Dữ liệu mẫu
+
+Dữ liệu dưới đây được tạo khi API khởi động có khoá `Seed:DefaultPassword`. Chạy lại không nhân đôi.
+
+**Câu của `speaker1` — 9 câu**, đủ bốn trạng thái để thống kê đóng góp có số:
+
+| Trạng thái | Số câu |
+|---|---|
+| `Validated` | 5 |
+| `PendingValidation` | 2 |
+| `Rejected` | 1 |
+| `Deactivated` | 1 |
+
+**Hai task mẫu** (nhận ra dễ bằng tên trong `description`):
+
+| Task | Giao cho | Chỉ tiêu | Nội dung |
+|---|---|---|---|
+| `Ghi âm đợt mẫu` | `speaker1` | 8 cặp câu | 8 mục, tất cả còn chờ — chưa có bản ghi nào được thu |
+| `Duyệt bản ghi đợt mẫu` | `reviewer` | 4 bản ghi | hàng chờ trống, chờ có bản ghi để đưa vào |
+
+Dữ liệu mẫu **không có bản ghi**. Muốn có số liệu thống kê và lịch sử ghi âm thì tự thu bằng
+`POST /api/recordings` (xem mục 5), hoặc thêm câu vào task rồi ghi như bình thường. Sau khi
+thu đủ một cặp câu hai bản, `speaker1` thấy tiến độ nhảy lên 1 còn Task Manager vẫn để 0 —
+đúng khác biệt giữa "đã thu xong" và "đã duyệt xong".
+
 ---
 
 ## 2. Quy ước chung
@@ -354,6 +379,14 @@ Câu phải có từ 1 đến 9 từ tiếng Anh, vì con số này nằm trong 
 
 **Tiến độ** — `GET /api/speaker/progress`: tổng bản đã nộp, số bản đạt, và các task thu âm đang giao. Mỗi task trong `activeTasks` có `taskTitle` (tên nhiệm vụ — **không phụ thuộc** task có thuộc chiến dịch hay không), cùng `description` và `campaignName`.
 
+- `progress.done` của task thu âm là **số cặp câu đã gửi đủ cả hai bản**, chưa cần chờ duyệt —
+  thu xong là cộng 1. Task Manager (`GET /api/tasks`) vẫn đếm cặp câu **đã duyệt đạt**.
+- `totalSubmitted` / `totalApproved` là số **bản ghi** cả đời của người đọc, không tính bản trượt QC.
+
+**Đăng ký chiến dịch là tuỳ chọn.** Ghi âm không cần đăng ký đợt nào: việc thu dẫn ra từ
+task được giao. `isRegistered` chỉ là cờ hiển thị. Vì vậy `GET /api/speaker/rounds/current`
+trả 204 khi người đọc **chưa có task thu âm nào**, kể cả họ đã đăng ký đợt đang mở.
+
 **Đợt, bảng xếp hạng, đăng ký (mới — thay `CURRENT_ROUND`, `ROUND_LEADERBOARD`, `NEXT_ROUND`)**
 
 | Màn hình | API |
@@ -363,9 +396,45 @@ Câu phải có từ 1 đến 9 từ tiếng Anh, vì con số này nằm trong 
 | Bảng xếp hạng top 5 | `GET /api/speaker/rounds/{campaignId}/leaderboard?top=5` — xếp theo số bản duyệt đạt |
 | Đăng ký / huỷ | `POST /api/speaker/rounds/{campaignId}/register`, `DELETE /api/speaker/rounds/{campaignId}/registration` |
 | Bản bị từ chối cần thu lại | `GET /api/speaker/recordings/rejected?limit=5` — kèm `reason` + `audioUrl` nghe lại |
-| Lịch sử ghi âm | `GET /api/speaker/recordings/history?status&taskId&search&page&pageSize=` — kèm `reviews` đã chốt, nghe lại qua `GET /api/recordings/{id}/audio-url` |
+| Lịch sử ghi âm | `GET /api/speaker/recordings/history?status&taskId&search&page&pageSize=` — kèm `reviews` đã chốt và `audioUrl` nghe tạm (hết hạn ở `audioUrlExpiresAt`) |
 | Lịch sử đóng góp | `GET /api/speaker/contributions/history?category&search&page&pageSize=` |
-| Tổng hợp số liệu | `GET /api/speaker/stats` → `{total,approved,rejected,pending}` |
+| Tổng hợp số liệu | `GET /api/speaker/stats` → tách hai nhóm, xem bên dưới |
+
+**Lịch sử ghi âm — mỗi dòng là MỘT bản ghi** (bản cs hoặc bản vi), không phải một cặp:
+
+```json
+{
+  "recordingId": "r_cs_111000003",
+  "scriptId": "s_111000003",
+  "taskTitle": "Thu âm đợt 4",
+  "sentenceVariant": "CodeSwitching",
+  "csText": "[vi]Mình cần [en]review [vi]lại phần mã nguồn này",
+  "viText": "Mình cần xem lại phần mã nguồn này",
+  "audioUrl": "http://localhost:9000/recordings/...",
+  "audioUrlExpiresAt": "2026-09-22T04:30:00+00:00",
+  "durationSec": 3, "status": "PendingReview",
+  "recordedAt": "2026-09-22T04:00:00+00:00",
+  "reviews": []
+}
+```
+
+- `audioUrl` là link có hạn (mặc định 15 phút). Cần nghe lại bản cụ thể thì gọi
+  `GET /api/recordings/{id}/audio-url` như cũ — cách đó không phụ thuộc hạn link của cả trang.
+- Đọc `sentenceVariant` để biết bản nào, **đừng suy từ chuỗi `recordingId`**.
+- Muốn hiện theo cặp câu thì tự `groupBy(scriptId)`: một `scriptId` có tối đa hai dòng.
+
+**Tổng hợp số liệu** — `GET /api/speaker/stats`:
+
+```json
+{
+  "recording":    { "total": 40, "approved": 30, "rejected": 4, "pending": 6 },
+  "contribution": { "total": 12, "validated": 9,  "rejected": 1, "pending": 2 }
+}
+```
+
+- `recording` đếm **bản ghi**; `contribution` đếm **câu do chính người đọc nộp**.
+- `pending` của recording cộng cả bản trượt QC; `rejected` của contribution cộng cả câu đã bị ẩn.
+
 
 **Hồ sơ người đọc** — `GET /api/me/speaker-profile` và `PUT /api/me/speaker-profile`:
 
@@ -396,9 +465,40 @@ Câu phải có từ 1 đến 9 từ tiếng Anh, vì con số này nằm trong 
   "scriptTagged": "[vi]Mình cần [en]review [vi]lại phần mã nguồn này",
   "durationSec": 3,
   "audioUrl": "http://localhost:9000/recordings/...",
-  "audioUrlExpiresAt": "2026-09-22T04:30:00+00:00"
+  "audioUrlExpiresAt": "2026-09-22T04:30:00+00:00",
+  "pair": [
+    {
+      "recordingId": "r_cs_111000003",
+      "sentenceVariant": "CodeSwitching",
+      "scriptText": "Mình cần review lại phần mã nguồn này",
+      "scriptTagged": "[vi]Mình cần [en]review [vi]lại phần mã nguồn này",
+      "durationSec": 3,
+      "audioUrl": "http://localhost:9000/recordings/r_cs...",
+      "audioUrlExpiresAt": "2026-09-22T04:30:00+00:00",
+      "status": "PendingReview", "reviewsDone": 1, "myReviewDone": false,
+      "isReviewable": true
+    },
+    {
+      "recordingId": "r_vi_111000003",
+      "sentenceVariant": "PureVietnamese",
+      "scriptText": "Mình cần xem lại phần mã nguồn này",
+      "scriptTagged": "Mình cần xem lại phần mã nguồn này",
+      "durationSec": 3,
+      "audioUrl": "http://localhost:9000/recordings/r_vi...",
+      "audioUrlExpiresAt": "2026-09-22T04:30:00+00:00",
+      "status": "PendingReview", "reviewsDone": 0, "myReviewDone": false,
+      "isReviewable": true
+    }
+  ]
 }
 ```
+
+- **`pair` là CẶP CÂU**: luôn hai ô, đúng thứ tự `CodeSwitching` rồi `PureVietnamese`.
+  Ô trên khớp với các trường cũ ở gốc response (bản đang mở để duyệt).
+- Bản của cặp câu **chưa thu** thì `recordingId` rỗng, `audioUrl` null, `status` null —
+  dùng để hiện "cặp câu này còn thiếu bản Việt" thay vì một ô trống.
+- **Vẫn duyệt TỪNG bản một**: `POST /api/recordings/{recordingId}/reviews` không đổi,
+  mỗi bản vẫn đủ ba lượt riêng. Xem cả hai bản là để người duyệt đối chiếu chúng với nhau.
 
 2. `GET /api/rejection-reasons` — danh sách lý do từ chối, chia theo `category`. `description` trả về **tiếng Việt**.
 3. `POST /api/recordings/{recordingId}/reviews`:
@@ -437,12 +537,24 @@ Ngoài cách nhận từng bản bằng `next`, Reviewer mở được cả task
       "queueStatus": "Queued",
       "reviewsDone": 1, "roundsRequired": 3,
       "myReviewDone": false,
-      "blocker": "None", "canReview": true
+      "blocker": "None", "canReview": true,
+      "sibling": {
+        "recordingId": "r_vi_131000006",
+        "sentenceVariant": "PureVietnamese",
+        "scriptText": "Mình cần xem lại phần mã nguồn này",
+        "status": "PendingReview",
+        "reviewsDone": 0
+      }
     }
   ],
   "page": 1, "pageSize": 20, "total": 1, "totalPages": 1, "hasNext": false
 }
 ```
+
+- `sibling` là bản còn lại của cặp câu, cho danh sách hiện đủ hai bản cạnh nhau.
+  Không có thì là `null` (cặp câu còn thiếu bản kia).
+- `sibling` **không kèm `audioUrl`** — danh sách dài, cấp link nghe cho từng dòng rất nặng.
+  Muốn nghe thì mở `GET /api/reviewer/recordings/{id}`, kết quả có đủ `pair`.
 
 2. Bấm vào một dòng có `canReview: true` thì gọi `GET /api/reviewer/recordings/{recordingId}` —
    trả **đúng cấu trúc như `next`** (có `round`, `scriptTagged`, `audioUrl`), rồi nộp duyệt như bước 3 ở trên.
@@ -511,6 +623,15 @@ giao) — các dòng có `canReview: false`, nộp duyệt vẫn trả 403 `task
 | Thêm mục chọn tay | `POST /api/tasks/{id}/items` `{ "ids": ["s_211000001", "s_131000002"] }` |
 | Thêm mục tự động | `POST /api/tasks/{id}/items` `{ "autoFill": { "count": 10, "domain": "ItTechnology" } }` — task duyệt thì dùng `"speakerId"` thay cho `"domain"` |
 | Gỡ mục | `DELETE /api/tasks/{id}/items/{itemId}` |
+
+**Cặp câu nằm trong task khác vẫn còn chạy** thì `POST /api/tasks/{id}/items` **chuyển sang task
+mới** thay vì báo lỗi — miễn là cặp câu đó **chưa có bản ghi nào nộp** và task mới đã giao cho
+đúng người đọc đang giữ nó. Chỉ tiêu của task cũ được hạ xuống cho khớp số mục còn lại.
+
+Cặp câu đã có bản ghi nộp thì vẫn nằm trong `skipped` với lý do
+`Cặp câu đang nằm trong một task khác đang chạy và đã có bản ghi nộp.`
+Task chưa giao cho ai thì không được cướp câu của người khác — lý do kèm theo báo rõ cách xử lý.
+
 | Giao hoặc giao lại | `POST /api/tasks/{id}/assign` `{ "userId": 7 }` |
 | Huỷ | `POST /api/tasks/{id}/cancel` |
 | Tổng hợp theo người nhận | `GET /api/tasks/by-assignee` |
@@ -689,6 +810,14 @@ Ai đã code theo bản API trước ngày 22/09/2026 thì cần sửa:
 | Ai duyệt câu cũng chốt được sang `Validated` | Chỉ **Reviewer được phân đúng chủ đề**; Speaker và Admin nhận 422 `reviewer_domain_required` |
 | — | Mới: chiến dịch `/api/campaigns/*`, phân chủ đề `/api/users/{id}/domains`, tự xem chủ đề `GET /api/me/domains` |
 | — | Mới: Reviewer xem danh sách bản ghi trong task `GET /api/reviewer/tasks/{taskId}/recordings` và mở một bản `GET /api/reviewer/recordings/{id}` |
+| `GET /api/speaker/stats` → `{total,approved,rejected,pending}` | → `{ recording: {total,approved,rejected,pending}, contribution: {total,validated,rejected,pending} }` |
+| `GET /api/speaker/recordings/history` → `csAudioUrl`, `viAudioUrl` (luôn null) | → `audioUrl` + `audioUrlExpiresAt` (mỗi dòng là **một** bản ghi) và thêm `sentenceVariant` |
+| Duyệt bản ghi chỉ thấy **một câu** | Thêm `pair`: **cả hai bản** của cặp câu (cs + vi). Các trường cũ giữ nguyên, trỏ vào bản đang mở |
+| Danh sách task duyệt không thấy bản kia | Thêm `sibling` (không kèm link nghe) |
+| Thêm câu vào task bị báo `Cặp câu đang nằm trong một task khác đang chạy.` | Câu **chưa có bản ghi nào** được **chuyển** sang task mới; chỉ tiêu task cũ tự hạ |
+| `progress.done` của task thu âm = số cặp câu **đã duyệt đạt** | = số cặp câu **đã thu đủ hai bản**, không chờ duyệt. Task Manager vẫn đếm cặp câu đã duyệt |
+| `GET /api/speaker/rounds/current` lấy đợt đã **đăng ký** khi chưa có task | Không có task thì trả 204 — đăng ký chiến dịch là tuỳ chọn, không phải điều kiện ghi âm |
+| `description` của lý do bản dịch cứng | Viết lại theo khuôn "vấn đề — cần làm gì" (migration `V4__reason_descriptions_vi.sql`) |
 
 ## 9. Chưa có — backend đang làm
 

@@ -1016,24 +1016,24 @@ INSERT INTO role (role_name, description) VALUES
     ('admin',        'Manages data, users, configuration, and statistics');
 
 INSERT INTO script_error_reason (reason_code, description, sort_order) VALUES
-    ('meaningless',    'Câu không có nghĩa rõ ràng', 10),
-    ('unnatural',      'Chuyển ngữ Việt - Anh không tự nhiên', 20),
-    ('grammar',        'Lỗi ngữ pháp', 30),
-    ('spelling',       'Lỗi chính tả', 40),
-    ('mismatch',       'Câu tiếng Anh và tiếng Việt không tương đương', 50),
-    ('duplicate',      'Trùng với câu đã có', 60),
-    ('other',          'Lỗi văn bản khác', 99);
+    ('meaningless',    'Câu không có nghĩa rõ ràng — nên bỏ và tìm câu khác', 10),
+    ('unnatural',      'Chuyển ngữ Việt - Anh không tự nhiên — cần nói lại cho nghe như người bản xứ', 20),
+    ('grammar',        'Lỗi ngữ pháp trong câu tiếng Anh hoặc tiếng Việt', 30),
+    ('spelling',       'Lỗi chính tả trong câu tiếng Anh hoặc tiếng Việt', 40),
+    ('mismatch',       'Hai câu không cùng nghĩa — phần tiếng Anh không dịch được sang tiếng Việt', 50),
+    ('duplicate',      'Câu này đã có trong dữ liệu — không cần gửi lại', 60),
+    ('other',          'Lỗi văn bản khác — ghi rõ ở ô bình luận', 99);
 
 INSERT INTO rejection_reason (reason_code, category, description) VALUES
-    ('content_mismatch',    'content',        'Nội dung đọc không khớp với văn bản'),
-    ('script_text_error',   'content',        'Văn bản câu bị sai (đưa câu về lại bước duyệt nội dung)'),
-    ('background_noise',    'audio_quality',  'Có tạp âm hoặc âm thanh xen kẽ'),
-    ('low_volume',          'audio_quality',  'Âm lượng quá nhỏ'),
-    ('clipping_distortion', 'audio_quality',  'Âm thanh bị vỡ hoặc méo'),
-    ('excess_silence',      'audio_quality',  'Khoảng lặng đầu/cuối quá dài'),
-    ('mispronunciation',    'pronunciation',  'Phát âm sai từ'),
-    ('word_skipped_added',  'pronunciation',  'Đọc thiếu, thêm hoặc thay từ'),
-    ('other',               'other',          'Lỗi khác');
+    ('content_mismatch',    'content',        'Đọc sai nội dung — phần đọc không khớp với văn bản đã cho'),
+    ('script_text_error',   'content',        'Văn bản câu bị sai — câu này sẽ quay về bước duyệt nội dung'),
+    ('background_noise',    'audio_quality',  'Có tạp âm — nghe thấy tiếng khác lẫn vào trong bản ghi'),
+    ('low_volume',          'audio_quality',  'Âm lượng quá nhỏ — người nghe phải vặn to mới nghe rõ'),
+    ('clipping_distortion', 'audio_quality',  'Âm thanh bị vỡ — nói quá lớn hoặc thu trong lúc bị va chạm'),
+    ('excess_silence',      'audio_quality',  'Khoảng lặng đầu hoặc cuối quá dài — thu lại phần này'),
+    ('mispronunciation',    'pronunciation',  'Phát âm sai — đọc chưa đúng, cần tập lại rồi thu'),
+    ('word_skipped_added',  'pronunciation',  'Đọc thiếu, thêm hoặc thay từ — phần đọc lệch với văn bản'),
+    ('other',               'other',          'Lỗi khác — ghi rõ ở ô bình luận');
 
 INSERT INTO system_config (config_key, config_value, value_type, description) VALUES
     ('review.rounds_required',              '3',     'int',    'Independent reviews per recording'),

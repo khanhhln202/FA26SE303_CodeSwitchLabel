@@ -16,7 +16,7 @@ namespace CodeSwitchLabel.Services.Seeding;
 /// Lớp này chỉ thêm phần KHÔNG nằm trong file đó: tài khoản demo, các tham số bổ sung,
 /// và vài cặp câu mẫu. Mọi bước đều kiểm tra trước khi ghi nên chạy lại không nhân đôi dữ liệu.
 /// </summary>
-public static class DatabaseSeeder
+public static partial class DatabaseSeeder
 {
     public static async Task SeedAsync(
         IServiceProvider services, string defaultPassword, CancellationToken ct = default)
@@ -30,19 +30,56 @@ public static class DatabaseSeeder
 
         await EnsureSchemaAsync(db, logger, ct);
 
-        var adminId = await SeedUsersAsync(db, hasher, defaultPassword, ct);
+        await SeedUsersAsync(db, hasher, defaultPassword, ct);
         await SeedReviewerDomainsAsync(db, ct);
         await SeedExtraConfigAsync(db, ct);
-        await SeedCampaignAsync(db, adminId, ct);
 
-        var reviewerId = await db.AppUsers
-            .Where(u => u.Email == "reviewer@codeswitchlabel.local")
-            .Select(u => u.UserId)
-            .FirstAsync(ct);
+        var ids = await LoadDemoUserIdsAsync(db, ct);
+        if (ids is null) return;
 
-        await SeedScriptsAsync(db, adminId, reviewerId, ct);
+        await SeedCampaignAsync(db, ids.Admin, ct);
+        await SeedScriptsAsync(db, ids, ct);
+
+        // Dữ liệu để thao tác thử: câu của người đọc và hai task mẫu.
+        await SeedSpeakerScriptsAsync(db, ids, ct);
+        await SeedTasksAsync(db, ids, ct);
 
         logger.LogInformation("Seed dữ liệu phát triển hoàn tất.");
+    }
+
+    /// <summary>Gộp id các tài khoản demo để bước seed sau không phải tra lại từng cái.</summary>
+    private sealed record DemoUserIds(
+        long Admin, long Manager, long Reviewer, long Speaker, long SecondReviewer, long ThirdReviewer);
+
+    private static async Task<DemoUserIds?> LoadDemoUserIdsAsync(
+        CodeSwitchLabelDbContext db, CancellationToken ct)
+    {
+        var wanted = new[]
+        {
+            "admin@codeswitchlabel.local",
+            "manager@codeswitchlabel.local",
+            "reviewer@codeswitchlabel.local",
+            "reviewer2@codeswitchlabel.local",
+            "reviewer3@codeswitchlabel.local",
+            "speaker1@codeswitchlabel.local"
+        };
+
+        var found = await db.AppUsers
+            .Where(u => wanted.Contains(u.Email))
+            .Select(u => new { u.UserId, u.Email })
+            .ToListAsync(ct);
+
+        if (found.Count != wanted.Length) return null;
+
+        long Id(string email) => found.Single(u => u.Email == email).UserId;
+
+        return new DemoUserIds(
+            Id("admin@codeswitchlabel.local"),
+            Id("manager@codeswitchlabel.local"),
+            Id("reviewer@codeswitchlabel.local"),
+            Id("speaker1@codeswitchlabel.local"),
+            Id("reviewer2@codeswitchlabel.local"),
+            Id("reviewer3@codeswitchlabel.local"));
     }
 
     /// <summary>
@@ -337,13 +374,10 @@ public static class DatabaseSeeder
     }
 
     /// <summary>
-    /// Cặp câu mẫu + các dòng script_word cho từng từ tiếng Anh. Mỗi câu được đưa sang
-    /// "đã duyệt" bằng ĐÚNG luồng thật: tạo ở chờ duyệt, ghi một lượt duyệt chấp nhận của
-    /// Reviewer đủ chủ đề, rồi mới chốt trạng thái — vì lược đồ chỉ cho validated khi có lượt
-    /// duyệt hợp lệ (trigger trg_script_validated_domain).
+    /// Cặp câu mẫu + các dòng script_word cho từng từ tiếng Anh.
     /// </summary>
     private static async Task SeedScriptsAsync(
-        CodeSwitchLabelDbContext db, long adminId, long reviewerId, CancellationToken ct)
+        CodeSwitchLabelDbContext db, DemoUserIds ids, CancellationToken ct)
     {
         if (await db.Scripts.AnyAsync(ct)) return;
 
@@ -376,66 +410,130 @@ public static class DatabaseSeeder
              ScriptDomain.DailyLife, [("check", "kiểm tra")])
         ];
 
-        var now = DateTimeOffset.UtcNow;
-
         foreach (var seed in seeds)
         {
-            var enWordCount = CodeSwitchText.CountEnglishWords(seed.Cs);
-
-            // Các từ mẫu đều dịch thẳng nên mã quan hệ là 1; thứ tự alignment trùng vị trí trong câu.
-            var scriptId = await db.Database
-                .SqlQuery<string>(
-                    $"""SELECT fn_generate_script_id({enWordCount}, CAST({SnakeCaseNaming.ToSnakeCase(seed.Domain.ToString())} AS script_domain), 1) AS "Value" """)
-                .SingleAsync(ct);
-
-            var script = new Script
-            {
-                ScriptId = scriptId,
-                CsContent = seed.Cs,
-                ViContent = seed.Vi,
-                Status = ScriptStatus.PendingValidation,
-                WordCount = CodeSwitchText.CountWords(seed.Cs),
-                EnWordCount = enWordCount,
-                Domain = seed.Domain,
-                CreatedBy = adminId,
-                CreatedAt = now,
-                UpdatedAt = now
-            };
-
-            for (var i = 0; i < seed.Pairs.Length; i++)
-            {
-                var (en, vi) = seed.Pairs[i];
-
-                script.Words.Add(new ScriptWord
-                {
-                    ScriptId = scriptId,
-                    WordPosition = (short)(i + 1),
-                    EnWord = en,
-                    ViWord = vi,
-                    Relation = ScriptWordRelation.SemanticEquivalent
-                });
-            }
-
-            db.Scripts.Add(script);
-
-            // Lưu câu + các dòng script_word trước, để lượt duyệt bên dưới tham chiếu tới câu có thật.
-            await db.SaveChangesAsync(ct);
-
-            db.ScriptReviews.Add(new ScriptReview
-            {
-                ScriptId = scriptId,
-                UserId = reviewerId,
-                Action = ScriptReviewAction.Accepted,
-                Comment = "Dữ liệu mẫu — tự động chấp nhận.",
-                ReviewedAt = now
-            });
-
-            // Lượt duyệt phải nằm sẵn trong database TRƯỚC khi đổi trạng thái, vì trigger
-            // trg_script_validated_domain không phải loại defer.
-            await db.SaveChangesAsync(ct);
-
-            script.Status = ScriptStatus.Validated;
-            await db.SaveChangesAsync(ct);
+            await CreateScriptAsync(db, seed.Cs, seed.Vi, seed.Domain, seed.Pairs, ids.Admin, ct);
         }
+    }
+
+    /// <summary>
+    /// Tạo một cặp câu đi qua ĐÚNG luồng thật: tạo ở chờ duyệt, ghi một lượt duyệt của
+    /// Reviewer đủ chủ đề, rồi mới chốt trạng thái — vì lược đồ chỉ cho validated khi có lượt
+    /// duyệt hợp lệ (trigger trg_script_validated_domain).
+    /// </summary>
+    /// <param name="finalStatus">Trạng thái muốn có sau cùng; <c>Validated</c> thì đi qua lượt duyệt.</param>
+    private static async Task<string> CreateScriptAsync(
+        CodeSwitchLabelDbContext db,
+        string cs, string vi,
+        ScriptDomain domain,
+        (string En, string Vi)[] pairs,
+        long createdBy,
+        CancellationToken ct,
+        ScriptStatus finalStatus = ScriptStatus.Validated)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var enWordCount = CodeSwitchText.CountEnglishWords(cs);
+
+        // Trigger defer trg_script_word_consistency kiểm tra lúc COMMIT, nên lỗi lệch số
+        // báo ra giữa chừng lúc đã ghi mấy câu trước đó. Chặn ngay ở đây để câu lỗi nói rõ
+        // câu nào và vì sao, thay vì một mã script và một con số.
+        if (enWordCount != pairs.Length)
+        {
+            throw new InvalidOperationException(
+                $"Câu mẫu \"{cs}\" có {enWordCount} từ [en] nhưng khai báo {pairs.Length} dòng script_word. " +
+                "Đoạn [en] nhiều từ thì phải tách dấu cách, ví dụ [en]Sài Gòn thành hai từ.");
+        }
+
+        // Các từ mẫu đều dịch thẳng nên mã quan hệ là 1; thứ tự alignment trùng vị trí trong câu.
+        var scriptId = await db.Database
+            .SqlQuery<string>(
+                $"""SELECT fn_generate_script_id({enWordCount}, CAST({SnakeCaseNaming.ToSnakeCase(domain.ToString())} AS script_domain), 1) AS "Value" """)
+            .SingleAsync(ct);
+
+        var script = new Script
+        {
+            ScriptId = scriptId,
+            CsContent = cs,
+            ViContent = vi,
+            Status = ScriptStatus.PendingValidation,
+            WordCount = CodeSwitchText.CountWords(cs),
+            EnWordCount = enWordCount,
+            Domain = domain,
+            CreatedBy = createdBy,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        for (var i = 0; i < pairs.Length; i++)
+        {
+            var (en, viWord) = pairs[i];
+
+            script.Words.Add(new ScriptWord
+            {
+                ScriptId = scriptId,
+                WordPosition = (short)(i + 1),
+                EnWord = en,
+                ViWord = viWord,
+                Relation = ScriptWordRelation.SemanticEquivalent
+            });
+        }
+
+        db.Scripts.Add(script);
+
+        // Lưu câu + các dòng script_word trước, để lượt duyệt bên dưới tham chiếu tới câu có thật.
+        await db.SaveChangesAsync(ct);
+
+        if (finalStatus == ScriptStatus.PendingValidation) return scriptId;
+
+        var action = finalStatus == ScriptStatus.Validated
+            ? ScriptReviewAction.Accepted
+            : ScriptReviewAction.Rejected;
+
+        var reviewerId = await PickDomainReviewerAsync(db, domain, ct);
+
+        if (reviewerId == 0)
+        {
+            throw new InvalidOperationException(
+                $"Không có Reviewer nào được phân chủ đề {domain} — seed câu mẫu sẽ vi phạm " +
+                "trg_script_validated_domain. Chạy SeedReviewerDomainsAsync trước.");
+        }
+
+        db.ScriptReviews.Add(new ScriptReview
+        {
+            ScriptId = scriptId,
+            UserId = reviewerId,
+            Action = action,
+            Comment = "Dữ liệu mẫu — tự động " + (action == ScriptReviewAction.Accepted ? "chấp nhận." : "từ chối."),
+            ReviewedAt = now
+        });
+
+        // Lượt duyệt phải nằm sẵn trong database TRƯỚC khi đổi trạng thái, vì trigger
+        // trg_script_validated_domain không phải loại defer.
+        await db.SaveChangesAsync(ct);
+
+        // Trigger trg_script_validated_domain chỉ canh trạng thái validated, nên câu bị ẩn
+        // (deactivated) cũng đặt thẳng được — không cần đi qua duyệt.
+        script.Status = finalStatus;
+        await db.SaveChangesAsync(ct);
+
+        return scriptId;
+    }
+
+    /// <summary>Một Reviewer được phân đúng chủ đề; 0 nếu dữ liệu mẫu chưa có ai.</summary>
+    private static async Task<long> PickDomainReviewerAsync(
+        CodeSwitchLabelDbContext db, ScriptDomain domain, CancellationToken ct)
+    {
+        // Chỉ lấy trong nhóm Reviewer: trigger chỉ cần người duyệt đúng chủ đề, nhưng lấy cả
+        // Admin vào thì lượt duyệt mẫu sẽ mang vai trò sai so với thực tế.
+        var reviewerRole = await db.Roles
+            .Where(r => r.RoleName == RoleName.Reviewer)
+            .Select(r => r.RoleId)
+            .FirstOrDefaultAsync(ct);
+
+        return await db.UserDomains
+            .Where(d => d.Domain == domain && d.User.RoleId == reviewerRole)
+            .OrderBy(d => d.UserId)
+            .Select(d => d.UserId)
+            .FirstOrDefaultAsync(ct);
     }
 }

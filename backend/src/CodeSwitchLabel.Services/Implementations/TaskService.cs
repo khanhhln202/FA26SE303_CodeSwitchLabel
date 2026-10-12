@@ -14,16 +14,24 @@ namespace CodeSwitchLabel.Services.Implementations;
 
 internal static class TaskMapper
 {
-    public static TaskProgressDto ProgressOf(this TaskRow r, DateTimeOffset now) =>
-        new(r.TaskType == TaskType.Recording ? "cặp câu" : "bản ghi",
+    /// <param name="doneOverride">
+    /// Task Manager đếm việc đã ĐƯỢC DUYỆT xong; Speaker đếm việc đã THU xong. Cùng một task
+    /// nhưng hai bộ số khác nhau, nên chỗ nào muốn bộ nào thì truyền bộ đó vào.
+    /// </param>
+    public static TaskProgressDto ProgressOf(this TaskRow r, DateTimeOffset now, int? doneOverride = null)
+    {
+        var done = doneOverride ?? r.Done;
+
+        return new(r.TaskType == TaskType.Recording ? "cặp câu" : "bản ghi",
             r.TargetQty,
-            r.Done,
+            done,
             r.Started,
             r.UsableItems,
             r.TotalItems,
-            TaskStateMachine.Percent(r.Done, r.TargetQty),
+            TaskStateMachine.Percent(done, r.TargetQty),
             r.Deadline.HasValue ? Math.Round((r.Deadline.Value - now).TotalHours, 1) : null,
             r.Deadline.HasValue && r.Deadline.Value < now && TaskStateMachine.AcceptsWork(r.Status));
+    }
 
     public static TaskListItemDto ToListItem(this TaskRow r, DateTimeOffset now) =>
         new(r.TaskId,
@@ -39,6 +47,7 @@ internal static class TaskMapper
             r.ProgressOf(now));
 
     // Speaker thấy task của chính mình nên không cần người nhận / thời điểm tạo.
+    // Tiến độ đếm cặp câu đã THU ĐỦ, không đợi duyệt: gửi xong hai bản là cộng 1.
     public static SpeakerActiveTaskDto ToSpeakerActiveTask(this TaskRow r, DateTimeOffset now) =>
         new(r.TaskId,
             r.Description,
@@ -47,7 +56,7 @@ internal static class TaskMapper
             r.TaskType,
             r.Status,
             r.Deadline,
-            r.ProgressOf(now));
+            r.ProgressOf(now, r.SubmittedPairs));
 }
 
 public class TaskService(
@@ -327,6 +336,7 @@ public class TaskService(
         var assigneeId = (await tasks.GetActiveAssignmentAsync(taskId, ct))?.UserId;
         var skipped = new List<SkippedItemDto>();
         var now = clock.GetUtcNow();
+        var borrowedFrom = new List<long>();
         List<string> accepted;
 
         if (task.TaskType == TaskType.Recording)
@@ -336,7 +346,7 @@ public class TaskService(
                 : [.. await tasks.FindScriptCandidatesAsync(
                     taskId, assigneeId, request.AutoFill!.Domain, request.AutoFill.Count, ct)];
 
-            accepted = await FilterScriptsAsync(taskId, ids, assigneeId, skipped, ct);
+            accepted = await FilterScriptsAsync(taskId, ids, assigneeId, skipped, ct, borrowedFrom);
 
             tasks.AddScriptItems(accepted.Select(id => new TaskScript
             {
@@ -367,10 +377,35 @@ public class TaskService(
         }
 
         await SaveTasksAsync(ct);
+
+        // Câu mượn từ task khác làm chỉ tiêu task cũ vượt quá số mục còn lại — hạ xuống cho khớp,
+        // rồi tính lại trạng thái. Không hạ thì task cũ treo vĩnh viễn ở chỗ không đủ việc.
+        foreach (var oldTaskId in borrowedFrom.Distinct().Where(id => id != taskId))
+        {
+            await ShrinkTargetToItemsAsync(oldTaskId, ct);
+            await tracker.RefreshStatusAsync(oldTaskId, ct);
+        }
+
         await tracker.RefreshStatusAsync(taskId, ct);
         if (transaction is not null) await transaction.CommitAsync(ct);
 
         return new AddTaskItemsResult(accepted.Count, skipped, await LoadDetailAsync(taskId, ct));
+    }
+
+    /// <summary>Hạ chỉ tiêu của task cho vừa đủ số mục còn lại, không hạ thấp hơn mức đang làm được.</summary>
+    private async Task ShrinkTargetToItemsAsync(long taskId, CancellationToken ct)
+    {
+        var task = await tasks.GetForUpdateAsync(taskId, ct);
+        if (task is null || task.Status == WorkTaskStatus.Draft) return;
+
+        var assigneeId = (await tasks.GetActiveAssignmentAsync(taskId, ct))?.UserId;
+        var (workable, _) = await CountWorkableAsync(task, assigneeId, null, ct);
+
+        if (workable < task.TargetQty)
+        {
+            task.TargetQty = workable;
+            await SaveTasksAsync(ct);
+        }
     }
 
     public async Task<TaskDetailDto> RemoveItemAsync(
@@ -587,13 +622,24 @@ public class TaskService(
 
     // ----------------------------------------------------------------- nội bộ
 
+    /// <returns>Danh sách id được nhận, và các task cũ cần cập nhật lại sau khi mượn câu.</returns>
     private async Task<List<string>> FilterScriptsAsync(
-        long taskId, string[] ids, long? assigneeId, List<SkippedItemDto> skipped, CancellationToken ct)
+        long taskId, string[] ids, long? assigneeId, List<SkippedItemDto> skipped,
+        CancellationToken ct, List<long>? borrowedFromTasks = null)
     {
         var existing = (await tasks.GetScriptItemsAsync(taskId, ct)).Select(i => i.ScriptId).ToHashSet();
         var found = (await tasks.GetScriptsAsync(ids, ct)).ToDictionary(s => s.ScriptId);
         var queuedElsewhere = await tasks.FindScriptsQueuedInOtherActiveTasksAsync(ids, taskId, assigneeId, ct);
         var accepted = new List<string>();
+
+        // Chỉ mượn được câu của chính người nhận task này. Task chưa giao cho ai thì không
+        // gắn với một người nào, nên không được cướp câu đang nằm trong task của người khác.
+        var borrowable = queuedElsewhere
+            .Where(id => !found.TryGetValue(id, out var s)
+                || !s.Recordings.Any(r => r.Status != RecordingStatus.QcFailed))
+            .ToHashSet();
+
+        if (!assigneeId.HasValue) borrowable.Clear();
 
         foreach (var id in ids)
         {
@@ -605,10 +651,41 @@ public class TaskService(
                 skipped.Add(new SkippedItemDto(id, $"Đang ở trạng thái {script.Status}, chỉ nhận câu đã duyệt nội dung."));
             else if (assigneeId.HasValue && script.Recordings.Any(r => r.SpeakerId != assigneeId.Value && r.Status != RecordingStatus.QcFailed))
                 skipped.Add(new SkippedItemDto(id, "Cặp câu này do người đọc khác thu."));
+            else if (queuedElsewhere.Contains(id) && borrowable.Contains(id))
+            {
+                // Câu còn nằm trong task khác nhưng CHƯA có bản ghi nào: chuyển sang task này cho
+                // mượn, thay vì báo lỗi. Người nhận chỉ nhận nhiệm vụ, chưa bắt tay vào làm.
+                accepted.Add(id);
+            }
             else if (queuedElsewhere.Contains(id))
-                skipped.Add(new SkippedItemDto(id, "Cặp câu đang nằm trong một task khác đang chạy."));
+                skipped.Add(new SkippedItemDto(id, assigneeId.HasValue
+                    ? "Cặp câu đang nằm trong một task khác đang chạy và đã có bản ghi nộp."
+                    : "Cặp câu đang nằm trong một task khác đang chạy — giao task cho người đọc trước rồi thử lại."));
             else
                 accepted.Add(id);
+        }
+
+        // Chỉ mượn câu nào THỰC SỰ được nhận vào task này. Câu bị bỏ vì lý do khác (đã có trong
+        // task, không tồn tại, chưa duyệt nội dung…) phải nằm yên ở task cũ — gỡ đi là mất luôn.
+        borrowable.IntersectWith(accepted);
+
+        if (borrowable.Count > 0)
+        {
+            var stale = await tasks.GetQueuedScriptItemsInOtherActiveTasksAsync(
+                [.. borrowable], taskId, assigneeId, ct);
+
+            foreach (var item in stale)
+            {
+                // Trùng nhau là bình thường khi một câu nằm ở nhiều task: bỏ hết các bản cũ.
+                if (found.TryGetValue(item.ScriptId, out var s)
+                    && s.Recordings.Any(r => r.Status != RecordingStatus.QcFailed))
+                {
+                    continue;
+                }
+
+                borrowedFromTasks?.Add(item.TaskId);
+                tasks.Remove(item);
+            }
         }
 
         return accepted;

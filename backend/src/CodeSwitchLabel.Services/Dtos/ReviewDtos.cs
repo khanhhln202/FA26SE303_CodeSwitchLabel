@@ -22,6 +22,11 @@ public record ReviewDto(
 /// </summary>
 /// <param name="ScriptText">Câu cần đối chiếu, đã bỏ nhãn: bản cs hay bản thuần Việt tuỳ biến thể.</param>
 /// <param name="ScriptTagged">Cũng câu đó nhưng còn nhãn [vi]/[en], để giao diện tô màu phần tiếng Anh.</param>
+/// <param name="Pair">
+/// CẶP CÂU đầy đủ: một ô cho bản cs, một ô cho bản vi, cùng trạng thái riêng của từng bản.
+/// Người duyệt vẫn chấm TỪNG bản một — mỗi bản vẫn đủ số vòng duyệt riêng.
+/// Bản chưa thu thì <c>AudioUrl</c> null; ô đó hiện trạng thái <c>None</c> cho biết còn thiếu.
+/// </param>
 public record NextReviewDto(
     string RecordingId,
     long SpeakerId,
@@ -34,7 +39,25 @@ public record NextReviewDto(
     string ScriptTagged,
     decimal DurationSec,
     string AudioUrl,
-    DateTimeOffset AudioUrlExpiresAt);
+    DateTimeOffset AudioUrlExpiresAt,
+    IReadOnlyList<ReviewVariantDto> Pair);
+
+/// <param name="Status"><c>None</c> = cặp câu còn thiếu bản này, chưa ai thu.</param>
+public record ReviewVariantDto(
+    string RecordingId,
+    SentenceVariant SentenceVariant,
+    string ScriptText,
+    string ScriptTagged,
+    decimal? DurationSec,
+    string? AudioUrl,
+    DateTimeOffset? AudioUrlExpiresAt,
+    RecordingStatus? Status,
+    int ReviewsDone,
+    bool MyReviewDone)
+{
+    /// <summary>Reviewer mở được ô này để duyệt không.</summary>
+    public bool IsReviewable => Status == RecordingStatus.PendingReview;
+}
 
 public record SubmitReviewRequest
 {
@@ -102,6 +125,8 @@ public record TaskReviewQuery : PageRequest
 /// <param name="ReviewsDone">Số lượt đã có, không kèm ai duyệt và duyệt thế nào.</param>
 /// <param name="MyReviewDone">Chính người đang xem đã duyệt bản này rồi.</param>
 /// <param name="Blocker">Lý do chưa duyệt được; <c>None</c> là mở ra duyệt được ngay.</param>
+/// <param name="Sibling">Bản còn lại của cặp câu, để danh sách cũng hiện đủ hai bản. Không kèm link
+/// nghe vì danh sách dài, gọi N lần kho lưu trữ rất nặng — mở ô đó thì <c>GET .../recordings/{id}</c>.</param>
 public record TaskReviewItemDto(
     string RecordingId,
     long SpeakerId,
@@ -114,8 +139,17 @@ public record TaskReviewItemDto(
     int ReviewsDone,
     int RoundsRequired,
     bool MyReviewDone,
-    ReviewBlocker Blocker)
+    ReviewBlocker Blocker,
+    ReviewSiblingDto? Sibling)
 {
     /// <summary>Có mở được bằng <c>GET /api/reviewer/recordings/{id}</c> không.</summary>
     public bool CanReview => Blocker == ReviewBlocker.None;
 }
+
+/// <summary>Bản anh em của một bản ghi trong cặp câu, xem từ danh sách task duyệt.</summary>
+public record ReviewSiblingDto(
+    string RecordingId,
+    SentenceVariant SentenceVariant,
+    string ScriptText,
+    RecordingStatus? Status,
+    int ReviewsDone);
