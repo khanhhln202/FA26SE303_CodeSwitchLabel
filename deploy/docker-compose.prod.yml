@@ -109,6 +109,9 @@ services:
       # Trình duyệt chỉ cho frontend gọi API nếu origin nằm trong danh sách này.
       Cors__AllowedOrigins__0: ${FE_ORIGIN}
       Cors__AllowedOrigins__1: ${FE_ORIGIN_PREVIEW:-${FE_ORIGIN}}
+      # Máy cá nhân của đội frontend, để họ trỏ thẳng vào máy chủ này thay vì phải
+      # chạy backend trên máy mình. Bỏ trống ở bản chạy thật.
+      Cors__AllowedOrigins__2: ${FE_ORIGIN_LOCAL:-${FE_ORIGIN}}
 
       # Máy chủ thử nghiệm cho đội frontend: bật Swagger và tạo dữ liệu mẫu.
       # Khi chuyển sang bản chạy thật, đặt Swagger__Enabled=false và bỏ trống Seed__DefaultPassword.
