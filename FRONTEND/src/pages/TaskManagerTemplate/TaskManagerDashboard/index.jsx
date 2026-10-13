@@ -134,119 +134,119 @@ export default function TaskManagerDashboard() {
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
+        <Loader2 className="w-8 h-8 animate-spin text-[#16A34A]" />
       </div>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6 text-left font-sans transition-colors">
+    <div className="max-w-6xl mx-auto space-y-4 text-left font-sans transition-colors p-1">
       
       {/* HEADER TỔNG */}
-      <div className="space-y-1">
-        <h2 className="text-[22px] font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-          <BarChart3 className="w-5 h-5 text-slate-900 dark:text-white shrink-0" />
+      <div>
+        <h2 className="text-[22px] font-bold text-[#16171C] dark:text-white tracking-tight flex items-center gap-2">
+          <BarChart3 className="w-5 h-5 text-[#16171C] dark:text-white shrink-0" />
           <span>Bảng điều khiển</span>
         </h2>
-        <p className="text-[13px] font-semibold bg-clip-text text-transparent bg-gradient-to-r from-[#15803D] via-emerald-600 to-teal-700 dark:from-[#1DB954] dark:via-emerald-400 dark:to-green-300 mt-1">
+        <p className="type-ui text-[#6E7078] dark:text-gray-400 mt-1">
           Thống kê chính xác số lượng và tình trạng các nhiệm vụ
         </p>
       </div>
 
       {/* 1. HÀNG THỐNG KÊ 1: TỔNG SỐ NHIỆM VỤ CỦA SPEAKER & REVIEWER */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
         {/* Ô SPEAKER TASKS */}
-        <div className="bg-white dark:bg-[#1C1D22] p-6 rounded-xl border border-gray-200 dark:border-gray-800 shadow-xs flex items-center gap-4 transition-colors">
+        <div className="bg-white dark:bg-[#1C1D22] p-4.5 rounded-2xl border border-[#E5E2D8] dark:border-gray-800 shadow-[0_1px_3px_rgba(16,17,20,0.04)] flex items-center gap-3.5 transition-all hover:shadow-[0_4px_12px_rgba(16,17,20,0.06)]">
           <div 
-            className="p-3 rounded-full shrink-0"
+            className="w-11 h-11 rounded-2xl shrink-0 flex items-center justify-center"
             style={{ 
               backgroundColor: `${speakerColor}1F`, 
               color: speakerColor 
             }}
           >
-            <ListTodo className="size-6" />
+            <ListTodo className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-1">Nhiệm vụ Speaker</p>
-            <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 font-sans">
-              {stats.speakerTasksCount} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">nhiệm vụ</span>
+            <p className="type-label text-[#6E7078] dark:text-gray-400">Nhiệm vụ Speaker</p>
+            <h3 className="type-stat text-[#16171C] dark:text-gray-100 font-sans mt-0.5">
+              {stats.speakerTasksCount} <span className="type-label font-normal text-[#6E7078] dark:text-gray-400">nhiệm vụ</span>
             </h3>
           </div>
         </div>
 
         {/* Ô REVIEWER TASKS */}
-        <div className="bg-white dark:bg-[#1C1D22] p-6 rounded-xl border border-gray-200 dark:border-gray-800 shadow-xs flex items-center gap-4 transition-colors">
+        <div className="bg-white dark:bg-[#1C1D22] p-4.5 rounded-2xl border border-[#E5E2D8] dark:border-gray-800 shadow-[0_1px_3px_rgba(16,17,20,0.04)] flex items-center gap-3.5 transition-all hover:shadow-[0_4px_12px_rgba(16,17,20,0.06)]">
           <div 
-            className="p-3 rounded-full shrink-0"
+            className="w-11 h-11 rounded-2xl shrink-0 flex items-center justify-center"
             style={{ 
               backgroundColor: `${reviewerColor}1F`, 
               color: reviewerColor 
             }}
           >
-            <ListTodo className="size-6" />
+            <ListTodo className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-1">Nhiệm vụ Reviewer</p>
-            <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 font-sans">
-              {stats.reviewerTasksCount} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">nhiệm vụ</span>
+            <p className="type-label text-[#6E7078] dark:text-gray-400">Nhiệm vụ Reviewer</p>
+            <h3 className="type-stat text-[#16171C] dark:text-gray-100 font-sans mt-0.5">
+              {stats.reviewerTasksCount} <span className="type-label font-normal text-[#6E7078] dark:text-gray-400">nhiệm vụ</span>
             </h3>
           </div>
         </div>
       </div>
 
       {/* 2. HÀNG THỐNG KÊ 2: NHIỆM VỤ ĐÃ PHÂN CÔNG CHO SPEAKER & REVIEWER */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
         {/* ĐÃ PHÂN CÔNG SPEAKER */}
-        <div className="bg-white dark:bg-[#1C1D22] p-6 rounded-xl border border-gray-200 dark:border-gray-800 shadow-xs flex items-center gap-4 transition-colors">
+        <div className="bg-white dark:bg-[#1C1D22] p-4.5 rounded-2xl border border-[#E5E2D8] dark:border-gray-800 shadow-[0_1px_3px_rgba(16,17,20,0.04)] flex items-center gap-3.5 transition-all hover:shadow-[0_4px_12px_rgba(16,17,20,0.06)]">
           <div 
-            className="p-3 rounded-full shrink-0"
+            className="w-11 h-11 rounded-2xl shrink-0 flex items-center justify-center"
             style={{ 
               backgroundColor: `${speakerColor}1F`, 
               color: speakerColor 
             }}
           >
-            <UserCheck className="size-6" />
+            <UserCheck className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-1">Đã phân công Speaker</p>
-            <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 font-sans">
-              {stats.assignedSpeakerCount} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">nhiệm vụ</span>
+            <p className="type-label text-[#6E7078] dark:text-gray-400">Đã phân công Speaker</p>
+            <h3 className="type-stat text-[#16171C] dark:text-gray-100 font-sans mt-0.5">
+              {stats.assignedSpeakerCount} <span className="type-label font-normal text-[#6E7078] dark:text-gray-400">nhiệm vụ</span>
             </h3>
           </div>
         </div>
 
         {/* ĐÃ PHÂN CÔNG REVIEWER */}
-        <div className="bg-white dark:bg-[#1C1D22] p-6 rounded-xl border border-gray-200 dark:border-gray-800 shadow-xs flex items-center gap-4 transition-colors">
+        <div className="bg-white dark:bg-[#1C1D22] p-4.5 rounded-2xl border border-[#E5E2D8] dark:border-gray-800 shadow-[0_1px_3px_rgba(16,17,20,0.04)] flex items-center gap-3.5 transition-all hover:shadow-[0_4px_12px_rgba(16,17,20,0.06)]">
           <div 
-            className="p-3 rounded-full shrink-0"
+            className="w-11 h-11 rounded-2xl shrink-0 flex items-center justify-center"
             style={{ 
               backgroundColor: `${reviewerColor}1F`, 
               color: reviewerColor 
             }}
           >
-            <UserCheck className="size-6" />
+            <UserCheck className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 font-medium mb-1">Đã phân công Reviewer</p>
-            <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 font-sans">
-              {stats.assignedReviewerCount} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">nhiệm vụ</span>
+            <p className="type-label text-[#6E7078] dark:text-gray-400">Đã phân công Reviewer</p>
+            <h3 className="type-stat text-[#16171C] dark:text-gray-100 font-sans mt-0.5">
+              {stats.assignedReviewerCount} <span className="type-label font-normal text-[#6E7078] dark:text-gray-400">nhiệm vụ</span>
             </h3>
           </div>
         </div>
       </div>
 
       {/* 3. KHU VỰC THỐNG KÊ THEO CHỦ ĐỀ */}
-      <div className="bg-white dark:bg-[#1C1D22] p-6 rounded-xl border border-gray-200 dark:border-gray-800 shadow-xs space-y-4 transition-colors">
-        <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-          <Tag className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+      <div className="bg-white dark:bg-[#1C1D22] p-5 rounded-[24px] border border-[#E5E2D8] dark:border-gray-800 shadow-[0_1px_3px_rgba(16,17,20,0.04)] space-y-3 transition-colors">
+        <h3 className="type-card-title text-[#16171C] dark:text-gray-100 flex items-center gap-2">
+          <Tag className="w-4 h-4 text-[#6E7078] dark:text-gray-400" />
           Phân bố nhiệm vụ theo chủ đề
         </h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 type-ui">
           {/* CÔNG NGHỆ THÔNG TIN */}
-          <div className="flex justify-between items-center p-3 rounded-lg bg-gray-50 dark:bg-[#25272E] border border-gray-200 dark:border-gray-700/60 transition-colors">
+          <div className="flex justify-between items-center p-3 rounded-xl bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8]/80 dark:border-gray-700/60 transition-colors">
             <span
-              className="px-2.5 py-1 rounded-md text-[11px] font-bold border inline-block whitespace-nowrap"
+              className="px-2.5 py-0.5 rounded-md type-caption font-label border inline-block whitespace-nowrap"
               style={{
                 backgroundColor: getCatStyle('Công nghệ thông tin').bg,
                 color: getCatStyle('Công nghệ thông tin').text,
@@ -255,13 +255,13 @@ export default function TaskManagerDashboard() {
             >
               Công nghệ thông tin
             </span>
-            <span className="font-bold text-gray-900 dark:text-white font-sans text-xs">{stats.techTasks} nhiệm vụ</span>
+            <span className="type-label text-[#16171C] dark:text-white font-sans">{stats.techTasks} nhiệm vụ</span>
           </div>
 
           {/* GIÁO DỤC */}
-          <div className="flex justify-between items-center p-3 rounded-lg bg-gray-50 dark:bg-[#25272E] border border-gray-200 dark:border-gray-700/60 transition-colors">
+          <div className="flex justify-between items-center p-3 rounded-xl bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8]/80 dark:border-gray-700/60 transition-colors">
             <span
-              className="px-2.5 py-1 rounded-md text-[11px] font-bold border inline-block whitespace-nowrap"
+              className="px-2.5 py-0.5 rounded-md type-caption font-label border inline-block whitespace-nowrap"
               style={{
                 backgroundColor: getCatStyle('Giáo dục').bg,
                 color: getCatStyle('Giáo dục').text,
@@ -270,13 +270,13 @@ export default function TaskManagerDashboard() {
             >
               Giáo dục
             </span>
-            <span className="font-bold text-gray-900 dark:text-white font-sans text-xs">{stats.eduTasks} nhiệm vụ</span>
+            <span className="type-label text-[#16171C] dark:text-white font-sans">{stats.eduTasks} nhiệm vụ</span>
           </div>
 
           {/* HỘI THOẠI HÀNG NGÀY */}
-          <div className="flex justify-between items-center p-3 rounded-lg bg-gray-50 dark:bg-[#25272E] border border-gray-200 dark:border-gray-700/60 transition-colors">
+          <div className="flex justify-between items-center p-3 rounded-xl bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8]/80 dark:border-gray-700/60 transition-colors">
             <span
-              className="px-2.5 py-1 rounded-md text-[11px] font-bold border inline-block whitespace-nowrap"
+              className="px-2.5 py-0.5 rounded-md type-caption font-label border inline-block whitespace-nowrap"
               style={{
                 backgroundColor: getCatStyle('Hội thoại hàng ngày').bg,
                 color: getCatStyle('Hội thoại hàng ngày').text,
@@ -285,7 +285,7 @@ export default function TaskManagerDashboard() {
             >
               Hội thoại hàng ngày
             </span>
-            <span className="font-bold text-gray-900 dark:text-white font-sans text-xs">{stats.lifeTasks} nhiệm vụ</span>
+            <span className="type-label text-[#16171C] dark:text-white font-sans">{stats.lifeTasks} nhiệm vụ</span>
           </div>
         </div>
       </div>
