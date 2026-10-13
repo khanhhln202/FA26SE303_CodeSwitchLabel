@@ -10,16 +10,31 @@ import {
   ADMIN_ACCENT,
   SUCCESS
 } from "../../../constants/theme";
-
-const LOCAL_STORAGE_KEY = "admin_english_word_limit_config";
+import { adminService } from "../../../services/adminService";
 
 export default function AdminTextConfig() {
-  const [maxEnglishWords, setMaxEnglishWords] = useState(() => {
-    const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-    return saved ? parseInt(saved, 10) : 5;
-  });
-
+  const [maxEnglishWords, setMaxEnglishWords] = useState(5);
   const [toast, setToast] = useState({ show: false, message: "" });
+
+  const fetchConfig = async () => {
+    try {
+      const data = await adminService.getTextConfig("maxEnglishWords");
+      if (data) {
+        if (Array.isArray(data)) {
+          const item = data.find((c) => c.key === "maxEnglishWords" || c.configKey === "maxEnglishWords");
+          if (item) setMaxEnglishWords(parseInt(item.value || item.configValue, 10));
+        } else {
+          setMaxEnglishWords(parseInt(data.value || data.configValue || "5", 10));
+        }
+      }
+    } catch (err) {
+      console.error("Lỗi lấy cấu hình:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchConfig();
+  }, []);
 
   useEffect(() => {
     if (toast.show) {
@@ -34,12 +49,15 @@ export default function AdminTextConfig() {
     setToast({ show: true, message: msg });
   };
 
-  const handleSaveConfig = () => {
-    localStorage.setItem(LOCAL_STORAGE_KEY, maxEnglishWords.toString());
-    showNotification(`Đã lưu cấu hình!`);
+  const handleSaveConfig = async () => {
+    try {
+      await adminService.updateTextConfig("maxEnglishWords", maxEnglishWords);
+      showNotification(`Đã lưu cấu hình ${maxEnglishWords} từ thành công!`);
+    } catch (err) {
+      showNotification("Lưu cấu hình thất bại!");
+    }
   };
 
-  // Tính phần trăm dải màu bên trái nút kéo (từ 1 đến 10)
   const percentage = ((maxEnglishWords - 1) / (10 - 1)) * 100;
 
   return (
