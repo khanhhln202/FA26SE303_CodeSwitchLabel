@@ -129,7 +129,7 @@ console.log('\n== Màn 4 · Giao việc');
 const batDau = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
 const ketThuc = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
 r = S('4.0a', 'admin', 'POST', '/api/campaigns', await call(T.admin, 'POST', '/api/campaigns',
-  { campaignName: 'Đợt thu thập demo ' + batDau, targetQty: 2000, startDate: batDau, endDate: ketThuc }), 201,
+  { campaignName: 'Đợt thu thập demo ' + batDau, targetQty: 2000, domain: 'ItTechnology', startDate: batDau, endDate: ketThuc }), 201,
   (b) => ({ campaignId: b.campaignId, status: b.status, targetQty: b.targetQty }));
 const campaignId = r.body.campaignId;
 S('4.0b', 'manager', 'POST', '/api/tasks', await call(T.manager, 'POST', '/api/tasks',

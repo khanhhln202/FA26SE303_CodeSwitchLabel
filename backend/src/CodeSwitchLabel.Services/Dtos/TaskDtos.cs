@@ -17,7 +17,7 @@ public record CreateTaskRequest
     /// Chủ đề của nhiệm vụ. Khi gắn vào chiến dịch, phải trùng chủ đề của chiến dịch —
     /// nếu không thì 422 task_domain_mismatch_campaign.
     /// </summary>
-    public ScriptDomain? Domain { get; init; } = ScriptDomain.ItTechnology;
+    public ScriptDomain? Domain { get; init; }
 
     [StringLength(1000)]
     public string? Description { get; init; }

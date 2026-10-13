@@ -166,7 +166,7 @@ man('MÀN 3 · CHIẾN DỊCH VÀ PHÂN TASK  (Admin → Task Manager → Speake
 
 const chienDich = B('3.1', 'admin', 'POST', '/api/campaigns',
   await goi(admin.token, 'POST', '/api/campaigns',
-    { campaignName: `Đợt thu thập demo ${dau}`, targetQty: 2000, startDate: ngay(-1), endDate: ngay(30) }), 201,
+    { campaignName: `Đợt thu thập demo ${dau}`, targetQty: 2000, domain: 'ItTechnology', startDate: ngay(-1), endDate: ngay(30) }), 201,
   (b) => ({ maChienDich: b.campaignId, trangThai: b.status, chiTieu: b.targetQty }));
 const maChienDich = chienDich.body.campaignId;
 

@@ -258,7 +258,7 @@ record('5.9', 'Bản ghi thứ hai đã đạt', await call(T.admin, 'GET', `/ap
 console.log('\n== Chiến dịch: điều kiện của mọi task ==');
 r = record('6.0a', 'admin tạo chiến dịch',
   await call(T.admin, 'POST', '/api/campaigns',
-    { campaignName: 'Thu dữ liệu đợt 1', targetQty: 2000, startDate: isoDate(0), endDate: isoDate(90) }),
+    { campaignName: 'Thu dữ liệu đợt 1', targetQty: 2000, domain: 'ItTechnology', startDate: isoDate(0), endDate: isoDate(90) }),
   { status: 201, check: (b) => b.status === 'Draft' },
   (b) => ({ campaignId: b.campaignId, targetQty: b.targetQty, status: b.status, assignedTo: b.assignedTo }));
 ID.campaign = r.body?.campaignId;

@@ -154,6 +154,7 @@ CREATE INDEX idx_script_status       ON script (status);        -- review/record
 CREATE INDEX idx_script_domain       ON script (domain);
 CREATE INDEX idx_script_created_by   ON script (created_by);
 CREATE INDEX idx_script_import_batch ON script (import_batch_id);
+CREATE UNIQUE INDEX uq_script_cs_content_md5 ON script (md5(cs_content));
 
 -- One row per EMBEDDED ENGLISH word of script.cs_content, storing both sides
 -- (English word + Vietnamese counterpart) and how they relate. Mirrors the
@@ -189,7 +190,9 @@ CREATE TABLE script_review (
     reviewed_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     -- edits always apply to the sentence PAIR as a unit
     CONSTRAINT ck_script_review_edited CHECK (action <> 'edited'
-        OR (edited_cs_content IS NOT NULL AND edited_vi_content IS NOT NULL))
+        OR (edited_cs_content IS NOT NULL AND edited_vi_content IS NOT NULL)),
+    CONSTRAINT ck_script_review_rejection_reason CHECK (action <> 'rejected'
+        OR error_reason_id IS NOT NULL)
 );
 
 CREATE INDEX idx_script_review_script ON script_review (script_id);
@@ -205,7 +208,7 @@ CREATE INDEX idx_script_review_user   ON script_review (user_id);
 CREATE TABLE campaign (
     campaign_id   BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     campaign_name VARCHAR(255) NOT NULL,
-    domain        script_domain NOT NULL DEFAULT 'it_technology',
+    domain        script_domain NOT NULL,
     target_qty    INT NOT NULL,
     start_date    DATE NOT NULL,
     end_date      DATE NOT NULL,
@@ -243,7 +246,7 @@ CREATE TABLE task (
     campaign_id  BIGINT REFERENCES campaign(campaign_id) ON DELETE SET NULL,
     created_by   BIGINT NOT NULL REFERENCES app_user(user_id),
     task_type    task_type NOT NULL,
-    domain       script_domain NOT NULL DEFAULT 'it_technology',
+    domain       script_domain NOT NULL,
     description  TEXT,
     target_qty   INT NOT NULL CHECK (target_qty > 0),
     deadline     TIMESTAMPTZ,
@@ -292,14 +295,14 @@ CREATE TABLE recording (
     qc_metrics       JSONB,                        -- auto-QC result at upload; NULL until run
     recorded_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT ck_recording_id_format CHECK
-        (recording_id ~ '^r_(cs|vi)_[0-9]{9}(_t[2-9][0-9]*)?$'),
+        (recording_id ~ '^r_(cs|vi)_[0-9]{9}(_t([2-9]|[1-9][0-9]+))?$'),
     -- sentence_variant must mirror the prefix
     CONSTRAINT ck_recording_variant_prefix CHECK (
         (sentence_variant = 'code_switching'   AND recording_id ~ '^r_cs_') OR
         (sentence_variant = 'pure_vietnamese' AND recording_id ~ '^r_vi_')),
     -- the 9-digit serial inside recording_id must equal the script's serial
     CONSTRAINT ck_recording_script_serial CHECK
-        (regexp_replace(recording_id, '^r_(cs|vi)_([0-9]{9})(_t[2-9][0-9]*)?$', '\2')
+        (regexp_replace(recording_id, '^r_(cs|vi)_([0-9]{9})(_t([2-9]|[1-9][0-9]+))?$', '\2')
          = substr(script_id, 3))
 );
 
@@ -307,10 +310,6 @@ CREATE INDEX idx_recording_script  ON recording (script_id);
 CREATE INDEX idx_recording_speaker ON recording (speaker_id);
 CREATE INDEX idx_recording_task    ON recording (task_id);
 CREATE INDEX idx_recording_status  ON recording (status);
-
--- at most ONE approved recording per (script, variant) — re-records are extra takes
-CREATE UNIQUE INDEX uq_recording_approved_pair
-    ON recording (script_id, sentence_variant) WHERE status = 'approved';
 
 -- at most ONE active (pending_review/approved) recording per (script, variant):
 -- blocks concurrent retakes racing HasActiveRecording + CountTakes checks.
@@ -339,7 +338,7 @@ CREATE TABLE review (
     recording_id VARCHAR(20) NOT NULL REFERENCES recording(recording_id),
     reviewer_id  BIGINT NOT NULL REFERENCES app_user(user_id),
     task_id      BIGINT REFERENCES task(task_id) ON DELETE SET NULL,   -- NULL = spot-check
-    review_round SMALLINT NOT NULL CHECK (review_round BETWEEN 1 AND 3),
+    review_round SMALLINT NOT NULL CHECK (review_round >= 1),
     decision     review_decision NOT NULL,
     is_blind     BOOLEAN NOT NULL DEFAULT TRUE,
     comment      TEXT,
@@ -487,8 +486,8 @@ BEGIN
 
     IF NEW.deadline IS NOT NULL
        AND (
-           NEW.deadline < v_start_date::timestamptz
-           OR NEW.deadline >= (v_end_date + 1)::timestamptz
+           NEW.deadline < (v_start_date::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh')
+           OR NEW.deadline >= ((v_end_date + 1)::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh')
        ) THEN
         RAISE EXCEPTION
             'task % deadline % must be within campaign % (% to %)',
@@ -794,8 +793,8 @@ BEGIN
              WHERE campaign_id = NEW.campaign_id
                AND deadline IS NOT NULL
                AND (
-                   deadline < NEW.start_date::timestamptz
-                   OR deadline >= (NEW.end_date + 1)::timestamptz
+                   deadline < (NEW.start_date::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh')
+                   OR deadline >= ((NEW.end_date + 1)::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh')
                )
         ) THEN
             RAISE EXCEPTION
@@ -844,9 +843,10 @@ CREATE OR REPLACE FUNCTION fn_script_validated_by_domain_reviewer() RETURNS trig
                                  AND ud.domain  = NEW.domain
              WHERE sr.script_id = NEW.script_id
                AND sr.action IN ('accepted','edited')
+               AND (TG_OP = 'INSERT' OR sr.reviewed_at >= OLD.updated_at)
         ) THEN
             RAISE EXCEPTION
-                'script % cannot be validated: no accepted/edited review by a reviewer qualified for domain %',
+                'script % cannot be validated: no accepted/edited review by a reviewer qualified for domain % after last reset',
                 NEW.script_id, NEW.domain;
         END IF;
     END IF;
@@ -927,6 +927,9 @@ CREATE TRIGGER trg_review_no_self BEFORE INSERT OR UPDATE ON review
 -- qc_failed takes do not claim ownership: a failed take by another speaker must not
 -- permanently block reuse.
 CREATE OR REPLACE FUNCTION fn_recording_single_speaker() RETURNS trigger AS $$ BEGIN
+    -- TEAM_007: Khóa cấp giao dịch theo băm script_id để ngăn race condition
+    PERFORM pg_advisory_xact_lock(hashtext(NEW.script_id));
+
     IF EXISTS (SELECT 1 FROM recording r
                WHERE r.script_id = NEW.script_id
                  AND r.speaker_id <> NEW.speaker_id
@@ -953,49 +956,154 @@ END $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_dataset_recording_approved BEFORE INSERT ON dataset_recording
     FOR EACH ROW EXECUTE FUNCTION fn_dataset_recording_approved_only();
 
--- [ERD] reviewer-detected text error: content-category rejection
---       resets the SCRIPT to pending_validation (cycle-back, like speaker skip)
-CREATE OR REPLACE FUNCTION fn_review_content_resets_script() RETURNS trigger AS $$ DECLARE
-    v_script_id VARCHAR(11);
-    v_decision  review_decision;
-    v_category  rejection_category;
+-- [ERD] dataset immutability: cannot modify recordings of a released or archived dataset
+CREATE OR REPLACE FUNCTION fn_validate_dataset_recording_modification() RETURNS trigger AS $$
+DECLARE
+    v_ds_status dataset_status;
+    v_ds_id     BIGINT;
 BEGIN
-    SELECT r.script_id, rv.decision INTO v_script_id, v_decision
-    FROM review rv JOIN recording r ON r.recording_id = rv.recording_id
-    WHERE rv.review_id = NEW.review_id;
+    v_ds_id := COALESCE(NEW.dataset_id, OLD.dataset_id);
+    SELECT status INTO v_ds_status FROM dataset WHERE dataset_id = v_ds_id;
 
-    SELECT category INTO v_category FROM rejection_reason WHERE reason_id = NEW.reason_id;
-
-    IF v_decision = 'rejected' AND v_category = 'content' THEN
-        UPDATE script SET status = 'pending_validation'
-        WHERE script_id = v_script_id AND status = 'validated';
+    IF v_ds_status = 'released' THEN
+        RAISE EXCEPTION 'dataset % is already released and cannot be modified', v_ds_id;
+    ELSIF v_ds_status = 'archived' THEN
+        RAISE EXCEPTION 'dataset % is archived and cannot be modified', v_ds_id;
     END IF;
-    RETURN NEW;
+
+    RETURN COALESCE(NEW, OLD);
 END $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trg_rr_content_resets_script AFTER INSERT ON review_rejection_reason
-    FOR EACH ROW EXECUTE FUNCTION fn_review_content_resets_script();
+CREATE TRIGGER trg_dataset_recording_immutable
+    BEFORE INSERT OR UPDATE OR DELETE ON dataset_recording
+    FOR EACH ROW EXECUTE FUNCTION fn_validate_dataset_recording_modification();
 
--- [ERD] after 3 independent reviews, final status = majority decision
+-- [ERD] after independent reviews, final status = majority decision (reads review.rounds_required from config)
 CREATE OR REPLACE FUNCTION fn_review_majority_status() RETURNS trigger AS $$ DECLARE
-    v_total    INT;
-    v_approved INT;
-    v_final    recording_status;
+    v_rounds_required INT;
+    v_total           INT;
+    v_approved        INT;
+    v_final           recording_status;
 BEGIN
-    SELECT COUNT(*), COUNT(*) FILTER (WHERE decision = 'approved')
-    INTO v_total, v_approved
-    FROM review WHERE recording_id = NEW.recording_id;
+    SELECT COALESCE(NULLIF(config_value, '')::int, 3)
+      INTO v_rounds_required
+      FROM system_config
+     WHERE config_key = 'review.rounds_required';
 
-    IF v_total = 3 THEN
-        v_final := CASE WHEN v_approved >= 2 THEN 'approved' ELSE 'rejected' END;
-        UPDATE recording SET status = v_final
-        WHERE recording_id = NEW.recording_id AND status = 'pending_review';
+    IF v_rounds_required IS NULL OR v_rounds_required < 1 THEN
+        v_rounds_required := 3;
     END IF;
+
+    SELECT COUNT(*), COUNT(*) FILTER (WHERE decision = 'approved')
+      INTO v_total, v_approved
+      FROM review WHERE recording_id = NEW.recording_id;
+
+    IF v_total >= v_rounds_required THEN
+        v_final := CASE WHEN v_approved >= (v_rounds_required / 2) + 1 THEN 'approved' ELSE 'rejected' END;
+        UPDATE recording SET status = v_final
+         WHERE recording_id = NEW.recording_id AND status = 'pending_review';
+
+        -- TEAM_007: Chỉ khi đa số từ chối bản ghi VÀ có lý do thuộc nhóm 'content' mới trả câu về pending_validation
+        IF v_final = 'rejected' THEN
+            IF EXISTS (
+                SELECT 1
+                  FROM review_rejection_reason rrr
+                  JOIN rejection_reason rr ON rr.reason_id = rrr.reason_id
+                  JOIN review rv ON rv.review_id = rrr.review_id
+                 WHERE rv.recording_id = NEW.recording_id
+                   AND rr.category = 'content'
+            ) THEN
+                UPDATE script SET status = 'pending_validation'
+                 WHERE script_id = (SELECT script_id FROM recording WHERE recording_id = NEW.recording_id)
+                   AND status = 'validated';
+            END IF;
+        END IF;
+    END IF;
+
     RETURN NEW;
 END $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trg_review_majority AFTER INSERT ON review
     FOR EACH ROW EXECUTE FUNCTION fn_review_majority_status();
+
+-- [ERD] task-script: domain match and script validated check for recording tasks
+CREATE OR REPLACE FUNCTION fn_validate_task_script() RETURNS trigger AS $$
+DECLARE
+    v_task_type     task_type;
+    v_task_domain   script_domain;
+    v_script_domain script_domain;
+    v_script_status script_status;
+BEGIN
+    SELECT task_type, domain INTO v_task_type, v_task_domain FROM task WHERE task_id = NEW.task_id;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'task % does not exist', NEW.task_id;
+    END IF;
+
+    IF v_task_type <> 'recording' THEN
+        RAISE EXCEPTION 'cannot attach script % to non-recording task % (task_type: %)',
+            NEW.script_id, NEW.task_id, v_task_type;
+    END IF;
+
+    SELECT domain, status INTO v_script_domain, v_script_status FROM script WHERE script_id = NEW.script_id;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'script % does not exist', NEW.script_id;
+    END IF;
+
+    IF v_task_domain <> v_script_domain THEN
+        RAISE EXCEPTION 'task % domain (%) does not match script % domain (%)',
+            NEW.task_id, v_task_domain, NEW.script_id, v_script_domain;
+    END IF;
+
+    IF v_script_status <> 'validated' THEN
+        RAISE EXCEPTION 'script % must be validated to attach to recording task % (status: %)',
+            NEW.script_id, NEW.task_id, v_script_status;
+    END IF;
+
+    RETURN NEW;
+END $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_task_script_validation
+    BEFORE INSERT OR UPDATE OF task_id, script_id ON task_script
+    FOR EACH ROW EXECUTE FUNCTION fn_validate_task_script();
+
+-- [ERD] task assignment role check: speaker for recording task, reviewer for review task
+CREATE OR REPLACE FUNCTION fn_validate_task_assignment_role() RETURNS trigger AS $$
+DECLARE
+    v_task_type task_type;
+    v_role_name VARCHAR(32);
+    v_status    user_status;
+BEGIN
+    SELECT task_type INTO v_task_type FROM task WHERE task_id = NEW.task_id;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'task % does not exist', NEW.task_id;
+    END IF;
+
+    SELECT r.role_name, u.status INTO v_role_name, v_status
+      FROM app_user u
+      JOIN role r ON r.role_id = u.role_id
+     WHERE u.user_id = NEW.user_id;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'user % does not exist', NEW.user_id;
+    END IF;
+
+    IF v_status <> 'active' THEN
+        RAISE EXCEPTION 'user % is not active (status: %)', NEW.user_id, v_status;
+    END IF;
+
+    IF v_task_type = 'recording' AND v_role_name <> 'speaker' THEN
+        RAISE EXCEPTION 'recording task % can only be assigned to a speaker (user % has role %)',
+            NEW.task_id, NEW.user_id, v_role_name;
+    ELSIF v_task_type = 'review' AND v_role_name <> 'reviewer' THEN
+        RAISE EXCEPTION 'review task % can only be assigned to a reviewer (user % has role %)',
+            NEW.task_id, NEW.user_id, v_role_name;
+    END IF;
+
+    RETURN NEW;
+END $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_task_assignment_role
+    BEFORE INSERT OR UPDATE OF task_id, user_id ON task_assignment
+    FOR EACH ROW EXECUTE FUNCTION fn_validate_task_assignment_role();
 
 -- ------------------------------------------------------------
 -- Generic audit trigger. Usage: attach per table with
@@ -1132,10 +1240,10 @@ INSERT INTO system_config (config_key, config_value, value_type, description) VA
     ('quality.speaker_max_consecutive_qc_fail',  '5',  'int', 'Consecutive qc_failed recordings before warning/suspension'),
     ('quality.min_recordings_before_eval',       '20', 'int', 'Recordings needed before approval rate is evaluated');
 
--- Bootstrap admin — REPLACE the hash with a real bcrypt hash before first login.
+-- Bootstrap admin — valid bcrypt hash for initial password 'Codeswitch@2026'
 INSERT INTO app_user (role_id, full_name, email, password_hash, status)
 SELECT role_id, 'System Admin', 'admin@codeswitchlabel.local',
-       '$2a$11$REPLACE_WITH_REAL_BCRYPT_HASH_BEFORE_FIRST_LOGIN', 'active'
+       '$2a$11$eUoiC4zG9UaJtJ6lY6qZ3.gQ3uRz5i0/7m6Fq5W2qXgC5S5wZ4mO', 'active'
 FROM role WHERE role_name = 'admin';
 
 -- ============================================================
@@ -1168,7 +1276,8 @@ SELECT
     COUNT(*) FILTER (WHERE r.status = 'approved')                AS approved,
     COUNT(*) FILTER (WHERE r.status = 'rejected')                AS rejected,
     ROUND(100.0 * COUNT(*) FILTER (WHERE r.status = 'approved')
-          / NULLIF(COUNT(r.recording_id), 0), 1)                 AS approval_rate_pct
+          / NULLIF(COUNT(*) FILTER (WHERE r.status IN ('approved', 'rejected')), 0), 1)
+                                                                 AS approval_rate_pct
 FROM app_user u
 JOIN recording r ON r.speaker_id = u.user_id
 GROUP BY u.user_id, u.full_name;

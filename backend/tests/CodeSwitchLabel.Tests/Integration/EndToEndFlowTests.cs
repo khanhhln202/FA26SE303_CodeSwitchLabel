@@ -204,6 +204,7 @@ public sealed class EndToEndFlowTests : ApiTestBase
         var createCampaign = await PostAsync("/api/campaigns", new
         {
             campaignName = $"E2E unassigned {Guid.NewGuid():N}",
+            domain = "ItTechnology",
             targetQty = 2000,
             startDate = DateOnly.FromDateTime(DateTime.UtcNow),
             endDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30))
@@ -286,6 +287,7 @@ public sealed class EndToEndFlowTests : ApiTestBase
         var response = await PostAsync("/api/campaigns", new
         {
             campaignName = $"E2E {Guid.NewGuid():N}",
+            domain = "ItTechnology",
             targetQty = 2000,
             startDate = DateOnly.FromDateTime(DateTime.UtcNow),
             endDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30))

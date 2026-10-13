@@ -90,6 +90,10 @@ public class TaskService(
     ISystemConfigService config,
     TimeProvider clock) : ITaskService
 {
+    // TEAM_007: Múi giờ Việt Nam (UTC+7 / Asia/Ho_Chi_Minh) thống nhất với database
+    private static readonly TimeSpan VietnamOffset = TimeSpan.FromHours(7);
+    private static DateOnly ToVietnamDate(DateTimeOffset dt) => DateOnly.FromDateTime(dt.ToOffset(VietnamOffset).DateTime);
+
     public async Task<TaskDetailDto> CreateAsync(
         CreateTaskRequest request, long createdById, CancellationToken ct = default)
     {
@@ -132,7 +136,7 @@ public class TaskService(
             }
 
             // Hạn task phải nằm trong khoảng ngày của chiến dịch (trigger của database cũng chặn).
-            var deadlineDate = DateOnly.FromDateTime(deadline.UtcDateTime);
+            var deadlineDate = ToVietnamDate(deadline);
 
             if (deadlineDate < campaign.StartDate || deadlineDate > campaign.EndDate)
             {
@@ -142,7 +146,7 @@ public class TaskService(
                     $"{campaign.StartDate:yyyy-MM-dd} đến {campaign.EndDate:yyyy-MM-dd}.");
             }
 
-            var domain = request.Domain ?? ScriptDomain.ItTechnology;
+            var domain = request.Domain ?? campaign.Domain;
 
             // TEAM_003: Nhiệm vụ phải cùng chủ đề với chiến dịch
             if (domain != campaign.Domain)
@@ -164,12 +168,14 @@ public class TaskService(
             }
         }
 
+        var taskDomain = request.Domain ?? (campaign != null ? campaign.Domain : ScriptDomain.ItTechnology);
+
         var task = new WorkTask
         {
             CampaignId = request.CampaignId,
             CreatedBy = createdById,
             TaskType = request.TaskType!.Value,
-            Domain = request.Domain ?? ScriptDomain.ItTechnology, // TEAM_003
+            Domain = taskDomain, // TEAM_007
             Description = Clean(request.Description),
             TargetQty = targetQty,
             Deadline = deadline,
@@ -222,7 +228,7 @@ public class TaskService(
 
             if (task.Deadline.HasValue)
             {
-                var deadlineDate = DateOnly.FromDateTime(task.Deadline.Value.UtcDateTime);
+                var deadlineDate = ToVietnamDate(task.Deadline.Value);
                 if (deadlineDate < campaign.StartDate || deadlineDate > campaign.EndDate)
                 {
                     throw new UnprocessableException(
@@ -318,7 +324,7 @@ public class TaskService(
                 : null;
             if (campaign is not null)
             {
-                var deadlineDate = DateOnly.FromDateTime(deadline.UtcDateTime);
+                var deadlineDate = ToVietnamDate(deadline);
                 if (deadlineDate < campaign.StartDate || deadlineDate > campaign.EndDate)
                 {
                     throw new UnprocessableException(
@@ -405,9 +411,9 @@ public class TaskService(
             string[] ids = hasIds
                 ? [.. request.Ids.Distinct()]
                 : [.. await tasks.FindScriptCandidatesAsync(
-                    taskId, assigneeId, request.AutoFill!.Domain, request.AutoFill.Count, ct)];
+                    taskId, assigneeId, request.AutoFill!.Domain ?? task.Domain, request.AutoFill.Count, ct)];
 
-            accepted = await FilterScriptsAsync(taskId, ids, assigneeId, skipped, ct, borrowedFrom);
+            accepted = await FilterScriptsAsync(taskId, task.Domain, ids, assigneeId, skipped, ct, borrowedFrom);
 
             tasks.AddScriptItems(accepted.Select(id => new TaskScript
             {
@@ -723,7 +729,7 @@ public class TaskService(
 
     /// <returns>Danh sách id được nhận, và các task cũ cần cập nhật lại sau khi mượn câu.</returns>
     private async Task<List<string>> FilterScriptsAsync(
-        long taskId, string[] ids, long? assigneeId, List<SkippedItemDto> skipped,
+        long taskId, ScriptDomain taskDomain, string[] ids, long? assigneeId, List<SkippedItemDto> skipped,
         CancellationToken ct, List<long>? borrowedFromTasks = null)
     {
         var existing = (await tasks.GetScriptItemsAsync(taskId, ct)).Select(i => i.ScriptId).ToHashSet();
@@ -748,6 +754,8 @@ public class TaskService(
                 skipped.Add(new SkippedItemDto(id, "Không tồn tại."));
             else if (script.Status != ScriptStatus.Validated)
                 skipped.Add(new SkippedItemDto(id, $"Đang ở trạng thái {script.Status}, chỉ nhận câu đã duyệt nội dung."));
+            else if (script.Domain != taskDomain)
+                skipped.Add(new SkippedItemDto(id, $"Chủ đề câu ({script.Domain}) không khớp với chủ đề nhiệm vụ ({taskDomain})."));
             else if (assigneeId.HasValue && script.Recordings.Any(r => r.SpeakerId != assigneeId.Value && r.Status != RecordingStatus.QcFailed))
                 skipped.Add(new SkippedItemDto(id, "Cặp câu này do người đọc khác thu."));
             else if (queuedElsewhere.Contains(id) && borrowable.Contains(id))

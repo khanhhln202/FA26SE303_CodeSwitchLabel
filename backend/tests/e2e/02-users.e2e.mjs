@@ -111,7 +111,7 @@ console.log('\n== Đổi vai bị chặn khi đang nhận task ==');
 const iso = (days) => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
 const managerId = (await call(T.manager, 'GET', '/api/auth/me')).body.userId;
 r = await call(T.admin, 'POST', '/api/campaigns',
-  { campaignName: 'Chien dich kiem thu nguoi dung', targetQty: 2000, startDate: iso(0), endDate: iso(60) });
+  { campaignName: 'Chien dich kiem thu nguoi dung', targetQty: 2000, domain: 'ItTechnology', startDate: iso(0), endDate: iso(60) });
 const campaignId = r.body?.campaignId;
 await call(T.admin, 'POST', `/api/campaigns/${campaignId}/assign`, { assignedToUserId: managerId });
 
