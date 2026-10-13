@@ -16,53 +16,10 @@ import {
   CHIP_DANGER_BORDER,
   CHIP_DANGER_TEXT
 } from "../../../constants/theme";
-
-const DEFAULT_USERS = [
-  { id: "USR-001", name: "Quản Lý", email: "manager@fpt.edu.vn", role: "Task Manager", status: "Active", createdAt: "15/01/2026" },
-  { id: "USR-002", name: "Trần Minh Tâm", email: "tam.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "20/01/2026" },
-  { id: "USR-005", name: "Nguyễn Văn Anh", email: "anh.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "06/02/2026" },
-  { id: "USR-006", name: "Trần Thị Bình", email: "binh.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "07/02/2026" },
-  { id: "USR-007", name: "Lê Văn Cường", email: "cuong.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "08/02/2026" },
-  { id: "USR-008", name: "Phạm Thị Dung", email: "dung.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "09/02/2026" },
-  { id: "USR-009", name: "Hoàng Văn Em", email: "em.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "10/02/2026" },
-  { id: "USR-010", name: "Vũ Thị Phương", email: "phuong.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "11/02/2026" },
-  { id: "USR-011", name: "Đặng Văn Giang", email: "giang.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "12/02/2026" },
-  { id: "USR-012", name: "Bùi Thị Hải", email: "hai.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "13/02/2026" },
-  { id: "USR-013", name: "Đinh Văn Hùng", email: "hung.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "14/02/2026" },
-  { id: "USR-003", name: "Phạm Thu Thảo", email: "thao.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "01/02/2026" },
-  { id: "USR-004", name: "Lê Hoàng Nam", email: "nam.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "05/02/2026" },
-  { id: "USR-014", name: "Đỗ Thị Khánh", email: "khanh.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "15/02/2026" },
-  { id: "USR-015", name: "Hoàng Văn Lâm", email: "lam.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "16/02/2026" },
-  { id: "USR-016", name: "Ngô Thị Minh", email: "minh.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "17/02/2026" },
-  { id: "USR-017", name: "Dương Văn Nghĩa", email: "nghia.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "18/02/2026" },
-  { id: "USR-018", name: "Lý Thị Oanh", email: "oanh.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "19/02/2026" },
-  { id: "USR-019", name: "Võ Văn Phong", email: "phong.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "20/02/2026" },
-  { id: "USR-020", name: "Đoàn Thị Quỳnh", email: "quynh.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "21/02/2026" },
-  { id: "USR-021", name: "Trịnh Văn Rồng", email: "rong.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "22/02/2026" },
-];
-
-const LOCAL_STORAGE_KEY = "admin_users_list_v2";
+import { adminService } from "../../../services/adminService";
 
 export default function AdminUserManagement() {
-  const [users, setUsers] = useState(() => {
-    const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-    let list = DEFAULT_USERS;
-    if (saved) {
-      try { list = JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-
-    const tmProfile = localStorage.getItem("task_manager_user_profile");
-    if (tmProfile) {
-      try {
-        const parsed = JSON.parse(tmProfile);
-        if (parsed.name) {
-          list = list.map((u) => u.role === "Task Manager" ? { ...u, name: parsed.name } : u);
-        }
-      } catch (e) { console.error(e); }
-    }
-    return list;
-  });
-
+  const [users, setUsers] = useState([]);
   const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
@@ -76,30 +33,32 @@ export default function AdminUserManagement() {
   
   const pageSize = 10;
 
-  useEffect(() => {
-    const syncTaskManagerName = () => {
-      const tmProfile = localStorage.getItem("task_manager_user_profile");
-      if (tmProfile) {
-        try {
-          const parsed = JSON.parse(tmProfile);
-          if (parsed.name) {
-            setUsers((prev) =>
-              prev.map((u) => (u.role === "Task Manager" ? { ...u, name: parsed.name } : u))
-            );
-          }
-        } catch (e) {
-          console.error(e);
-        }
-      }
-    };
+  const fetchUsers = async () => {
+    try {
+      const res = await adminService.getUsers({
+        page: currentPage,
+        pageSize: 100
+      });
+      const items = res.items || res || [];
+      setUsers(
+        items.map((u) => ({
+          id: u.userId ? `USR-${String(u.userId).padStart(3, '0')}` : u.id,
+          rawId: u.userId || u.id,
+          name: u.fullName || u.name || "",
+          email: u.email || "",
+          role: u.role || "Speaker",
+          status: u.status === "Locked" || u.status === "Disabled" ? "Disabled" : "Active",
+          createdAt: u.createdAt ? new Date(u.createdAt).toLocaleDateString("vi-VN") : ""
+        }))
+      );
+    } catch (err) {
+      console.error("Lỗi lấy danh sách người dùng:", err);
+    }
+  };
 
-    window.addEventListener("userProfileUpdated", syncTaskManagerName);
-    return () => window.removeEventListener("userProfileUpdated", syncTaskManagerName);
-  }, []);
-
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(users));
-  }, [users]);
+    fetchUsers();
+  }, [currentPage]);
 
   useEffect(() => {
     if (toast.show) {
@@ -125,58 +84,57 @@ export default function AdminUserManagement() {
     }
   };
 
-  const ConfirmToggleStatusUser = () => {
+  const ConfirmToggleStatusUser = async () => {
     if (!userToToggleStatus) return;
     const targetUser = userToToggleStatus;
 
-    setUsers((prev) => {
-      const updatedList = prev.map((u) => {
-        if (u.id === targetUser.id) {
-          const nextStatus = u.status === "Active" ? "Disabled" : "Active";
-          if (nextStatus === "Active") {
-            showNotification(`Đã kích hoạt tài khoản "${u.name}" thành công!`);
-          } else {
-            showNotification(`Đã vô hiệu hóa tài khoản "${u.name}"!`);
-          }
-          return { ...u, status: nextStatus };
-        }
-        return u;
-      });
-
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updatedList));
-      return updatedList;
-    });
+    try {
+      if (targetUser.status === "Active") {
+        await adminService.lockUser(targetUser.rawId);
+        showNotification(`Đã vô hiệu hóa tài khoản "${targetUser.name}"!`);
+      } else {
+        await adminService.unlockUser(targetUser.rawId);
+        showNotification(`Đã kích hoạt tài khoản "${targetUser.name}" thành công!`);
+      }
+      fetchUsers();
+    } catch (err) {
+      const errorMsg = err.response?.data?.title || "Thao tác khoá/mở khoá tài khoản thất bại!";
+      showNotification(errorMsg);
+    }
 
     setUserToToggleStatus(null);
   };
 
-  const handleAddUser = (e) => {
+  const handleAddUser = async (e) => {
     e.preventDefault();
     if (!newUser.name || !newUser.email) return;
 
-    const created = {
-      id: `USR-00${users.length + 1}`,
-      name: newUser.name,
-      email: newUser.email,
-      role: newUser.role,
-      status: "Active",
-      createdAt: new Date().toLocaleDateString("vi-VN"),
-    };
-
-    const updated = [...users, created];
-    setUsers(updated);
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
-    setIsAddModalOpen(false);
-    showNotification(`Đã tạo thành công người dùng "${newUser.name}"!`);
-    setNewUser({ name: "", email: "", role: "Speaker" });
+    try {
+      await adminService.createUser({
+        fullName: newUser.name,
+        email: newUser.email,
+        role: newUser.role
+      });
+      setIsAddModalOpen(false);
+      showNotification(`Đã tạo thành công người dùng "${newUser.name}"!`);
+      setNewUser({ name: "", email: "", role: "Speaker" });
+      fetchUsers();
+    } catch (err) {
+      const errorMsg = err.response?.data?.title || "Tạo người dùng mới thất bại!";
+      showNotification(errorMsg);
+    }
   };
 
-  const ConfirmDeleteUser = () => {
+  const ConfirmDeleteUser = async () => {
     if (!userToDelete) return;
-    const updated = users.filter((u) => u.id !== userToDelete.id);
-    setUsers(updated);
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
-    showNotification(`Đã xóa thành công người dùng "${userToDelete.name}"!`);
+    try {
+      await adminService.deleteUser(userToDelete.rawId);
+      showNotification(`Đã xóa thành công người dùng "${userToDelete.name}"!`);
+      fetchUsers();
+    } catch (err) {
+      const errorMsg = err.response?.data?.title || "Xóa người dùng thất bại!";
+      showNotification(errorMsg);
+    }
     setUserToDelete(null);
   };
 
@@ -197,6 +155,7 @@ export default function AdminUserManagement() {
 
   const roleBadgeStyle = (role) => {
     switch (role) {
+      case "TaskManager":
       case "Task Manager": 
         return { backgroundColor: TASK_MANAGER_ACCENT, color: "#FFFFFF" };
       case "Reviewer": 
@@ -283,7 +242,7 @@ export default function AdminUserManagement() {
               className="w-[150px] px-2.5 py-2 bg-[#F9FAFB] dark:bg-[#25272E] border border-[#E5E7EB] dark:border-gray-700 focus:bg-white dark:focus:bg-[#1C1D22] focus:border-gray-400 dark:focus:border-gray-500 rounded-xl text-xs font-bold text-[#16171C] dark:text-white outline-none cursor-pointer transition-all font-sans"
             >
               <option value="all" className="bg-white dark:bg-[#25272E]">Tất cả vai trò</option>
-              <option value="Task Manager" className="bg-white dark:bg-[#25272E]">Task Manager</option>
+              <option value="TaskManager" className="bg-white dark:bg-[#25272E]">Task Manager</option>
               <option value="Reviewer" className="bg-white dark:bg-[#25272E]">Reviewer</option>
               <option value="Speaker" className="bg-white dark:bg-[#25272E]">Speaker</option>
             </select>
@@ -432,7 +391,7 @@ export default function AdminUserManagement() {
                 >
                   <option value="Speaker" className="bg-white dark:bg-[#25272E]">Speaker</option>
                   <option value="Reviewer" className="bg-white dark:bg-[#25272E]">Reviewer</option>
-                  <option value="Task Manager" className="bg-white dark:bg-[#25272E]">Task Manager</option>
+                  <option value="TaskManager" className="bg-white dark:bg-[#25272E]">Task Manager</option>
                 </select>
               </div>
 

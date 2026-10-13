@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Search, Download, CheckCircle2, XCircle, Play, Pause, Headphones, Filter, Eye, Clock, X, AlertCircle } from "lucide-react";
 import Pagination from "../../../components/Pagination/Pagination";
 import {
@@ -14,19 +14,9 @@ import {
   CHIP_DANGER_BORDER,
   CHIP_DANGER_TEXT
 } from "../../../constants/theme";
+import { adminService } from "../../../services/adminService";
+import { getScriptDetailApi } from "../../../services/scriptApi";
 
-// Danh sách 10 Reviewers và 10 Speakers
-const DEFAULT_REVIEWERS = [
-  "Trần Minh Tâm", "Nguyễn Văn Anh", "Trần Thị Bình", "Lê Văn Cường", "Phạm Thị Dung",
-  "Hoàng Văn Em", "Vũ Thị Phương", "Đặng Văn Giang", "Bùi Thị Hải", "Đinh Văn Hùng"
-];
-
-const DEFAULT_SPEAKERS = [
-  "Phạm Thu Thảo", "Lê Hoàng Nam", "Đỗ Thị Khánh", "Hoàng Văn Lâm", "Ngô Thị Minh",
-  "Dương Văn Nghĩa", "Lý Thị Oanh", "Võ Văn Phong", "Đoàn Thị Quỳnh", "Trịnh Văn Rồng"
-];
-
-// Bộ màu chủ đề
 const CATEGORY_COLORS = {
   'Hội thoại hàng ngày': { bg: '#E6F0FE', text: '#1E40AF', border: '#C9DEFB' },
   'Công nghệ thông tin': { bg: '#FBF0DA', text: '#92600A', border: '#F3E0B5' },
@@ -35,252 +25,23 @@ const CATEGORY_COLORS = {
 
 const getCatStyle = (cat) => CATEGORY_COLORS[cat] || { bg: '#F9FAFB', text: '#2B2C31', border: '#E5E7EB' };
 
-// Chuyển đổi số giây nguyên sang dạng 00:SS
 const formatDurationText = (sec) => {
   const integerSec = Math.round(Number(sec));
   const s = integerSec % 60;
   return `00:${s < 10 ? '0' : ''}${s}`;
 };
 
-// Danh sách bản ghi âm Code-switching
-const UNIQUE_RECORDINGS_DATA = [
-  {
-    id: "REC-001", textId: "TXT-001",
-    content: "Em nhớ upload tài liệu lên hệ thống trước deadline ngày mai nhé.",
-    contentVietnamese: "Em nhớ tải tài liệu lên hệ thống trước thời hạn ngày mai nhé.",
-    topic: "Công nghệ thông tin", speaker: DEFAULT_SPEAKERS[0],
-    reviewers: [
-      { name: DEFAULT_REVIEWERS[0], status: "Approved", reason: null },
-      { name: DEFAULT_REVIEWERS[1], status: "Approved", reason: null },
-      { name: DEFAULT_REVIEWERS[2], status: "Pending", reason: null }
-    ],
-    durationSec: 4, createdAt: "15/09/2026"
-  },
-  {
-    id: "REC-002", textId: "TXT-002",
-    content: "Sáng nay team mình có cuộc meeting trực tiếp lúc two PM tại phòng họp.",
-    contentVietnamese: "Sáng nay đội mình có cuộc họp trực tiếp lúc hai giờ chiều tại phòng họp.",
-    topic: "Giáo dục", speaker: DEFAULT_SPEAKERS[0],
-    reviewers: [
-      { name: DEFAULT_REVIEWERS[0], status: "Rejected", reason: "Lẫn tiếng ồn môi trường / tạp âm" },
-      { name: DEFAULT_REVIEWERS[1], status: "Rejected", reason: "Giọng đọc bị rè / âm lượng quá nhỏ" },
-      { name: DEFAULT_REVIEWERS[2], status: "Approved", reason: null }
-    ],
-    durationSec: 6, createdAt: "15/09/2026"
-  },
-  {
-    id: "REC-003", textId: "TXT-003",
-    content: "Vui lòng check kỹ pull request trên Github trước khi merge mã nguồn.",
-    contentVietnamese: "Vui lòng kiểm tra kỹ yêu cầu hợp nhất trên Github trước khi gộp mã nguồn.",
-    topic: "Công nghệ thông tin", speaker: DEFAULT_SPEAKERS[1],
-    reviewers: [
-      { name: DEFAULT_REVIEWERS[1], status: "Approved", reason: null },
-      { name: DEFAULT_REVIEWERS[3], status: "Approved", reason: null }
-    ],
-    durationSec: 5, createdAt: "15/09/2026"
-  },
-  {
-    id: "REC-004", textId: "TXT-004",
-    content: "Cuối tuần này bạn có rảnh đi coffee và chill với nhóm chúng mình không.",
-    contentVietnamese: "Cuối tuần này bạn có rảnh đi cà phê và thư giãn với nhóm chúng mình không.",
-    topic: "Hội thoại hàng ngày", speaker: DEFAULT_SPEAKERS[1],
-    reviewers: [
-      { name: DEFAULT_REVIEWERS[1], status: "Rejected", reason: "Tốc độ đọc quá nhanh, khó nhận diện từ" },
-      { name: DEFAULT_REVIEWERS[4], status: "Approved", reason: null },
-      { name: DEFAULT_REVIEWERS[5], status: "Approved", reason: null }
-    ],
-    durationSec: 4, createdAt: "15/09/2026"
-  },
-  {
-    id: "REC-005", textId: "TXT-005",
-    content: "Thầy giáo vừa gởi email nhắc nhở về bài thuyết trình tuần tới.",
-    contentVietnamese: "Thầy giáo vừa gởi thư điện tử nhắc nhở về bài thuyết trình tuần tới.",
-    topic: "Giáo dục", speaker: DEFAULT_SPEAKERS[2],
-    reviewers: [
-      { name: DEFAULT_REVIEWERS[2], status: "Approved", reason: null },
-      { name: DEFAULT_REVIEWERS[6], status: "Approved", reason: null }
-    ],
-    durationSec: 4, createdAt: "15/09/2026"
-  },
-  {
-    id: "REC-006", textId: "TXT-006",
-    content: "Hệ thống đang bảo trì server, vui lòng thử lại sau vài phút.",
-    contentVietnamese: "Hệ thống đang bảo trì máy chủ, vui lòng thử lại sau vài phút.",
-    topic: "Công nghệ thông tin", speaker: DEFAULT_SPEAKERS[2],
-    reviewers: [
-      { name: DEFAULT_REVIEWERS[2], status: "Rejected", reason: "Phát âm từ tiếng Anh chưa chuẩn / sai accent" },
-      { name: DEFAULT_REVIEWERS[7], status: "Rejected", reason: "Đọc thiếu từ hoặc ngắt nghỉ không tự nhiên" }
-    ],
-    durationSec: 6, createdAt: "15/09/2026"
-  },
-  {
-    id: "REC-007", textId: "TXT-007",
-    content: "Bạn có thể share file slide bài giảng cho lớp cùng xem không.",
-    contentVietnamese: "Bạn có thể chia sẻ tệp trình chiếu bài giảng cho lớp cùng xem không.",
-    topic: "Giáo dục", speaker: DEFAULT_SPEAKERS[3],
-    reviewers: [
-      { name: DEFAULT_REVIEWERS[3], status: "Approved", reason: null },
-      { name: DEFAULT_REVIEWERS[8], status: "Approved", reason: null }
-    ],
-    durationSec: 3, createdAt: "15/09/2026"
-  },
-  {
-    id: "REC-008", textId: "TXT-008",
-    content: "Dự án này cần hoàn thành đúng schedule đã đề ra ban đầu.",
-    contentVietnamese: "Dự án này cần hoàn thành đúng tiến độ đã đề ra ban đầu.",
-    topic: "Công nghệ thông tin", speaker: DEFAULT_SPEAKERS[3],
-    reviewers: [
-      { name: DEFAULT_REVIEWERS[3], status: "Rejected", reason: "Đọc thiếu từ hoặc ngắt nghỉ không tự nhiên" },
-      { name: DEFAULT_REVIEWERS[9], status: "Pending", reason: null }
-    ],
-    durationSec: 6, createdAt: "15/09/2026"
-  },
-  {
-    id: "REC-009", textId: "TXT-009",
-    content: "Tối nay mình đi shopping sắm vài đồ decor phòng ngủ nhé.",
-    contentVietnamese: "Tối nay mình đi mua sắm vài đồ trang trí phòng ngủ nhé.",
-    topic: "Hội thoại hàng ngày", speaker: DEFAULT_SPEAKERS[4],
-    reviewers: [
-      { name: DEFAULT_REVIEWERS[4], status: "Approved", reason: null },
-      { name: DEFAULT_REVIEWERS[0], status: "Approved", reason: null }
-    ],
-    durationSec: 4, createdAt: "15/09/2026"
-  },
-  {
-    id: "REC-010", textId: "TXT-010",
-    content: "Mọi người cùng nhau brainstorm ý tưởng mới cho đợt workshop này.",
-    contentVietnamese: "Mọi người cùng nhau động não ý tưởng mới cho đợt hội thảo này.",
-    topic: "Giáo dục", speaker: DEFAULT_SPEAKERS[4],
-    reviewers: [
-      { name: DEFAULT_REVIEWERS[4], status: "Rejected", reason: "Giọng đọc bị rè / âm lượng quá nhỏ" },
-      { name: DEFAULT_REVIEWERS[1], status: "Rejected", reason: "Lẫn tiếng ồn môi trường / tạp âm" }
-    ],
-    durationSec: 6, createdAt: "15/09/2026"
-  },
-  {
-    id: "REC-011", textId: "TXT-011",
-    content: "Nhớ backup dữ liệu database trước khi thực hiện nâng cấp hệ thống.",
-    contentVietnamese: "Nhớ sao lưu dữ liệu cơ sở dữ liệu trước khi thực hiện nâng cấp hệ thống.",
-    topic: "Công nghệ thông tin", speaker: DEFAULT_SPEAKERS[5],
-    reviewers: [
-      { name: DEFAULT_REVIEWERS[5], status: "Approved", reason: null },
-      { name: DEFAULT_REVIEWERS[2], status: "Approved", reason: null }
-    ],
-    durationSec: 4, createdAt: "15/09/2026"
-  },
-  {
-    id: "REC-012", textId: "TXT-012",
-    content: "Thầy hướng dẫn bảo mình làm lại phần research methodology.",
-    contentVietnamese: "Thầy hướng dẫn bảo mình làm lại phần phương pháp nghiên cứu.",
-    topic: "Giáo dục", speaker: DEFAULT_SPEAKERS[5],
-    reviewers: [
-      { name: DEFAULT_REVIEWERS[5], status: "Rejected", reason: "Phát âm từ tiếng Anh chưa chuẩn / sai accent" },
-      { name: DEFAULT_REVIEWERS[3], status: "Rejected", reason: "Đọc thiếu từ hoặc ngắt nghỉ không tự nhiên" }
-    ],
-    durationSec: 4, createdAt: "15/09/2026"
-  },
-  {
-    id: "REC-013", textId: "TXT-013",
-    content: "Cuối tuần mình đi camping ở ngoại thành để relax một chút.",
-    contentVietnamese: "Cuối tuần mình đi cắm trại ở ngoại thành để thư giãn một chút.",
-    topic: "Hội thoại hàng ngày", speaker: DEFAULT_SPEAKERS[6],
-    reviewers: [
-      { name: DEFAULT_REVIEWERS[6], status: "Approved", reason: null },
-      { name: DEFAULT_REVIEWERS[4], status: "Approved", reason: null }
-    ],
-    durationSec: 4, createdAt: "15/09/2026"
-  },
-  {
-    id: "REC-014", textId: "TXT-014",
-    content: "Bạn tạo thêm một task mới trên Jira để tracking tiến độ công việc.",
-    contentVietnamese: "Bạn tạo thêm một nhiệm vụ mới trên Jira để theo dõi tiến độ công việc.",
-    topic: "Công nghệ thông tin", speaker: DEFAULT_SPEAKERS[6],
-    reviewers: [
-      { name: DEFAULT_REVIEWERS[6], status: "Rejected", reason: "Lẫn tiếng ồn môi trường / tạp âm" },
-      { name: DEFAULT_REVIEWERS[5], status: "Rejected", reason: "Tốc độ đọc quá nhanh, khó nhận diện từ" }
-    ],
-    durationSec: 5, createdAt: "15/09/2026"
-  },
-  {
-    id: "REC-015", textId: "TXT-015",
-    content: "Nhớ check inbox email xem có thông báo mới từ trường không.",
-    contentVietnamese: "Nhớ kiểm tra hộp thư đến thư điện tử xem có thông báo mới từ trường không.",
-    topic: "Giáo dục", speaker: DEFAULT_SPEAKERS[7],
-    reviewers: [
-      { name: DEFAULT_REVIEWERS[7], status: "Approved", reason: null },
-      { name: DEFAULT_REVIEWERS[6], status: "Approved", reason: null }
-    ],
-    durationSec: 4, createdAt: "15/09/2026"
-  },
-  {
-    id: "REC-016", textId: "TXT-016",
-    content: "Quán cafe này có không gian yên tĩnh thích hợp để học study online.",
-    contentVietnamese: "Quán cà phê này có không gian yên tĩnh thích hợp để học tập trực tuyến.",
-    topic: "Hội thoại hàng ngày", speaker: DEFAULT_SPEAKERS[7],
-    reviewers: [
-      { name: DEFAULT_REVIEWERS[7], status: "Rejected", reason: "Đọc thiếu từ hoặc ngắt nghỉ không tự nhiên" },
-      { name: DEFAULT_REVIEWERS[8], status: "Rejected", reason: "Giọng đọc bị rè / âm lượng quá nhỏ" }
-    ],
-    durationSec: 4, createdAt: "15/09/2026"
-  },
-  {
-    id: "REC-017", textId: "TXT-017",
-    content: "Đội ngũ tech vừa fix lỗi xong tính năng thanh toán trực tuyến.",
-    contentVietnamese: "Đội ngũ kỹ thuật vừa sửa lỗi xong tính năng thanh toán trực tuyến.",
-    topic: "Công nghệ thông tin", speaker: DEFAULT_SPEAKERS[8],
-    reviewers: [
-      { name: DEFAULT_REVIEWERS[8], status: "Approved", reason: null },
-      { name: DEFAULT_REVIEWERS[9], status: "Approved", reason: null }
-    ],
-    durationSec: 4, createdAt: "15/09/2026"
-  },
-  {
-    id: "REC-018", textId: "TXT-018",
-    content: "Em muốn đăng ký tham gia khóa học IELTS speaking vào tháng sau.",
-    contentVietnamese: "Em muốn đăng ký tham gia khóa học IELTS kỹ năng nói vào tháng sau.",
-    topic: "Giáo dục", speaker: DEFAULT_SPEAKERS[8],
-    reviewers: [
-      { name: DEFAULT_REVIEWERS[8], status: "Rejected", reason: "Tốc độ đọc quá nhanh, khó nhận diện từ" },
-      { name: DEFAULT_REVIEWERS[0], status: "Rejected", reason: "Phát âm từ tiếng Anh chưa chuẩn / sai accent" }
-    ],
-    durationSec: 4, createdAt: "15/09/2026"
-  },
-  {
-    id: "REC-019", textId: "TXT-019",
-    content: "Chiều nay tụi mình ra sân tập workout để rèn luyện sức khỏe.",
-    contentVietnamese: "Chiều nay tụi mình ra sân tập thể dục để rèn luyện sức khỏe.",
-    topic: "Hội thoại hàng ngày", speaker: DEFAULT_SPEAKERS[9],
-    reviewers: [
-      { name: DEFAULT_REVIEWERS[9], status: "Approved", reason: null },
-      { name: DEFAULT_REVIEWERS[1], status: "Approved", reason: null }
-    ],
-    durationSec: 4, createdAt: "15/09/2026"
-  },
-  {
-    id: "REC-020", textId: "TXT-020",
-    content: "Cảm ơn bạn đã hỗ trợ feedback bài làm của mình rất chi tiết.",
-    contentVietnamese: "Cảm ơn bạn đã hỗ trợ nhận xét bài làm của mình rất chi tiết.",
-    topic: "Giáo dục", speaker: DEFAULT_SPEAKERS[9],
-    reviewers: [
-      { name: DEFAULT_REVIEWERS[9], status: "Rejected", reason: "Giọng đọc bị rè / âm lượng quá nhỏ" },
-      { name: DEFAULT_REVIEWERS[2], status: "Rejected", reason: "Lẫn tiếng ồn môi trường / tạp âm" }
-    ],
-    durationSec: 4, createdAt: "15/09/2026"
-  }
-];
-
-// Hàm tính toán trạng thái chung của bản ghi dựa trên danh sách Reviewers:
 const calculateRecordingStatus = (reviewers = []) => {
-  const hasPending = reviewers.some((rev) => rev.status === "Pending");
+  if (!Array.isArray(reviewers) || !reviewers.length) return "Pending";
+  const hasPending = reviewers.some((rev) => rev?.status === "Pending");
   if (hasPending) return "Pending";
 
-  const rejectedCount = reviewers.filter((rev) => rev.status === "Rejected").length;
+  const rejectedCount = reviewers.filter((rev) => rev?.status === "Rejected").length;
   if (rejectedCount >= 2) return "Rejected";
 
   return "Approved";
 };
 
-// Hàm lấy tên viết tắt cho Avatar/Icon đại diện reviewer
 const getInitials = (name) => {
   if (!name) return "R";
   const parts = name.trim().split(" ");
@@ -289,21 +50,118 @@ const getInitials = (name) => {
 };
 
 export default function AdminRecordings() {
+  const [recordings, setRecordings] = useState([]);
   const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
 
-  // Modals state
   const [selectedTextContent, setSelectedTextContent] = useState(null);
+  const [isLoadingText, setIsLoadingText] = useState(false);
   const [selectedReviewersList, setSelectedReviewersList] = useState(null);
   
-  // Audio Player Modal State
   const [playingRecording, setPlayingRecording] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
 
-  const recordings = useMemo(() => UNIQUE_RECORDINGS_DATA, []);
+  const fetchRecordings = async () => {
+    try {
+      // 1. Gọi song song danh sách bản thu và danh sách users để lấy tên thật của Speaker
+      const [recRes, usersRes] = await Promise.all([
+        adminService.getRecordings({ page: currentPage, pageSize: 100 }),
+        adminService.getUsers({ page: 1, pageSize: 200 })
+      ]);
+
+      const items = recRes.items || recRes || [];
+      const userItems = usersRes.items || usersRes || [];
+      
+      // Tạo dictionary { userId: fullName }
+      const userMap = {};
+      userItems.forEach((u) => {
+        userMap[u.userId || u.id] = u.fullName || u.name;
+      });
+
+      setRecordings(
+        items.map((r) => ({
+          id: r.recordingId || r.id || "",
+          rawId: r.recordingId || r.id || "",
+          textId: r.scriptId || r.textId || "N/A",
+          content: r.csContent || r.scriptText || r.content || "",
+          contentVietnamese: r.veContent || r.contentVietnamese || "",
+          topic: r.domain || r.topic || "Công nghệ thông tin",
+          // Map đúng tên thật từ userMap, nếu không có mới fallback về User #id
+          speaker: userMap[r.speakerId] || (r.speakerId ? `User #${r.speakerId}` : "Chưa xác định"),
+          reviewers: Array.isArray(r.reviewers) ? r.reviewers : [],
+          durationSec: r.durationSec || 0,
+          createdAt: r.recordedAt ? new Date(r.recordedAt).toLocaleDateString("vi-VN") : ""
+        }))
+      );
+    } catch (err) {
+      console.error("Lỗi lấy danh sách bản thu âm:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchRecordings();
+  }, [currentPage]);
+
+  // Hàm gọi API lấy chi tiết nội dung cặp câu khi người dùng bấm xem
+  const handleOpenTextDetail = async (recording) => {
+    if (!recording.textId || recording.textId === "N/A") return;
+    
+    // Đặt state tạm thời
+    setSelectedTextContent({
+      ...recording,
+      content: recording.content || "Đang tải dữ liệu...",
+      contentVietnamese: recording.contentVietnamese || "Đang tải dữ liệu..."
+    });
+    setIsLoadingText(true);
+
+    try {
+      const detail = await getScriptDetailApi(recording.textId);
+      setSelectedTextContent({
+        ...recording,
+        content: detail.csContent || recording.content,
+        contentVietnamese: detail.veContent || recording.contentVietnamese
+      });
+    } catch (err) {
+      console.error("Lỗi lấy chi tiết câu:", err);
+    } finally {
+      setIsLoadingText(false);
+    }
+  };
+
+  // Hàm gọi API lấy lịch sử kiểm duyệt thực tế khi click xem phản hồi
+  const handleOpenReviewersModal = async (recording) => {
+    setSelectedReviewersList({
+      ...recording,
+      content: recording.content || "Đang tải nội dung câu...",
+      reviewers: []
+    });
+
+    try {
+      const [scriptDetail, reviewsData] = await Promise.all([
+        recording.textId && recording.textId !== "N/A" 
+          ? getScriptDetailApi(recording.textId).catch(() => null) 
+          : null,
+        adminService.getRecordingReviews(recording.rawId).catch(() => [])
+      ]);
+
+      const formattedReviewers = (Array.isArray(reviewsData) ? reviewsData : []).map(rev => ({
+        name: rev.reviewerName || (rev.reviewerId ? `Reviewer #${rev.reviewerId}` : "Reviewer"),
+        status: rev.decision || rev.status || "Pending",
+        reason: rev.reason || rev.comment || ""
+      }));
+
+      setSelectedReviewersList({
+        ...recording,
+        content: scriptDetail?.csContent || recording.content || "Không có nội dung",
+        reviewers: formattedReviewers
+      });
+    } catch (err) {
+      console.error("Lỗi lấy thông tin kiểm duyệt:", err);
+    }
+  };
 
   const handleSearch = () => {
     setSearchTerm(searchInput);
@@ -316,7 +174,6 @@ export default function AdminRecordings() {
     }
   };
 
-  // Logic Tìm kiếm
   const filteredRecordings = useMemo(() => {
     const keywords = searchTerm.trim().toLowerCase().split(/\s+/).filter(Boolean);
 
@@ -328,16 +185,16 @@ export default function AdminRecordings() {
 
       if (keywords.length === 0) return true;
 
-      const reviewersText = r.reviewers.map((rev) => rev.name).join(" ");
+      const reviewersText = (r.reviewers || []).map((rev) => rev?.name || "").join(" ");
       const combinedSearchableText = [
         r.id,
         r.textId,
         r.content,
-        r.contentVietnamese || "",
+        r.contentVietnamese,
         r.speaker,
         r.topic,
         reviewersText
-      ].join(" ").toLowerCase();
+      ].filter(Boolean).join(" ").toLowerCase();
 
       return keywords.every((kw) => combinedSearchableText.includes(kw));
     });
@@ -353,13 +210,31 @@ export default function AdminRecordings() {
     return Math.max(0, pageSize - paginatedRecordings.length);
   }, [paginatedRecordings.length, pageSize]);
 
-  const handleExportDataset = () => {
-    const approvedCount = recordings.filter((r) => calculateRecordingStatus(r.reviewers) === "Approved").length;
-    alert(`Đang đóng gói và tải xuống tập dữ liệu Code-switching gồm ${approvedCount} file Audio (.ZIP)...`);
+  const handleExportDataset = async () => {
+    try {
+      const blob = await adminService.exportDatasetZip(1);
+      const url = window.URL.createObjectURL(new Blob([blob]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `Dataset_Codeswitching.zip`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+    } catch (err) {
+      alert("Xuất tập dữ liệu dataset thất bại!");
+    }
   };
 
-  const openAudioPlayer = (recording) => {
-    setPlayingRecording(recording);
+  const openAudioPlayer = async (recording) => {
+    try {
+      const res = await adminService.getAudioUrl(recording.rawId);
+      setPlayingRecording({
+        ...recording,
+        audioUrl: res.url || res
+      });
+    } catch {
+      setPlayingRecording(recording);
+    }
     setIsPlaying(false);
   };
 
@@ -453,8 +328,8 @@ export default function AdminRecordings() {
                   {paginatedRecordings.map((r) => {
                     const style = getCatStyle(r.topic);
                     const status = calculateRecordingStatus(r.reviewers);
-                    const totalRev = r.reviewers.length;
-                    const rejectedRevCount = r.reviewers.filter((rev) => rev.status === "Rejected").length;
+                    const totalRev = (r.reviewers || []).length;
+                    const rejectedRevCount = (r.reviewers || []).filter((rev) => rev?.status === "Rejected").length;
 
                     return (
                       <tr key={r.id} className="hover:bg-[#F3F4F6] dark:hover:bg-[#25272E]/50 transition-colors">
@@ -470,7 +345,7 @@ export default function AdminRecordings() {
                         <td className="px-1.5 text-center align-middle py-0.5">
                           <button
                             type="button"
-                            onClick={() => setSelectedTextContent(r)}
+                            onClick={() => handleOpenTextDetail(r)}
                             className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#F9FAFB] dark:bg-[#25272E] hover:bg-[#E5E7EB] dark:hover:bg-gray-700 text-[#2B2C31] dark:text-gray-200 text-[11px] font-bold border border-[#E5E7EB] dark:border-gray-700 transition-colors cursor-pointer w-full"
                           >
                             <Eye className="w-3.5 h-3.5 text-[#6E7078] dark:text-gray-400 shrink-0" />
@@ -499,7 +374,7 @@ export default function AdminRecordings() {
                         <td className="px-1.5 text-center align-middle py-0.5">
                           <button
                             type="button"
-                            onClick={() => setSelectedReviewersList(r)}
+                            onClick={() => handleOpenReviewersModal(r)}
                             className="inline-flex items-center justify-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium border bg-[#F7FAFC] dark:bg-[#25272E] border-[#E2E8F0] dark:border-gray-700 hover:bg-[#EDF2F7] dark:hover:bg-gray-700 transition-all cursor-pointer mx-auto"
                           >
                             <span
@@ -508,9 +383,9 @@ export default function AdminRecordings() {
                               }}
                               className={rejectedRevCount > 0 ? "font-semibold" : "text-[#4A5568] dark:text-gray-300"}
                             >
-                              {rejectedRevCount > 0
-                                ? `${rejectedRevCount}/${totalRev} từ chối`
-                                : `${totalRev} reviewers`}
+                              {totalRev > 0
+                                ? (rejectedRevCount > 0 ? `${rejectedRevCount}/${totalRev} từ chối` : `${totalRev} reviewers`)
+                                : "Xem phản hồi"}
                             </span>
                             <Eye className="w-3 h-3 text-[#A0AEC0] dark:text-gray-400 shrink-0" />
                           </button>
@@ -674,7 +549,6 @@ export default function AdminRecordings() {
       {selectedTextContent && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white dark:bg-[#1C1D22] rounded-3xl border border-[#E5E7EB] dark:border-gray-800 shadow-2xl max-w-lg w-full overflow-hidden animate-in fade-in zoom-in duration-150">
-            {/* VẠCH MÀU TRANG TRÍ Ở MÉP TRÊN ĐỈNH MODAL MÀU ADMIN */}
             <div 
               style={{ backgroundColor: ADMIN_ACCENT }} 
               className="h-1.5 w-full rounded-t-3xl shrink-0" 
@@ -734,12 +608,13 @@ export default function AdminRecordings() {
         </div>
       )}
 
-      {/* MODAL 3: KẾT QUẢ KIỂM DUYỆT (Đã cố định màu chữ tối text-[#2B2C31] cho reviewer) */}
+      {/* MODAL 3: KẾT QUẢ KIỂM DUYỆT */}
       {selectedReviewersList && (() => {
-        const total = selectedReviewersList.reviewers.length;
-        const approvedCount = selectedReviewersList.reviewers.filter(r => r.status === "Approved").length;
-        const rejectedCount = selectedReviewersList.reviewers.filter(r => r.status === "Rejected").length;
-        const finalStatus = calculateRecordingStatus(selectedReviewersList.reviewers);
+        const revList = Array.isArray(selectedReviewersList.reviewers) ? selectedReviewersList.reviewers : [];
+        const total = revList.length;
+        const approvedCount = revList.filter(r => r?.status === "Approved").length;
+        const rejectedCount = revList.filter(r => r?.status === "Rejected").length;
+        const finalStatus = calculateRecordingStatus(revList);
 
         const topBorderBg =
           finalStatus === "Approved"
@@ -758,15 +633,12 @@ export default function AdminRecordings() {
         return (
           <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
             <div className="bg-white dark:bg-[#1C1D22] rounded-3xl border border-[#E5E7EB] dark:border-gray-800 shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-150 text-left">
-              
-              {/* VẠCH MÀU TRANG TRÍ Ở MÉP TRÊN ĐỈNH MODAL */}
               <div 
                 style={{ backgroundColor: topBorderBg }} 
                 className="h-1.5 w-full rounded-t-3xl shrink-0" 
               />
 
               <div className="p-6 space-y-4">
-                {/* Header Modal */}
                 <div 
                   style={{ borderBottomColor: BORDER_LIGHT }} 
                   className="flex items-start justify-between border-b pb-3"
@@ -804,7 +676,6 @@ export default function AdminRecordings() {
                   </button>
                 </div>
 
-                {/* Ô CÂU VĂN */}
                 <div className="p-3.5 bg-[#F9FAFB] dark:bg-[#25272E] rounded-2xl space-y-1 border border-[#E5E7EB]/60 dark:border-gray-700/60">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-[#9A9CA6] dark:text-gray-400 block">
                     CÂU VĂN
@@ -814,59 +685,60 @@ export default function AdminRecordings() {
                   </p>
                 </div>
 
-                {/* DANH SÁCH REVIEWER KIỂM DUYỆT */}
                 <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                  {selectedReviewersList.reviewers.map((rev, idx) => {
-                    const isApp = rev.status === "Approved";
-                    const isRej = rev.status === "Rejected";
+                  {revList.length > 0 ? (
+                    revList.map((rev, idx) => {
+                      const isApp = rev?.status === "Approved";
+                      const isRej = rev?.status === "Rejected";
 
-                    const itemBg = isApp ? CHIP_SUCCESS_BG : isRej ? CHIP_DANGER_BG : CHIP_WARNING_BG;
-                    const itemBorder = isApp ? CHIP_SUCCESS_BORDER : isRej ? CHIP_DANGER_BORDER : CHIP_WARNING_BORDER;
-                    const itemText = isApp ? CHIP_SUCCESS_TEXT : isRej ? CHIP_DANGER_TEXT : CHIP_WARNING_TEXT;
+                      const itemBg = isApp ? CHIP_SUCCESS_BG : isRej ? CHIP_DANGER_BG : CHIP_WARNING_BG;
+                      const itemBorder = isApp ? CHIP_SUCCESS_BORDER : isRej ? CHIP_DANGER_BORDER : CHIP_WARNING_BORDER;
+                      const itemText = isApp ? CHIP_SUCCESS_TEXT : isRej ? CHIP_DANGER_TEXT : CHIP_WARNING_TEXT;
 
-                    return (
-                      <div
-                        key={idx}
-                        style={{
-                          backgroundColor: itemBg,
-                          borderColor: itemBorder
-                        }}
-                        className="p-3 rounded-2xl border transition-colors flex flex-col gap-1"
-                      >
-                        <div className="flex items-center gap-2">
-                          {/* Avatar tròn chứa tên viết tắt */}
-                          <div
-                            style={{ backgroundColor: itemText }}
-                            className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
-                          >
-                            {getInitials(rev.name)}
+                      return (
+                        <div
+                          key={idx}
+                          style={{
+                            backgroundColor: itemBg,
+                            borderColor: itemBorder
+                          }}
+                          className="p-3 rounded-2xl border transition-colors flex flex-col gap-1"
+                        >
+                          <div className="flex items-center gap-2">
+                            <div
+                              style={{ backgroundColor: itemText }}
+                              className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+                            >
+                              {getInitials(rev?.name)}
+                            </div>
+
+                            <span className="font-bold text-xs text-[#2B2C31] flex-1 truncate">
+                              {rev?.name || "Reviewer"}
+                            </span>
+
+                            <span
+                              style={{ color: itemText }}
+                              className="text-xs font-bold"
+                            >
+                              {isApp ? "Đã duyệt" : isRej ? "Từ chối" : "Chưa đánh giá"}
+                            </span>
                           </div>
 
-                          {/* Đã giữ nguyên màu chữ tối text-[#2B2C31] trên cả light và dark mode */}
-                          <span className="font-bold text-xs text-[#2B2C31] flex-1 truncate">
-                            {rev.name}
-                          </span>
-
-                          <span
-                            style={{ color: itemText }}
-                            className="text-xs font-bold"
-                          >
-                            {isApp ? "Đã duyệt" : isRej ? "Từ chối" : "Chưa đánh giá"}
-                          </span>
+                          {isRej && rev?.reason && (
+                            <div className="pl-8 text-[11px] font-semibold text-[#2B2C31]">
+                              {rev.reason}
+                            </div>
+                          )}
                         </div>
-
-                        {/* Lý do từ chối nếu có (sử dụng màu chữ đậm dễ đọc) */}
-                        {isRej && rev.reason && (
-                          <div className="pl-8 text-[11px] font-semibold text-[#2B2C31]">
-                            {rev.reason}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  ) : (
+                    <div className="text-center py-6 text-xs text-gray-500">
+                      Bản ghi âm này chưa có lượt kiểm duyệt nào.
+                    </div>
+                  )}
                 </div>
 
-                {/* NÚT ĐÓNG */}
                 <div className="pt-2">
                   <button
                     type="button"

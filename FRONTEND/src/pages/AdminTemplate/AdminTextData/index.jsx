@@ -23,8 +23,8 @@ import {
   CHIP_WARNING_BORDER,
   CHIP_WARNING_TEXT
 } from "../../../constants/theme";
+import { adminService } from "../../../services/adminService";
 
-// Màu phân loại (bộ A) - đồng bộ chuẩn với ReviewerContribution
 const CATEGORY_COLORS = {
   'Hội thoại hàng ngày': { bg: '#E6F0FE', text: '#1E40AF', border: '#C9DEFB' },
   'Công nghệ thông tin': { bg: '#FBF0DA', text: '#92600A', border: '#F3E0B5' },
@@ -38,44 +38,8 @@ const countWords = (text) => {
   return words ? words.length : 0;
 };
 
-const INITIAL_TEXTS = [
-  { id: "TXT-001", content: "Em nhớ upload tài liệu lên hệ thống trước deadline ngày mai nhé.", topic: "Công nghệ thông tin", status: "active" },
-  { id: "TXT-002", content: "Sáng nay team mình có cuộc meeting trực tiếp lúc two PM tại phòng họp.", topic: "Giáo dục", status: "active" },
-  { id: "TXT-003", content: "Vui lòng check kỹ pull request trên Github trước khi merge mã nguồn.", topic: "Công nghệ thông tin", status: "active" },
-  { id: "TXT-004", content: "Cuối tuần này bạn có rảnh đi coffee và chill với nhóm chúng mình không.", topic: "Hội thoại hàng ngày", status: "active" },
-  { id: "TXT-005", content: "Thầy giáo vừa gởi email nhắc nhở về bài thuyết trình tuần tới.", topic: "Giáo dục", status: "active" },
-  { id: "TXT-006", content: "Hệ thống đang bảo trì server, vui lòng thử lại sau vài phút.", topic: "Công nghệ thông tin", status: "active" },
-  { id: "TXT-007", content: "Bạn có thể share file slide bài giảng cho lớp cùng xem không.", topic: "Giáo dục", status: "active" },
-  { id: "TXT-008", content: "Dự án này cần hoàn thành đúng schedule đã đề ra ban đầu.", topic: "Công nghệ thông tin", status: "active" },
-  { id: "TXT-009", content: "Tối nay mình đi shopping sắm vài đồ decor phòng ngủ nhé.", topic: "Hội thoại hàng ngày", status: "active" },
-  { id: "TXT-010", content: "Mọi người cùng nhau brainstorm ý tưởng mới cho đợt workshop này.", topic: "Giáo dục", status: "active" },
-  { id: "TXT-011", content: "Nhớ backup dữ liệu database trước khi thực hiện nâng cấp hệ thống.", topic: "Công nghệ thông tin", status: "pending" },
-  { id: "TXT-012", content: "Thầy hướng dẫn bảo mình làm lại phần research methodology.", topic: "Giáo dục", status: "pending" },
-  { id: "TXT-013", content: "Cuối tuần mình đi camping ở ngoại thành để relax một chút.", topic: "Hội thoại hàng ngày", status: "pending" },
-  { id: "TXT-014", content: "Bạn tạo thêm một task mới trên Jira để tracking tiến độ công việc.", topic: "Công nghệ thông tin", status: "pending" },
-  { id: "TXT-015", content: "Nhớ check inbox email xem có thông báo mới từ trường không.", topic: "Giáo dục", status: "pending" },
-  { id: "TXT-016", content: "Quán cafe này có không gian yên tĩnh thích hợp để học study online.", topic: "Hội thoại hàng ngày", status: "pending" },
-  { id: "TXT-017", content: "Đội ngũ tech vừa fix lỗi xong tính năng thanh toán trực tuyến.", topic: "Công nghệ thông tin", status: "pending" },
-  { id: "TXT-018", content: "Em muốn đăng ký tham gia khóa học IELTS speaking vào tháng sau.", topic: "Giáo dục", status: "pending" },
-  { id: "TXT-019", content: "Chiều nay tụi mình ra sân tập workout để rèn luyện sức khỏe.", topic: "Hội thoại hàng ngày", status: "pending" },
-  { id: "TXT-020", content: "Cảm ơn bạn đã hỗ trợ feedback bài làm của mình rất chi tiết.", topic: "Giáo dục", status: "pending" }
-];
-
-const LOCAL_STORAGE_KEY = "admin_text_dataset_v3";
-
 export default function AdminTextData() {
-  const [textList, setTextList] = useState(() => {
-    const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (saved) {
-      try { 
-        return JSON.parse(saved); 
-      } catch (e) { 
-        console.error(e); 
-      }
-    }
-    return INITIAL_TEXTS;
-  });
-
+  const [textList, setTextList] = useState([]);
   const [searchInput, setSearchInput] = useState("");
   const [activeSearchTerm, setActiveSearchTerm] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("all");
@@ -89,9 +53,29 @@ export default function AdminTextData() {
   const [toast, setToast] = useState({ show: false, message: "" });
   const [formData, setFormData] = useState({ content: "", topic: "Công nghệ thông tin", status: "active" });
 
+  const fetchTexts = async () => {
+    try {
+      const res = await adminService.getTexts({
+        page: currentPage,
+        pageSize: 100
+      });
+      const items = res.items || res || [];
+      setTextList(
+        items.map((item) => ({
+          id: item.scriptId || item.id,
+          content: item.csContent || item.csPlain || item.content || "",
+          topic: item.domain || item.topic || "Công nghệ thông tin",
+          status: item.status === "Validated" || item.status === "active" ? "active" : "pending"
+        }))
+      );
+    } catch (err) {
+      console.error("Lỗi lấy danh sách câu văn bản:", err);
+    }
+  };
+
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(textList));
-  }, [textList]);
+    fetchTexts();
+  }, [currentPage]);
 
   useEffect(() => {
     if (toast.show) {
@@ -129,42 +113,43 @@ export default function AdminTextData() {
     setShowModal(true);
   };
 
-  const handleSubmitForm = (e) => {
+  const handleSubmitForm = async (e) => {
     e.preventDefault();
     if (!formData.content.trim()) return;
 
-    if (editingItem) {
-      setTextList((prev) =>
-        prev.map((item) =>
-          item.id === editingItem.id
-            ? {
-                ...item,
-                content: formData.content,
-                topic: formData.topic,
-                status: formData.status,
-              }
-            : item
-        )
-      );
-      showNotification(`Đã cập nhật thành công văn bản ${editingItem.id}!`);
-    } else {
-      const newItem = {
-        id: `TXT-${String(textList.length + 1).padStart(3, '0')}`,
-        content: formData.content,
-        topic: formData.topic,
-        status: formData.status,
-      };
-      setTextList((prev) => [...prev, newItem]);
-      showNotification("Đã thêm văn bản mới!");
+    try {
+      if (editingItem) {
+        await adminService.updateTextReview(editingItem.id, {
+          action: "Edited",
+          editedCsContent: formData.content
+        });
+        showNotification(`Đã cập nhật thành công văn bản ${editingItem.id}!`);
+      } else {
+        await adminService.createText({
+          csContent: formData.content,
+          veContent: formData.content,
+          domain: formData.topic
+        });
+        showNotification("Đã thêm văn bản mới!");
+      }
+      setShowModal(false);
+      fetchTexts();
+    } catch (err) {
+      const errorMsg = err.response?.data?.title || "Thao tác cập nhật văn bản thất bại!";
+      showNotification(errorMsg);
     }
-
-    setShowModal(false);
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!itemToDelete) return;
-    setTextList((prev) => prev.filter((t) => t.id !== itemToDelete.id));
-    showNotification(`Đã xóa thành công văn bản ${itemToDelete.id}!`);
+    try {
+      await adminService.deleteText(itemToDelete.id);
+      showNotification(`Đã xóa thành công văn bản ${itemToDelete.id}!`);
+      fetchTexts();
+    } catch (err) {
+      const errorMsg = err.response?.data?.title || "Xóa văn bản thất bại!";
+      showNotification(errorMsg);
+    }
     setItemToDelete(null);
   };
 

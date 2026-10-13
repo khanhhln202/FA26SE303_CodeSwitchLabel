@@ -15,24 +15,10 @@ import {
   SUCCESS,
   DANGER
 } from "../../../constants/theme";
-
-const INITIAL_TOPICS = [
-  { id: "TOPIC-001", name: "Công nghệ thông tin" },
-  { id: "TOPIC-002", name: "Giáo dục" },
-  { id: "TOPIC-003", name: "Hội thoại hàng ngày" },
-];
-
-const LOCAL_STORAGE_KEY = "admin_topic_config_v2";
+import { adminService } from "../../../services/adminService";
 
 export default function AdminTopicConfig() {
-  const [topicList, setTopicList] = useState(() => {
-    const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return INITIAL_TOPICS;
-  });
-
+  const [topicList, setTopicList] = useState([]);
   const [searchInput, setSearchInput] = useState("");
   const [activeSearchTerm, setActiveSearchTerm] = useState("");
   
@@ -45,9 +31,25 @@ export default function AdminTopicConfig() {
   const [toast, setToast] = useState({ show: false, message: "" });
   const [formData, setFormData] = useState({ name: "" });
 
+  const fetchTopics = async () => {
+    try {
+      const data = await adminService.getTopics();
+      if (Array.isArray(data)) {
+        setTopicList(
+          data.map((item, idx) => ({
+            id: item.code || `TOPIC-${String(idx + 1).padStart(3, '0')}`,
+            name: item.name || item.code
+          }))
+        );
+      }
+    } catch (err) {
+      console.error("Lỗi lấy danh sách chủ đề:", err);
+    }
+  };
+
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(topicList));
-  }, [topicList]);
+    fetchTopics();
+  }, []);
 
   useEffect(() => {
     if (toast.show) {
@@ -309,12 +311,11 @@ export default function AdminTopicConfig() {
         </div>
       )}
 
-      {/* Modal Xác nhận Xóa (Kích thước gốc + Đường kẻ trên đỉnh) */}
+      {/* Modal Xác nhận Xóa */}
       {itemToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs" onClick={() => setItemToDelete(null)}>
           <div className="bg-white dark:bg-[#1C1D22] rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden border border-[#E5E7EB] dark:border-gray-800 animate-in fade-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
             
-            {/* Đường kẻ vạch màu DANGER trang trí trên đỉnh */}
             <div className="h-1.5 w-full shrink-0" style={{ backgroundColor: DANGER }} />
 
             <div className="p-5 text-center space-y-3">
