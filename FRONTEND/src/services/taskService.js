@@ -44,6 +44,12 @@ export const taskService = {
     const res = await apiClient.patch(`/api/campaigns/${id}`, data);
     return res.data;
   },
+  
+  // Thêm vào object taskService trong file taskService.js
+  deleteCampaign: async (id) => {
+    const res = await apiClient.delete(`/api/campaigns/${id}`);
+    return res.data;
+  },
 
   // Gỡ Task khỏi Đợt (Chuẩn endpoint C# CampaignsController)
   detachTaskFromCampaign: async (campaignId, taskId) => {
@@ -72,8 +78,26 @@ export const taskService = {
     return res.data;
   },
 
+  // BỔ SUNG: Thêm/Lấp mục câu hỏi theo chủ đề vào Task (POST /api/tasks/{id}/items)
+  addTaskItems: async (id, data) => {
+    const res = await apiClient.post(`/api/tasks/${id}/items`, data);
+    return res.data;
+  },
+
   assignTask: async (id, userId) => {
     const res = await apiClient.post(`/api/tasks/${id}/assign`, { userId: Number(userId) });
+    return res.data;
+  },
+
+  // BỔ SUNG: Hủy Task chuẩn quy định BE (POST /api/tasks/{id}/cancel)
+  cancelTask: async (id) => {
+    const res = await apiClient.post(`/api/tasks/${id}/cancel`);
+    return res.data;
+  },
+
+  // BỔ SUNG: Xóa cứng Task rảnh (DELETE /api/tasks/{id})
+  deleteTask: async (id) => {
+    const res = await apiClient.delete(`/api/tasks/${id}`);
     return res.data;
   },
 

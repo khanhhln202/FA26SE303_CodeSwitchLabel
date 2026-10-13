@@ -39,38 +39,59 @@ import {
 } from "../../../constants/theme";
 import { taskService } from "../../../services/taskService";
 
-// Helper format ngày
+// Helper format ngày hiển thị VN (dd/mm/yyyy)
 const formatDateToVN = (dateStr) => {
   if (!dateStr) return "";
   if (dateStr.includes("/")) return dateStr;
-  const [year, month, day] = dateStr.split("T")[0].split("-");
+  const clean = dateStr.split("T")[0];
+  const [year, month, day] = clean.split("-");
+  if (!year || !month || !day) return "";
   return `${day}/${month}/${year}`;
 };
 
+// Helper format ngày ISO (yyyy-mm-dd)
 const formatDateToISO = (dateStr) => {
   if (!dateStr) return "";
   if (dateStr.includes("-")) return dateStr.split("T")[0];
-  const [day, month, year] = dateStr.split("/");
-  return `${year}-${month}-${day}`;
+  const parts = dateStr.split("/");
+  if (parts.length === 3) {
+    const [day, month, year] = parts;
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  }
+  return "";
 };
 
-// Component Custom Date Picker hiển thị chuẩn DD/MM/YYYY
+// Helper chuyển đổi Domain/Topic từ BE sang tên tiếng Việt
+const mapDomainToTopicVN = (domain) => {
+  if (domain === "ItTechnology" || domain === "IT" || domain === "Công nghệ thông tin") return "Công nghệ thông tin";
+  if (domain === "Education" || domain === "Giáo dục") return "Giáo dục";
+  if (domain === "DailyLife" || domain === "Hội thoại hàng ngày") return "Hội thoại hàng ngày";
+  return domain || "Công nghệ thông tin";
+};
+
+// Component Custom Date Picker hiển thị chuẩn DD/MM/YYYY cho UI người dùng
 const VNFormatDatePicker = ({ label, value, onChange, minDateIso }) => {
+  const displayValue = useMemo(() => {
+    if (!value) return "";
+    return value.includes("-") ? formatDateToVN(value) : value;
+  }, [value]);
+
   const handleInputChange = (e) => {
     let input = e.target.value.replace(/\D/g, "");
     if (input.length > 8) input = input.slice(0, 8);
 
+    let formatted = input;
     if (input.length >= 5) {
-      input = `${input.slice(0, 2)}/${input.slice(2, 4)}/${input.slice(4)}`;
+      formatted = `${input.slice(0, 2)}/${input.slice(2, 4)}/${input.slice(4)}`;
     } else if (input.length >= 3) {
-      input = `${input.slice(0, 2)}/${input.slice(2)}`;
+      formatted = `${input.slice(0, 2)}/${input.slice(2)}`;
     }
 
     if (input.length === 10) {
-      const iso = formatDateToISO(input);
-      onChange(iso);
+      const iso = formatDateToISO(formatted);
+      onChange(iso || formatted);
     } else {
-      onChange(input);
+      onChange(formatted);
     }
   };
 
@@ -91,7 +112,7 @@ const VNFormatDatePicker = ({ label, value, onChange, minDateIso }) => {
         <input
           type="text"
           placeholder="dd/mm/yyyy"
-          value={value.includes("-") ? formatDateToVN(value) : value}
+          value={displayValue}
           onChange={handleInputChange}
           maxLength={10}
           className="w-full pl-3 pr-8 py-1.5 text-xs bg-gray-50 dark:bg-[#25272E] border-gray-200 dark:border-gray-700 focus:bg-white dark:focus:bg-[#1C1D22] focus:border-gray-400 dark:focus:border-gray-500 rounded-lg outline-none font-sans text-gray-900 dark:text-gray-100 transition-all font-medium border"
@@ -102,7 +123,7 @@ const VNFormatDatePicker = ({ label, value, onChange, minDateIso }) => {
           <input
             type="date"
             min={minDateIso}
-            value={value.includes("-") ? value : formatDateToISO(value)}
+            value={value && value.includes("-") ? value.split("T")[0] : ""}
             onChange={handleNativePickerChange}
             className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
           />
@@ -122,10 +143,9 @@ export default function TaskManagerManagement() {
 
   // 1. Trạng thái Modal Tạo/Cập nhật Đợt
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState("CREATE"); // "CREATE" hoặc "UPDATE"
+  const [modalMode, setModalMode] = useState("CREATE");
   const [modalTargetBatchId, setModalTargetBatchId] = useState(null);
 
-  // Form mới cho Modal Đợt
   const [batchFormData, setBatchFormData] = useState({
     name: "",
     target: 2000,
@@ -151,7 +171,6 @@ export default function TaskManagerManagement() {
     assignedUsers: []
   });
 
-  // Modal Xem danh sách người thực hiện & Modal Xóa Đợt
   const [viewingAssignedTask, setViewingAssignedTask] = useState(null);
   const [deletingBatch, setDeletingBatch] = useState(null);
 
@@ -165,51 +184,45 @@ export default function TaskManagerManagement() {
   });
   const [deletingTask, setDeletingTask] = useState(null);
 
-  // Danh sách Đợt từ API
   const [batches, setBatches] = useState([]);
   const [selectedBatchId, setSelectedBatchId] = useState(null);
 
-  // Danh sách nhiệm vụ từ API
   const [assignTasks, setAssignTasks] = useState([]);
   const [batchMapping, setBatchMapping] = useState({});
 
-  // Gọi API kết nối Backend chuẩn xác
   const loadDataFromApi = async () => {
     try {
       const [campaignRes, taskRes, speakerUsersRes, reviewerUsersRes] = await Promise.all([
-        taskService.getCampaigns().catch(() => ({ items: [] })),
-        taskService.getTasks().catch(() => ({ items: [] })),
+        taskService.getCampaigns({ pageSize: 1000 }).catch(() => ({ items: [] })),
+        taskService.getTasks({ pageSize: 1000 }).catch(() => ({ items: [] })),
         taskService.getAssignableUsers("Recording").catch(() => []),
         taskService.getAssignableUsers("Review").catch(() => [])
       ]);
 
-      const rawCampaigns = campaignRes?.items || campaignRes?.data || [];
+      const rawCampaigns = campaignRes?.items || campaignRes?.data || (Array.isArray(campaignRes) ? campaignRes : []);
 
-      // Map và sắp xếp tăng dần 1, 2, 3, 4 theo số hiển thị của Đợt
+      // SẮP XẾP TỪ RẢI RÁC SANG THỨ TỰ SỐ NHỎ ĐẾN LỚN
       const campaignList = rawCampaigns
-        .map((c) => ({
-          id: c.campaignId || c.id,
-          name: c.campaignName || c.title || c.name || `Đợt ${c.campaignId || c.id}`,
-          campaignName: c.campaignName || c.title || c.name || `Đợt ${c.campaignId || c.id}`,
-          target: c.targetQty || c.targetCount || c.target || 2000,
-          speakerCount: c.speakerCount || 5,
-          reviewerCount: c.reviewerCount || 2,
-          topic: c.domain === "ItTechnology" ? "Công nghệ thông tin" :
-                 c.domain === "Education" ? "Giáo dục" : "Hội thoại hàng ngày",
-          startDate: formatDateToVN(c.startDate || todayIso),
-          endDate: formatDateToVN(c.endDate || todayIso),
-          status: c.status || "Draft",
-          assignedSpeakers: [],
-          assignedReviewers: []
-        }))
-        .sort((a, b) => {
-          // Bóc tách số trong tên (vd: "Đợt 1", "test campaing 07" -> 1, 7)
-          const numA = parseInt((a.campaignName || a.name || "").replace(/\D/g, "")) || Number(a.id) || 0;
-          const numB = parseInt((b.campaignName || b.name || "").replace(/\D/g, "")) || Number(b.id) || 0;
-          return numA - numB;
-        });
+        .map((c) => {
+          const rawId = c.campaignId || c.id;
+          return {
+            id: Number(rawId),
+            name: c.campaignName || c.title || c.name || `Đợt ${rawId}`,
+            campaignName: c.campaignName || c.title || c.name || `Đợt ${rawId}`,
+            target: c.targetQty || c.targetCount || c.target || 2000,
+            speakerCount: c.speakerCount || 5,
+            reviewerCount: c.reviewerCount || 2,
+            topic: mapDomainToTopicVN(c.domain || c.topic),
+            startDate: formatDateToVN(c.startDate || todayIso),
+            endDate: formatDateToVN(c.endDate || todayIso),
+            status: c.status || "Draft",
+            assignedSpeakers: [],
+            assignedReviewers: []
+          };
+        })
+        .sort((a, b) => a.id - b.id);
 
-      const rawTasks = taskRes?.items || taskRes?.data || [];
+      const rawTasks = taskRes?.items || taskRes?.data || (Array.isArray(taskRes) ? taskRes : []);
 
       const mappedTasks = rawTasks.map((t) => {
         const rawStatus = String(t.status || t.taskStatus || t.state || "").toLowerCase();
@@ -221,19 +234,22 @@ export default function TaskManagerManagement() {
           calculatedStatus = "Đã hủy";
         }
 
+        const rawType = String(t.taskType || t.type || t.role || "").toLowerCase();
+        const isSpeaker = rawType === "recording" || rawType === "speaker" || rawType === "0";
+
         return {
           id: t.taskId || t.id,
           taskId: t.taskId || t.id,
           title: t.title || t.description || "Nhiệm vụ",
-          role: t.taskType === "Recording" ? "Speaker" : "Reviewer",
-          campaignId: t.campaignId,
+          role: isSpeaker ? "Speaker" : "Reviewer",
+          campaignId: Number(t.campaignId),
+          topic: mapDomainToTopicVN(t.domain || t.topic || t.categoryName),
           assignedUsers: t.assigneeName ? [t.assigneeName] : [],
           assignedToUserId: t.assignedToUserId || t.assigneeId,
           status: calculatedStatus
         };
       });
 
-      // Gộp danh sách người dùng có thể giao việc (Speakers & Reviewers)
       const mappedSpeakers = (speakerUsersRes || []).map((u) => ({
         id: u.userId || u.id,
         name: u.fullName || u.userName || u.name,
@@ -291,7 +307,6 @@ export default function TaskManagerManagement() {
     setToast({ show: true, message: msg });
   };
 
-  // Lấy danh sách Speaker & Reviewer Active
   const activeSpeakers = useMemo(() => {
     const speakers = allAdminUsers.filter(u => u.role === "Speaker" && u.status === "Active");
     return [...speakers].sort((a, b) => {
@@ -306,7 +321,6 @@ export default function TaskManagerManagement() {
     return allAdminUsers.filter(u => u.role === "Reviewer" && u.status === "Active");
   }, [allAdminUsers]);
 
-  // Tổng hợp tất cả nhiệm vụ
   const allTasksOptions = useMemo(() => [
     ...speakerTasksList.map(t => ({ 
       ...t, 
@@ -322,15 +336,13 @@ export default function TaskManagerManagement() {
     }))
   ], [speakerTasksList, reviewerTasksList]);
 
-  // Đợt đang chọn trong Modal Phân công
   const assignModalSelectedBatch = useMemo(() => {
     return batches.find(b => b.id === assignFormData.selectedBatchId) || batches[0] || null;
   }, [batches, assignFormData.selectedBatchId]);
 
-  // Lọc danh sách Nhiệm vụ theo Topic của Đợt
   const filteredTasksForAssignModal = useMemo(() => {
     if (!assignModalSelectedBatch) return allTasksOptions;
-    return allTasksOptions.filter(t => t.topic === assignModalSelectedBatch.topic || !t.topic);
+    return allTasksOptions.filter(t => !t.topic || t.topic === assignModalSelectedBatch.topic);
   }, [allTasksOptions, assignModalSelectedBatch]);
 
   const currentSelectedTask = useMemo(() => {
@@ -341,7 +353,6 @@ export default function TaskManagerManagement() {
     return currentSelectedTask?.role === "Speaker" ? activeSpeakers : activeReviewers;
   }, [currentSelectedTask, activeSpeakers, activeReviewers]);
 
-  // Giới hạn số lượng tối đa
   const maxAllowedUsers = useMemo(() => {
     if (!assignModalSelectedBatch || !currentSelectedTask) return Infinity;
     return currentSelectedTask.role === "Speaker"
@@ -349,7 +360,6 @@ export default function TaskManagerManagement() {
       : Number(assignModalSelectedBatch.reviewerCount || 0);
   }, [assignModalSelectedBatch, currentSelectedTask]);
 
-  // Mở Modal PHÂN CÔNG NHIỆM VỤ MỚI
   const handleOpenAssignModal = () => {
     if (batches.length === 0) {
       showNotification("Vui lòng tạo đợt trước khi thực hiện phân công nhiệm vụ!");
@@ -360,7 +370,7 @@ export default function TaskManagerManagement() {
     const initialBatch = batches.find(b => b.id === selectedBatchId) || batches[0] || null;
     const initialBatchTopic = initialBatch?.topic;
     const availableTasks = initialBatchTopic 
-      ? allTasksOptions.filter(t => t.topic === initialBatchTopic || !t.topic) 
+      ? allTasksOptions.filter(t => !t.topic || t.topic === initialBatchTopic) 
       : allTasksOptions;
 
     const defaultTask = availableTasks[0] || allTasksOptions[0];
@@ -376,7 +386,7 @@ export default function TaskManagerManagement() {
   const handleBatchChangeInAssignModal = (newBatchId) => {
     const nextBatch = batches.find(b => b.id === newBatchId);
     const nextAvailableTasks = nextBatch 
-      ? allTasksOptions.filter(t => t.topic === nextBatch.topic || !t.topic)
+      ? allTasksOptions.filter(t => !t.topic || t.topic === nextBatch.topic)
       : allTasksOptions;
     
     const defaultNextTask = nextAvailableTasks[0];
@@ -448,7 +458,6 @@ export default function TaskManagerManagement() {
     }
   };
 
-  // Mở Modal TẠO ĐỢT MỚI
   const handleOpenCreateModal = () => {
     setModalMode("CREATE");
     setModalTargetBatchId(null);
@@ -466,7 +475,6 @@ export default function TaskManagerManagement() {
     setIsModalOpen(true);
   };
 
-  // Mở Modal CẬP NHẬT ĐỢT
   const handleOpenUpdateModal = (e, batch) => {
     e.stopPropagation();
     setModalMode("UPDATE");
@@ -486,7 +494,6 @@ export default function TaskManagerManagement() {
     setIsModalOpen(true);
   };
 
-  // Xác nhận lưu Đợt qua API Backend
   const handleConfirmSaveModal = async (e) => {
     if (e) e.preventDefault();
 
@@ -496,16 +503,22 @@ export default function TaskManagerManagement() {
     }
 
     try {
-      let rawStart = batchFormData.startDate || todayIso;
-      let rawEnd = batchFormData.endDate || todayIso;
+      const parseToCleanIso = (str) => {
+        if (!str) return todayIso;
+        if (str.includes("-")) return str.split("T")[0];
+        if (str.includes("/")) {
+          const parts = str.split("/");
+          if (parts.length === 3) {
+            return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+          }
+        }
+        return todayIso;
+      };
 
-      if (rawStart.includes("/")) rawStart = formatDateToISO(rawStart);
-      if (rawEnd.includes("/")) rawEnd = formatDateToISO(rawEnd);
+      const cleanStart = parseToCleanIso(batchFormData.startDate);
+      const cleanEnd = parseToCleanIso(batchFormData.endDate);
 
-      const startIso = rawStart.split("T")[0];
-      const endIso = rawEnd.split("T")[0];
-
-      if (endIso < startIso) {
+      if (cleanEnd < cleanStart) {
         alert("Ngày kết thúc phải lớn hơn hoặc bằng ngày bắt đầu!");
         return;
       }
@@ -516,68 +529,78 @@ export default function TaskManagerManagement() {
         "Hội thoại hàng ngày": "DailyLife"
       };
 
+      const startIso = `${cleanStart}T00:00:00Z`;
+      const endIso = `${cleanEnd}T23:59:59Z`;
+
+      const campaignPayload = {
+        title: String(batchFormData.name).trim(),
+        campaignName: String(batchFormData.name).trim(),
+        domain: domainMap[batchFormData.topic] || "ItTechnology",
+        targetQty: Number(batchFormData.target),
+        startDate: cleanStart,
+        endDate: cleanEnd,
+        StartDate: cleanStart,
+        EndDate: cleanEnd,
+        startDateIso: startIso,
+        endDateIso: endIso
+      };
+
       if (modalMode === "CREATE") {
-        await taskService.createCampaign({
-          name: String(batchFormData.name),
-          campaignName: String(batchFormData.name),
-          title: String(batchFormData.name),
-          domain: domainMap[batchFormData.topic] || "ItTechnology",
-          targetQty: Number(batchFormData.target),
-          targetCount: Number(batchFormData.target),
-          speakerCount: Number(batchFormData.speakerCount || 1),
-          reviewerCount: Number(batchFormData.reviewerCount || 1),
-          startDate: `${startIso}T00:00:00.000Z`,
-          endDate: `${endIso}T00:00:00.000Z`
-        });
+        await taskService.createCampaign(campaignPayload);
         showNotification(`Đã tạo thành công ${batchFormData.name}!`);
       } else {
-        await taskService.updateCampaign(modalTargetBatchId, {
-          title: String(batchFormData.name),
-          campaignName: String(batchFormData.name),
-          domain: domainMap[batchFormData.topic] || "ItTechnology",
-          targetQty: Number(batchFormData.target),
-          targetCount: Number(batchFormData.target),
-          speakerCount: Number(batchFormData.speakerCount || 1),
-          reviewerCount: Number(batchFormData.reviewerCount || 1),
-          startDate: `${startIso}T00:00:00.000Z`,
-          endDate: `${endIso}T00:00:00.000Z`
-        });
+        await taskService.updateCampaign(modalTargetBatchId, campaignPayload);
         showNotification(`Đã cập nhật ${batchFormData.name}!`);
       }
 
       setIsModalOpen(false);
-      loadDataFromApi();
+      await loadDataFromApi();
     } catch (err) {
       console.error("Lỗi API tạo/sửa đợt:", err?.response?.data || err);
-      const apiErrorMsg = err?.response?.data?.message || err?.response?.data?.title || "Lưu đợt thất bại!";
+      
+      const responseData = err?.response?.data;
+      let apiErrorMsg = responseData?.title || responseData?.message || "Lưu đợt thất bại!";
+      
+      if (responseData?.errors) {
+        const errorKeys = Object.keys(responseData.errors);
+        if (errorKeys.length > 0) {
+          const firstErr = responseData.errors[errorKeys[0]];
+          apiErrorMsg = Array.isArray(firstErr) ? firstErr[0] : firstErr;
+        }
+      }
+      
       showNotification(apiErrorMsg);
     }
   };
 
-  // Chuẩn bị xóa Đợt
   const handleRequestDeleteBatch = (e, batchToDelete) => {
     e.stopPropagation();
     setDeletingBatch(batchToDelete);
   };
 
+  // HÀM XÓA ĐỢT XỬ LÝ LỖI TRIỆT ĐỂ
   const handleConfirmDeleteBatch = async () => {
     if (!deletingBatch) return;
+    const targetCampaignId = Number(deletingBatch.id);
 
     try {
-      const remainingBatches = batches.filter((b) => b.id !== deletingBatch.id);
-      setBatches(remainingBatches);
-
-      if (selectedBatchId === deletingBatch.id) {
-        setSelectedBatchId(remainingBatches.length > 0 ? remainingBatches[0].id : null);
+      if (typeof taskService.deleteCampaign === "function") {
+        await taskService.deleteCampaign(targetCampaignId);
+      } else {
+        throw new Error("Không tìm thấy hàm deleteCampaign trong taskService");
       }
 
-      showNotification(`Đã xóa đợt ${deletingBatch.name}!`);
-    } finally {
+      showNotification(`Đã xóa đợt ${deletingBatch.campaignName || deletingBatch.name}!`);
+      setDeletingBatch(null);
+      await loadDataFromApi();
+    } catch (err) {
+      console.error("Chi tiết lỗi xóa đợt từ Server:", err?.response || err);
+      const errorMsg = err?.response?.data?.message || err?.response?.data?.title || "Server không cho phép xóa đợt này!";
+      alert(`Xóa thất bại: ${errorMsg}`);
       setDeletingBatch(null);
     }
   };
 
-  // SỬA & XÓA NHIỆM VỤ TRONG BẢNG
   const handleOpenEditTaskModal = (task) => {
     setEditingTask(task);
     setEditTaskFormData({
@@ -659,11 +682,6 @@ export default function TaskManagerManagement() {
       await loadDataFromApi();
     }
   };
-
-  const currentBatchTaskIds = useMemo(() => {
-    if (!selectedBatchId) return [];
-    return batchMapping[selectedBatchId] || [];
-  }, [batchMapping, selectedBatchId]);
 
   const currentTasks = useMemo(() => {
     if (!selectedBatchId) return assignTasks;
@@ -830,7 +848,7 @@ export default function TaskManagerManagement() {
                 <VNFormatDatePicker
                   label="Ngày kết thúc"
                   value={batchFormData.endDate}
-                  minDateIso={batchFormData.startDate.includes("-") ? batchFormData.startDate : todayIso}
+                  minDateIso={batchFormData.startDate && batchFormData.startDate.includes("-") ? batchFormData.startDate : todayIso}
                   onChange={(newVal) => setBatchFormData({ ...batchFormData, endDate: newVal })}
                 />
               </div>
@@ -845,7 +863,6 @@ export default function TaskManagerManagement() {
                 </button>
                 <button
                   type="submit"
-                  onClick={handleConfirmSaveModal}
                   style={{ backgroundColor: TASK_MANAGER_ACCENT }}
                   className="flex-1 py-2 text-white rounded-lg text-xs font-bold hover:opacity-90 transition-opacity cursor-pointer"
                 >
@@ -880,9 +897,9 @@ export default function TaskManagerManagement() {
                     onChange={(e) => handleBatchChangeInAssignModal(e.target.value)}
                     className="w-full text-xs appearance-none border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#25272E] text-gray-900 dark:text-white rounded-lg outline-none font-bold transition-all font-sans truncate pl-3 pr-8 py-1.5 focus:bg-white dark:focus:bg-[#1C1D22] focus:border-gray-400 dark:focus:border-gray-500 cursor-pointer"
                   >
-                    {batches.map((b) => (
+                    {batches.map((b, idx) => (
                       <option key={b.id} value={b.id} className="bg-white text-gray-900 dark:bg-[#1C1D22] dark:text-white">
-                        {b.campaignName || b.name} - Số lượng(tối đa): {b.speakerCount} speakers, {b.reviewerCount} reviewers
+                        Đợt {idx + 1} - {b.campaignName || b.name} - Số lượng(tối đa): {b.speakerCount} speakers, {b.reviewerCount} reviewers
                       </option>
                     ))}
                   </select>
@@ -1413,7 +1430,7 @@ export default function TaskManagerManagement() {
       {/* Grid Layout chính */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 flex-1 min-h-0">
         
-        {/* Cột trái: Danh sách các Đợt (Sắp xếp tăng dần Đợt 1 -> Đợt n) */}
+        {/* Cột trái: Danh sách các Đợt */}
         <div className="lg:col-span-1 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1D22] p-3 shadow-xs flex flex-col gap-2 min-h-0">
           
           <div className="flex items-center justify-between px-1 pb-1 border-b border-gray-100 dark:border-gray-800">
@@ -1429,7 +1446,7 @@ export default function TaskManagerManagement() {
                 Chưa có đợt nào. Bấm nút tạo đợt ở trên để tạo.
               </div>
             ) : (
-              batches.map((batch) => {
+              batches.map((batch, index) => {
                 const active = batch.id === selectedBatchId;
                 
                 const mappedIds = batchMapping[batch.id] || [];
@@ -1472,8 +1489,9 @@ export default function TaskManagerManagement() {
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0 flex-1">
+                        {/* CHỈNH SỬA DUY NHẤT: HIỂN THỊ ĐỢT THEO STT TUẦN TỰ (1, 2... 15, 16) */}
                         <span className="text-xs font-bold text-gray-900 dark:text-white truncate">
-                          Đợt {batch.id}
+                          Đợt {index + 1}
                         </span>
                         
                         <span 
@@ -1665,7 +1683,6 @@ export default function TaskManagerManagement() {
                             </button>
                           </td>
                           
-                          {/* TRẠNG THÁI HIỂN THỊ CỐ ĐỊNH, KHÔNG XUỐNG DÒNG */}
                           <td className="py-3.5 px-3 text-center whitespace-nowrap">
                             <span
                               style={{
