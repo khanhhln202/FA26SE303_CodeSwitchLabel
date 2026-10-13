@@ -104,8 +104,8 @@ const VNFormatDatePicker = ({ label, value, onChange, minDateIso }) => {
 
   return (
     <div className="space-y-1">
-      <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase flex items-center gap-1">
-        <Calendar className="w-3 h-3" /> {label}
+      <label className="block type-label text-[#2B2C31] dark:text-gray-300 flex items-center gap-1">
+        <Calendar className="w-3.5 h-3.5 text-[#6E7078]" /> {label}
       </label>
 
       <div className="relative flex items-center">
@@ -115,11 +115,11 @@ const VNFormatDatePicker = ({ label, value, onChange, minDateIso }) => {
           value={displayValue}
           onChange={handleInputChange}
           maxLength={10}
-          className="w-full pl-3 pr-8 py-1.5 text-xs bg-gray-50 dark:bg-[#25272E] border-gray-200 dark:border-gray-700 focus:bg-white dark:focus:bg-[#1C1D22] focus:border-gray-400 dark:focus:border-gray-500 rounded-lg outline-none font-sans text-gray-900 dark:text-gray-100 transition-all font-medium border"
+          className="w-full h-11 pl-3.5 pr-8 py-2.5 type-body bg-white dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10 rounded-xl outline-none font-sans text-[#16171C] dark:text-gray-100 transition-all"
         />
 
-        <div className="absolute right-2 flex items-center justify-center cursor-pointer">
-          <Calendar className="w-3.5 h-3.5 text-gray-400 dark:text-gray-400 pointer-events-none" />
+        <div className="absolute right-3 flex items-center justify-center cursor-pointer">
+          <Calendar className="w-4 h-4 text-[#9A9CA3] pointer-events-none" />
           <input
             type="date"
             min={minDateIso}
@@ -578,7 +578,6 @@ export default function TaskManagerManagement() {
     setDeletingBatch(batchToDelete);
   };
 
-  // HÀM XÓA ĐỢT XỬ LÝ LỖI TRIỆT ĐỂ
   const handleConfirmDeleteBatch = async () => {
     if (!deletingBatch) return;
     const targetCampaignId = Number(deletingBatch.id);
@@ -714,51 +713,50 @@ export default function TaskManagerManagement() {
   const targetModalBatchObj = batches.find((b) => b.id === modalTargetBatchId) || selectedBatchObj;
 
   return (
-    <div className="w-full h-full flex flex-col gap-3 text-left font-sans p-1 overflow-y-auto relative">
+    <div className="w-full h-full flex flex-col gap-3.5 text-left font-sans p-1 overflow-y-auto relative transition-colors">
       
       {/* Toast Notification */}
       <div 
-        style={{ borderColor: SUCCESS }}
-        className={`fixed top-4 right-4 z-[9999] flex items-center gap-2 bg-[#16171C] dark:bg-white text-white dark:text-[#16171C] px-3.5 py-2 rounded-xl shadow-xl border transform transition-all duration-300 ease-out ${
+        className={`fixed top-4 right-4 z-[9999] flex items-center gap-2.5 bg-[#16171C] dark:bg-white text-white dark:text-[#16171C] px-4 py-3 rounded-2xl shadow-2xl border border-[#3FA66B]/40 transform transition-all duration-300 ease-out ${
           toast.show ? "translate-y-0 opacity-100 scale-100" : "-translate-y-4 opacity-0 scale-95 pointer-events-none"
         }`}
       >
-        <CheckCircle2 style={{ color: SUCCESS }} className="w-4 h-4 shrink-0" />
-        <span className="text-xs font-bold">{toast.message}</span>
+        <CheckCircle2 style={{ color: SUCCESS }} className="w-5 h-5 shrink-0" />
+        <span className="type-ui font-label">{toast.message}</span>
         <button 
           type="button"
           onClick={() => setToast((prev) => ({ ...prev, show: false }))} 
           className="p-1 hover:bg-white/10 dark:hover:bg-black/10 rounded-lg transition-colors cursor-pointer ml-1"
         >
-          <X className="w-3.5 h-3.5 text-gray-400 dark:text-gray-500" />
+          <X className="w-4 h-4 text-[#9A9CA3] dark:text-[#6E7078]" />
         </button>
       </div>
 
       {/* MODAL TẠO / CẬP NHẬT ĐỢT */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 dark:bg-black/60 backdrop-blur-[2px]" onClick={() => setIsModalOpen(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#16171C]/55 backdrop-blur-xs" onClick={() => setIsModalOpen(false)}>
           <div 
-            className="rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1D22] animate-in fade-in zoom-in-95 duration-200" 
+            className="rounded-[24px] w-full max-w-lg shadow-[0_20px_50px_rgba(16,17,20,0.25)] overflow-hidden border border-[#E5E2D8] dark:border-gray-800 bg-white dark:bg-[#1C1D22] animate-in fade-in zoom-in-95 duration-200" 
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ backgroundColor: TASK_MANAGER_ACCENT }} className="h-1.5 w-full shrink-0" />
             
-            <form onSubmit={handleConfirmSaveModal} className="p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">
+            <form onSubmit={handleConfirmSaveModal} className="p-6 space-y-4">
+              <div className="flex items-center justify-between border-b border-[#E5E2D8] dark:border-gray-800 pb-3">
+                <h3 className="type-section text-[#16171C] dark:text-gray-100">
                   {modalMode === "CREATE" ? "Tạo đợt nhiệm vụ mới" : `Chỉnh sửa ${targetModalBatchObj?.campaignName || targetModalBatchObj?.name || "đợt"}`}
                 </h3>
                 <button 
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="p-1 hover:bg-gray-100 dark:hover:bg-[#25272E] rounded-lg transition-colors cursor-pointer"
+                  className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#F0EEE6] dark:hover:bg-gray-800 transition-colors cursor-pointer"
                 >
-                  <X className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                  <X className="w-4 h-4 text-[#6E7078]" />
                 </button>
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">
+                <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
                   Tên đợt (Campaign Name)
                 </label>
                 <input
@@ -767,23 +765,23 @@ export default function TaskManagerManagement() {
                   value={batchFormData.name}
                   onChange={(e) => setBatchFormData({ ...batchFormData, name: e.target.value })}
                   placeholder="Nhập tên đợt..."
-                  className="w-full px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#25272E] text-gray-900 dark:text-white rounded-lg outline-none font-medium transition-all font-sans focus:bg-white dark:focus:bg-[#1C1D22] focus:border-gray-400 dark:focus:border-gray-500"
+                  className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none transition-all font-sans focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10 placeholder:text-[#9A9CA3]"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1 flex items-center justify-between">
-                    <span>Chủ đề (Topic)</span>
+                  <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
+                    Chủ đề (Topic)
                   </label>
                   <select
                     disabled={modalMode === "UPDATE"}
                     value={batchFormData.topic}
                     onChange={(e) => setBatchFormData({ ...batchFormData, topic: e.target.value })}
-                    className={`w-full px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-lg outline-none font-bold transition-all font-sans focus:bg-white dark:focus:bg-[#1C1D22] focus:border-gray-400 dark:focus:border-gray-500 ${
+                    className={`w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 text-[#16171C] dark:text-white rounded-xl outline-none font-bold transition-all font-sans focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10 ${
                       modalMode === "UPDATE"
-                        ? "bg-gray-100 dark:bg-[#18191D] cursor-not-allowed opacity-80 appearance-none"
-                        : "bg-gray-50 dark:bg-[#25272E] cursor-pointer"
+                        ? "bg-[#F7F5EF] dark:bg-[#18191D] cursor-not-allowed opacity-80 appearance-none"
+                        : "bg-white dark:bg-[#25272E] cursor-pointer"
                     }`}
                   >
                     <option value="Công nghệ thông tin" className="dark:bg-[#1C1D22]">Công nghệ thông tin</option>
@@ -793,7 +791,7 @@ export default function TaskManagerManagement() {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">
+                  <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
                     Mục tiêu (Số câu)
                   </label>
                   <input
@@ -802,14 +800,14 @@ export default function TaskManagerManagement() {
                     required
                     value={batchFormData.target}
                     onChange={(e) => setBatchFormData({ ...batchFormData, target: e.target.value })}
-                    className="w-full px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#25272E] text-gray-900 dark:text-white rounded-lg outline-none font-bold transition-all font-sans focus:bg-white dark:focus:bg-[#1C1D22] focus:border-gray-400 dark:focus:border-gray-500"
+                    className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none font-bold transition-all font-sans focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">
+                  <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
                     Số lượng Speakers
                   </label>
                   <input
@@ -818,12 +816,12 @@ export default function TaskManagerManagement() {
                     required
                     value={batchFormData.speakerCount}
                     onChange={(e) => setBatchFormData({ ...batchFormData, speakerCount: e.target.value })}
-                    className="w-full px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#25272E] text-gray-900 dark:text-white rounded-lg outline-none font-bold transition-all font-sans focus:bg-white dark:focus:bg-[#1C1D22] focus:border-gray-400 dark:focus:border-gray-500"
+                    className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none font-bold transition-all font-sans focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">
+                  <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
                     Số lượng Reviewers
                   </label>
                   <input
@@ -832,12 +830,12 @@ export default function TaskManagerManagement() {
                     required
                     value={batchFormData.reviewerCount}
                     onChange={(e) => setBatchFormData({ ...batchFormData, reviewerCount: e.target.value })}
-                    className="w-full px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#25272E] text-gray-900 dark:text-white rounded-lg outline-none font-bold transition-all font-sans focus:bg-white dark:focus:bg-[#1C1D22] focus:border-gray-400 dark:focus:border-gray-500"
+                    className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none font-bold transition-all font-sans focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3.5">
                 <VNFormatDatePicker
                   label="Ngày bắt đầu"
                   value={batchFormData.startDate}
@@ -853,18 +851,18 @@ export default function TaskManagerManagement() {
                 />
               </div>
 
-              <div className="flex gap-2 pt-2">
+              <div className="flex gap-2.5 pt-2">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="flex-1 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-xs font-bold hover:bg-gray-100 dark:hover:bg-[#25272E] cursor-pointer transition-colors"
+                  className="flex-1 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 type-button text-[#6E7078] dark:text-gray-300 hover:bg-[#F7F5EF] dark:hover:bg-[#25272E] cursor-pointer transition-colors"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
-                  style={{ backgroundColor: TASK_MANAGER_ACCENT }}
-                  className="flex-1 py-2 text-white rounded-lg text-xs font-bold hover:opacity-90 transition-opacity cursor-pointer"
+                  style={{ backgroundColor: TASK_MANAGER_ACCENT, boxShadow: `0 10px 24px ${TASK_MANAGER_ACCENT}40` }}
+                  className="flex-1 py-2.5 text-white rounded-xl type-button hover:opacity-90 active:scale-[0.99] cursor-pointer transition-all"
                 >
                   {modalMode === "CREATE" ? "Tạo đợt" : "Lưu thay đổi"}
                 </button>
@@ -876,40 +874,49 @@ export default function TaskManagerManagement() {
 
       {/* MODAL PHÂN CÔNG NHIỆM VỤ MỚI */}
       {isAssignModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 dark:bg-black/60 backdrop-blur-[2px]" onClick={() => setIsAssignModalOpen(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#16171C]/55 backdrop-blur-xs" onClick={() => setIsAssignModalOpen(false)}>
           <div 
-            className="rounded-2xl w-full max-w-md shadow-2xl overflow-hidden border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1D22] animate-in fade-in zoom-in-95 duration-200" 
+            className="rounded-[24px] w-full max-w-md shadow-[0_20px_50px_rgba(16,17,20,0.25)] overflow-hidden border border-[#E5E2D8] dark:border-gray-800 bg-white dark:bg-[#1C1D22] animate-in fade-in zoom-in-95 duration-200" 
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ backgroundColor: TASK_MANAGER_ACCENT }} className="h-1.5 w-full shrink-0" />
-            <form onSubmit={handleSubmitAssignForm} className="p-5 space-y-3">
-              <h3 className="text-sm font-bold truncate text-gray-900 dark:text-gray-100">
-                Phân công nhiệm vụ mới
-              </h3>
+            <form onSubmit={handleSubmitAssignForm} className="p-6 space-y-4">
+              <div className="flex items-center justify-between border-b border-[#E5E2D8] dark:border-gray-800 pb-3">
+                <h3 className="type-section truncate text-[#16171C] dark:text-gray-100">
+                  Phân công nhiệm vụ mới
+                </h3>
+                <button 
+                  type="button"
+                  onClick={() => setIsAssignModalOpen(false)}
+                  className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#F0EEE6] dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4 text-[#6E7078]" />
+                </button>
+              </div>
 
               <div>
-                <label className="block text-[10px] font-bold uppercase mb-1 text-gray-500 dark:text-gray-400">
+                <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
                   Chọn đợt
                 </label>
                 <div className="relative flex items-center">
                   <select
                     value={assignFormData.selectedBatchId}
                     onChange={(e) => handleBatchChangeInAssignModal(e.target.value)}
-                    className="w-full text-xs appearance-none border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#25272E] text-gray-900 dark:text-white rounded-lg outline-none font-bold transition-all font-sans truncate pl-3 pr-8 py-1.5 focus:bg-white dark:focus:bg-[#1C1D22] focus:border-gray-400 dark:focus:border-gray-500 cursor-pointer"
+                    className="w-full h-11 appearance-none border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl type-body outline-none font-bold transition-all font-sans truncate pl-3.5 pr-8 py-2.5 focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10 cursor-pointer"
                   >
                     {batches.map((b, idx) => (
-                      <option key={b.id} value={b.id} className="bg-white text-gray-900 dark:bg-[#1C1D22] dark:text-white">
+                      <option key={b.id} value={b.id} className="bg-white text-[#16171C] dark:bg-[#1C1D22] dark:text-white">
                         Đợt {idx + 1} - {b.campaignName || b.name} - Số lượng(tối đa): {b.speakerCount} speakers, {b.reviewerCount} reviewers
                       </option>
                     ))}
                   </select>
-                  <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 pointer-events-none text-gray-400 dark:text-gray-400" />
+                  <ChevronDown className="w-4 h-4 absolute right-3 pointer-events-none text-[#9A9CA3]" />
                 </div>
               </div>
               
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-[10px] font-bold uppercase text-gray-500 dark:text-gray-400">
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block type-label text-[#2B2C31] dark:text-gray-200">
                     Chọn nhiệm vụ (Thuộc chủ đề: {assignModalSelectedBatch?.topic || "Tất cả"})
                   </label>
                 </div>
@@ -917,38 +924,38 @@ export default function TaskManagerManagement() {
                   <select
                     value={assignFormData.selectedUniqueKey}
                     onChange={(e) => handleTaskChangeInAssignModal(e.target.value)}
-                    className="w-full text-xs appearance-none border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#25272E] text-gray-900 dark:text-white rounded-lg outline-none font-bold transition-all font-sans truncate pl-3 pr-8 py-1.5 focus:bg-white dark:focus:bg-[#1C1D22] focus:border-gray-400 dark:focus:border-gray-500 cursor-pointer"
+                    className="w-full h-11 appearance-none border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl type-body outline-none font-bold transition-all font-sans truncate pl-3.5 pr-8 py-2.5 focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10 cursor-pointer"
                   >
                     {filteredTasksForAssignModal.length > 0 ? (
                       filteredTasksForAssignModal.map((t) => (
-                        <option key={t.uniqueKey} value={t.uniqueKey} className="bg-white text-gray-900 dark:bg-[#1C1D22] dark:text-white">
+                        <option key={t.uniqueKey} value={t.uniqueKey} className="bg-white text-[#16171C] dark:bg-[#1C1D22] dark:text-white">
                           {t.label}
                         </option>
                       ))
                     ) : (
-                      <option value="" disabled className="bg-white text-gray-900 dark:bg-[#1C1D22] dark:text-white">
+                      <option value="" disabled className="bg-white text-[#16171C] dark:bg-[#1C1D22] dark:text-white">
                         Không có nhiệm vụ nào thuộc chủ đề {assignModalSelectedBatch?.topic}
                       </option>
                     )}
                   </select>
-                  <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 pointer-events-none text-gray-400 dark:text-gray-400" />
+                  <ChevronDown className="w-4 h-4 absolute right-3 pointer-events-none text-[#9A9CA3]" />
                 </div>
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-[10px] font-bold uppercase text-gray-500 dark:text-gray-400">
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block type-label text-[#2B2C31] dark:text-gray-200">
                     {currentSelectedTask?.role} đang hoạt động ({assignFormData.assignedUsers.length}/{maxAllowedUsers} tối đa)
                   </label>
                   <span 
                     style={{ backgroundColor: currentSelectedTask?.role === "Speaker" ? SPEAKER_ACCENT : REVIEWER_ACCENT }}
-                    className="text-[9px] text-white px-1.5 py-0.2 rounded font-bold"
+                    className="type-caption text-white px-2 py-0.5 rounded-md font-bold"
                   >
                     {currentSelectedTask?.role}
                   </span>
                 </div>
 
-                <div className="max-h-52 overflow-y-auto border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#25272E] rounded-lg p-2 space-y-1.5">
+                <div className="max-h-52 overflow-y-auto border border-[#E5E2D8] dark:border-gray-700 bg-[#F7F5EF] dark:bg-[#25272E] rounded-xl p-2.5 space-y-2">
                   {targetUserList.length > 0 ? (
                     targetUserList.map((u) => {
                       const isChecked = assignFormData.assignedUsers.includes(u.name);
@@ -960,17 +967,17 @@ export default function TaskManagerManagement() {
                       return (
                         <label 
                           key={u.id} 
-                          className={`flex items-start justify-between p-2 rounded-lg text-xs transition-all border ${
+                          className={`flex items-start justify-between p-2.5 rounded-xl type-ui transition-all border ${
                             isDisableUnchecked 
-                              ? "opacity-50 cursor-not-allowed text-gray-400 dark:text-gray-500 border-transparent" 
+                              ? "opacity-50 cursor-not-allowed text-[#9A9CA3] border-transparent" 
                               : "cursor-pointer"
                           } ${
                             isChecked 
-                              ? "bg-white dark:bg-[#1C1D22] border-gray-400 dark:border-gray-500 shadow-xs font-bold text-gray-900 dark:text-white" 
-                              : "bg-white/50 dark:bg-[#1C1D22]/50 border-gray-200 dark:border-gray-700 hover:bg-black/5 dark:hover:bg-white/5 text-gray-600 dark:text-gray-300"
+                              ? "bg-white dark:bg-[#1C1D22] border-[#16A34A] shadow-xs font-bold text-[#16171C] dark:text-white" 
+                              : "bg-white/70 dark:bg-[#1C1D22]/50 border-[#E5E2D8] dark:border-gray-700 hover:bg-white text-[#6E7078] dark:text-gray-300"
                           }`}
                         >
-                          <div className="flex items-start gap-2 min-w-0 flex-1">
+                          <div className="flex items-start gap-2.5 min-w-0 flex-1">
                             <input
                               type="checkbox"
                               checked={isChecked}
@@ -980,13 +987,13 @@ export default function TaskManagerManagement() {
                               className="rounded focus:ring-0 cursor-pointer disabled:cursor-not-allowed shrink-0 mt-0.5"
                             />
                             <div className="flex flex-col min-w-0 pr-1">
-                              <span className="truncate leading-tight">{u.name}</span>
-                              <span className="text-[10px] font-normal text-gray-400 dark:text-gray-400 truncate">
+                              <span className="truncate leading-tight font-bold">{u.name}</span>
+                              <span className="type-caption text-[#6E7078] dark:text-gray-400 truncate">
                                 {u.email}
                               </span>
                               
                               {hasPreferenceReason && (
-                                <span className="text-[9.5px] font-semibold mt-0.5 text-gray-500 dark:text-gray-400 line-clamp-1">
+                                <span className="type-meta font-medium mt-0.5 text-[#6E7078] dark:text-gray-400 line-clamp-1">
                                   Lý do: {u.performanceReason}
                                 </span>
                               )}
@@ -1002,9 +1009,9 @@ export default function TaskManagerManagement() {
                                     borderColor: CHIP_SUCCESS_BORDER,
                                     color: CHIP_SUCCESS_TEXT
                                   }}
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold border"
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md type-caption font-bold border"
                                 >
-                                  <Award className="w-2.5 h-2.5 shrink-0" />
+                                  <Award className="w-3 h-3 shrink-0" />
                                   <span>Ưu tiên</span>
                                 </span>
                               )}
@@ -1016,9 +1023,9 @@ export default function TaskManagerManagement() {
                                     borderColor: "rgba(243, 114, 127, 0.4)",
                                     color: DANGER
                                   }}
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold border"
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md type-caption font-bold border"
                                 >
-                                  <AlertCircle className="w-2.5 h-2.5 shrink-0" />
+                                  <AlertCircle className="w-3 h-3 shrink-0" />
                                   <span>Hạn chế</span>
                                 </span>
                               )}
@@ -1028,26 +1035,26 @@ export default function TaskManagerManagement() {
                       );
                     })
                   ) : (
-                    <div className="p-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400">
+                    <div className="p-3 text-center type-ui text-[#6E7078] dark:text-gray-400">
                       Không có {currentSelectedTask?.role} nào đang hoạt động (Active).
                     </div>
                   )}
                 </div>
               </div>
 
-              <div className="flex gap-2 pt-1">
+              <div className="flex gap-2.5 pt-2">
                 <button
                   type="button"
                   onClick={() => setIsAssignModalOpen(false)}
-                  className="flex-1 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-xs font-bold hover:bg-gray-100 dark:hover:bg-[#25272E] cursor-pointer transition-colors"
+                  className="flex-1 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 type-button text-[#6E7078] dark:text-gray-300 hover:bg-[#F7F5EF] dark:hover:bg-[#25272E] cursor-pointer transition-colors"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
                   disabled={filteredTasksForAssignModal.length === 0}
-                  style={{ backgroundColor: TASK_MANAGER_ACCENT }}
-                  className="flex-1 py-2 text-white rounded-lg text-xs font-bold hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ backgroundColor: TASK_MANAGER_ACCENT, boxShadow: `0 10px 24px ${TASK_MANAGER_ACCENT}40` }}
+                  className="flex-1 py-2.5 text-white rounded-xl type-button hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Lưu phân công
                 </button>
@@ -1059,38 +1066,38 @@ export default function TaskManagerManagement() {
 
       {/* MODAL XÓA ĐỢT */}
       {deletingBatch && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 dark:bg-black/60 backdrop-blur-[2px]" onClick={() => setDeletingBatch(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#16171C]/55 backdrop-blur-xs" onClick={() => setDeletingBatch(null)}>
           <div 
-            className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1D22] rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden transition-colors animate-in fade-in zoom-in-95 duration-200" 
+            className="border border-[#E5E2D8] dark:border-gray-800 bg-white dark:bg-[#1C1D22] rounded-[24px] w-full max-w-sm shadow-[0_20px_50px_rgba(16,17,20,0.25)] overflow-hidden transition-colors animate-in fade-in zoom-in-95 duration-200" 
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ backgroundColor: DANGER }} className="h-1.5 w-full shrink-0" />
-            <div className="p-5 text-center space-y-3">
+            <div className="p-6 text-center space-y-3.5">
               <div 
                 style={{ backgroundColor: "rgba(243, 114, 127, 0.15)", color: DANGER }}
-                className="w-10 h-10 rounded-xl flex items-center justify-center mx-auto"
+                className="w-11 h-11 rounded-full flex items-center justify-center mx-auto"
               >
                 <AlertTriangle className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">Xác nhận xóa đợt</h3>
-                <p className="text-[11px] mt-1 break-words text-gray-500 dark:text-gray-400">
-                  Bạn có chắc muốn xóa <span className="font-bold text-gray-900 dark:text-gray-200">"{deletingBatch.campaignName || deletingBatch.name}"</span>? 
+                <h3 className="type-section text-[#16171C] dark:text-gray-100">Xác nhận xóa đợt</h3>
+                <p className="type-ui mt-1 break-words text-[#6E7078] dark:text-gray-400">
+                  Bạn có chắc muốn xóa <span className="font-bold text-[#16171C] dark:text-gray-200">"{deletingBatch.campaignName || deletingBatch.name}"</span>? 
                 </p>
               </div>
-              <div className="flex gap-2 pt-1">
+              <div className="flex gap-2.5 pt-2">
                 <button
                   type="button"
                   onClick={() => setDeletingBatch(null)}
-                  className="flex-1 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-xs font-bold hover:bg-gray-100 dark:hover:bg-[#25272E] cursor-pointer transition-colors"
+                  className="flex-1 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 type-button text-[#6E7078] dark:text-gray-300 hover:bg-[#F7F5EF] dark:hover:bg-[#25272E] cursor-pointer transition-colors"
                 >
                   Hủy
                 </button>
                 <button
                   type="button"
                   onClick={handleConfirmDeleteBatch}
-                  style={{ backgroundColor: DANGER }}
-                  className="flex-1 py-2 text-white rounded-lg text-xs font-bold hover:opacity-90 transition-opacity cursor-pointer"
+                  style={{ backgroundColor: DANGER, boxShadow: `0 10px 24px ${DANGER}40` }}
+                  className="flex-1 py-2.5 text-white rounded-xl type-button hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer"
                 >
                   Xóa ngay
                 </button>
@@ -1102,47 +1109,47 @@ export default function TaskManagerManagement() {
 
       {/* MODAL SỬA NHIỆM VỤ */}
       {isEditTaskModalOpen && editingTask && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 dark:bg-black/60 backdrop-blur-[2px]" onClick={() => setIsEditTaskModalOpen(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#16171C]/55 backdrop-blur-xs" onClick={() => setIsEditTaskModalOpen(false)}>
           <div 
-            className="rounded-2xl w-full max-w-md shadow-2xl overflow-hidden border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1D22] animate-in fade-in zoom-in-95 duration-200" 
+            className="rounded-[24px] w-full max-w-md shadow-[0_20px_50px_rgba(16,17,20,0.25)] overflow-hidden border border-[#E5E2D8] dark:border-gray-800 bg-white dark:bg-[#1C1D22] animate-in fade-in zoom-in-95 duration-200" 
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ backgroundColor: TASK_MANAGER_ACCENT }} className="h-1.5 w-full shrink-0" />
             
-            <form onSubmit={handleSaveEditTask} className="p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">
+            <form onSubmit={handleSaveEditTask} className="p-6 space-y-4">
+              <div className="flex items-center justify-between border-b border-[#E5E2D8] dark:border-gray-800 pb-3">
+                <h3 className="type-section text-[#16171C] dark:text-gray-100">
                   Chỉnh sửa phân công nhiệm vụ
                 </h3>
                 <button 
                   type="button"
                   onClick={() => setIsEditTaskModalOpen(false)}
-                  className="p-1 hover:bg-gray-100 dark:hover:bg-[#25272E] rounded-lg transition-colors cursor-pointer"
+                  className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#F0EEE6] dark:hover:bg-gray-800 transition-colors cursor-pointer"
                 >
-                  <X className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                  <X className="w-4 h-4 text-[#6E7078]" />
                 </button>
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1 flex items-center justify-between">
-                  <span>Tên nhiệm vụ</span>
+                <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
+                  Tên nhiệm vụ
                 </label>
                 <input
                   type="text"
                   value={editTaskFormData.title}
                   onChange={(e) => setEditTaskFormData({ ...editTaskFormData, title: e.target.value })}
-                  className="w-full px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#25272E] text-gray-900 dark:text-white rounded-lg outline-none font-medium transition-all font-sans focus:bg-white dark:focus:bg-[#1C1D22] focus:border-gray-400 dark:focus:border-gray-500"
+                  className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none font-medium transition-all font-sans focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10"
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1 flex items-center justify-between">
-                  <span>Vai trò thực hiện</span>
+                <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
+                  Vai trò thực hiện
                 </label>
                 <select
                   disabled
                   value={editTaskFormData.role}
-                  className="w-full px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-[#18191D] text-gray-500 dark:text-gray-400 rounded-lg outline-none font-bold transition-all cursor-not-allowed opacity-80 appearance-none"
+                  className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-[#F7F5EF] dark:bg-[#18191D] text-[#6E7078] dark:text-gray-400 rounded-xl outline-none font-bold transition-all cursor-not-allowed opacity-80 appearance-none"
                 >
                   <option value="Speaker" className="dark:bg-[#1C1D22]">Speaker</option>
                   <option value="Reviewer" className="dark:bg-[#1C1D22]">Reviewer</option>
@@ -1160,19 +1167,19 @@ export default function TaskManagerManagement() {
 
                   return (
                     <>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block type-label text-[#2B2C31] dark:text-gray-200">
                           {editTaskFormData.role} đang hoạt động ({editTaskFormData.assignedUsers.length}/{maxUsers} tối đa)
                         </label>
                         <span 
                           style={{ backgroundColor: editTaskFormData.role === "Speaker" ? SPEAKER_ACCENT : REVIEWER_ACCENT }}
-                          className="text-[9px] text-white px-1.5 py-0.2 rounded font-bold"
+                          className="type-caption text-white px-2 py-0.5 rounded-md font-bold"
                         >
                           {editTaskFormData.role}
                         </span>
                       </div>
 
-                      <div className="max-h-52 overflow-y-auto border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#25272E] rounded-lg p-2 space-y-1.5">
+                      <div className="max-h-52 overflow-y-auto border border-[#E5E2D8] dark:border-gray-700 bg-[#F7F5EF] dark:bg-[#25272E] rounded-xl p-2.5 space-y-2">
                         {userList.map((u) => {
                           const isChecked = editTaskFormData.assignedUsers.includes(u.name);
                           const isDisableUnchecked = !isChecked && editTaskFormData.assignedUsers.length >= maxUsers;
@@ -1183,17 +1190,17 @@ export default function TaskManagerManagement() {
                           return (
                             <label 
                               key={u.id}
-                              className={`flex items-start justify-between p-2 rounded-lg text-xs transition-all border ${
+                              className={`flex items-start justify-between p-2.5 rounded-xl type-ui transition-all border ${
                                 isDisableUnchecked 
-                                  ? "opacity-50 cursor-not-allowed text-gray-400 dark:text-gray-500 border-transparent" 
+                                  ? "opacity-50 cursor-not-allowed text-[#9A9CA3] border-transparent" 
                                   : "cursor-pointer"
                               } ${
                                 isChecked 
-                                  ? "bg-white dark:bg-[#1C1D22] border-gray-400 dark:border-gray-500 shadow-xs font-bold text-gray-900 dark:text-white" 
-                                  : "bg-white/50 dark:bg-[#1C1D22]/50 border-gray-200 dark:border-gray-700 hover:bg-black/5 dark:hover:bg-white/5 text-gray-600 dark:text-gray-300"
+                                  ? "bg-white dark:bg-[#1C1D22] border-[#16A34A] shadow-xs font-bold text-[#16171C] dark:text-white" 
+                                  : "bg-white/70 dark:bg-[#1C1D22]/50 border-[#E5E2D8] dark:border-gray-700 hover:bg-white text-[#6E7078] dark:text-gray-300"
                               }`}
                             >
-                              <div className="flex items-start gap-2 min-w-0 flex-1">
+                              <div className="flex items-start gap-2.5 min-w-0 flex-1">
                                 <input
                                   type="checkbox"
                                   checked={isChecked}
@@ -1203,13 +1210,13 @@ export default function TaskManagerManagement() {
                                   className="rounded focus:ring-0 cursor-pointer disabled:cursor-not-allowed shrink-0 mt-0.5"
                                 />
                                 <div className="flex flex-col min-w-0 pr-1">
-                                  <span className="truncate leading-tight">{u.name}</span>
-                                  <span className="text-[10px] font-normal text-gray-400 dark:text-gray-400 truncate">
+                                  <span className="truncate leading-tight font-bold">{u.name}</span>
+                                  <span className="type-caption text-[#6E7078] dark:text-gray-400 truncate">
                                     {u.email}
                                   </span>
 
                                   {hasPreferenceReason && (
-                                    <span className="text-[9.5px] font-semibold mt-0.5 text-gray-500 dark:text-gray-400 line-clamp-1">
+                                    <span className="type-meta font-medium mt-0.5 text-[#6E7078] dark:text-gray-400 line-clamp-1">
                                       Lý do: {u.performanceReason}
                                     </span>
                                   )}
@@ -1225,9 +1232,9 @@ export default function TaskManagerManagement() {
                                         borderColor: CHIP_SUCCESS_BORDER,
                                         color: CHIP_SUCCESS_TEXT
                                       }}
-                                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold border"
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md type-caption font-bold border"
                                     >
-                                      <Award className="w-2.5 h-2.5 shrink-0" />
+                                      <Award className="w-3 h-3 shrink-0" />
                                       <span>Ưu tiên</span>
                                     </span>
                                   )}
@@ -1239,9 +1246,9 @@ export default function TaskManagerManagement() {
                                         borderColor: "rgba(243, 114, 127, 0.4)",
                                         color: DANGER
                                       }}
-                                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-bold border"
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md type-caption font-bold border"
                                     >
-                                      <AlertCircle className="w-2.5 h-2.5 shrink-0" />
+                                      <AlertCircle className="w-3 h-3 shrink-0" />
                                       <span>Hạn chế</span>
                                     </span>
                                   )}
@@ -1256,18 +1263,18 @@ export default function TaskManagerManagement() {
                 })()}
               </div>
 
-              <div className="flex gap-2 pt-2">
+              <div className="flex gap-2.5 pt-2">
                 <button
                   type="button"
                   onClick={() => setIsEditTaskModalOpen(false)}
-                  className="flex-1 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-xs font-bold hover:bg-gray-100 dark:hover:bg-[#25272E] cursor-pointer transition-colors"
+                  className="flex-1 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 type-button text-[#6E7078] dark:text-gray-300 hover:bg-[#F7F5EF] dark:hover:bg-[#25272E] cursor-pointer transition-colors"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
-                  style={{ backgroundColor: TASK_MANAGER_ACCENT }}
-                  className="flex-1 py-2 text-white rounded-lg text-xs font-bold hover:opacity-90 transition-opacity cursor-pointer"
+                  style={{ backgroundColor: TASK_MANAGER_ACCENT, boxShadow: `0 10px 24px ${TASK_MANAGER_ACCENT}40` }}
+                  className="flex-1 py-2.5 text-white rounded-xl type-button hover:opacity-90 active:scale-[0.99] cursor-pointer transition-all"
                 >
                   Lưu thay đổi
                 </button>
@@ -1279,38 +1286,38 @@ export default function TaskManagerManagement() {
 
       {/* MODAL XÓA NHIỆM VỤ CỦA ĐỢT */}
       {deletingTask && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 dark:bg-black/60 backdrop-blur-[2px]" onClick={() => setDeletingTask(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#16171C]/55 backdrop-blur-xs" onClick={() => setDeletingTask(null)}>
           <div 
-            className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1D22] rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden transition-colors animate-in fade-in zoom-in-95 duration-200" 
+            className="border border-[#E5E2D8] dark:border-gray-800 bg-white dark:bg-[#1C1D22] rounded-[24px] w-full max-w-sm shadow-[0_20px_50px_rgba(16,17,20,0.25)] overflow-hidden transition-colors animate-in fade-in zoom-in-95 duration-200" 
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ backgroundColor: DANGER }} className="h-1.5 w-full shrink-0" />
-            <div className="p-5 text-center space-y-3">
+            <div className="p-6 text-center space-y-3.5">
               <div 
                 style={{ backgroundColor: "rgba(243, 114, 127, 0.15)", color: DANGER }}
-                className="w-10 h-10 rounded-xl flex items-center justify-center mx-auto"
+                className="w-11 h-11 rounded-full flex items-center justify-center mx-auto"
               >
                 <AlertTriangle className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">Xác nhận gỡ nhiệm vụ</h3>
-                <p className="text-[11px] mt-1 break-words text-gray-500 dark:text-gray-400">
-                  Bạn có chắc muốn gỡ nhiệm vụ <span className="font-bold text-gray-900 dark:text-gray-200">"{deletingTask.title}"</span> khỏi đợt này?
+                <h3 className="type-section text-[#16171C] dark:text-gray-100">Xác nhận gỡ nhiệm vụ</h3>
+                <p className="type-ui mt-1 break-words text-[#6E7078] dark:text-gray-400">
+                  Bạn có chắc muốn gỡ nhiệm vụ <span className="font-bold text-[#16171C] dark:text-gray-200">"{deletingTask.title}"</span> khỏi đợt này?
                 </p>
               </div>
-              <div className="flex gap-2 pt-1">
+              <div className="flex gap-2.5 pt-2">
                 <button
                   type="button"
                   onClick={() => setDeletingTask(null)}
-                  className="flex-1 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-xs font-bold hover:bg-gray-100 dark:hover:bg-[#25272E] cursor-pointer transition-colors"
+                  className="flex-1 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 type-button text-[#6E7078] dark:text-gray-300 hover:bg-[#F7F5EF] dark:hover:bg-[#25272E] cursor-pointer transition-colors"
                 >
                   Hủy
                 </button>
                 <button
                   type="button"
                   onClick={handleConfirmDeleteTask}
-                  style={{ backgroundColor: DANGER }}
-                  className="flex-1 py-2 text-white rounded-lg text-xs font-bold hover:opacity-90 transition-opacity cursor-pointer"
+                  style={{ backgroundColor: DANGER, boxShadow: `0 10px 24px ${DANGER}40` }}
+                  className="flex-1 py-2.5 text-white rounded-xl type-button hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer"
                 >
                   Gỡ ngay
                 </button>
@@ -1322,68 +1329,68 @@ export default function TaskManagerManagement() {
 
       {/* MODAL XEM DANH SÁCH NGƯỜI ĐƯỢC PHÂN CÔNG */}
       {viewingAssignedTask && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 dark:bg-black/60 backdrop-blur-[2px]" onClick={() => setViewingAssignedTask(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#16171C]/55 backdrop-blur-xs" onClick={() => setViewingAssignedTask(null)}>
           <div 
-            className="rounded-2xl w-full max-w-md shadow-2xl overflow-hidden border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1D22] animate-in fade-in zoom-in-95 duration-200" 
+            className="rounded-[24px] w-full max-w-md shadow-[0_20px_50px_rgba(16,17,20,0.25)] overflow-hidden border border-[#E5E2D8] dark:border-gray-800 bg-white dark:bg-[#1C1D22] animate-in fade-in zoom-in-95 duration-200" 
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ backgroundColor: TASK_MANAGER_ACCENT }} className="h-1.5 w-full shrink-0" />
-            <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
+            <div className="p-5 border-b border-[#E5E2D8] dark:border-gray-800 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Users style={{ color: TASK_MANAGER_ACCENT }} className="w-4 h-4" />
-                <h3 className="text-xs font-bold text-gray-900 dark:text-gray-100">
+                <h3 className="type-section text-[#16171C] dark:text-gray-100">
                   Danh sách phân công ({viewingAssignedTask.role || "Người thực hiện"})
                 </h3>
               </div>
               <button 
                 onClick={() => setViewingAssignedTask(null)}
-                className="p-1 hover:bg-gray-100 dark:hover:bg-[#25272E] rounded-lg transition-colors cursor-pointer"
+                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#F0EEE6] dark:hover:bg-gray-800 transition-colors cursor-pointer"
               >
-                <X className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                <X className="w-4 h-4 text-[#6E7078]" />
               </button>
             </div>
 
-            <div className="p-4 space-y-3">
-              <p className="text-xs font-bold break-words text-gray-900 dark:text-gray-200">
-                {viewingAssignedTask.title}
+            <div className="p-5 space-y-3.5">
+              <p className="type-body font-bold break-words text-[#16171C] dark:text-gray-200">
+                "{viewingAssignedTask.title}"
               </p>
 
-              <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
+              <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
                 {viewingAssignedTask.assignedUsers && viewingAssignedTask.assignedUsers.length > 0 ? (
                   viewingAssignedTask.assignedUsers.map((userName, idx) => (
                     <div 
                       key={idx} 
-                      className="flex items-center justify-between p-2 rounded-xl text-xs font-semibold bg-gray-50 dark:bg-[#25272E] text-gray-900 dark:text-gray-200"
+                      className="flex items-center justify-between p-3 rounded-xl type-ui font-label bg-[#F7F5EF] dark:bg-[#25272E] text-[#16171C] dark:text-gray-200 border border-[#E5E2D8]/80 dark:border-gray-700/60"
                     >
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2.5">
                         <div 
                           style={{ backgroundColor: TASK_MANAGER_ACCENT }}
-                          className="w-6 h-6 rounded-full text-white flex items-center justify-center text-[10px] font-bold"
+                          className="w-7 h-7 rounded-full text-white flex items-center justify-center type-caption font-bold"
                         >
                           {userName.charAt(0)}
                         </div>
-                        <span>{userName}</span>
+                        <span className="font-bold">{userName}</span>
                       </div>
                       <span 
                         style={{ backgroundColor: viewingAssignedTask.role === "Speaker" ? SPEAKER_ACCENT : REVIEWER_ACCENT }}
-                        className="text-[9px] text-white px-2 py-0.5 rounded-md font-bold"
+                        className="type-caption text-white px-2.5 py-0.5 rounded-md font-bold"
                       >
                         {viewingAssignedTask.role || "Thực hiện"}
                       </span>
                     </div>
                   ))
                 ) : (
-                  <p className="text-xs text-center py-2 text-gray-500 dark:text-gray-400">Chưa phân công người nào</p>
+                  <p className="type-ui text-center py-4 text-[#6E7078] dark:text-gray-400">Chưa phân công người nào</p>
                 )}
               </div>
             </div>
 
-            <div className="p-3 border-t border-gray-200 dark:border-gray-800 text-right bg-gray-50/50 dark:bg-[#25272E]/50">
+            <div className="p-4 border-t border-[#E5E2D8] dark:border-gray-800 text-right bg-[#F7F5EF]/50 dark:bg-[#25272E]/50">
               <button
                 type="button"
                 onClick={() => setViewingAssignedTask(null)}
                 style={{ backgroundColor: TASK_MANAGER_ACCENT }}
-                className="px-4 py-1.5 text-white rounded-lg text-xs font-bold hover:opacity-90 transition-opacity cursor-pointer"
+                className="w-full py-2.5 text-white rounded-xl type-button hover:opacity-90 transition-opacity cursor-pointer shadow-sm text-center"
               >
                 Đóng
               </button>
@@ -1395,54 +1402,54 @@ export default function TaskManagerManagement() {
       {/* Header Page + Cụm Nút Thao Tác */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 shrink-0">
         <div>
-          <h2 className="text-[22px] font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-            <ListTodo className="w-5 h-5 text-slate-900 dark:text-white shrink-0" />
+          <h2 className="text-[22px] font-bold text-[#16171C] dark:text-white tracking-tight flex items-center gap-2">
+            <ListTodo className="w-5 h-5 text-[#16171C] dark:text-white shrink-0" />
             Quản lý nhiệm vụ
           </h2>
-          <p className="text-[13px] font-semibold bg-clip-text text-transparent bg-gradient-to-r from-[#15803D] via-emerald-600 to-teal-700 dark:from-[#1DB954] dark:via-emerald-400 dark:to-green-300 mt-0.5">
+          <p className="type-ui text-[#6E7078] dark:text-gray-400 mt-0.5">
             Quản lý và tạo các nhiệm vụ thực hiện theo từng đợt
           </p>
         </div>
 
-        <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
+        <div className="flex items-center gap-2.5 self-start md:self-auto shrink-0">
           <button
             type="button"
             onClick={handleOpenCreateModal}
-            style={{ backgroundColor: TASK_MANAGER_ACCENT }}
-            className="inline-flex items-center gap-1.5 py-1.5 px-3 text-xs font-bold text-white rounded-lg shadow-2xs hover:opacity-90 transition-all cursor-pointer"
+            style={{ backgroundColor: TASK_MANAGER_ACCENT, boxShadow: `0 10px 24px ${TASK_MANAGER_ACCENT}40` }}
+            className="inline-flex items-center gap-1.5 py-2 px-4 type-button text-white rounded-xl hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-4 h-4" />
             <span>Tạo đợt</span>
           </button>
 
           <button
             type="button"
             onClick={handleOpenAssignModal}
-            style={{ backgroundColor: TASK_MANAGER_ACCENT }}
-            className="inline-flex items-center gap-1.5 py-1.5 px-3 text-xs font-bold text-white rounded-lg shadow-2xs hover:opacity-90 transition-all cursor-pointer"
+            style={{ backgroundColor: TASK_MANAGER_ACCENT, boxShadow: `0 10px 24px ${TASK_MANAGER_ACCENT}40` }}
+            className="inline-flex items-center gap-1.5 py-2 px-4 type-button text-white rounded-xl hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer"
           >
-            <UserCheck className="w-3.5 h-3.5" />
+            <UserCheck className="w-4 h-4" />
             <span>Phân công</span>
           </button>
         </div>
       </div>
 
       {/* Grid Layout chính */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 flex-1 min-h-0">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-3.5 flex-1 min-h-0">
         
         {/* Cột trái: Danh sách các Đợt */}
-        <div className="lg:col-span-1 rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1D22] p-3 shadow-xs flex flex-col gap-2 min-h-0">
+        <div className="lg:col-span-1 rounded-2xl border border-[#E5E2D8] dark:border-gray-800 bg-white dark:bg-[#1C1D22] p-3.5 shadow-[0_1px_3px_rgba(16,17,20,0.04)] flex flex-col gap-2.5 min-h-0">
           
-          <div className="flex items-center justify-between px-1 pb-1 border-b border-gray-100 dark:border-gray-800">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-900 dark:text-white flex items-center gap-1.5">
-              <Layers style={{ color: TASK_MANAGER_ACCENT }} className="w-3.5 h-3.5" />
+          <div className="flex items-center justify-between px-1 pb-1.5 border-b border-[#E5E2D8] dark:border-gray-800">
+            <h3 className="type-card-title text-[#16171C] dark:text-white flex items-center gap-1.5 uppercase">
+              <Layers style={{ color: TASK_MANAGER_ACCENT }} className="w-4 h-4" />
               DANH SÁCH ĐỢT
             </h3>
           </div>
 
-          <div className="flex flex-col gap-2 overflow-y-auto max-h-[580px] pr-1">
+          <div className="flex flex-col gap-2.5 overflow-y-auto max-h-[580px] pr-1">
             {batches.length === 0 ? (
-              <div className="p-3 text-center text-xs font-medium text-gray-400 dark:text-gray-500">
+              <div className="p-4 text-center type-ui text-[#9A9CA3] dark:text-gray-500">
                 Chưa có đợt nào. Bấm nút tạo đợt ở trên để tạo.
               </div>
             ) : (
@@ -1481,16 +1488,15 @@ export default function TaskManagerManagement() {
                       backgroundColor: `${TASK_MANAGER_ACCENT}15`, 
                       borderColor: `${TASK_MANAGER_ACCENT}50` 
                     } : {}}
-                    className={`relative w-full text-left p-3 rounded-xl transition-all border cursor-pointer flex flex-col gap-2 ${
+                    className={`relative w-full text-left p-3.5 rounded-xl transition-all border cursor-pointer flex flex-col gap-2 ${
                       active 
                         ? "shadow-xs" 
-                        : "bg-gray-50/50 dark:bg-[#25272E]/50 border-transparent hover:bg-gray-100 dark:hover:bg-[#25272E]"
+                        : "bg-[#F7F5EF]/60 dark:bg-[#25272E]/50 border-[#E5E2D8] dark:border-gray-800 hover:bg-[#F7F5EF] dark:hover:bg-[#25272E]"
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0 flex-1">
-                        {/* CHỈNH SỬA DUY NHẤT: HIỂN THỊ ĐỢT THEO STT TUẦN TỰ (1, 2... 15, 16) */}
-                        <span className="text-xs font-bold text-gray-900 dark:text-white truncate">
+                        <span className="type-ui font-bold text-[#16171C] dark:text-white truncate">
                           Đợt {index + 1}
                         </span>
                         
@@ -1500,7 +1506,7 @@ export default function TaskManagerManagement() {
                             borderColor: batchBadgeBorder,
                             color: batchBadgeText
                           }}
-                          className="inline-flex items-center gap-1 pl-1.5 pr-2 py-0.5 rounded-full text-[9px] font-bold border shrink-0 leading-tight whitespace-nowrap"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full type-caption font-label border shrink-0 leading-tight whitespace-nowrap"
                         >
                           {isBatchCompleted ? (
                             <CheckCircle2 className="w-2.5 h-2.5 shrink-0" style={{ color: batchBadgeText }} />
@@ -1516,7 +1522,7 @@ export default function TaskManagerManagement() {
                           type="button"
                           onClick={(e) => handleOpenUpdateModal(e, batch)}
                           title={`Sửa ${batch.campaignName || batch.name}`}
-                          className="p-1 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md hover:text-gray-900 dark:hover:text-gray-100 transition-colors cursor-pointer dark:text-gray-400"
+                          className="w-7 h-7 rounded-lg flex items-center justify-center text-[#6E7078] hover:bg-[#E5E2D8] dark:hover:bg-gray-700 hover:text-[#16171C] dark:hover:text-gray-100 transition-colors cursor-pointer"
                         >
                           <Edit3 className="w-3.5 h-3.5" />
                         </button>
@@ -1525,37 +1531,37 @@ export default function TaskManagerManagement() {
                           type="button"
                           onClick={(e) => handleRequestDeleteBatch(e, batch)}
                           title={`Xóa ${batch.campaignName || batch.name}`}
-                          className="p-1 text-gray-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-md hover:text-red-600 dark:hover:text-[#E55353] transition-colors cursor-pointer dark:text-gray-400"
+                          className="w-7 h-7 rounded-lg flex items-center justify-center text-[#6E7078] hover:bg-[#FDEAEA] dark:hover:bg-red-900/30 hover:text-[#C63B3B] dark:hover:text-[#E55353] transition-colors cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </div>
 
-                    <div className="text-[10px] space-y-1 text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-gray-800/60 pt-1.5">
-                      <div className="flex items-center gap-1 font-medium text-gray-700 dark:text-gray-300">
+                    <div className="type-caption space-y-1 text-[#6E7078] dark:text-gray-400 border-t border-[#E5E2D8] dark:border-gray-800/60 pt-2">
+                      <div className="flex items-center gap-1 font-medium text-[#16171C] dark:text-gray-300">
                         <FolderKanban className="w-3 h-3 text-indigo-500 shrink-0" />
-                        <span className="truncate">Tên đợt: <strong className="text-gray-900 dark:text-white font-bold">{batch.campaignName || batch.name}</strong></span>
+                        <span className="truncate">Tên đợt: <strong className="text-[#16171C] dark:text-white font-bold">{batch.campaignName || batch.name}</strong></span>
                       </div>
 
-                      <div className="flex items-center gap-1 font-medium text-gray-700 dark:text-gray-300">
+                      <div className="flex items-center gap-1 font-medium text-[#16171C] dark:text-gray-300">
                         <Tag className="w-3 h-3 text-emerald-500 shrink-0" />
-                        <span className="truncate">Chủ đề: <strong className="text-gray-900 dark:text-white font-bold">{batch.topic || "Công nghệ thông tin"}</strong></span>
+                        <span className="truncate">Chủ đề: <strong className="text-[#16171C] dark:text-white font-bold">{batch.topic || "Công nghệ thông tin"}</strong></span>
                       </div>
 
-                      <div className="flex items-center gap-1 font-medium text-gray-700 dark:text-gray-300">
+                      <div className="flex items-center gap-1 font-medium text-[#16171C] dark:text-gray-300">
                         <Target className="w-3 h-3 text-blue-500 shrink-0" />
-                        <span>Mục tiêu: <strong className="text-gray-900 dark:text-white font-bold">{batch.target || 2000}</strong> câu</span>
+                        <span>Mục tiêu: <strong className="text-[#16171C] dark:text-white font-bold">{batch.target || 2000}</strong> câu</span>
                       </div>
 
-                      <div className="flex items-center gap-1 font-medium text-gray-700 dark:text-gray-300">
+                      <div className="flex items-center gap-1 font-medium text-[#16171C] dark:text-gray-300">
                         <Users className="w-3 h-3 text-amber-500 shrink-0" />
-                        <span>Số lượng(tối đa): <strong className="text-gray-900 dark:text-white font-bold">{batch.speakerCount || 0}</strong> Speakers, <strong className="text-gray-800 dark:text-gray-200">{batch.reviewerCount || 0}</strong> Reviewers</span>
+                        <span>Số lượng(tối đa): <strong className="text-[#16171C] dark:text-white font-bold">{batch.speakerCount || 0}</strong> Speakers, <strong className="text-[#16171C] dark:text-gray-200">{batch.reviewerCount || 0}</strong> Reviewers</span>
                       </div>
 
-                      <div className="flex items-center gap-1 font-medium text-gray-700 dark:text-gray-300">
+                      <div className="flex items-center gap-1 font-medium text-[#16171C] dark:text-gray-300">
                         <Calendar className="w-3 h-3 text-purple-500 shrink-0" />
-                        <span>Thời gian: <strong className="text-gray-900 dark:text-white font-bold">{batch.startDate || "N/A"} - {batch.endDate || "N/A"}</strong></span>
+                        <span>Thời gian: <strong className="text-[#16171C] dark:text-white font-bold">{batch.startDate || "N/A"} - {batch.endDate || "N/A"}</strong></span>
                       </div>
                     </div>
 
@@ -1567,26 +1573,26 @@ export default function TaskManagerManagement() {
         </div>
 
         {/* Cột phải: Bảng danh sách nhiệm vụ */}
-        <div className="lg:col-span-3 flex flex-col gap-3 min-h-0">
+        <div className="lg:col-span-3 flex flex-col gap-3.5 min-h-0">
           
           {/* Filter Bar */}
-          <div className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1D22] p-2 shadow-xs flex flex-col md:flex-row gap-2 justify-between items-center transition-colors">
+          <div className="rounded-2xl border border-[#E5E2D8] dark:border-gray-800 bg-white dark:bg-[#1C1D22] p-2.5 shadow-[0_1px_3px_rgba(16,17,20,0.04)] flex flex-col md:flex-row gap-2.5 justify-between items-center transition-colors">
             <div className="w-full md:w-auto flex-1 max-w-xl">
-              <div className="relative w-full flex items-center rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#25272E] focus-within:border-gray-400 dark:focus-within:border-gray-500 focus-within:bg-white dark:focus-within:bg-[#1C1D22] transition-all p-1">
-                <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none z-10 text-gray-400 dark:text-gray-500" />
+              <div className="relative w-full flex items-center bg-[#F7F5EF] dark:bg-[#25272E] rounded-xl border border-[#E5E2D8] dark:border-gray-700 focus-within:border-[#16A34A] focus-within:bg-white dark:focus-within:bg-[#1C1D22] transition-all p-1">
+                <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9A9CA3] pointer-events-none z-10" />
                 <input
                   type="text"
                   placeholder="Tìm theo tên nhiệm vụ..."
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  className="w-full pl-10 pr-28 py-1.5 bg-transparent border-none text-xs font-medium outline-none transition-all placeholder:text-gray-400 text-gray-900 dark:text-white"
+                  className="w-full pl-10 pr-28 py-1.5 bg-transparent border-none type-ui text-[#16171C] dark:text-white outline-none transition-all placeholder:text-[#9A9CA3]"
                 />
                 <button
                   type="button"
                   onClick={handleSearchSubmit}
                   style={{ backgroundColor: TASK_MANAGER_ACCENT }}
-                  className="absolute right-1 top-1/2 -translate-y-1/2 px-4 py-1.5 text-white rounded-lg text-xs font-bold hover:opacity-90 transition-all cursor-pointer z-10 shadow-xs"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 px-4 py-1.5 text-white rounded-lg type-button hover:opacity-90 transition-all cursor-pointer z-10"
                 >
                   Tìm kiếm
                 </button>
@@ -1594,11 +1600,11 @@ export default function TaskManagerManagement() {
             </div>
 
             <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
-              <Filter className="w-3.5 h-3.5 text-gray-500 dark:text-gray-400 shrink-0" />
+              <Filter className="w-4 h-4 text-[#6E7078] dark:text-gray-400 shrink-0" />
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-[160px] px-2.5 py-2 border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#25272E] text-gray-900 dark:text-white focus:bg-white dark:focus:bg-[#1C1D22] focus:border-gray-400 dark:focus:border-gray-500 rounded-xl text-xs font-bold outline-none cursor-pointer transition-all font-sans"
+                className="w-[160px] px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 focus:bg-white dark:focus:bg-[#1C1D22] focus:border-[#16A34A] rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
               >
                 <option value="ALL" className="bg-white dark:bg-[#25272E]">Tất cả trạng thái</option>
                 <option value="Đang thực hiện" className="bg-white dark:bg-[#25272E]">Đang thực hiện</option>
@@ -1609,23 +1615,23 @@ export default function TaskManagerManagement() {
           </div>
 
           {/* BẢNG CHUẨN */}
-          <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1D22] shadow-xs overflow-hidden flex-1 flex flex-col">
+          <div className="rounded-2xl border border-[#E5E2D8] dark:border-gray-800 bg-white dark:bg-[#1C1D22] shadow-[0_1px_3px_rgba(16,17,20,0.04)] overflow-hidden flex-1 flex flex-col">
             <div className="overflow-x-auto flex-1">
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left type-ui min-w-[700px]">
                 <thead>
-                  <tr className="border-b border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400 text-[10px] uppercase font-bold bg-gray-50/80 dark:bg-[#25272E]">
-                    <th className="py-3 px-3 text-center w-[50px]">STT</th>
-                    <th className="py-3 px-3 min-w-[200px]">NHIỆM VỤ</th>
-                    <th className="py-3 px-3 text-center w-[100px]">VAI TRÒ</th>
-                    <th className="py-3 px-3 text-center w-[200px]">NGƯỜI ĐƯỢC PHÂN CÔNG</th>
-                    <th className="py-3 px-3 text-center w-[150px]">TRẠNG THÁI</th>
-                    <th className="py-3 px-3 text-center w-[100px]">THAO TÁC</th>
+                  <tr className="border-b border-[#E5E2D8] dark:border-gray-800 text-[#9A9CA3] dark:text-gray-400 type-label h-8 bg-[#F7F5EF] dark:bg-[#25272E]">
+                    <th className="py-2 px-3 text-center w-[50px]">STT</th>
+                    <th className="py-2 px-3 min-w-[200px]">NHIỆM VỤ</th>
+                    <th className="py-2 px-3 text-center w-[100px]">VAI TRÒ</th>
+                    <th className="py-2 px-3 text-center w-[200px]">NGƯỜI ĐƯỢC PHÂN CÔNG</th>
+                    <th className="py-2 px-3 text-center w-[150px]">TRẠNG THÁI</th>
+                    <th className="py-2 px-3 text-center w-[100px]">THAO TÁC</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                <tbody className="divide-y divide-[#F0EEE6] dark:divide-gray-800">
                   {!selectedBatchObj || filteredTasks.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center text-gray-400 dark:text-gray-500 font-medium">
+                      <td colSpan={6} className="py-12 text-center text-[#9A9CA3] dark:text-gray-500 type-ui">
                         {!selectedBatchObj 
                           ? "Hãy chọn hoặc tạo một đợt để xem danh sách nhiệm vụ." 
                           : `Không tìm thấy nhiệm vụ nào trong ${selectedBatchObj.campaignName || selectedBatchObj.name}.`}
@@ -1656,41 +1662,41 @@ export default function TaskManagerManagement() {
                           : CHIP_WARNING_TEXT;
 
                       return (
-                        <tr key={task.id} className="hover:bg-gray-50/80 dark:hover:bg-[#25272E]/50 transition-colors">
-                          <td className="py-3.5 px-3 text-center text-gray-400 font-medium text-xs">
+                        <tr key={task.id} className="hover:bg-[#F7F5EF]/70 dark:hover:bg-[#25272E]/50 transition-colors h-11">
+                          <td className="py-2 px-3 text-center text-[#9A9CA3] font-medium type-caption">
                             {index + 1}
                           </td>
-                          <td className="py-3.5 px-3">
-                            <p className="font-bold text-gray-900 dark:text-white text-xs leading-snug">{task.title}</p>
+                          <td className="py-2 px-3">
+                            <p className="font-bold text-[#16171C] dark:text-white type-ui leading-snug">{task.title}</p>
                           </td>
-                          <td className="py-3.5 px-3 text-center">
+                          <td className="py-2 px-3 text-center">
                             <span 
                               style={{ backgroundColor: task.role === "Speaker" ? SPEAKER_ACCENT : REVIEWER_ACCENT }}
-                              className="text-[10px] font-bold text-white px-2.5 py-1 rounded-md"
+                              className="type-caption font-bold text-white px-2.5 py-0.5 rounded-md"
                             >
                               {task.role}
                             </span>
                           </td>
 
-                          <td className="py-3.5 px-3 text-center whitespace-nowrap">
+                          <td className="py-2 px-3 text-center whitespace-nowrap">
                             <button
                               type="button"
                               onClick={() => setViewingAssignedTask(task)}
-                              className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#F9FAFB] dark:bg-[#25272E] hover:bg-[#E5E7EB] dark:hover:bg-gray-700 text-[#2B2C31] dark:text-gray-200 text-[11px] font-bold border border-[#E5E7EB] dark:border-gray-700 transition-colors cursor-pointer"
+                              className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-xl bg-[#F7F5EF] dark:bg-[#25272E] hover:bg-[#E5E2D8] dark:hover:bg-gray-700 text-[#16171C] dark:text-gray-200 type-meta font-label border border-[#E5E2D8] dark:border-gray-700 transition-colors cursor-pointer"
                             >
                               <Eye className="w-3.5 h-3.5 text-[#6E7078] dark:text-gray-400 shrink-0" />
                               <span>Xem danh sách ({countUsers})</span>
                             </button>
                           </td>
                           
-                          <td className="py-3.5 px-3 text-center whitespace-nowrap">
+                          <td className="py-2 px-3 text-center whitespace-nowrap">
                             <span
                               style={{
                                 backgroundColor: statusBg,
                                 borderColor: statusBorder,
                                 color: statusText
                               }}
-                              className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold border leading-tight select-none whitespace-nowrap"
+                              className="inline-flex items-center justify-center gap-1 px-2.5 py-0.5 rounded-full type-caption font-label border leading-tight select-none whitespace-nowrap"
                             >
                               {isCompleted ? (
                                 <CheckCircle2 className="w-3 h-3 shrink-0" style={{ color: statusText }} />
@@ -1703,13 +1709,13 @@ export default function TaskManagerManagement() {
                             </span>
                           </td>
 
-                          <td className="py-3.5 px-3 text-center">
+                          <td className="py-2 px-3 text-center">
                             <div className="flex items-center justify-center gap-1">
                               <button
                                 type="button"
                                 onClick={() => handleOpenEditTaskModal(task)}
                                 title="Sửa nhiệm vụ"
-                                className="p-1 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md hover:text-gray-900 dark:hover:text-gray-100 transition-colors cursor-pointer dark:text-gray-400"
+                                className="w-7 h-7 rounded-lg flex items-center justify-center text-[#6E7078] dark:text-gray-400 hover:text-[#16171C] dark:hover:text-white hover:bg-[#F7F5EF] dark:hover:bg-gray-700 transition-colors cursor-pointer"
                               >
                                 <Edit3 className="w-3.5 h-3.5" />
                               </button>
@@ -1717,7 +1723,7 @@ export default function TaskManagerManagement() {
                                 type="button"
                                 onClick={() => handleRequestDeleteTask(task)}
                                 title="Gỡ nhiệm vụ khỏi đợt"
-                                className="p-1 text-gray-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-md hover:text-red-600 dark:hover:text-[#E55353] transition-colors cursor-pointer dark:text-gray-400"
+                                className="w-7 h-7 rounded-lg flex items-center justify-center text-[#6E7078] dark:text-gray-400 hover:text-[#C63B3B] dark:hover:text-[#E55353] hover:bg-[#FDEAEA] dark:hover:bg-[#C63B3B]/20 transition-colors cursor-pointer"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
