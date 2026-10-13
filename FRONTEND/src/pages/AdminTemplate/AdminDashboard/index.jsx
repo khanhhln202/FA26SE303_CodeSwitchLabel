@@ -7,12 +7,6 @@ import {
 } from "lucide-react";
 
 import {
-  SURFACE_CARD,
-  SURFACE_MUTED,
-  TEXT_HEADING,
-  TEXT_BODY,
-  TEXT_FAINT,
-  BORDER_LIGHT,
   ADMIN_ACCENT,
   TASK_MANAGER_ACCENT,
   REVIEWER_ACCENT,
@@ -21,210 +15,42 @@ import {
   DANGER,
   WARNING
 } from "../../../constants/theme";
-
-const USER_STORAGE_KEY = "admin_users_list_v2";
-
-const DEFAULT_USERS = [
-  { id: "USR-001", name: "Quản Lý", email: "manager@fpt.edu.vn", role: "Task Manager", status: "Active", createdAt: "15/01/2026" },
-  { id: "USR-002", name: "Trần Minh Tâm", email: "tam.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "20/01/2026" },
-  { id: "USR-005", name: "Nguyễn Văn Anh", email: "anh.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "06/02/2026" },
-  { id: "USR-006", name: "Trần Thị Bình", email: "binh.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "07/02/2026" },
-  { id: "USR-007", name: "Lê Văn Cường", email: "cuong.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "08/02/2026" },
-  { id: "USR-008", name: "Phạm Thị Dung", email: "dung.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "09/02/2026" },
-  { id: "USR-009", name: "Hoàng Văn Em", email: "em.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "10/02/2026" },
-  { id: "USR-010", name: "Vũ Thị Phương", email: "phuong.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "11/02/2026" },
-  { id: "USR-011", name: "Đặng Văn Giang", email: "giang.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "12/02/2026" },
-  { id: "USR-012", name: "Bùi Thị Hải", email: "hai.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "13/02/2026" },
-  { id: "USR-013", name: "Đinh Văn Hùng", email: "hung.reviewer@fpt.edu.vn", role: "Reviewer", status: "Active", createdAt: "14/02/2026" },
-  { id: "USR-003", name: "Phạm Thu Thảo", email: "thao.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "01/02/2026" },
-  { id: "USR-004", name: "Lê Hoàng Nam", email: "nam.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "05/02/2026" },
-  { id: "USR-014", name: "Đỗ Thị Khánh", email: "khanh.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "15/02/2026" },
-  { id: "USR-015", name: "Hoàng Văn Lâm", email: "lam.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "16/02/2026" },
-  { id: "USR-016", name: "Ngô Thị Minh", email: "minh.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "17/02/2026" },
-  { id: "USR-017", name: "Dương Văn Nghĩa", email: "nghia.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "18/02/2026" },
-  { id: "USR-018", name: "Lý Thị Oanh", email: "oanh.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "19/02/2026" },
-  { id: "USR-019", name: "Võ Văn Phong", email: "phong.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "20/02/2026" },
-  { id: "USR-020", name: "Đoàn Thị Quỳnh", email: "quynh.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "21/02/2026" },
-  { id: "USR-021", name: "Trịnh Văn Rồng", email: "rong.speaker@fpt.edu.vn", role: "Speaker", status: "Active", createdAt: "22/02/2026" },
-];
-
-const RECORDINGS_DATASET = [
-  {
-    id: "REC-001", durationSec: 4,
-    reviewers: [
-      { name: "Trần Minh Tâm", status: "Approved", reason: null },
-      { name: "Nguyễn Văn Anh", status: "Approved", reason: null },
-      { name: "Trần Thị Bình", status: "Pending", reason: null }
-    ]
-  },
-  {
-    id: "REC-002", durationSec: 6,
-    reviewers: [
-      { name: "Trần Minh Tâm", status: "Rejected", reason: "Lẫn tiếng ồn môi trường / tạp âm" },
-      { name: "Nguyễn Văn Anh", status: "Rejected", reason: "Giọng đọc bị rè / âm lượng quá nhỏ" },
-      { name: "Trần Thị Bình", status: "Approved", reason: null }
-    ]
-  },
-  {
-    id: "REC-003", durationSec: 5,
-    reviewers: [
-      { name: "Nguyễn Văn Anh", status: "Approved", reason: null },
-      { name: "Lê Văn Cường", status: "Approved", reason: null }
-    ]
-  },
-  {
-    id: "REC-004", durationSec: 4,
-    reviewers: [
-      { name: "Nguyễn Văn Anh", status: "Rejected", reason: "Tốc độ đọc quá nhanh, khó nhận diện từ" },
-      { name: "Phạm Thị Dung", status: "Approved", reason: null },
-      { name: "Hoàng Văn Em", status: "Approved", reason: null }
-    ]
-  },
-  {
-    id: "REC-005", durationSec: 4,
-    reviewers: [
-      { name: "Trần Thị Bình", status: "Approved", reason: null },
-      { name: "Vũ Thị Phương", status: "Approved", reason: null }
-    ]
-  },
-  {
-    id: "REC-006", durationSec: 6,
-    reviewers: [
-      { name: "Trần Thị Bình", status: "Rejected", reason: "Phát âm từ tiếng Anh chưa chuẩn / sai accent" },
-      { name: "Đặng Văn Giang", status: "Rejected", reason: "Đọc thiếu từ hoặc ngắt nghỉ không tự nhiên" }
-    ]
-  },
-  {
-    id: "REC-007", durationSec: 3,
-    reviewers: [
-      { name: "Lê Văn Cường", status: "Approved", reason: null },
-      { name: "Bùi Thị Hải", status: "Approved", reason: null }
-    ]
-  },
-  {
-    id: "REC-008", durationSec: 6,
-    reviewers: [
-      { name: "Lê Văn Cường", status: "Rejected", reason: "Đọc thiếu từ hoặc ngắt nghỉ không tự nhiên" },
-      { name: "Đinh Văn Hùng", status: "Pending", reason: null }
-    ]
-  },
-  {
-    id: "REC-009", durationSec: 4,
-    reviewers: [
-      { name: "Phạm Thị Dung", status: "Approved", reason: null },
-      { name: "Trần Minh Tâm", status: "Approved", reason: null }
-    ]
-  },
-  {
-    id: "REC-010", durationSec: 6,
-    reviewers: [
-      { name: "Phạm Thị Dung", status: "Rejected", reason: "Giọng đọc bị rè / âm lượng quá nhỏ" },
-      { name: "Nguyễn Văn Anh", status: "Rejected", reason: "Lẫn tiếng ồn môi trường / tạp âm" }
-    ]
-  },
-  {
-    id: "REC-011", durationSec: 4,
-    reviewers: [
-      { name: "Hoàng Văn Em", status: "Approved", reason: null },
-      { name: "Trần Thị Bình", status: "Approved", reason: null }
-    ]
-  },
-  {
-    id: "REC-012", durationSec: 4,
-    reviewers: [
-      { name: "Hoàng Văn Em", status: "Rejected", reason: "Phát âm từ tiếng Anh chưa chuẩn / sai accent" },
-      { name: "Lê Văn Cường", status: "Rejected", reason: "Đọc thiếu từ hoặc ngắt nghỉ không tự nhiên" }
-    ]
-  },
-  {
-    id: "REC-013", durationSec: 4,
-    reviewers: [
-      { name: "Vũ Thị Phương", status: "Approved", reason: null },
-      { name: "Phạm Thị Dung", status: "Approved", reason: null }
-    ]
-  },
-  {
-    id: "REC-014", durationSec: 5,
-    reviewers: [
-      { name: "Vũ Thị Phương", status: "Rejected", reason: "Lẫn tiếng ồn môi trường / tạp âm" },
-      { name: "Hoàng Văn Em", status: "Rejected", reason: "Tốc độ đọc quá nhanh, khó nhận diện từ" }
-    ]
-  },
-  {
-    id: "REC-015", durationSec: 4,
-    reviewers: [
-      { name: "Đặng Văn Giang", status: "Approved", reason: null },
-      { name: "Vũ Thị Phương", status: "Approved", reason: null }
-    ]
-  },
-  {
-    id: "REC-016", durationSec: 4,
-    reviewers: [
-      { name: "Đặng Văn Giang", status: "Rejected", reason: "Đọc thiếu từ hoặc ngắt nghỉ không tự nhiên" },
-      { name: "Bùi Thị Hải", status: "Rejected", reason: "Giọng đọc bị rè / âm lượng quá nhỏ" }
-    ]
-  },
-  {
-    id: "REC-017", durationSec: 4,
-    reviewers: [
-      { name: "Bùi Thị Hải", status: "Approved", reason: null },
-      { name: "Đinh Văn Hùng", status: "Approved", reason: null }
-    ]
-  },
-  {
-    id: "REC-018", durationSec: 4,
-    reviewers: [
-      { name: "Bùi Thị Hải", status: "Rejected", reason: "Tốc độ đọc quá nhanh, khó nhận diện từ" },
-      { name: "Trần Minh Tâm", status: "Rejected", reason: "Phát âm từ tiếng Anh chưa chuẩn / sai accent" }
-    ]
-  },
-  {
-    id: "REC-019", durationSec: 4,
-    reviewers: [
-      { name: "Đinh Văn Hùng", status: "Approved", reason: null },
-      { name: "Nguyễn Văn Anh", status: "Approved", reason: null }
-    ]
-  },
-  {
-    id: "REC-020", durationSec: 4,
-    reviewers: [
-      { name: "Đinh Văn Hùng", status: "Rejected", reason: "Giọng đọc bị rè / âm lượng quá nhỏ" },
-      { name: "Trần Thị Bình", status: "Rejected", reason: "Lẫn tiếng ồn môi trường / tạp âm" }
-    ]
-  }
-];
-
-const getRecordingStatus = (reviewers = []) => {
-  const hasPending = reviewers.some((rev) => rev.status === "Pending");
-  if (hasPending) return "Pending";
-
-  const rejectedCount = reviewers.filter((rev) => rev.status === "Rejected").length;
-  if (rejectedCount >= 2) return "Rejected";
-
-  return "Approved";
-};
+import { adminService } from "../../../services/adminService";
 
 export default function AdminDashboard() {
-  const [users, setUsers] = useState(() => {
-    const saved = localStorage.getItem(USER_STORAGE_KEY);
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+  const [users, setUsers] = useState([]);
+  const [recordingsDataset, setRecordingsDataset] = useState([]);
+
+  const fetchDashboardData = async () => {
+    try {
+      const [usersRes, dashboardRes] = await Promise.allSettled([
+        adminService.getUsers(),
+        adminService.getDashboardStats()
+      ]);
+
+      if (usersRes.status === "fulfilled" && usersRes.value) {
+        const list = usersRes.value.items || usersRes.value || [];
+        setUsers(list.map((u) => ({
+          role: u.role,
+        })));
+      }
+
+      if (dashboardRes.status === "fulfilled" && dashboardRes.value) {
+        const stats = dashboardRes.value;
+        if (stats.recordings) {
+          setRecordingsDataset(stats.recordings);
+        }
+      }
+    } catch (err) {
+      console.error("Lỗi khi tải dữ liệu dashboard:", err);
     }
-    return DEFAULT_USERS;
-  });
+  };
 
   useEffect(() => {
-    const handleStorageChange = () => {
-      const saved = localStorage.getItem(USER_STORAGE_KEY);
-      if (saved) {
-        try { setUsers(JSON.parse(saved)); } catch (e) { console.error(e); }
-      }
-    };
-    window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
+    fetchDashboardData();
   }, []);
 
-  const taskManagersCount = users.filter((u) => u.role === "Task Manager").length;
+  const taskManagersCount = users.filter((u) => u.role === "TaskManager" || u.role === "Task Manager").length;
   const reviewersCount = users.filter((u) => u.role === "Reviewer").length;
   const speakersCount = users.filter((u) => u.role === "Speaker").length;
 
@@ -241,26 +67,22 @@ export default function AdminDashboard() {
     let pendingCount = 0;
     const reasonMap = {};
 
-    RECORDINGS_DATASET.forEach((rec) => {
-      totalDuration += rec.durationSec;
-      const status = getRecordingStatus(rec.reviewers);
+    recordingsDataset.forEach((rec) => {
+      totalDuration += rec.durationSec || 0;
+      const status = rec.status || "Pending";
 
-      if (status === "Approved") {
-        approvedCount++;
-      } else if (status === "Pending") {
-        pendingCount++;
-      } else if (status === "Rejected") {
-        rejectedCount++;
-      }
+      if (status === "Approved") approvedCount++;
+      else if (status === "Pending") pendingCount++;
+      else if (status === "Rejected") rejectedCount++;
 
-      rec.reviewers.forEach((rev) => {
+      (rec.reviewers || []).forEach((rev) => {
         if (rev.status === "Rejected" && rev.reason) {
           reasonMap[rev.reason] = (reasonMap[rev.reason] || 0) + 1;
         }
       });
     });
 
-    const totalRecs = RECORDINGS_DATASET.length;
+    const totalRecs = recordingsDataset.length;
     const approvalRate = totalRecs > 0 ? Math.round((approvedCount / totalRecs) * 100) : 0;
 
     const roundedDuration = Math.round(totalDuration);
@@ -277,7 +99,7 @@ export default function AdminDashboard() {
       approvalRate,
       reasonMap,
     };
-  }, []);
+  }, [recordingsDataset]);
 
   const reviewR = 20;
   const reviewCIRC = 2 * Math.PI * reviewR;

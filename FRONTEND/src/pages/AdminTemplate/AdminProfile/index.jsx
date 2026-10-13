@@ -5,6 +5,7 @@ import {
   ADMIN_ACCENT as ACCENT,
   SUCCESS
 } from '../../../constants/theme';
+import { adminService } from '../../../services/adminService';
 
 const VIETNAM_PROVINCES = [
   "TP. Hà Nội", "TP. Hồ Chí Minh", "TP. Đà Nẵng", "TP. Hải Phòng", "TP. Cần Thơ", "TP. Huế",
@@ -14,24 +15,41 @@ const VIETNAM_PROVINCES = [
   "Quảng Trị", "Sơn La", "Tây Ninh", "Thái Nguyên", "Thanh Hóa", "Tuyên Quang", "Vĩnh Long"
 ];
 
-const DEFAULT_ADMIN = {
-  id: "ADM-001",
-  name: "Quản Trị Hệ Thống",
-  email: "admin@fpt.edu.vn",
-  role: "Administrator",
-  gender: "Nam",
-  dob: "1995-01-01",
-  city: "TP. Hà Nội"
-};
-
 export default function AdminProfile() {
   const navigate = useNavigate();
-  const [formData, setFormData] = useState(() => {
-    const saved = localStorage.getItem("admin_user_profile");
-    return saved ? JSON.parse(saved) : DEFAULT_ADMIN;
+  const [formData, setFormData] = useState({
+    id: "",
+    name: "",
+    email: "",
+    role: "",
+    gender: "Nam",
+    dob: "1995-01-01",
+    city: "TP. Hà Nội",
+    phone: ""
   });
 
   const [toast, setToast] = useState({ show: false, message: "" });
+
+  const fetchProfile = async () => {
+    try {
+      const user = await adminService.getProfile();
+      if (user) {
+        setFormData((prev) => ({
+          ...prev,
+          id: `ADM-${String(user.userId || user.id || 1).padStart(3, '0')}`,
+          name: user.fullName || user.name || "",
+          email: user.email || "",
+          role: user.role || "Administrator"
+        }));
+      }
+    } catch (err) {
+      console.error("Lỗi tải thông tin cá nhân:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchProfile();
+  }, []);
 
   useEffect(() => {
     if (toast.show) {
@@ -46,11 +64,19 @@ export default function AdminProfile() {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
-    localStorage.setItem("admin_user_profile", JSON.stringify(formData));
-    window.dispatchEvent(new Event("userProfileUpdated"));
-    setToast({ show: true, message: "Cập nhật hồ sơ cá nhân thành công!" });
+    try {
+      await adminService.updateProfile({
+        fullName: formData.name,
+        phone: formData.phone || null
+      });
+      window.dispatchEvent(new Event("userProfileUpdated"));
+      setToast({ show: true, message: "Cập nhật hồ sơ cá nhân thành công!" });
+    } catch (err) {
+      const msg = err.response?.data?.title || "Cập nhật hồ sơ cá nhân thất bại!";
+      setToast({ show: true, message: msg });
+    }
   };
 
   return (
