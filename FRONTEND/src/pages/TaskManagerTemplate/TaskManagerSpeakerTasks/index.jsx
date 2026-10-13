@@ -180,10 +180,17 @@ export default function TaskManagerSpeakerTasks() {
     if (!formData.title.trim()) return;
 
     try {
-      // Set deadline về cuối ngày UTC (23:59:59) để không bị lùi ngày làm hỏng validation C#
       const selectedDate = new Date(formData.deadline);
       selectedDate.setHours(23, 59, 59, 999);
       const isoDeadline = selectedDate.toISOString();
+
+      const domainMap = {
+        "Công nghệ thông tin": "ItTechnology",
+        "Giáo dục": "Education",
+        "Hội thoại hàng ngày": "DailyLife"
+      };
+
+      const selectedDomainCode = domainMap[formData.topic] || "ItTechnology";
 
       if (editingTask) {
         await taskService.updateTask(editingTask.id, {
@@ -195,14 +202,30 @@ export default function TaskManagerSpeakerTasks() {
         });
         showNotification(`Đã cập nhật nhiệm vụ "${formData.title}"!`);
       } else {
-        await taskService.createTask({
+        // 1. Tạo Task
+        const newCreatedTask = await taskService.createTask({
           title: formData.title,
           description: formData.title,
-          taskType: "Recording", // C# Enum Recording
+          taskType: "Recording",
+          domain: selectedDomainCode,
+          topic: formData.topic,
           campaignId: null,
           targetQty: 10,
           deadline: isoDeadline
         });
+
+        const createdTaskId = newCreatedTask?.summary?.taskId || newCreatedTask?.taskId || newCreatedTask?.id;
+
+        // 2. Tự động lấp các câu đúng chủ đề (domain) được chọn vào Task
+        if (createdTaskId) {
+          await taskService.addTaskItems?.(createdTaskId, {
+            autoFill: {
+              count: 10,
+              domain: selectedDomainCode
+            }
+          }).catch(err => console.warn("Lỗi autoFill domain:", err));
+        }
+
         showNotification(`Đã tạo thành công nhiệm vụ "${formData.title}"!`);
       }
       setIsModalOpen(false);
@@ -224,22 +247,38 @@ export default function TaskManagerSpeakerTasks() {
   };
 
   const handleConfirmDelete = async () => {
-    if (!taskToDelete) return;
-    const targetId = Number(taskToDelete.id || taskToDelete.taskId);
+  if (!taskToDelete) return;
+  const targetId = Number(taskToDelete.id || taskToDelete.taskId);
 
+  try {
+    // 1. Thử gọi API xóa cứng trước (dành cho task rảnh)
+    await taskService.deleteTask(targetId);
+    
+    // Nếu BE xóa thành công trong DB -> mới cập nhật lại UI
+    setTasks((prev) => prev.filter((t) => t.id !== targetId));
+    showNotification(`Đã xóa thành công nhiệm vụ "${taskToDelete.title}"!`);
+    setTaskToDelete(null);
+  } catch (deleteError) {
+    // 2. Nếu không xóa cứng được (do task đã có dữ liệu/phân công), chuyển sang gọi API Hủy (cancelTask)
     try {
       await taskService.cancelTask(targetId);
-      setTasks((prev) => prev.filter((t) => t.id !== targetId));
+      
+      // Hủy thành công -> tải lại danh sách từ BE để lấy trạng thái mới nhất
       showNotification(`Đã hủy thành công nhiệm vụ "${taskToDelete.title}"!`);
       setTaskToDelete(null);
       await loadTasksFromApi();
-    } catch (e) {
-      console.warn("Lỗi API cancel:", e?.response?.data || e);
-      const msg = e?.response?.data?.title || e?.response?.data?.message || "Hủy nhiệm vụ thất bại!";
-      showNotification(msg);
+    } catch (cancelError) {
+      // 3. Nếu cả 2 API đều thất bại -> Báo lỗi chính xác từ BE và KHÔNG xóa khỏi UI
+      console.error("Lỗi xóa/hủy task từ BE:", cancelError?.response?.data || cancelError);
+      
+      const responseData = cancelError?.response?.data || deleteError?.response?.data;
+      const errorMsg = responseData?.title || responseData?.message || "Không thể xóa/hủy nhiệm vụ này do ràng buộc dữ liệu!";
+      
+      showNotification(errorMsg);
       setTaskToDelete(null);
     }
-  };
+  }
+};
 
   const filteredTasks = useMemo(() => {
     return tasks.filter((t) => {
@@ -459,6 +498,27 @@ export default function TaskManagerSpeakerTasks() {
                   placeholder="Ví dụ: Thu âm mô hình trí tuệ nhân tạo thế hệ mới"
                   className="w-full px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#25272E] text-gray-900 dark:text-white rounded-lg outline-none font-medium transition-all font-sans truncate focus:bg-white dark:focus:bg-[#1C1D22] focus:border-gray-400 dark:focus:border-gray-500"
                 />
+              </div>
+
+              {/* Ô CHỌN CHỦ ĐỀ: Khóa khi sửa nhiệm vụ */}
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">
+                  Chủ đề (Topic)
+                </label>
+                <select
+                  disabled={!!editingTask}
+                  value={formData.topic}
+                  onChange={(e) => setFormData({ ...formData, topic: e.target.value })}
+                  className={`w-full px-3 py-1.5 text-xs border border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white rounded-lg outline-none font-bold transition-all font-sans ${
+                    editingTask
+                      ? "bg-gray-100 dark:bg-[#18191D] cursor-not-allowed opacity-80 appearance-none"
+                      : "bg-gray-50 dark:bg-[#25272E] cursor-pointer focus:bg-white dark:focus:bg-[#1C1D22] focus:border-gray-400 dark:focus:border-gray-500"
+                  }`}
+                >
+                  <option value="Công nghệ thông tin" className="dark:bg-[#1C1D22]">Công nghệ thông tin</option>
+                  <option value="Giáo dục" className="dark:bg-[#1C1D22]">Giáo dục</option>
+                  <option value="Hội thoại hàng ngày" className="dark:bg-[#1C1D22]">Hội thoại hàng ngày</option>
+                </select>
               </div>
 
               {/* Hàng chứa 2 ô chọn ngày tạo và ngày hạn chót */}
