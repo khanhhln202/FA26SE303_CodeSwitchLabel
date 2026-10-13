@@ -57,3 +57,4 @@ deploy/.deployed-sha
 # ---- Bản sao lưu cục bộ ----
 *.sql.gz
 *.tgz
+docker-compose.local.yml
