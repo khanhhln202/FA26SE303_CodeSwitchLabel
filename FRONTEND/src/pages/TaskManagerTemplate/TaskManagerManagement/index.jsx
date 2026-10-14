@@ -115,7 +115,15 @@ const VNFormatDatePicker = ({ label, value, onChange, minDateIso }) => {
           value={displayValue}
           onChange={handleInputChange}
           maxLength={10}
-          className="w-full h-11 pl-3.5 pr-8 py-2.5 type-body bg-white dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10 rounded-xl outline-none font-sans text-[#16171C] dark:text-gray-100 transition-all"
+          className="w-full h-11 pl-3.5 pr-8 py-2.5 type-body bg-white dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl outline-none font-sans text-[#16171C] dark:text-gray-100 transition-all"
+          onFocus={(e) => {
+            e.target.style.borderColor = TASK_MANAGER_ACCENT;
+            e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
+          }}
+          onBlur={(e) => {
+            e.target.style.borderColor = '';
+            e.target.style.boxShadow = 'none';
+          }}
         />
 
         <div className="absolute right-3 flex items-center justify-center cursor-pointer">
@@ -126,6 +134,20 @@ const VNFormatDatePicker = ({ label, value, onChange, minDateIso }) => {
             value={value && value.includes("-") ? value.split("T")[0] : ""}
             onChange={handleNativePickerChange}
             className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+            onFocus={(e) => {
+              const parentInput = e.target.parentElement.previousElementSibling;
+              if (parentInput) {
+                parentInput.style.borderColor = TASK_MANAGER_ACCENT;
+                parentInput.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
+              }
+            }}
+            onBlur={(e) => {
+              const parentInput = e.target.parentElement.previousElementSibling;
+              if (parentInput) {
+                parentInput.style.borderColor = '';
+                parentInput.style.boxShadow = 'none';
+              }
+            }}
           />
         </div>
       </div>
@@ -765,7 +787,15 @@ export default function TaskManagerManagement() {
                   value={batchFormData.name}
                   onChange={(e) => setBatchFormData({ ...batchFormData, name: e.target.value })}
                   placeholder="Nhập tên đợt..."
-                  className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none transition-all font-sans focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10 placeholder:text-[#9A9CA3]"
+                  className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none transition-all font-sans placeholder:text-[#9A9CA3]"
+                  onFocus={(e) => {
+                    e.target.style.borderColor = TASK_MANAGER_ACCENT;
+                    e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '';
+                    e.target.style.boxShadow = 'none';
+                  }}
                 />
               </div>
 
@@ -778,11 +808,21 @@ export default function TaskManagerManagement() {
                     disabled={modalMode === "UPDATE"}
                     value={batchFormData.topic}
                     onChange={(e) => setBatchFormData({ ...batchFormData, topic: e.target.value })}
-                    className={`w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 text-[#16171C] dark:text-white rounded-xl outline-none font-bold transition-all font-sans focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10 ${
+                    className={`w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 text-[#16171C] dark:text-white rounded-xl outline-none font-bold transition-all font-sans ${
                       modalMode === "UPDATE"
                         ? "bg-[#F7F5EF] dark:bg-[#18191D] cursor-not-allowed opacity-80 appearance-none"
                         : "bg-white dark:bg-[#25272E] cursor-pointer"
                     }`}
+                    onFocus={(e) => {
+                      if (modalMode !== "UPDATE") {
+                        e.target.style.borderColor = TASK_MANAGER_ACCENT;
+                        e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
+                      }
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = '';
+                      e.target.style.boxShadow = 'none';
+                    }}
                   >
                     <option value="Công nghệ thông tin" className="dark:bg-[#1C1D22]">Công nghệ thông tin</option>
                     <option value="Giáo dục" className="dark:bg-[#1C1D22]">Giáo dục</option>
@@ -800,7 +840,15 @@ export default function TaskManagerManagement() {
                     required
                     value={batchFormData.target}
                     onChange={(e) => setBatchFormData({ ...batchFormData, target: e.target.value })}
-                    className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none font-bold transition-all font-sans focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10"
+                    className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none font-bold transition-all font-sans"
+                    onFocus={(e) => {
+                      e.target.style.borderColor = TASK_MANAGER_ACCENT;
+                      e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = '';
+                      e.target.style.boxShadow = 'none';
+                    }}
                   />
                 </div>
               </div>
@@ -816,7 +864,15 @@ export default function TaskManagerManagement() {
                     required
                     value={batchFormData.speakerCount}
                     onChange={(e) => setBatchFormData({ ...batchFormData, speakerCount: e.target.value })}
-                    className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none font-bold transition-all font-sans focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10"
+                    className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none font-bold transition-all font-sans"
+                    onFocus={(e) => {
+                      e.target.style.borderColor = TASK_MANAGER_ACCENT;
+                      e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = '';
+                      e.target.style.boxShadow = 'none';
+                    }}
                   />
                 </div>
 
@@ -830,7 +886,15 @@ export default function TaskManagerManagement() {
                     required
                     value={batchFormData.reviewerCount}
                     onChange={(e) => setBatchFormData({ ...batchFormData, reviewerCount: e.target.value })}
-                    className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none font-bold transition-all font-sans focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10"
+                    className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none font-bold transition-all font-sans"
+                    onFocus={(e) => {
+                      e.target.style.borderColor = TASK_MANAGER_ACCENT;
+                      e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = '';
+                      e.target.style.boxShadow = 'none';
+                    }}
                   />
                 </div>
               </div>
@@ -902,7 +966,15 @@ export default function TaskManagerManagement() {
                   <select
                     value={assignFormData.selectedBatchId}
                     onChange={(e) => handleBatchChangeInAssignModal(e.target.value)}
-                    className="w-full h-11 appearance-none border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl type-body outline-none font-bold transition-all font-sans truncate pl-3.5 pr-8 py-2.5 focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10 cursor-pointer"
+                    className="w-full h-11 appearance-none border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl type-body outline-none font-bold transition-all font-sans truncate pl-3.5 pr-8 py-2.5 cursor-pointer"
+                    onFocus={(e) => {
+                      e.target.style.borderColor = TASK_MANAGER_ACCENT;
+                      e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = '';
+                      e.target.style.boxShadow = 'none';
+                    }}
                   >
                     {batches.map((b, idx) => (
                       <option key={b.id} value={b.id} className="bg-white text-[#16171C] dark:bg-[#1C1D22] dark:text-white">
@@ -924,7 +996,15 @@ export default function TaskManagerManagement() {
                   <select
                     value={assignFormData.selectedUniqueKey}
                     onChange={(e) => handleTaskChangeInAssignModal(e.target.value)}
-                    className="w-full h-11 appearance-none border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl type-body outline-none font-bold transition-all font-sans truncate pl-3.5 pr-8 py-2.5 focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10 cursor-pointer"
+                    className="w-full h-11 appearance-none border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl type-body outline-none font-bold transition-all font-sans truncate pl-3.5 pr-8 py-2.5 cursor-pointer"
+                    onFocus={(e) => {
+                      e.target.style.borderColor = TASK_MANAGER_ACCENT;
+                      e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = '';
+                      e.target.style.boxShadow = 'none';
+                    }}
                   >
                     {filteredTasksForAssignModal.length > 0 ? (
                       filteredTasksForAssignModal.map((t) => (
@@ -967,13 +1047,14 @@ export default function TaskManagerManagement() {
                       return (
                         <label 
                           key={u.id} 
+                          style={isChecked ? { borderColor: TASK_MANAGER_ACCENT } : {}}
                           className={`flex items-start justify-between p-2.5 rounded-xl type-ui transition-all border ${
                             isDisableUnchecked 
                               ? "opacity-50 cursor-not-allowed text-[#9A9CA3] border-transparent" 
                               : "cursor-pointer"
                           } ${
                             isChecked 
-                              ? "bg-white dark:bg-[#1C1D22] border-[#16A34A] shadow-xs font-bold text-[#16171C] dark:text-white" 
+                              ? "bg-white dark:bg-[#1C1D22] shadow-xs font-bold text-[#16171C] dark:text-white" 
                               : "bg-white/70 dark:bg-[#1C1D22]/50 border-[#E5E2D8] dark:border-gray-700 hover:bg-white text-[#6E7078] dark:text-gray-300"
                           }`}
                         >
@@ -1138,7 +1219,15 @@ export default function TaskManagerManagement() {
                   type="text"
                   value={editTaskFormData.title}
                   onChange={(e) => setEditTaskFormData({ ...editTaskFormData, title: e.target.value })}
-                  className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none font-medium transition-all font-sans focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10"
+                  className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none font-medium transition-all font-sans"
+                  onFocus={(e) => {
+                    e.target.style.borderColor = TASK_MANAGER_ACCENT;
+                    e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '';
+                    e.target.style.boxShadow = 'none';
+                  }}
                 />
               </div>
 
@@ -1190,13 +1279,14 @@ export default function TaskManagerManagement() {
                           return (
                             <label 
                               key={u.id}
+                              style={isChecked ? { borderColor: TASK_MANAGER_ACCENT } : {}}
                               className={`flex items-start justify-between p-2.5 rounded-xl type-ui transition-all border ${
                                 isDisableUnchecked 
                                   ? "opacity-50 cursor-not-allowed text-[#9A9CA3] border-transparent" 
                                   : "cursor-pointer"
                               } ${
                                 isChecked 
-                                  ? "bg-white dark:bg-[#1C1D22] border-[#16A34A] shadow-xs font-bold text-[#16171C] dark:text-white" 
+                                  ? "bg-white dark:bg-[#1C1D22] shadow-xs font-bold text-[#16171C] dark:text-white" 
                                   : "bg-white/70 dark:bg-[#1C1D22]/50 border-[#E5E2D8] dark:border-gray-700 hover:bg-white text-[#6E7078] dark:text-gray-300"
                               }`}
                             >
@@ -1578,7 +1668,17 @@ export default function TaskManagerManagement() {
           {/* Filter Bar */}
           <div className="rounded-2xl border border-[#E5E2D8] dark:border-gray-800 bg-white dark:bg-[#1C1D22] p-2.5 shadow-[0_1px_3px_rgba(16,17,20,0.04)] flex flex-col md:flex-row gap-2.5 justify-between items-center transition-colors">
             <div className="w-full md:w-auto flex-1 max-w-xl">
-              <div className="relative w-full flex items-center bg-[#F7F5EF] dark:bg-[#25272E] rounded-xl border border-[#E5E2D8] dark:border-gray-700 focus-within:border-[#16A34A] focus-within:bg-white dark:focus-within:bg-[#1C1D22] transition-all p-1">
+              <div 
+                className="relative w-full flex items-center bg-[#F7F5EF] dark:bg-[#25272E] rounded-xl border border-[#E5E2D8] dark:border-gray-700 transition-all p-1"
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = TASK_MANAGER_ACCENT;
+                  e.currentTarget.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = '';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
                 <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9A9CA3] pointer-events-none z-10" />
                 <input
                   type="text"
@@ -1604,7 +1704,15 @@ export default function TaskManagerManagement() {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-[160px] px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 focus:bg-white dark:focus:bg-[#1C1D22] focus:border-[#16A34A] rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
+                className="min-w-[170px] w-auto px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 focus:bg-white dark:focus:bg-[#1C1D22] rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
+                onFocus={(e) => {
+                  e.target.style.borderColor = TASK_MANAGER_ACCENT;
+                  e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = '';
+                  e.target.style.boxShadow = 'none';
+                }}
               >
                 <option value="ALL" className="bg-white dark:bg-[#25272E]">Tất cả trạng thái</option>
                 <option value="Đang thực hiện" className="bg-white dark:bg-[#25272E]">Đang thực hiện</option>
@@ -1621,11 +1729,11 @@ export default function TaskManagerManagement() {
                 <thead>
                   <tr className="border-b border-[#E5E2D8] dark:border-gray-800 text-[#9A9CA3] dark:text-gray-400 type-label h-8 bg-[#F7F5EF] dark:bg-[#25272E]">
                     <th className="py-2 px-3 text-center w-[50px]">STT</th>
-                    <th className="py-2 px-3 min-w-[200px]">NHIỆM VỤ</th>
-                    <th className="py-2 px-3 text-center w-[100px]">VAI TRÒ</th>
-                    <th className="py-2 px-3 text-center w-[200px]">NGƯỜI ĐƯỢC PHÂN CÔNG</th>
-                    <th className="py-2 px-3 text-center w-[150px]">TRẠNG THÁI</th>
-                    <th className="py-2 px-3 text-center w-[100px]">THAO TÁC</th>
+                    <th className="py-2 px-3 min-w-[200px]">Nhiệm vụ</th>
+                    <th className="py-2 px-3 text-center w-[100px]">Vai trò</th>
+                    <th className="py-2 px-3 text-center w-[200px]">Người được phân công</th>
+                    <th className="py-2 px-3 text-center w-[150px]">Trạng thái</th>
+                    <th className="py-2 px-3 text-center w-[100px]">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#F0EEE6] dark:divide-gray-800">

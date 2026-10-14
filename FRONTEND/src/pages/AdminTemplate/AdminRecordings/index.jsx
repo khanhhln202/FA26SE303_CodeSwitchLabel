@@ -260,7 +260,17 @@ export default function AdminRecordings() {
         {/* Filter Bar */}
         <div className="bg-white dark:bg-[#1C1D22] rounded-2xl border border-[#E5E2D8] dark:border-gray-800 p-2.5 shadow-[0_1px_3px_rgba(16,17,20,0.04)] flex flex-col md:flex-row gap-2.5 justify-between items-center transition-colors">
           <div className="w-full md:w-auto flex-1 max-w-xl">
-            <div className="relative w-full flex items-center bg-[#F7F5EF] dark:bg-[#25272E] rounded-xl border border-[#E5E2D8] dark:border-gray-700 focus-within:border-[#16A34A] focus-within:bg-white dark:focus-within:bg-[#1C1D22] transition-all p-1">
+            <div 
+              className="relative w-full flex items-center bg-[#F7F5EF] dark:bg-[#25272E] rounded-xl border border-[#E5E2D8] dark:border-gray-700 transition-all p-1"
+              onFocus={(e) => {
+                e.currentTarget.style.borderColor = ADMIN_ACCENT;
+                e.currentTarget.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.borderColor = '';
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+            >
               <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9A9CA3] pointer-events-none z-10" />
               <input
                 type="text"
@@ -289,7 +299,15 @@ export default function AdminRecordings() {
                 setStatusFilter(e.target.value);
                 setCurrentPage(1);
               }}
-              className="w-[160px] px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 focus:bg-white dark:focus:bg-[#1C1D22] focus:border-[#16A34A] rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
+              className="w-[160px] px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
+              onFocus={(e) => {
+                e.target.style.borderColor = ADMIN_ACCENT;
+                e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = '';
+                e.target.style.boxShadow = 'none';
+              }}
             >
               <option value="all" className="bg-white dark:bg-[#25272E]">Tất cả trạng thái</option>
               <option value="Approved" className="bg-white dark:bg-[#25272E]">Đã phê duyệt</option>
@@ -511,8 +529,8 @@ export default function AdminRecordings() {
 
               <div className="space-y-1 pt-1">
                 <div className="relative w-full h-1.5 bg-[#E5E2D8] dark:bg-gray-700 rounded-full flex items-center cursor-pointer">
-                  <div className="h-full bg-[#16A34A] rounded-full w-0" />
-                  <div className="w-3 h-3 bg-white dark:bg-gray-200 border-2 border-[#16A34A] rounded-full shadow-xs absolute left-0 -translate-x-1/2 cursor-pointer" />
+                  <div className="h-full rounded-full w-0" style={{ backgroundColor: ADMIN_ACCENT }} />
+                  <div className="w-3 h-3 bg-white dark:bg-gray-200 border-2 rounded-full shadow-xs absolute left-0 -translate-x-1/2 cursor-pointer" style={{ borderColor: ADMIN_ACCENT }} />
                 </div>
                 <div className="flex items-center justify-between type-caption font-label text-[#9A9CA3] dark:text-gray-400 pt-1">
                   <span>0:00</span>

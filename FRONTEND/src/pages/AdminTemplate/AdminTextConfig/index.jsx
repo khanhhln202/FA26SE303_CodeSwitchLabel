@@ -139,7 +139,7 @@ export default function AdminTextConfig() {
                 [&::-webkit-slider-thumb]:rounded-full 
                 [&::-webkit-slider-thumb]:bg-white 
                 [&::-webkit-slider-thumb]:border-4 
-                [&::-webkit-slider-thumb]:border-[var(--admin-accent,#16A34A)] 
+                [&::-webkit-slider-thumb]:border-[#3B82F6] 
                 [&::-webkit-slider-thumb]:shadow-md 
                 [&::-webkit-slider-thumb]:hover:scale-110 
                 [&::-webkit-slider-thumb]:transition-transform"

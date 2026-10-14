@@ -176,7 +176,17 @@ export default function AdminTopicConfig() {
         {/* Toolbar & Search Bar */}
         <div className="bg-white dark:bg-[#1C1D22] rounded-2xl border border-[#E5E2D8] dark:border-gray-800 p-2.5 shadow-[0_1px_3px_rgba(16,17,20,0.04)] flex flex-col md:flex-row gap-2.5 justify-between items-center transition-colors">
           <div className="w-full md:w-auto flex-1 max-w-xl">
-            <div className="relative w-full flex items-center bg-[#F7F5EF] dark:bg-[#25272E] rounded-xl border border-[#E5E2D8] dark:border-gray-700 focus-within:border-[#16A34A] focus-within:bg-white dark:focus-within:bg-[#1C1D22] transition-all p-1">
+            <div 
+              className="relative w-full flex items-center bg-[#F7F5EF] dark:bg-[#25272E] rounded-xl border border-[#E5E2D8] dark:border-gray-700 transition-all p-1"
+              onFocus={(e) => {
+                e.currentTarget.style.borderColor = ADMIN_ACCENT;
+                e.currentTarget.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.borderColor = '';
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+            >
               <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9A9CA3] pointer-events-none z-10" />
               <input
                 type="text"
@@ -206,7 +216,7 @@ export default function AdminTopicConfig() {
             {/* Header Table */}
             <div className="bg-[#F7F5EF] dark:bg-[#25272E] type-label text-[#9A9CA3] dark:text-gray-400 border-b border-[#E5E2D8] dark:border-gray-800 flex items-center shrink-0 h-8">
               <div className="px-3 text-center whitespace-nowrap w-[65px]">STT</div>
-              <div className="px-4 text-left flex-1 whitespace-nowrap">Tên Chủ đề</div>
+              <div className="px-4 text-left flex-1 whitespace-nowrap">Tên chủ đề</div>
               <div className="px-4 text-center w-[100px] whitespace-nowrap">Thao tác</div>
             </div>
 
@@ -296,7 +306,15 @@ export default function AdminTopicConfig() {
                   placeholder="Nhập tên chủ đề..."
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full h-11 px-3.5 py-2.5 bg-white dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10 rounded-xl type-body text-[#16171C] dark:text-white outline-none transition-all placeholder:text-[#9A9CA3]"
+                  className="w-full h-11 px-3.5 py-2.5 bg-white dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-body text-[#16171C] dark:text-white outline-none transition-all placeholder:text-[#9A9CA3]"
+                  onFocus={(e) => {
+                    e.target.style.borderColor = ADMIN_ACCENT;
+                    e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '';
+                    e.target.style.boxShadow = 'none';
+                  }}
                 />
               </div>
 

@@ -215,7 +215,17 @@ export default function AdminTextData() {
         {/* Toolbar & Filter Bar */}
         <div className="bg-white dark:bg-[#1C1D22] rounded-2xl border border-[#E5E2D8] dark:border-gray-800 p-2.5 shadow-[0_1px_3px_rgba(16,17,20,0.04)] flex flex-col md:flex-row gap-2.5 justify-between items-center transition-colors">
           <div className="w-full md:w-auto flex-1 max-w-xl">
-            <div className="relative w-full flex items-center bg-[#F7F5EF] dark:bg-[#25272E] rounded-xl border border-[#E5E2D8] dark:border-gray-700 focus-within:border-[#16A34A] focus-within:bg-white dark:focus-within:bg-[#1C1D22] transition-all p-1">
+            <div 
+              className="relative w-full flex items-center bg-[#F7F5EF] dark:bg-[#25272E] rounded-xl border border-[#E5E2D8] dark:border-gray-700 transition-all p-1"
+              onFocus={(e) => {
+                e.currentTarget.style.borderColor = ADMIN_ACCENT;
+                e.currentTarget.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.borderColor = '';
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+            >
               <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9A9CA3] pointer-events-none z-10" />
               <input
                 type="text"
@@ -244,7 +254,15 @@ export default function AdminTextData() {
                 setSelectedStatus(e.target.value);
                 setCurrentPage(1);
               }}
-              className="w-[160px] px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 focus:bg-white dark:focus:bg-[#1C1D22] focus:border-[#16A34A] rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
+              className="w-[160px] px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
+              onFocus={(e) => {
+                e.target.style.borderColor = ADMIN_ACCENT;
+                e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = '';
+                e.target.style.boxShadow = 'none';
+              }}
             >
               <option value="all" className="bg-white dark:bg-[#25272E]">Tất cả trạng thái</option>
               <option value="active" className="bg-white dark:bg-[#25272E]">Sẵn sàng</option>
@@ -384,7 +402,15 @@ export default function AdminTextData() {
                 <select
                   value={formData.topic}
                   onChange={(e) => setFormData({ ...formData, topic: e.target.value })}
-                  className="w-full h-11 px-3.5 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] type-body text-[#16171C] dark:text-white outline-none cursor-pointer transition-all focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10 font-sans"
+                  className="w-full h-11 px-3.5 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] type-body text-[#16171C] dark:text-white outline-none cursor-pointer transition-all font-sans"
+                  onFocus={(e) => {
+                    e.target.style.borderColor = ADMIN_ACCENT;
+                    e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '';
+                    e.target.style.boxShadow = 'none';
+                  }}
                 >
                   <option value="Công nghệ thông tin" className="bg-white dark:bg-[#25272E]">Công nghệ thông tin</option>
                   <option value="Giáo dục" className="bg-white dark:bg-[#25272E]">Giáo dục</option>
@@ -402,7 +428,15 @@ export default function AdminTextData() {
                   placeholder="Nhập câu mẫu..."
                   value={formData.content}
                   onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                  className="w-full p-3.5 bg-white dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10 rounded-xl type-body text-[#16171C] dark:text-white outline-none transition-all resize-none"
+                  className="w-full p-3.5 bg-white dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-body text-[#16171C] dark:text-white outline-none transition-all resize-none"
+                  onFocus={(e) => {
+                    e.target.style.borderColor = ADMIN_ACCENT;
+                    e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '';
+                    e.target.style.boxShadow = 'none';
+                  }}
                 ></textarea>
                 <div className="flex justify-between items-center mt-1 type-meta text-[#6E7078] dark:text-gray-400">
                   <span>Không giới hạn độ dài câu</span>
@@ -419,7 +453,15 @@ export default function AdminTextData() {
                 <select
                   value={formData.status}
                   onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  className="w-full h-11 px-3.5 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] type-body text-[#16171C] dark:text-white outline-none cursor-pointer transition-all focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10 font-sans"
+                  className="w-full h-11 px-3.5 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] type-body text-[#16171C] dark:text-white outline-none cursor-pointer transition-all font-sans"
+                  onFocus={(e) => {
+                    e.target.style.borderColor = ADMIN_ACCENT;
+                    e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '';
+                    e.target.style.boxShadow = 'none';
+                  }}
                 >
                   <option value="active" className="bg-white dark:bg-[#25272E]">Sẵn sàng</option>
                   <option value="pending" className="bg-white dark:bg-[#25272E]">Chờ duyệt</option>
