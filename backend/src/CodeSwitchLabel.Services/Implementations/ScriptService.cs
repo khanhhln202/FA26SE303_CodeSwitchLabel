@@ -375,6 +375,7 @@ public class ScriptService(
         // lần lưu thứ nhất bên dưới.
         string? editedCs = null;
         string? editedVe = null;
+        EditPlan? edit = null;
 
         switch (action)
         {
@@ -385,7 +386,7 @@ public class ScriptService(
                 (editedCs, editedVe) = RequireEditedPair(request);
                 review.EditedCsContent = editedCs;
                 review.EditedViContent = editedVe;
-                await ValidateEditAsync(script, request, editedCs, editedVe, ct);
+                edit = await ValidateEditAsync(script, request, editedCs, editedVe, ct);
                 break;
 
             case ScriptReviewAction.Rejected:
@@ -416,9 +417,9 @@ public class ScriptService(
         await repository.SaveChangesAsync(ct);
 
         // LƯU LẦN 2 — sửa câu và chốt trạng thái, lúc này lượt duyệt đã nằm trong database.
-        if (action == ScriptReviewAction.Edited)
+        if (edit is not null)
         {
-            ApplyEdit(script, request, editedCs!, editedVe!);
+            ApplyEdit(script, editedCs!, editedVe!, edit);
         }
 
         if (action is ScriptReviewAction.Accepted or ScriptReviewAction.Edited)
@@ -587,16 +588,12 @@ public class ScriptService(
     }
 
     /// <summary>
-    /// Ghi nội dung mới đè lên cặp câu và tính lại hai cột đếm.
-    /// Lược đồ không lưu phiên bản cũ, nên chỉ cho sửa khi chưa có bản ghi âm nào.
-    /// Số từ tiếng Anh cũng không được đổi: nó nằm trong mã script, mà mã thì không đổi được.
+    /// Kiểm tra bản sửa trước khi lượt duyệt được ghi, và tính sẵn những thứ
+    /// <see cref="ApplyEdit"/> cần để không phải đếm lại lần nữa.
+    /// Tách khỏi ApplyEdit vì ReviewCoreAsync phải chạy hết kiểm tra này TRƯỚC lần lưu
+    /// đầu tiên — nếu không, một bản sửa sai sẽ để lại lượt duyệt mồ côi rồi mới ném lỗi.
     /// </summary>
-    /// <summary>
-    /// Kiểm tra bản sửa trước khi lượt duyệt được ghi. Tách khỏi <see cref="ApplyEdit"/> vì
-    /// ReviewCoreAsync phải chạy hết kiểm tra này TRƯỚC lần lưu đầu tiên — nếu không, một bản sửa
-    /// sai sẽ để lại lượt duyệt mồ côi rồi mới ném lỗi.
-    /// </summary>
-    private async Task ValidateEditAsync(
+    private async Task<EditPlan> ValidateEditAsync(
         Script script, ReviewScriptRequest request, string cs, string ve, CancellationToken ct)
     {
         if (await repository.HasRecordingsAsync(script.ScriptId, ct))
@@ -607,7 +604,7 @@ public class ScriptService(
                 "Sửa sẽ làm transcript của bản ghi cũ không còn khớp với âm thanh.");
         }
 
-        var (_, enWordCount) = ValidatePair(cs, ve);
+        var (wordCount, enWordCount) = ValidatePair(cs, ve);
 
         if (enWordCount != script.EnWordCount)
         {
@@ -619,9 +616,11 @@ public class ScriptService(
 
         // Sửa cả alignment thì thay cả bộ dòng script_word của câu. Số từ tiếng Anh phải giữ nguyên,
         // và quan hệ Anh–Việt cũng không đổi được vì nó là chữ số trong mã câu.
+        List<ScriptWord>? words = null;
+
         if (request.EditedAlignment is { Count: > 0 } edited)
         {
-            var words = BuildWords(edited, enWordCount);
+            words = BuildWords(edited, enWordCount);
 
             if (RelationOf(words) != RelationDigitOf(script.ScriptId))
             {
@@ -630,25 +629,26 @@ public class ScriptService(
                     $"Bản sửa đổi quan hệ Anh–Việt, nhưng quan hệ đã nằm trong mã {script.ScriptId} nên không đổi được.");
             }
         }
+
+        return new EditPlan(wordCount, words);
     }
 
-    /// <summary>Ghi bản sửa vào câu. Chỉ chạy sau khi <see cref="ValidateEditAsync"/> đã qua.</summary>
-    private void ApplyEdit(Script script, ReviewScriptRequest request, string cs, string ve)
+    /// <summary>
+    /// Ghi nội dung mới đè lên cặp câu. Lược đồ không lưu phiên bản cũ, nên chỉ cho sửa khi
+    /// chưa có bản ghi âm nào. Số từ tiếng Anh cũng không được đổi: nó nằm trong mã script.
+    /// </summary>
+    private void ApplyEdit(Script script, string cs, string ve, EditPlan plan)
     {
-        var (wordCount, enWordCount) = ValidatePair(cs, ve);
-
-        if (request.EditedAlignment is { Count: > 0 } edited)
+        if (plan.Words is not null)
         {
-            var words = BuildWords(edited, enWordCount);
-
             repository.RemoveWords(script.Words);
-            foreach (var word in words) word.ScriptId = script.ScriptId;
-            repository.AddWords(words);
+            foreach (var word in plan.Words) word.ScriptId = script.ScriptId;
+            repository.AddWords(plan.Words);
         }
 
         script.CsContent = cs;
         script.ViContent = ve;
-        script.WordCount = wordCount;
+        script.WordCount = plan.WordCount;
     }
 
     private async Task<short> ResolveErrorReasonIdAsync(string? code, CancellationToken ct)
@@ -847,3 +847,6 @@ public class ScriptService(
             "Nhờ Admin phân chủ đề cho Reviewer trước (PUT /api/users/{id}/domains).");
     }
 }
+
+/// <summary>Kết quả kiểm tra bản sửa, tính một lần rồi đưa sang <c>ApplyEdit</c> dùng lại.</summary>
+internal record EditPlan(int WordCount, List<ScriptWord>? Words);
