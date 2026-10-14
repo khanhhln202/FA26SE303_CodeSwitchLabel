@@ -159,7 +159,7 @@ export const SIDEBAR_CONFIG = {
       { name: "Bảng điều khiển", to: "/admin", icon: LayoutDashboard, end: true },
       { name: "Quản lý người dùng", to: "/admin/users", icon: Users },
       { name: "Quản lý dữ liệu văn bản", to: "/admin/text-data", icon: FileText },
-      { name: "Quản lý bản thu & bộ dữ liệu", to: "/admin/recordings", icon: Headphones },
+      { name: "Quản lý bản thu và bộ dữ liệu", to: "/admin/recordings", icon: Headphones },
       {
         name: "Thiết lập cấu hình",
         icon: Sliders,

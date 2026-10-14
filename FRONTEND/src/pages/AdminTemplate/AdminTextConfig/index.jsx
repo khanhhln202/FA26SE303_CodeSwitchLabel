@@ -47,17 +47,6 @@ export default function AdminTextConfig() {
   return (
     <div className="max-w-6xl mx-auto h-full flex flex-col justify-between text-left font-sans p-1 overflow-hidden relative transition-colors">
 
-      {/* Header Info */}
-      <div className="shrink-0 mb-2">
-        <h2 className="text-[22px] font-bold text-[#16171C] dark:text-white tracking-tight flex items-center gap-2">
-          <FileText className="w-5 h-5 text-[#16171C] dark:text-white shrink-0" />
-          Thiết lập tiêu chuẩn câu đóng góp
-        </h2>
-        <p className="type-ui text-[#6E7078] dark:text-gray-400 mt-1">
-          Quản lý số lượng từ tiếng Anh trong mỗi câu
-        </p>
-      </div>
-
       {/* Main Config Card */}
       <div className="bg-white dark:bg-[#1C1D22] rounded-[24px] border border-[#E5E2D8] dark:border-gray-800 shadow-[0_1px_3px_rgba(16,17,20,0.04)] overflow-hidden transition-colors flex-1 flex flex-col justify-between my-1.5 min-h-0">
         

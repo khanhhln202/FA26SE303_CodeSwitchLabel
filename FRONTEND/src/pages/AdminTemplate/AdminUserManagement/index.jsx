@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { Users, UserPlus, Search, Filter, Ban, CheckCircle2, Trash2, AlertTriangle, Lock, Unlock } from "lucide-react";
+import { Users, UserPlus, Search, Filter, Ban, CheckCircle2, Trash2, AlertTriangle, Lock, Unlock, X } from "lucide-react";
 import { toast } from "sonner";
 import Pagination from "../../../components/Pagination/Pagination";
 
@@ -156,30 +156,8 @@ export default function AdminUserManagement() {
   return (
     <div className="max-w-6xl mx-auto h-full flex flex-col justify-between text-left font-sans p-1 overflow-hidden relative transition-colors">
       
-      {/* Header & Filter */}
+      {/* Filter Bar + Nút Thêm Người Dùng */}
       <div className="shrink-0 space-y-2">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
-          <div>
-            <h2 className="text-[22px] font-bold text-[#16171C] dark:text-white tracking-tight flex items-center gap-2">
-              <Users className="w-5 h-5 text-[#16171C] dark:text-white shrink-0" />
-              Quản lý người dùng
-            </h2>
-            <p className="type-ui text-[#6E7078] dark:text-gray-400 mt-0.5">
-              Quản lý tài khoản, phân quyền hệ thống và trạng thái hoạt động
-            </p>
-          </div>
-
-          <button
-            onClick={() => setIsAddModalOpen(true)}
-            style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 10px 24px ${ADMIN_ACCENT}40` }}
-            className="px-4 py-2 text-white rounded-xl type-button flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer shrink-0"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>Thêm người dùng mới</span>
-          </button>
-        </div>
-
-        {/* Filter Bar */}
         <div className="bg-white dark:bg-[#1C1D22] rounded-2xl border border-[#E5E2D8] dark:border-gray-800 p-2.5 shadow-[0_1px_3px_rgba(16,17,20,0.04)] flex flex-col md:flex-row gap-2.5 justify-between items-center transition-colors">
           <div className="w-full md:w-auto flex-1 max-w-xl">
             <div 
@@ -213,29 +191,40 @@ export default function AdminUserManagement() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
-            <Filter className="w-4 h-4 text-[#6E7078] dark:text-gray-400 shrink-0" />
-            <select
-              value={roleFilter}
-              onChange={(e) => {
-                setRoleFilter(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="w-[160px] px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
-              onFocus={(e) => {
-                e.target.style.borderColor = ADMIN_ACCENT;
-                e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
-              }}
-              onBlur={(e) => {
-                e.target.style.borderColor = '';
-                e.target.style.boxShadow = 'none';
-              }}
+          <div className="flex items-center gap-2.5 w-full md:w-auto shrink-0 flex-wrap md:flex-nowrap justify-end">
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-[#6E7078] dark:text-gray-400 shrink-0" />
+              <select
+                value={roleFilter}
+                onChange={(e) => {
+                  setRoleFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-[160px] px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
+                onFocus={(e) => {
+                  e.target.style.borderColor = ADMIN_ACCENT;
+                  e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = '';
+                  e.target.style.boxShadow = 'none';
+                }}
+              >
+                <option value="all" className="bg-white dark:bg-[#25272E]">Tất cả vai trò</option>
+                <option value="TaskManager" className="bg-white dark:bg-[#25272E]">Task Manager</option>
+                <option value="Reviewer" className="bg-white dark:bg-[#25272E]">Reviewer</option>
+                <option value="Speaker" className="bg-white dark:bg-[#25272E]">Speaker</option>
+              </select>
+            </div>
+
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 10px 24px ${ADMIN_ACCENT}40` }}
+              className="px-3.5 py-2 text-white rounded-xl type-button flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer whitespace-nowrap"
             >
-              <option value="all" className="bg-white dark:bg-[#25272E]">Tất cả vai trò</option>
-              <option value="TaskManager" className="bg-white dark:bg-[#25272E]">Task Manager</option>
-              <option value="Reviewer" className="bg-white dark:bg-[#25272E]">Reviewer</option>
-              <option value="Speaker" className="bg-white dark:bg-[#25272E]">Speaker</option>
-            </select>
+              <UserPlus className="w-4 h-4" />
+              <span>Thêm người dùng mới</span>
+            </button>
           </div>
         </div>
       </div>
@@ -247,7 +236,7 @@ export default function AdminUserManagement() {
             {/* Table Header */}
             <div className="bg-[#F7F5EF] dark:bg-[#25272E] type-label text-[#9A9CA3] dark:text-gray-400 border-b border-[#E5E2D8] dark:border-gray-800 flex items-center shrink-0 h-8">
               <div className="px-3 text-center whitespace-nowrap w-[65px]">STT</div>
-              <div className="px-4 text-left flex-1">Họ và Tên</div>
+              <div className="px-4 text-left flex-1">Họ và tên</div>
               <div className="px-3 text-left flex-1 whitespace-nowrap">Email</div>
               <div className="px-3 text-left w-[140px] whitespace-nowrap">Vai trò</div>
               <div className="px-3 text-left w-[130px] whitespace-nowrap">Trạng thái</div>
@@ -358,7 +347,7 @@ export default function AdminUserManagement() {
               </div>
 
               <div>
-                <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">Họ và Tên</label>
+                <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">Họ và tên</label>
                 <input
                   type="text"
                   required

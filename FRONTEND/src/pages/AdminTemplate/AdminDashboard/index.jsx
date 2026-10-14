@@ -111,17 +111,7 @@ export default function AdminDashboard() {
   }, [qualityStats.reasonMap]);
 
   return (
-    <div className="max-w-6xl mx-auto space-y-4 text-left font-sans p-1 transition-colors h-full flex flex-col justify-between">
-      {/* HEADER TỔNG */}
-      <div>
-        <h2 className="text-[22px] font-bold text-[#16171C] dark:text-white tracking-tight flex items-center gap-2">
-          <BarChart3 className="w-5 h-5 text-[#16171C] dark:text-white shrink-0" />
-          Bảng điều khiển
-        </h2>
-        <p className="type-ui text-[#6E7078] dark:text-gray-400 mt-1">
-          Thống kê nhân sự, thời lượng audio, tỉ lệ duyệt/từ chối và lý do từ chối kiểm duyệt bản thu
-        </p>
-      </div>
+    <div className="max-w-6xl mx-auto space-y-6 text-left font-sans p-1 transition-colors flex flex-col justify-start">
 
       {/* 1. NHÓM THỐNG KÊ NHÂN SỰ VAI TRÒ */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">

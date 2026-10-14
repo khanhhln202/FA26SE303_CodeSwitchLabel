@@ -54,7 +54,16 @@ export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
         });
       }
 
-      const campaignList = campaignData?.items || campaignData?.data || [];
+      const rawCampaigns = campaignData?.items || campaignData?.data || (Array.isArray(campaignData) ? campaignData : []);
+      
+      // Sắp xếp các Đợt nhiệm vụ theo thứ tự ID số tăng dần (giống hệt TaskManagerManagement)
+      const campaignList = rawCampaigns
+        .map((c) => ({
+          ...c,
+          id: Number(c.campaignId || c.id)
+        }))
+        .sort((a, b) => a.id - b.id);
+
       const rawTasks = taskData?.items || taskData?.data || [];
 
       const mappedTasks = rawTasks.map((t) => {
@@ -68,7 +77,7 @@ export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
 
         return {
           id: t.taskId || t.id,
-          campaignId: t.campaignId,
+          campaignId: Number(t.campaignId),
           status: calculatedStatus
         };
       });
@@ -125,16 +134,6 @@ export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
 
   return (
     <div className="w-full h-full flex flex-col gap-4 text-left font-sans p-1 overflow-y-auto transition-colors">
-      {/* Header */}
-      <div>
-        <h2 className="text-[22px] font-bold text-[#16171C] dark:text-white tracking-tight flex items-center gap-2">
-          <FolderKanban className="w-6 h-6 text-[#16171C] dark:text-white shrink-0" />
-          Tổng quan chỉ tiêu & đợt nhiệm vụ
-        </h2>
-        <p className="type-ui text-[#6E7078] dark:text-gray-400 mt-1">
-          Theo dõi chỉ tiêu từ Admin và danh sách các đợt nhiệm vụ đang triển khai
-        </p>
-      </div>
 
       {/* Cards Chỉ tiêu từ Admin */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
@@ -277,7 +276,7 @@ export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
                   return (
                     <tr key={campaignId} className="hover:bg-[#F7F5EF]/70 dark:hover:bg-[#25272E]/50 transition-colors h-11">
                       <td className="py-2 px-3.5 font-bold text-[#16171C] dark:text-white">
-                        Đợt {campaignId || index + 1}
+                        Đợt {index + 1}
                       </td>
                       <td className="py-2 px-3.5 font-medium text-[#16171C] dark:text-gray-200">
                         {item.campaignName || item.title || item.name}
