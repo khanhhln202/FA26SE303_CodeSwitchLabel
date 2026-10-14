@@ -23,8 +23,16 @@ public interface ITaskService
         long taskId, string itemId, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false);
 
-    /// <summary>Giao việc. Task đang có người nhận thì đây chính là điều phối lại.</summary>
+    /// <summary>
+    /// TEAM_010: giao cho NHIỀU người cùng lúc — giao thêm, không đuổi người đang nhận.
+    /// Chỉ tiêu là của cả nhóm nên không nhân theo số người.
+    /// </summary>
     Task<TaskDetailDto> AssignAsync(
+        long taskId, long[] userIds, CancellationToken ct = default,
+        long? callerId = null, bool isAdmin = false);
+
+    /// <summary>TEAM_010: gỡ một người khỏi task, giữ lịch sử lượt giao.</summary>
+    Task<TaskDetailDto> UnassignAsync(
         long taskId, long userId, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false);
 

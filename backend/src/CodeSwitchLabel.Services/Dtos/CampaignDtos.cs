@@ -38,7 +38,8 @@ public record CreateCampaignRequest
     public string CampaignName { get; init; } = string.Empty;
 
     /// <summary>Chủ đề của cả đợt; chỉ nhiệm vụ cùng chủ đề mới gắn vào được.</summary>
-    public ScriptDomain? Domain { get; init; } = ScriptDomain.ItTechnology;
+    [Required(ErrorMessage = "Phải chọn chủ đề (domain).")]
+    public ScriptDomain? Domain { get; init; }
 
     /// <summary>Chỉ tiêu cặp câu cho cả chiến dịch; lược đồ giới hạn 2000..5000.</summary>
     [Required(ErrorMessage = "Phải đặt chỉ tiêu.")]

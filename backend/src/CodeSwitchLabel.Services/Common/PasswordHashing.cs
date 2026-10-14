@@ -44,9 +44,9 @@ public sealed class BcryptPasswordHasher : IPasswordHasher
         {
             return BCrypt.Net.BCrypt.Verify(password, hash);
         }
-        catch (BCrypt.Net.SaltParseException)
+        catch (Exception)
         {
-            // Hash trong database không đúng định dạng bcrypt — ví dụ hàng mồi chưa thay hash thật.
+            // TEAM_007: Hash không đúng định dạng bcrypt (lỗi parse, chuỗi quá ngắn, sai salt) trả false thay vì ném ngoại lệ 500
             return false;
         }
     }

@@ -45,6 +45,12 @@ public static class ConfigKeys
 
     /// <summary>Đỉnh tối đa cho phép (dBFS). Vượt là nghi ngờ vỡ tiếng, trượt QC.</summary>
     public const string RecordingMaxPeakDb = "recording.max_peak_db";
+
+    /// <summary>TEAM_010: phút trước khi một câu đã claim được người khác lấy lại.</summary>
+    public const string QueueClaimTtlMinutes = "queue.claim_ttl_minutes";
+
+    /// <summary>TEAM_010: lô câu văn bản mặc định Task Manager giao cho mỗi người duyệt.</summary>
+    public const string TextReviewBatchSize = "text_review.batch_size";
 }
 
 /// <summary>

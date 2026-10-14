@@ -81,6 +81,7 @@ public sealed class CampaignRuleTests(DatabaseFixture fixture) : ApiTestBase(fix
         var response = await PostAsync("/api/campaigns", new
         {
             campaignName = $"Luật chiến dịch {Guid.NewGuid():N}",
+            domain = "ItTechnology",
             targetQty = 2000,
             startDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
             endDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30))

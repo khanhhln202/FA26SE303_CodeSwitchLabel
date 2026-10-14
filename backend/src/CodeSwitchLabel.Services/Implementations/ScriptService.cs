@@ -46,6 +46,7 @@ internal static class ScriptMapper
 
 public class ScriptService(
     IScriptRepository repository,
+    IScriptQueueService queue,
     IReasonRepository reasonRepository,
     IUserDomainRepository domainRepository,
     ISystemConfigService config,
@@ -69,6 +70,34 @@ public class ScriptService(
                      ?? throw NotFoundException.Script(scriptId);
 
         return script.ToDetail();
+    }
+
+    /// <summary>
+    /// TEAM_010: điều kiện được phép duyệt nội dung một câu — chỉ một lượt, và chỉ
+    /// người được Task Manager giao câu đó trong lô.
+    ///
+    /// Câu nào đã có lượt duyệt rồi thì câu đó không còn trong hàng đợi nữa, nên chặn
+    /// ở đây là chốt cuối cho trường hợp hai người cùng bấm duyệt trong khoảng
+    /// mili-giây — không có chốt này thì lượt sau âm thầm ghi đè lượt trước.
+    /// </summary>
+    private async Task EnsureTextReviewAllowedAsync(string scriptId, long userId, CancellationToken ct)
+    {
+        var alreadyReviewed = await repository.HasAcceptedReviewAsync(scriptId, ct);
+
+        if (alreadyReviewed)
+        {
+            throw new ConflictException(
+                "text_review_already_done",
+                $"Cặp câu {scriptId} đã có người duyệt nội dung rồi. Mỗi câu chỉ duyệt một lượt.");
+        }
+
+        if (!await queue.CanReviewAsync(scriptId, userId, ct))
+        {
+            throw new ForbiddenException(
+                "text_review_not_assigned",
+                $"Cặp câu {scriptId} chưa được giao cho bạn trong hàng đợi duyệt văn bản. " +
+                "Chỉ người được Task Manager chia lô mới duyệt được câu này.");
+        }
     }
 
     /// <summary>
@@ -181,13 +210,10 @@ public class ScriptService(
 
         if (pendingScripts.Count > 0)
         {
-            // Fail-fast: Admin nhập là vào thẳng Validated nên phải đủ trình độ mọi chủ đề
-            // có trong file, thay vì nhập xong mới phát hiện từng câu thiếu quyền.
-            foreach (var domain in pendingScripts.Select(s => s.Domain).Distinct())
-            {
-                await EnsureDomainQualifiedAsync(importedById, domain, ct);
-            }
-
+            // TEAM_010: câu vào hàng đợi thì KHÔNG cần người duyệt có thẩm quyền chủ đề
+            // ngay lúc nhập — thẩm quyền áp dụng cho người DUYỆT (ReviewCoreAsync), không
+            // áp dụng cho việc cho câu nào vào hàng đợi. Kiểm tra fail-fast cũ vì vậy bị
+            // bỏ: nó chặn cả file nhập hàng loạt chỉ vì Admin chưa có domain.
             try
             {
                 foreach (var script in pendingScripts) repository.Add(script);
@@ -225,27 +251,6 @@ public class ScriptService(
                     }
                 }
             }
-
-            if (imported.Count > 0)
-            {
-                // Hai pha như ReviewAsync: lượt duyệt phải nằm sẵn trong DB trước khi status
-                // chuyển sang Validated, vì trigger trg_script_validated_domain không phải defer.
-                var reviewAt = clock.GetUtcNow();
-                foreach (var scriptId in imported)
-                {
-                    repository.AddReview(new ScriptReview
-                    {
-                        ScriptId = scriptId,
-                        UserId = importedById,
-                        Action = ScriptReviewAction.Accepted,
-                        Comment = $"Tự động duyệt khi Admin nhập file {safeName}.",
-                        ReviewedAt = reviewAt
-                    });
-                }
-                await repository.SaveChangesAsync(ct);
-
-                await repository.MarkValidatedAsync(imported, ct);
-            }
         }
 
         if (imported.Count == 0)
@@ -265,6 +270,11 @@ public class ScriptService(
         await repository.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
 
+        // TEAM_010 (yêu cầu 2.1): câu nhập từ file cũng phải VÀO HÀNG ĐỜI chung, đợi
+        // người duyệt — không tự coi là đã duyệt như trước đây. Trigger
+        // trg_script_queue_sync đã tự tạo hàng chặng text_review cho từng câu lúc INSERT;
+        // ở đây không cần (và không được) tự set Validated, vì làm vậy là câu đó lọt
+        // qua hàng đợi mà không ai xem.
         return new ImportResultDto(batch.BatchId, safeName, imported.Count, imported, skipped);
     }
 
@@ -343,6 +353,14 @@ public class ScriptService(
         var action = request.Action!.Value;
         var now = clock.GetUtcNow();
 
+        // TEAM_010 (yêu cầu 2.3): duyệt văn bản chỉ MỘT lượt, và chỉ người Task
+        // Manager giao câu này trong lô mới được duyệt.
+        //
+        // Không có hai chốt này thì nhiều người mở cùng một câu đều thấy nó "chưa ai
+        // duyệt" rồi cùng gửi quyết định — lượt sau ghi đè lượt trước, và câu đã
+        // sửa xong lại bị sửa ngược.
+        await EnsureTextReviewAllowedAsync(scriptId, userId, ct);
+
         var review = new ScriptReview
         {
             ScriptId = scriptId,
@@ -353,16 +371,21 @@ public class ScriptService(
             ReviewedAt = now
         };
 
+        // Nội dung sửa (nếu có) được KIỂM TRA ngay, nhưng CHƯA ghi vào câu — xem ghi chú ở
+        // lần lưu thứ nhất bên dưới.
+        string? editedCs = null;
+        string? editedVe = null;
+
         switch (action)
         {
             case ScriptReviewAction.Accepted:
                 break;
 
             case ScriptReviewAction.Edited:
-                var (cs, ve) = RequireEditedPair(request);
-                review.EditedCsContent = cs;
-                review.EditedViContent = ve;
-                await ApplyEditAsync(script, request, cs, ve, ct);
+                (editedCs, editedVe) = RequireEditedPair(request);
+                review.EditedCsContent = editedCs;
+                review.EditedViContent = editedVe;
+                await ValidateEditAsync(script, request, editedCs, editedVe, ct);
                 break;
 
             case ScriptReviewAction.Rejected:
@@ -374,22 +397,36 @@ public class ScriptService(
         repository.AddReview(review);
 
         // Kiểm tra trình độ đúng chủ đề TRƯỚC lần lưu đầu để khỏi để lại lượt duyệt mồ côi
-        // khi EnsureDomainQualified ném lỗi. Vẫn lưu lượt duyệt trước khi chốt validated để
-        // trigger trg_script_validated_domain (non-defer) thấy hàng duyệt đã nằm sẵn trong DB.
+        // khi EnsureDomainQualified ném lỗi.
         if (action is ScriptReviewAction.Accepted or ScriptReviewAction.Edited)
         {
             await EnsureDomainQualifiedAsync(userId, script.Domain, ct);
         }
 
+        // LƯU LẦN 1 — chỉ có lệnh INSERT của script_review, KHÔNG đụng vào bảng script.
+        //
+        // Lý do phải tách vậy: trigger trg_script_validated_domain chạy ngay (không defer) và chỉ
+        // chấp nhận lượt duyệt có reviewed_at >= updated_at của câu. Mà trg_script_touch đặt
+        // updated_at = now() ở MỌI lần UPDATE, còn reviewed_at đóng dấu bằng đồng hồ ứng dụng —
+        // luôn sớm hơn. Nếu lần lưu này có kèm UPDATE script (sửa nội dung, hoặc chốt
+        // validated luôn) thì updated_at bị đẩy lên, và lượt duyệt vừa ghi bị coi là cũ → 422.
+        //
+        // Gộp làm một lần lưu cũng không cứu được: EF Core không bảo đảm INSERT chạy trước UPDATE
+        // trong cùng một SaveChanges — nó có thể gửi UPDATE script trước INSERT script_review.
         await repository.SaveChangesAsync(ct);
+
+        // LƯU LẦN 2 — sửa câu và chốt trạng thái, lúc này lượt duyệt đã nằm trong database.
+        if (action == ScriptReviewAction.Edited)
+        {
+            ApplyEdit(script, request, editedCs!, editedVe!);
+        }
 
         if (action is ScriptReviewAction.Accepted or ScriptReviewAction.Edited)
         {
             script.Status = ScriptStatus.Validated;
-
-            // updated_at do trigger trg_script_touch của database tự đặt.
-            await repository.SaveChangesAsync(ct);
         }
+
+        await repository.SaveChangesAsync(ct);
 
         // Câu bị loại thì task nào đang chờ thu câu đó cũng mất mục ấy.
         if (action == ScriptReviewAction.Rejected)
@@ -554,7 +591,12 @@ public class ScriptService(
     /// Lược đồ không lưu phiên bản cũ, nên chỉ cho sửa khi chưa có bản ghi âm nào.
     /// Số từ tiếng Anh cũng không được đổi: nó nằm trong mã script, mà mã thì không đổi được.
     /// </summary>
-    private async Task ApplyEditAsync(
+    /// <summary>
+    /// Kiểm tra bản sửa trước khi lượt duyệt được ghi. Tách khỏi <see cref="ApplyEdit"/> vì
+    /// ReviewCoreAsync phải chạy hết kiểm tra này TRƯỚC lần lưu đầu tiên — nếu không, một bản sửa
+    /// sai sẽ để lại lượt duyệt mồ côi rồi mới ném lỗi.
+    /// </summary>
+    private async Task ValidateEditAsync(
         Script script, ReviewScriptRequest request, string cs, string ve, CancellationToken ct)
     {
         if (await repository.HasRecordingsAsync(script.ScriptId, ct))
@@ -565,7 +607,7 @@ public class ScriptService(
                 "Sửa sẽ làm transcript của bản ghi cũ không còn khớp với âm thanh.");
         }
 
-        var (wordCount, enWordCount) = ValidatePair(cs, ve);
+        var (_, enWordCount) = ValidatePair(cs, ve);
 
         if (enWordCount != script.EnWordCount)
         {
@@ -587,6 +629,17 @@ public class ScriptService(
                     "relation_locked",
                     $"Bản sửa đổi quan hệ Anh–Việt, nhưng quan hệ đã nằm trong mã {script.ScriptId} nên không đổi được.");
             }
+        }
+    }
+
+    /// <summary>Ghi bản sửa vào câu. Chỉ chạy sau khi <see cref="ValidateEditAsync"/> đã qua.</summary>
+    private void ApplyEdit(Script script, ReviewScriptRequest request, string cs, string ve)
+    {
+        var (wordCount, enWordCount) = ValidatePair(cs, ve);
+
+        if (request.EditedAlignment is { Count: > 0 } edited)
+        {
+            var words = BuildWords(edited, enWordCount);
 
             repository.RemoveWords(script.Words);
             foreach (var word in words) word.ScriptId = script.ScriptId;

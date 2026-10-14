@@ -111,14 +111,14 @@ console.log('\n== Đổi vai bị chặn khi đang nhận task ==');
 const iso = (days) => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
 const managerId = (await call(T.manager, 'GET', '/api/auth/me')).body.userId;
 r = await call(T.admin, 'POST', '/api/campaigns',
-  { campaignName: 'Chien dich kiem thu nguoi dung', targetQty: 2000, startDate: iso(0), endDate: iso(60) });
+  { campaignName: 'Chien dich kiem thu nguoi dung', targetQty: 2000, domain: 'ItTechnology', startDate: iso(0), endDate: iso(60) });
 const campaignId = r.body?.campaignId;
 await call(T.admin, 'POST', `/api/campaigns/${campaignId}/assign`, { assignedToUserId: managerId });
 
 r = await call(T.manager, 'POST', '/api/tasks', { campaignId, taskType: 'Recording', description: 'Task của speaker3', targetQty: 1, deadline: deadline() });
 const taskId = r.body.summary.taskId;
 await call(T.manager, 'POST', `/api/tasks/${taskId}/items`, { autoFill: { count: 2 } });
-record('6.1', 'Giao task cho speaker3', await call(T.manager, 'POST', `/api/tasks/${taskId}/assign`, { userId: s3 }),
+record('6.1', 'Giao task cho speaker3', await call(T.manager, 'POST', `/api/tasks/${taskId}/assign`, { userIds: [s3] }),
   { status: 200, check: (b) => b.summary.status === 'Open' }, (b) => ({ taskId, status: b.summary.status }));
 record('6.2', 'Số task hiện trong danh sách người giao được việc', await call(T.manager, 'GET', '/api/tasks/assignable-users?taskType=Recording'),
   { status: 200, check: (b) => b.find((u) => u.userId === s3)?.activeTasks === 1 }, (b) => b.find((u) => u.userId === s3));

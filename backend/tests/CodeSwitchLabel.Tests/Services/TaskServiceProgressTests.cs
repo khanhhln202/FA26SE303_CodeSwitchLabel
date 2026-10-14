@@ -30,8 +30,8 @@ public sealed class TaskServiceProgressTests
 
     /// <summary>Speaker vừa gửi đủ hai bản, chưa có bản nào được duyệt.</summary>
     private static TaskRow Row(int done = 0, int submittedPairs = 4, int target = 10) => new(
-        7, 1, "Chiến dịch", TaskType.Recording, ScriptDomain.ItTechnology, "Thu âm", WorkTaskStatus.InProgress, target,
-        null, DateTimeOffset.UtcNow, 9, "Người đọc",
+        7, 1, "Đợt 1", TaskType.Recording, ScriptDomain.ItTechnology, "Thu âm", WorkTaskStatus.InProgress, target,
+        null, DateTimeOffset.UtcNow, [new TaskAssigneeRow(9, "Người đọc")],
         Started: 8, Done: done, SubmittedPairs: submittedPairs, UsableItems: 10, TotalItems: 10);
 
     [Fact]
@@ -41,10 +41,13 @@ public sealed class TaskServiceProgressTests
             .ReturnsAsync([Row()]);
         _tasks.Setup(t => t.GetSpeakerTotalsAsync(9, It.IsAny<CancellationToken>()))
             .ReturnsAsync((8, 0));
+        // TEAM_010: riêng phần việc của người 9 trong task.
+        _tasks.Setup(t => t.GetAssigneeDoneAsync(7, TaskType.Recording, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<long, int> { [9] = 4 });
 
         var result = await _service.GetSpeakerProgressAsync(9, TestContext.Current.CancellationToken);
 
-        var progress = Assert.Single(result.ActiveTasks).Progress;
+        var progress = Assert.Single(result.ActiveTasks).MyProgress;
         Assert.Equal(4, progress.Done);
         Assert.Equal(40, progress.Percent);
         Assert.Equal(8, result.TotalSubmitted);
@@ -58,11 +61,49 @@ public sealed class TaskServiceProgressTests
             .ReturnsAsync([Row(submittedPairs: 10)]);
         _tasks.Setup(t => t.GetSpeakerTotalsAsync(9, It.IsAny<CancellationToken>()))
             .ReturnsAsync((10, 0));
+        _tasks.Setup(t => t.GetAssigneeDoneAsync(7, TaskType.Recording, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<long, int> { [9] = 10 });
 
         var result = await _service.GetSpeakerProgressAsync(9, TestContext.Current.CancellationToken);
 
-        var progress = Assert.Single(result.ActiveTasks).Progress;
+        var progress = Assert.Single(result.ActiveTasks).MyProgress;
         Assert.Equal(100, progress.Percent);
+    }
+
+    /// <summary>
+    /// TEAM_010: task có 3 người nhận thì mỗi người thấy TIẾN ĐỘ CỦA MÌNH, không
+    /// phải tổng của cả nhóm. Trước đây cả ba thấy cùng một con số.
+    /// </summary>
+    [Fact]
+    public async Task TaskNhieuNguoi_MoiNguoiThayTienDoRieng_ConTeamProgressChung()
+    {
+        var row = Row(done: 9, submittedPairs: 12, target: 30) with
+        {
+            Assignees = [new TaskAssigneeRow(9, "A"), new TaskAssigneeRow(10, "B"), new TaskAssigneeRow(11, "C")]
+        };
+
+        _tasks.Setup(t => t.GetActiveRowsForAssigneeAsync(9, TaskType.Recording, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([row]);
+        _tasks.Setup(t => t.GetSpeakerTotalsAsync(9, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((12, 9));
+        _tasks.Setup(t => t.GetAssigneeDoneAsync(7, TaskType.Recording, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<long, int> { [9] = 3, [10] = 4, [11] = 5 });
+
+        var result = await _service.GetSpeakerProgressAsync(9, TestContext.Current.CancellationToken);
+
+        var task = Assert.Single(result.ActiveTasks);
+
+        // Riêng người 9: 3 cặp câu trên tổng 30 → 10%.
+        Assert.Equal(3, task.MyProgress.Done);
+        Assert.Equal(10, task.MyProgress.Percent);
+
+        // Cả nhóm: 12 cặp câu đã thu đủ trên tổng 30 → 40%.
+        Assert.Equal(12, task.TeamProgress.Done);
+        Assert.Equal(40, task.TeamProgress.Percent);
+
+        // Thấy rõ các người cùng nhận.
+        Assert.Equal(3, task.Assignees.Count);
+        Assert.Equal([9L, 10L, 11L], task.Assignees.Select(a => a.UserId).Order());
     }
 
     [Fact]

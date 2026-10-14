@@ -132,31 +132,4 @@ public class ScriptRepositoryTests : IntegrationTestBase
         // Assert
         Assert.False(hasRecordings);
     }
-
-    [Fact]
-    public async Task GetNextForSpeakerAsync_ReServesRejectedScript_ToSameSpeaker()
-    {
-        // TEAM_002 (Option A): rejected takes retry with the SAME speaker — the
-        // single-speaker trigger blocks anyone else, so excluding rejected scripts
-        // for this speaker would orphan the pair. Guard the current behavior.
-        var speaker = await CreateUserWithBuilderAsync(
-            RoleName.Speaker, NewUniqueEmail("requeue"), "Requeue Speaker");
-
-        var script = await CreateValidatedScriptAsync(
-            "[vi]Thu [en]retry [vi]lại nhé",
-            "[vi]Thu thử lại nhé",
-            ScriptDomain.ItTechnology,
-            AdminUserId);
-
-        var recording = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
-        recording.Status = RecordingStatus.Rejected;
-        await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
-
-        // Act — same speaker must still be offered the pair to finish the missing variant.
-        var next = await Scripts.GetNextForSpeakerAsync(speaker.UserId, null, TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.NotNull(next);
-        Assert.Equal(script.ScriptId, next.ScriptId);
-    }
 }

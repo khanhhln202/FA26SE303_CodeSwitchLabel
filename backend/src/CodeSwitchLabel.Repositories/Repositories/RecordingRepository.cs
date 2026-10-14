@@ -8,6 +8,12 @@ namespace CodeSwitchLabel.Repositories.Repositories;
 
 public interface IRecordingRepository
 {
+    /// <summary>
+    /// TEAM_010: chuyển mọi bản ghi của cặp câu sang rejected — dùng cho nút
+    /// "Xóa hoàn toàn". Trả về số bản bị đổi.
+    /// </summary>
+    Task<int> MarkAllRejectedAsync(string scriptId, CancellationToken ct = default);
+
     Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken ct = default);
 
     Task<Recording?> GetAsync(string recordingId, CancellationToken ct = default);
@@ -48,6 +54,15 @@ public interface IRecordingRepository
 
 public class RecordingRepository(CodeSwitchLabelDbContext db) : IRecordingRepository
 {
+    /// <summary>
+    /// ExecuteUpdate nên không nạp hàng: không cần đọc file audio hay review của bản
+    /// ghi, chỉ cần đổi cột trạng thái.
+    /// </summary>
+    public Task<int> MarkAllRejectedAsync(string scriptId, CancellationToken ct = default) =>
+        db.Recordings
+            .Where(r => r.ScriptId == scriptId && r.Status != RecordingStatus.Rejected)
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.Status, RecordingStatus.Rejected), ct);
+
     public Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken ct = default) =>
         db.Database.BeginTransactionAsync(ct);
 

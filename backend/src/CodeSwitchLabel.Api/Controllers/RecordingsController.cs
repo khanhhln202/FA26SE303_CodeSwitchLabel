@@ -12,7 +12,8 @@ namespace CodeSwitchLabel.Api.Controllers;
 [Route("api/recordings")]
 [Tags(ApiTags.Recordings)]
 [Authorize]
-public class RecordingsController(IRecordingService recordingService) : ControllerBase
+public class RecordingsController(IRecordingService recordingService, IReviewService reviewService)
+    : ControllerBase
 {
     /// <summary>Nộp một bản ghi âm cho một biến thể của cặp câu.</summary>
     /// <remarks>
@@ -81,6 +82,50 @@ public class RecordingsController(IRecordingService recordingService) : Controll
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<AudioUrlDto>> AudioUrl(string id, CancellationToken ct)
         => Ok(await recordingService.GetAudioUrlAsync(id, OwnerFilter(), ct));
+
+    /// <summary>TEAM_010 (yêu cầu 2.4) — nút CHỈ XÓA AUDIO.</summary>
+    /// <remarks>
+    /// Bản ghi bị loại nhưng **câu văn bản được giữ lại** và quay về hàng đợi ghi âm để
+    /// thu lại. Câu quay về cho **chính người đọc cũ**, không phải người khác: luật của
+    /// lược đồ là một cặp câu chỉ một người đọc (`trg_recording_single_speaker`), nên
+    /// giao cho người khác là việc không làm được.
+    ///
+    /// Bắt buộc chọn ít nhất một lý do. Lý do lưu vào `recording.discard_note`, CỐ Ý
+    /// không ghi thành lượt duyệt — đây là quyết định dứt điểm, không phải phiếu bầu.
+    ///
+    /// Chỉ áp dụng khi bản ghi còn `pending_review`. Bản đã chốt rồi thì dùng
+    /// `POST /api/recordings/{id}/reviews` như bình thường.
+    /// </remarks>
+    [HttpPost("{id}/reject-audio")]
+    [Authorize(Roles = "Reviewer,TaskManager,Admin")]
+    [ProducesResponseType(typeof(RejectAudioResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ActionResult<RejectAudioResult>> RejectAudio(
+        string id, [FromBody] RejectAudioRequest request, CancellationToken ct)
+        => Ok(await reviewService.RejectAudioAsync(id, User.GetUserId(), request, ct));
+
+    /// <summary>TEAM_010 (yêu cầu 2.4) — nút XÓA HOÀN TOÀN cả văn bản lẫn audio.</summary>
+    /// <remarks>
+    /// Dành cho câu vô nghĩa hoặc lỗi nghiêm trọng: loại vĩnh viễn để không quay lại
+    /// hàng đợi và gây vòng lặp. Thực hiện bằng **xoá mềm** — câu chuyển sang
+    /// `deactivated` nên trigger rút nó khỏi mọi hàng đợi; dữ liệu vẫn còn để truy vết.
+    ///
+    /// Mọi bản ghi của cặp câu chuyển sang `rejected` và mọi task chứa câu đó bị trừ
+    /// chỉ tiêu, nên task có thể tự rời trạng thái `Completed`.
+    /// </remarks>
+    [HttpPost("{id}/discard-pair")]
+    [Authorize(Roles = "Reviewer,TaskManager,Admin")]
+    [ProducesResponseType(typeof(DiscardPairResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ActionResult<DiscardPairResult>> DiscardPair(
+        string id, [FromBody] DiscardPairRequest request, CancellationToken ct)
+        => Ok(await reviewService.DiscardPairAsync(id, User.GetUserId(), request, ct));
 
     /// <summary>Speaker chỉ được đụng tới bản ghi của mình; các vai khác thì không giới hạn.</summary>
     private long? OwnerFilter() => User.IsInRole("Speaker") ? User.GetUserId() : null;

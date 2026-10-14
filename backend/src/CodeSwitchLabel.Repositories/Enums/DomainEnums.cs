@@ -28,6 +28,18 @@ public enum ScriptDomain { ItTechnology, Education, DailyLife }
 public enum ScriptReviewAction { Accepted, Edited, Rejected }
 
 /// <summary>
+/// TEAM_010: Một câu đi hai chặng — duyệt nội dung rồi mới ghi âm. Cả hai chặng dùng
+/// chung một bảng script_queue để thứ tự FIFO và cơ chế giữ chỗ chỉ phải viết một lần.
+/// </summary>
+public enum QueueStage { TextReview, Recording }
+
+/// <summary>
+/// Claimed là trạng thái tạm có chủ trước khi hết hạn (claim_expires_at), nên câu bị
+/// bỏ ngang quay lại hàng đợi thay vì kẹt vĩnh viễn.
+/// </summary>
+public enum QueueState { Queued, Claimed, Done, Dropped }
+
+/// <summary>
 /// Quan hệ giữa từ tiếng Anh và từ tiếng Việt tương ứng, lưu theo từng từ trong script_word.
 /// proper_noun = danh từ riêng giữ nguyên, không dịch, nên vi_word phải bằng en_word.
 /// </summary>

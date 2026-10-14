@@ -31,12 +31,15 @@ public enum ReviewBlocker
 /// CHỖ CHỐT THẬT SỰ NẰM DƯỚI DATABASE — trigger trg_review_majority. Lớp này chỉ là bản sao
 /// để tầng trên biết còn thiếu mấy lượt và để kiểm thử luật, KHÔNG được dùng để ghi trạng thái.
 ///
-/// Lưu ý: trigger ghim cứng con số 3. Đổi tham số review.rounds_required mà không sửa trigger
-/// thì hai bên lệch nhau — ReviewService ghi log cảnh báo khi phát hiện.
+/// TEAM_007: Trigger trg_review_majority giờ đọc động từ system_config (review.rounds_required),
+/// mặc định là 3 nếu chưa cấu hình.
 /// </summary>
 public static class ReviewRules
 {
-    /// <summary>Số lượt duyệt mà trigger của database đang chờ.</summary>
+    /// <summary>Số lượt duyệt mặc định khi chưa có cấu hình.</summary>
+    public const int DefaultRoundsRequired = 3;
+
+    // TEAM_007: Trigger database hiện đọc động từ system_config ('review.rounds_required'); hằng số này giữ giá trị mặc định fallback.
     public const int RoundsRequiredInDatabase = 3;
 
     public static int NextRound(int existingReviews) => existingReviews + 1;

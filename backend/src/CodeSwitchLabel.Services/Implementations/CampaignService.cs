@@ -68,7 +68,7 @@ public class CampaignService(
         var campaign = new Campaign
         {
             CampaignName = request.CampaignName.Trim(),
-            Domain = request.Domain ?? ScriptDomain.ItTechnology,
+            Domain = request.Domain ?? throw new UnprocessableException("domain_required", "Phải chọn chủ đề (domain) cho chiến dịch."),
             TargetQty = request.TargetQty!.Value,
             StartDate = start,
             EndDate = end,
