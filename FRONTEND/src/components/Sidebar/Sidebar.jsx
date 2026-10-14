@@ -45,7 +45,7 @@ export default function Sidebar({ role, isOpen, onClose }) {
   }
 
   const {
-    background, idleText, accent, accentIcon, accentSoftBg, items, sections, promo,
+    background, idleText, accent, accentIcon, accentSoftBg, items, sections, promo, isThemeable,
     // Màu phụ cho sidebar nền sáng - không khai báo thì giữ đúng màu cũ của sidebar nền tối
     activeText = '#FFFFFF',
     hoverBg = 'rgba(255,255,255,0.06)',
@@ -58,7 +58,10 @@ export default function Sidebar({ role, isOpen, onClose }) {
   } = config;
 
   const itemBase = 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-ui font-label transition-all';
-  const idleCls = 'text-[var(--sidebar-idle)] hover:bg-[var(--sidebar-hover-bg)] hover:text-[var(--sidebar-hover-text)]';
+  const idleCls = isThemeable
+    ? 'text-[#6E7078] dark:text-[#9EA6B8] hover:bg-black/[0.04] dark:hover:bg-white/[0.06] hover:text-[#16171C] dark:hover:text-white'
+    : 'text-[var(--sidebar-idle)] hover:bg-[var(--sidebar-hover-bg)] hover:text-[var(--sidebar-hover-text)]';
+  
   const activeCls = 'text-[var(--sidebar-active-text)] border border-l-[3px]';
   const activeStyle = { background: accentSoftBg, borderColor: accent };
 
@@ -68,10 +71,14 @@ export default function Sidebar({ role, isOpen, onClose }) {
     <aside
       className={`w-64 font-sans h-screen fixed left-0 top-0 flex flex-col justify-between p-5 z-40 overflow-y-auto transition-transform duration-300 ease-in-out ${
         isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+      } ${
+        isThemeable
+          ? 'bg-white dark:bg-[#1C1D22] border-r border-[#E5E2D8] dark:border-gray-800'
+          : ''
       }`}
       style={{
-        background,
-        borderRight: `1px solid ${borderColor}`,
+        background: isThemeable ? undefined : background,
+        borderRight: isThemeable ? undefined : `1px solid ${borderColor}`,
         '--sidebar-idle': idleText,
         '--sidebar-active-text': activeText,
         '--sidebar-hover-bg': hoverBg,
@@ -81,9 +88,20 @@ export default function Sidebar({ role, isOpen, onClose }) {
       }}
     >
       <div className="space-y-5 flex-1 text-left flex flex-col">
-        {/* Logo - luôn 1 màu cố định, không đổi theo role */}
+        {/* Logo - Khi có isThemeable (Admin & Task Manager), chuyển sang logo chữ trắng ở Dark mode */}
         <div className="flex items-center justify-between">
-          <Logo variant={config.logoVariant ?? 'light'} size={40} />
+          {isThemeable ? (
+            <>
+              <div className="dark:hidden">
+                <Logo variant="dark" size={40} />
+              </div>
+              <div className="hidden dark:block">
+                <Logo variant="light" size={40} />
+              </div>
+            </>
+          ) : (
+            <Logo variant={config.logoVariant ?? 'light'} size={40} />
+          )}
           <button
             onClick={onClose}
             className={`lg:hidden p-1.5 rounded-lg ${idleCls}`}
@@ -146,7 +164,7 @@ export default function Sidebar({ role, isOpen, onClose }) {
                 <div key={item.name}>
                   <button
                     onClick={() => toggleGroup(item.name)}
-                    className={`${itemBase} w-full justify-between ${active ? activeCls : idleCls}`}
+                    className={`${itemBase} w-full justify-between cursor-pointer ${active ? activeCls : idleCls}`}
                     style={active ? activeStyle : {}}
                   >
                     <span className="flex items-center gap-3">
@@ -161,7 +179,7 @@ export default function Sidebar({ role, isOpen, onClose }) {
                       open ? 'max-h-40 opacity-100 mt-1' : 'max-h-0 opacity-0'
                     }`}
                   >
-                    <div className="ml-4 pl-3 border-l border-[var(--sidebar-line)] space-y-1">
+                    <div className="ml-4 pl-3 border-l border-[#E5E2D8] dark:border-gray-800 space-y-1">
                       {item.children.map((child) => {
                         const ChildIcon = child.icon;
                         return (
@@ -170,10 +188,11 @@ export default function Sidebar({ role, isOpen, onClose }) {
                             to={child.to}
                             onClick={onClose}
                             className={({ isActive: a }) =>
-                              `flex items-center gap-2.5 px-3 py-2 rounded-lg text-ui font-label transition-all ${
-                                a ? 'bg-[var(--sidebar-hover-bg)] text-[var(--sidebar-active-text)]' : idleCls
+                              `flex items-center gap-2.5 px-3 py-2 rounded-lg text-ui font-label transition-all cursor-pointer ${
+                                a ? 'bg-[var(--sidebar-hover-bg)] text-[var(--sidebar-active-text)] font-bold' : idleCls
                               }`
                             }
+                            style={({ isActive: a }) => (a ? { background: accentSoftBg, color: activeText } : {})}
                           >
                             {({ isActive: a }) => (
                               <>
@@ -197,7 +216,7 @@ export default function Sidebar({ role, isOpen, onClose }) {
                 to={item.to}
                 end={item.end}
                 onClick={onClose}
-                className={({ isActive }) => `${itemBase} ${isActive ? activeCls : idleCls}`}
+                className={({ isActive }) => `${itemBase} cursor-pointer ${isActive ? activeCls : idleCls}`}
                 style={({ isActive }) => (isActive ? activeStyle : {})}
               >
                 {({ isActive }) => (
@@ -211,7 +230,6 @@ export default function Sidebar({ role, isOpen, onClose }) {
           })}
         </nav>
         )}
-
         {/* Thẻ nhắc nhở nhỏ cuối sidebar - chỉ hiện nếu role có cấu hình promo */}
         {promo && (
           <div className="mt-auto mb-2 p-4 rounded-xl border border-[var(--sidebar-line)] space-y-2" style={{ background: promoBg }}>
@@ -225,7 +243,7 @@ export default function Sidebar({ role, isOpen, onClose }) {
       </div>
 
       {/* Footer dùng chung cho mọi role */}
-      <div className="space-y-1 pt-4 border-t border-[var(--sidebar-line)] text-left shrink-0">
+      <div className="space-y-1 pt-4 border-t border-[#E5E2D8] dark:border-gray-800 text-left shrink-0">
         <NavLink
           to="help-center"
           onClick={onClose}
