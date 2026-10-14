@@ -3,7 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import Sidebar from '../../components/Sidebar/Sidebar';
 import Logo from '../../components/Logo/Logo';
-import AdminHeader from '../../components/AdminHeader/AdminHeader';
+import Header from '../../components/Header/Header';
 import usePageTitle from '../../hooks/usePageTitle';
 
 export default function AdminTemplate() {
@@ -62,7 +62,7 @@ export default function AdminTemplate() {
         <main className="flex-1 lg:ml-64 h-full flex flex-col overflow-hidden bg-[#f8f7f0] dark:bg-[#0F172A] pt-16 lg:pt-0 transition-colors">
           {/* Header dành cho Desktop */}
           <div className="hidden lg:block">
-            <AdminHeader />
+            <Header role="admin" />
           </div>
 
           {/* Nơi chứa nội dung các trang con */}
