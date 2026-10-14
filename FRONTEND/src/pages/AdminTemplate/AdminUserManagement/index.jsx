@@ -140,9 +140,11 @@ export default function AdminUserManagement() {
 
   const filteredUsers = useMemo(() => {
     return users.filter((u) => {
+      // Loại bỏ tài khoản Admin/Administrator khỏi danh sách
+      const isNotAdmin = u.role !== "Admin" && u.role !== "Administrator";
       const matchSearch = u.name.toLowerCase().includes(searchTerm.toLowerCase()) || u.email.toLowerCase().includes(searchTerm.toLowerCase());
       const matchRole = roleFilter === "all" || u.role === roleFilter;
-      return matchSearch && matchRole;
+      return isNotAdmin && matchSearch && matchRole;
     });
   }, [users, searchTerm, roleFilter]);
 
@@ -210,7 +212,17 @@ export default function AdminUserManagement() {
         {/* Filter Bar */}
         <div className="bg-white dark:bg-[#1C1D22] rounded-2xl border border-[#E5E2D8] dark:border-gray-800 p-2.5 shadow-[0_1px_3px_rgba(16,17,20,0.04)] flex flex-col md:flex-row gap-2.5 justify-between items-center transition-colors">
           <div className="w-full md:w-auto flex-1 max-w-xl">
-            <div className="relative w-full flex items-center bg-[#F7F5EF] dark:bg-[#25272E] rounded-xl border border-[#E5E2D8] dark:border-gray-700 focus-within:border-[#16A34A] focus-within:bg-white dark:focus-within:bg-[#1C1D22] transition-all p-1">
+            <div 
+              className="relative w-full flex items-center bg-[#F7F5EF] dark:bg-[#25272E] rounded-xl border border-[#E5E2D8] dark:border-gray-700 transition-all p-1"
+              onFocus={(e) => {
+                e.currentTarget.style.borderColor = ADMIN_ACCENT;
+                e.currentTarget.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.borderColor = '';
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+            >
               <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9A9CA3] pointer-events-none z-10" />
               <input
                 type="text"
@@ -239,7 +251,15 @@ export default function AdminUserManagement() {
                 setRoleFilter(e.target.value);
                 setCurrentPage(1);
               }}
-              className="w-[160px] px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 focus:bg-white dark:focus:bg-[#1C1D22] focus:border-[#16A34A] rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
+              className="w-[160px] px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
+              onFocus={(e) => {
+                e.target.style.borderColor = ADMIN_ACCENT;
+                e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = '';
+                e.target.style.boxShadow = 'none';
+              }}
             >
               <option value="all" className="bg-white dark:bg-[#25272E]">Tất cả vai trò</option>
               <option value="TaskManager" className="bg-white dark:bg-[#25272E]">Task Manager</option>
@@ -375,7 +395,15 @@ export default function AdminUserManagement() {
                   value={newUser.name}
                   onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
                   placeholder="Nhập họ tên đầy đủ"
-                  className="w-full h-11 px-3.5 py-2.5 bg-white dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10 text-[#16171C] dark:text-white rounded-xl type-body outline-none transition-all placeholder:text-[#9A9CA3]"
+                  className="w-full h-11 px-3.5 py-2.5 bg-white dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 text-[#16171C] dark:text-white rounded-xl type-body outline-none transition-all placeholder:text-[#9A9CA3]"
+                  onFocus={(e) => {
+                    e.target.style.borderColor = ADMIN_ACCENT;
+                    e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '';
+                    e.target.style.boxShadow = 'none';
+                  }}
                 />
               </div>
 
@@ -387,7 +415,15 @@ export default function AdminUserManagement() {
                   value={newUser.email}
                   onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
                   placeholder="example@fpt.edu.vn"
-                  className="w-full h-11 px-3.5 py-2.5 bg-white dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10 text-[#16171C] dark:text-white rounded-xl type-body outline-none transition-all placeholder:text-[#9A9CA3]"
+                  className="w-full h-11 px-3.5 py-2.5 bg-white dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 text-[#16171C] dark:text-white rounded-xl type-body outline-none transition-all placeholder:text-[#9A9CA3]"
+                  onFocus={(e) => {
+                    e.target.style.borderColor = ADMIN_ACCENT;
+                    e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '';
+                    e.target.style.boxShadow = 'none';
+                  }}
                 />
               </div>
 
@@ -396,7 +432,15 @@ export default function AdminUserManagement() {
                 <select
                   value={newUser.role}
                   onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
-                  className="w-full h-11 px-3.5 py-2.5 bg-white dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10 rounded-xl type-body text-[#16171C] dark:text-white outline-none transition-all cursor-pointer font-sans"
+                  className="w-full h-11 px-3.5 py-2.5 bg-white dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-body text-[#16171C] dark:text-white outline-none transition-all cursor-pointer font-sans"
+                  onFocus={(e) => {
+                    e.target.style.borderColor = ADMIN_ACCENT;
+                    e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '';
+                    e.target.style.boxShadow = 'none';
+                  }}
                 >
                   <option value="Speaker" className="bg-white dark:bg-[#25272E]">Speaker</option>
                   <option value="Reviewer" className="bg-white dark:bg-[#25272E]">Reviewer</option>

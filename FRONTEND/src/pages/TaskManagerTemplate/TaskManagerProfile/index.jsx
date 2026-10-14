@@ -96,7 +96,7 @@ export default function TaskManagerProfile() {
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-[#16A34A]" />
+        <Loader2 className="w-8 h-8 animate-spin" style={{ color: ACCENT }} />
       </div>
     );
   }
@@ -149,7 +149,15 @@ export default function TaskManagerProfile() {
               value={formData.name || ''}
               onChange={(e) => handleChange('name', e.target.value)}
               required
-              className="w-full h-11 px-3.5 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white type-body font-medium transition-all outline-none focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10"
+              className="w-full h-11 px-3.5 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white type-body font-medium transition-all outline-none"
+              onFocus={(e) => {
+                e.target.style.borderColor = ACCENT;
+                e.target.style.boxShadow = `0 0 0 4px ${ACCENT}1A`;
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = '';
+                e.target.style.boxShadow = 'none';
+              }}
             />
           </div>
 
@@ -159,7 +167,15 @@ export default function TaskManagerProfile() {
               <select 
                 value={formData.gender || 'Nam'} 
                 onChange={(e) => handleChange('gender', e.target.value)}
-                className="w-full h-11 px-3.5 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white type-body font-medium transition-all outline-none cursor-pointer focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10"
+                className="w-full h-11 px-3.5 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white type-body font-medium transition-all outline-none cursor-pointer"
+                onFocus={(e) => {
+                  e.target.style.borderColor = ACCENT;
+                  e.target.style.boxShadow = `0 0 0 4px ${ACCENT}1A`;
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = '';
+                  e.target.style.boxShadow = 'none';
+                }}
               >
                 <option value="Nam" className="bg-white dark:bg-[#25272E]">Nam</option>
                 <option value="Nữ" className="bg-white dark:bg-[#25272E]">Nữ</option>
@@ -173,7 +189,15 @@ export default function TaskManagerProfile() {
                 type="date"
                 value={formData.dob || '1997-05-15'}
                 onChange={(e) => handleChange('dob', e.target.value)}
-                className="w-full h-11 px-3.5 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white type-body font-medium transition-all outline-none focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10"
+                className="w-full h-11 px-3.5 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white type-body font-medium transition-all outline-none"
+                onFocus={(e) => {
+                  e.target.style.borderColor = ACCENT;
+                  e.target.style.boxShadow = `0 0 0 4px ${ACCENT}1A`;
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = '';
+                  e.target.style.boxShadow = 'none';
+                }}
               />
             </div>
           </div>
@@ -194,7 +218,15 @@ export default function TaskManagerProfile() {
               <select
                 value={formData.city || 'TP. Hồ Chí Minh'}
                 onChange={(e) => handleChange('city', e.target.value)}
-                className="w-full h-11 px-3.5 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white type-body font-medium transition-all outline-none cursor-pointer font-sans focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10"
+                className="w-full h-11 px-3.5 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white type-body font-medium transition-all outline-none cursor-pointer font-sans"
+                onFocus={(e) => {
+                  e.target.style.borderColor = ACCENT;
+                  e.target.style.boxShadow = `0 0 0 4px ${ACCENT}1A`;
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = '';
+                  e.target.style.boxShadow = 'none';
+                }}
               >
                 {VIETNAM_PROVINCES.map((province) => (
                   <option key={province} value={province} className="bg-white dark:bg-[#25272E]">

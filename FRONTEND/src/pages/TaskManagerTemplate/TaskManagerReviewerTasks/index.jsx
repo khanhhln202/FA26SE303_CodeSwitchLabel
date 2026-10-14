@@ -323,7 +323,17 @@ export default function TaskManagerReviewerTasks() {
         {/* Filter Bar */}
         <div className="bg-white dark:bg-[#1C1D22] rounded-2xl border border-[#E5E2D8] dark:border-gray-800 p-2.5 shadow-[0_1px_3px_rgba(16,17,20,0.04)] flex flex-col md:flex-row gap-2.5 justify-between items-center transition-colors">
           <div className="w-full md:w-auto flex-1 max-w-xl">
-            <div className="relative w-full flex items-center bg-[#F7F5EF] dark:bg-[#25272E] rounded-xl border border-[#E5E2D8] dark:border-gray-700 focus-within:border-[#16A34A] focus-within:bg-white dark:focus-within:bg-[#1C1D22] transition-all p-1">
+            <div 
+              className="relative w-full flex items-center bg-[#F7F5EF] dark:bg-[#25272E] rounded-xl border border-[#E5E2D8] dark:border-gray-700 transition-all p-1"
+              onFocus={(e) => {
+                e.currentTarget.style.borderColor = TASK_MANAGER_ACCENT;
+                e.currentTarget.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.borderColor = '';
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+            >
               <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9A9CA3] pointer-events-none z-10" />
               <input
                 type="text"
@@ -352,7 +362,15 @@ export default function TaskManagerReviewerTasks() {
                 setTopicFilter(e.target.value);
                 setCurrentPage(1);
               }}
-              className="min-w-[170px] w-auto px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 focus:bg-white dark:focus:bg-[#1C1D22] focus:border-[#16A34A] rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
+              className="min-w-[170px] w-auto px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 focus:bg-white dark:focus:bg-[#1C1D22] rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
+              onFocus={(e) => {
+                e.target.style.borderColor = TASK_MANAGER_ACCENT;
+                e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = '';
+                e.target.style.boxShadow = 'none';
+              }}
             >
               <option value="all" className="bg-white dark:bg-[#25272E]">Tất cả chủ đề</option>
               <option value="Công nghệ thông tin" className="bg-white dark:bg-[#25272E]">Công nghệ thông tin</option>
@@ -491,7 +509,15 @@ export default function TaskManagerReviewerTasks() {
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                   placeholder="Ví dụ: Kiểm duyệt mô hình trí tuệ nhân tạo thế hệ mới"
-                  className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none transition-all font-sans focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10 placeholder:text-[#9A9CA3]"
+                  className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none transition-all font-sans placeholder:text-[#9A9CA3]"
+                  onFocus={(e) => {
+                    e.target.style.borderColor = TASK_MANAGER_ACCENT;
+                    e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '';
+                    e.target.style.boxShadow = 'none';
+                  }}
                 />
               </div>
 
@@ -507,8 +533,18 @@ export default function TaskManagerReviewerTasks() {
                   className={`w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 text-[#16171C] dark:text-white rounded-xl outline-none font-bold transition-all font-sans ${
                     editingTask
                       ? "bg-[#F7F5EF] dark:bg-[#18191D] cursor-not-allowed opacity-80 appearance-none"
-                      : "bg-white dark:bg-[#25272E] cursor-pointer focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10"
+                      : "bg-white dark:bg-[#25272E] cursor-pointer"
                   }`}
+                  onFocus={(e) => {
+                    if (!editingTask) {
+                      e.target.style.borderColor = TASK_MANAGER_ACCENT;
+                      e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
+                    }
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '';
+                    e.target.style.boxShadow = 'none';
+                  }}
                 >
                   <option value="Công nghệ thông tin" className="dark:bg-[#1C1D22]">Công nghệ thông tin</option>
                   <option value="Giáo dục" className="dark:bg-[#1C1D22]">Giáo dục</option>
@@ -539,7 +575,9 @@ export default function TaskManagerReviewerTasks() {
                 <div>
                   <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">Hạn chót (Deadline)</label>
                   <div className="relative">
-                    <div className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl font-medium flex items-center justify-between pointer-events-none font-sans">
+                    <div 
+                      className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl font-medium flex items-center justify-between pointer-events-none font-sans transition-all"
+                    >
                       <span>{formatDate(formData.deadline)}</span>
                       <Calendar className="w-4 h-4 text-[#9A9CA3]" />
                     </div>
@@ -550,6 +588,20 @@ export default function TaskManagerReviewerTasks() {
                       value={formData.deadline}
                       onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
                       className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                      onFocus={(e) => {
+                        const parent = e.target.previousElementSibling;
+                        if (parent) {
+                          parent.style.borderColor = TASK_MANAGER_ACCENT;
+                          parent.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
+                        }
+                      }}
+                      onBlur={(e) => {
+                        const parent = e.target.previousElementSibling;
+                        if (parent) {
+                          parent.style.borderColor = '';
+                          parent.style.boxShadow = 'none';
+                        }
+                      }}
                     />
                   </div>
                 </div>
