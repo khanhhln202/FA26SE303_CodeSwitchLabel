@@ -30,7 +30,28 @@ const CATEGORY_COLORS = {
   'Công nghệ thông tin': { bg: '#FBF0DA', text: '#92600A', border: '#F3E0B5' },
   'Giáo dục': { bg: '#FCE7F0', text: '#9D2662', border: '#F8CFE0' },
 };
-const catStyle = (cat) => CATEGORY_COLORS[cat] || { bg: '#F7F5EF', text: '#6E7078', border: '#E5E2D8' };
+
+// Chuẩn hóa tên chủ đề từ tiếng Anh/mã code sang tiếng Việt
+const normalizeTopicName = (rawTopic) => {
+  if (!rawTopic) return 'Công nghệ thông tin';
+  const topicLower = String(rawTopic).trim().toLowerCase();
+
+  if (topicLower.includes('it') || topicLower.includes('tech') || topicLower.includes('công nghệ')) {
+    return 'Công nghệ thông tin';
+  }
+  if (topicLower.includes('daily') || topicLower.includes('life') || topicLower.includes('hội thoại')) {
+    return 'Hội thoại hàng ngày';
+  }
+  if (topicLower.includes('edu') || topicLower.includes('giáo dục')) {
+    return 'Giáo dục';
+  }
+  return rawTopic;
+};
+
+const catStyle = (cat) => {
+  const normalized = normalizeTopicName(cat);
+  return CATEGORY_COLORS[normalized] || { bg: '#F7F5EF', text: '#6E7078', border: '#E5E2D8' };
+};
 
 const countWords = (text) => {
   if (!text || !text.trim()) return 0;
@@ -63,7 +84,7 @@ export default function AdminTextData() {
         items.map((item) => ({
           id: item.scriptId || item.id,
           content: item.csContent || item.csPlain || item.content || "",
-          topic: item.domain || item.topic || "Công nghệ thông tin",
+          topic: normalizeTopicName(item.domain || item.topic),
           status: item.status === "Validated" || item.status === "active" ? "active" : "pending"
         }))
       );
@@ -109,7 +130,7 @@ export default function AdminTextData() {
           action: "Edited",
           editedCsContent: formData.content
         });
-        toast.success(`Đã cập nhật thành công văn bản ${editingItem.id}!`);
+        toast.success(`Đã cập nhật thành công câu văn bản!`);
       } else {
         await adminService.createText({
           csContent: formData.content,
@@ -130,7 +151,7 @@ export default function AdminTextData() {
     if (!itemToDelete) return;
     try {
       await adminService.deleteText(itemToDelete.id);
-      toast.success(`Đã xóa thành công văn bản ${itemToDelete.id}!`);
+      toast.success(`Đã xóa thành công câu văn bản!`);
       fetchTexts();
     } catch (err) {
       const errorMsg = err.response?.data?.title || "Xóa văn bản thất bại!";
@@ -143,7 +164,7 @@ export default function AdminTextData() {
     return textList.filter((item) => {
       const matchesSearch = 
         item.content.toLowerCase().includes(activeSearchTerm.toLowerCase()) || 
-        item.id.toLowerCase().includes(activeSearchTerm.toLowerCase());
+        String(item.id).toLowerCase().includes(activeSearchTerm.toLowerCase());
       const matchesStatus = selectedStatus === "all" || item.status === selectedStatus;
       
       return matchesSearch && matchesStatus;
@@ -159,30 +180,8 @@ export default function AdminTextData() {
   return (
     <div className="max-w-6xl mx-auto h-full flex flex-col justify-between text-left font-sans p-1 overflow-hidden relative transition-colors">
       
-      {/* Header & Filter */}
+      {/* Toolbar & Filter Bar + Nút Thêm Văn Bản */}
       <div className="shrink-0 space-y-2">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
-          <div>
-            <h2 className="text-[22px] font-bold text-[#16171C] dark:text-white tracking-tight flex items-center gap-2">
-              <FileText className="w-5 h-5 text-[#16171C] dark:text-white shrink-0" />
-              Quản lý dữ liệu văn bản
-            </h2>
-            <p className="type-ui text-[#6E7078] dark:text-gray-400 mt-0.5">
-              Kho câu mẫu dùng cho Speaker thu âm và Reviewer kiểm duyệt
-            </p>
-          </div>
-
-          <button
-            onClick={handleOpenAddModal}
-            style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 10px 24px ${ADMIN_ACCENT}40` }}
-            className="px-4 py-2 text-white rounded-xl type-button flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer shrink-0"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Thêm văn bản mới</span>
-          </button>
-        </div>
-
-        {/* Toolbar & Filter Bar */}
         <div className="bg-white dark:bg-[#1C1D22] rounded-2xl border border-[#E5E2D8] dark:border-gray-800 p-2.5 shadow-[0_1px_3px_rgba(16,17,20,0.04)] flex flex-col md:flex-row gap-2.5 justify-between items-center transition-colors">
           <div className="w-full md:w-auto flex-1 max-w-xl">
             <div 
@@ -216,28 +215,39 @@ export default function AdminTextData() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
-            <Filter className="w-4 h-4 text-[#6E7078] dark:text-gray-400 shrink-0" />
-            <select
-              value={selectedStatus}
-              onChange={(e) => {
-                setSelectedStatus(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="w-[160px] px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
-              onFocus={(e) => {
-                e.target.style.borderColor = ADMIN_ACCENT;
-                e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
-              }}
-              onBlur={(e) => {
-                e.target.style.borderColor = '';
-                e.target.style.boxShadow = 'none';
-              }}
+          <div className="flex items-center gap-2.5 w-full md:w-auto shrink-0 flex-wrap md:flex-nowrap justify-end">
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-[#6E7078] dark:text-gray-400 shrink-0" />
+              <select
+                value={selectedStatus}
+                onChange={(e) => {
+                  setSelectedStatus(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-[160px] px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
+                onFocus={(e) => {
+                  e.target.style.borderColor = ADMIN_ACCENT;
+                  e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = '';
+                  e.target.style.boxShadow = 'none';
+                }}
+              >
+                <option value="all" className="bg-white dark:bg-[#25272E]">Tất cả trạng thái</option>
+                <option value="active" className="bg-white dark:bg-[#25272E]">Sẵn sàng</option>
+                <option value="pending" className="bg-white dark:bg-[#25272E]">Chờ duyệt</option>
+              </select>
+            </div>
+
+            <button
+              onClick={handleOpenAddModal}
+              style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 10px 24px ${ADMIN_ACCENT}40` }}
+              className="px-3.5 py-2 text-white rounded-xl type-button flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer whitespace-nowrap"
             >
-              <option value="all" className="bg-white dark:bg-[#25272E]">Tất cả trạng thái</option>
-              <option value="active" className="bg-white dark:bg-[#25272E]">Sẵn sàng</option>
-              <option value="pending" className="bg-white dark:bg-[#25272E]">Chờ duyệt</option>
-            </select>
+              <Plus className="w-4 h-4" />
+              <span>Thêm văn bản mới</span>
+            </button>
           </div>
         </div>
       </div>
@@ -248,7 +258,7 @@ export default function AdminTextData() {
           <div className="min-w-[750px] h-full flex flex-col">
             {/* Header Table */}
             <div className="bg-[#F7F5EF] dark:bg-[#25272E] type-label text-[#9A9CA3] dark:text-gray-400 border-b border-[#E5E2D8] dark:border-gray-800 flex items-center shrink-0 h-8">
-              <div className="px-3 text-center whitespace-nowrap w-[85px]">Mã text</div>
+              <div className="px-3 text-center whitespace-nowrap w-[65px]">STT</div>
               <div className="px-4 text-left flex-1">Nội dung</div>
               <div className="px-3 text-left w-[170px] whitespace-nowrap">Chủ đề</div>
               <div className="px-3 text-left w-[95px] whitespace-nowrap">Số từ</div>
@@ -259,72 +269,79 @@ export default function AdminTextData() {
             {/* Table Body */}
             <div className="divide-y divide-[#F0EEE6] dark:divide-gray-800 type-ui flex-1 grid grid-rows-10">
               {paginatedTexts.length > 0 ? (
-                paginatedTexts.map((item) => (
-                  <div key={item.id} className="hover:bg-[#F7F5EF]/70 dark:hover:bg-[#25272E]/50 transition-colors flex items-center h-full">
-                    <div className="px-3 text-center font-bold text-[#16171C] dark:text-gray-100 whitespace-nowrap w-[85px]">
-                      {item.id}
-                    </div>
-                    
-                    <div className="px-4 flex-1 truncate pr-6 text-[#16171C] dark:text-gray-200 font-medium">
-                      {item.content}
-                    </div>
-                    
-                    <div className="px-3 w-[170px] whitespace-nowrap">
-                      <span className="px-2.5 py-0.5 rounded-md type-caption font-label border" style={{ background: catStyle(item.topic).bg, color: catStyle(item.topic).text, borderColor: catStyle(item.topic).border }}>
-                        {item.topic}
-                      </span>
-                    </div>
-                    
-                    <div className="px-3 w-[95px] font-bold text-[#16171C] dark:text-gray-100 whitespace-nowrap">
-                      {countWords(item.content)} từ
-                    </div>
-                    
-                    <div className="px-3 w-[125px] whitespace-nowrap">
-                      {item.status === "active" ? (
+                paginatedTexts.map((item, index) => {
+                  const stt = (currentPage - 1) * pageSize + index + 1;
+                  const style = catStyle(item.topic);
+                  return (
+                    <div key={item.id} className="hover:bg-[#F7F5EF]/70 dark:hover:bg-[#25272E]/50 transition-colors flex items-center h-full">
+                      <div className="px-3 text-center font-bold text-[#16171C] dark:text-gray-100 whitespace-nowrap w-[65px]">
+                        {stt}
+                      </div>
+                      
+                      <div className="px-4 flex-1 truncate pr-6 text-[#16171C] dark:text-gray-200 font-medium">
+                        {item.content}
+                      </div>
+                      
+                      <div className="px-3 w-[170px] whitespace-nowrap">
                         <span 
-                          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full type-caption font-label border"
-                          style={{
-                            backgroundColor: CHIP_SUCCESS_BG,
-                            borderColor: CHIP_SUCCESS_BORDER,
-                            color: CHIP_SUCCESS_TEXT
-                          }}
+                          className="px-2.5 py-0.5 rounded-md type-caption font-label border inline-block whitespace-nowrap" 
+                          style={{ background: style.bg, color: style.text, borderColor: style.border }}
                         >
-                          <CheckCircle2 className="w-3 h-3 shrink-0" style={{ color: CHIP_SUCCESS_TEXT }} /> Sẵn sàng
+                          {normalizeTopicName(item.topic)}
                         </span>
-                      ) : (
-                        <span 
-                          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full type-caption font-label border"
-                          style={{
-                            backgroundColor: CHIP_WARNING_BG,
-                            borderColor: CHIP_WARNING_BORDER,
-                            color: CHIP_WARNING_TEXT
-                          }}
-                        >
-                          <Clock className="w-3 h-3 shrink-0" style={{ color: CHIP_WARNING_TEXT }} /> Chờ duyệt
-                        </span>
-                      )}
-                    </div>
+                      </div>
+                      
+                      <div className="px-3 w-[95px] font-bold text-[#16171C] dark:text-gray-100 whitespace-nowrap">
+                        {countWords(item.content)} từ
+                      </div>
+                      
+                      <div className="px-3 w-[125px] whitespace-nowrap">
+                        {item.status === "active" ? (
+                          <span 
+                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full type-caption font-label border"
+                            style={{
+                              backgroundColor: CHIP_SUCCESS_BG,
+                              borderColor: CHIP_SUCCESS_BORDER,
+                              color: CHIP_SUCCESS_TEXT
+                            }}
+                          >
+                            <CheckCircle2 className="w-3 h-3 shrink-0" style={{ color: CHIP_SUCCESS_TEXT }} /> Sẵn sàng
+                          </span>
+                        ) : (
+                          <span 
+                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full type-caption font-label border"
+                            style={{
+                              backgroundColor: CHIP_WARNING_BG,
+                              borderColor: CHIP_WARNING_BORDER,
+                              color: CHIP_WARNING_TEXT
+                            }}
+                          >
+                            <Clock className="w-3 h-3 shrink-0" style={{ color: CHIP_WARNING_TEXT }} /> Chờ duyệt
+                          </span>
+                        )}
+                      </div>
 
-                    <div className="px-4 text-center w-[100px] whitespace-nowrap">
-                      <div className="flex items-center justify-center gap-1">
-                        <button 
-                          onClick={() => handleOpenEditModal(item)}
-                          className="w-7 h-7 rounded-lg flex items-center justify-center text-[#6E7078] dark:text-gray-400 hover:text-[#16171C] dark:hover:text-white hover:bg-[#F7F5EF] dark:hover:bg-gray-700 transition-colors cursor-pointer"
-                          title="Chỉnh sửa văn bản"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={() => setItemToDelete(item)}
-                          className="w-7 h-7 rounded-lg flex items-center justify-center text-[#6E7078] dark:text-gray-400 hover:text-[#C63B3B] dark:hover:text-[#E55353] hover:bg-[#FDEAEA] dark:hover:bg-[#C63B3B]/20 transition-colors cursor-pointer"
-                          title="Xóa văn bản"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                      <div className="px-4 text-center w-[100px] whitespace-nowrap">
+                        <div className="flex items-center justify-center gap-1">
+                          <button 
+                            onClick={() => handleOpenEditModal(item)}
+                            className="w-7 h-7 rounded-lg flex items-center justify-center text-[#6E7078] dark:text-gray-400 hover:text-[#16171C] dark:hover:text-white hover:bg-[#F7F5EF] dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                            title="Chỉnh sửa văn bản"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => setItemToDelete({ ...item, stt })}
+                            className="w-7 h-7 rounded-lg flex items-center justify-center text-[#6E7078] dark:text-gray-400 hover:text-[#C63B3B] dark:hover:text-[#E55353] hover:bg-[#FDEAEA] dark:hover:bg-[#C63B3B]/20 transition-colors cursor-pointer"
+                            title="Xóa văn bản"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <div className="row-span-10 flex items-center justify-center text-[#9A9CA3] dark:text-gray-500 type-ui">
                   Không tìm thấy dữ liệu văn bản phù hợp.
@@ -354,7 +371,7 @@ export default function AdminTextData() {
             <form onSubmit={handleSubmitForm} className="p-6 space-y-4">
               <div className="flex items-center justify-between border-b border-[#E5E2D8] dark:border-gray-800 pb-3">
                 <h3 className="type-section text-[#16171C] dark:text-gray-100">
-                  {editingItem ? `Chỉnh sửa Văn bản (${editingItem.id})` : "Thêm văn bản mới"}
+                  {editingItem ? "Chỉnh sửa văn bản" : "Thêm văn bản mới"}
                 </h3>
                 <button
                   type="button"
@@ -471,7 +488,7 @@ export default function AdminTextData() {
               <div>
                 <h3 className="type-section text-[#16171C] dark:text-gray-100">Xác nhận xóa văn bản</h3>
                 <p className="type-ui text-[#6E7078] dark:text-gray-400 mt-1 break-words">
-                  Bạn có chắc chắn muốn xóa mã <span className="font-bold text-[#16171C] dark:text-gray-200">"{itemToDelete.id}"</span>? Hành động này không thể hoàn tác.
+                  Bạn có chắc chắn muốn xóa văn bản STT <span className="font-bold text-[#16171C] dark:text-gray-200">"{itemToDelete.stt}"</span>? Hành động này không thể hoàn tác.
                 </p>
               </div>
               <div className="flex gap-2.5 pt-2">

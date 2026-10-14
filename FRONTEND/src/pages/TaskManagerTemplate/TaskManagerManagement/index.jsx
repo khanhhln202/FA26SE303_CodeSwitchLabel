@@ -1461,41 +1461,6 @@ export default function TaskManagerManagement() {
         </div>
       )}
 
-      {/* Header Page + Cụm Nút Thao Tác */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 shrink-0">
-        <div>
-          <h2 className="text-[22px] font-bold text-[#16171C] dark:text-white tracking-tight flex items-center gap-2">
-            <ListTodo className="w-5 h-5 text-[#16171C] dark:text-white shrink-0" />
-            Quản lý nhiệm vụ
-          </h2>
-          <p className="type-ui text-[#6E7078] dark:text-gray-400 mt-0.5">
-            Quản lý và tạo các nhiệm vụ thực hiện theo từng đợt
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2.5 self-start md:self-auto shrink-0">
-          <button
-            type="button"
-            onClick={handleOpenCreateModal}
-            style={{ backgroundColor: TASK_MANAGER_ACCENT, boxShadow: `0 10px 24px ${TASK_MANAGER_ACCENT}40` }}
-            className="inline-flex items-center gap-1.5 py-2 px-4 type-button text-white rounded-xl hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Tạo đợt</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleOpenAssignModal}
-            style={{ backgroundColor: TASK_MANAGER_ACCENT, boxShadow: `0 10px 24px ${TASK_MANAGER_ACCENT}40` }}
-            className="inline-flex items-center gap-1.5 py-2 px-4 type-button text-white rounded-xl hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer"
-          >
-            <UserCheck className="w-4 h-4" />
-            <span>Phân công</span>
-          </button>
-        </div>
-      </div>
-
       {/* Grid Layout chính */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-3.5 flex-1 min-h-0">
         
@@ -1637,7 +1602,7 @@ export default function TaskManagerManagement() {
         {/* Cột phải: Bảng danh sách nhiệm vụ */}
         <div className="lg:col-span-3 flex flex-col gap-3.5 min-h-0">
           
-          {/* Filter Bar */}
+          {/* Filter Bar + Cụm Nút Thao Tác */}
           <div className="rounded-2xl border border-[#E5E2D8] dark:border-gray-800 bg-white dark:bg-[#1C1D22] p-2.5 shadow-[0_1px_3px_rgba(16,17,20,0.04)] flex flex-col md:flex-row gap-2.5 justify-between items-center transition-colors">
             <div className="w-full md:w-auto flex-1 max-w-xl">
               <div 
@@ -1671,26 +1636,48 @@ export default function TaskManagerManagement() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
-              <Filter className="w-4 h-4 text-[#6E7078] dark:text-gray-400 shrink-0" />
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="min-w-[170px] w-auto px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 focus:bg-white dark:focus:bg-[#1C1D22] rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
-                onFocus={(e) => {
-                  e.target.style.borderColor = TASK_MANAGER_ACCENT;
-                  e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
-                }}
-                onBlur={(e) => {
-                  e.target.style.borderColor = '';
-                  e.target.style.boxShadow = 'none';
-                }}
+            <div className="flex items-center gap-2.5 w-full md:w-auto shrink-0 flex-wrap md:flex-nowrap justify-end">
+              <div className="flex items-center gap-2">
+                <Filter className="w-4 h-4 text-[#6E7078] dark:text-gray-400 shrink-0" />
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="min-w-[150px] w-auto px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 focus:bg-white dark:focus:bg-[#1C1D22] rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
+                  onFocus={(e) => {
+                    e.target.style.borderColor = TASK_MANAGER_ACCENT;
+                    e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '';
+                    e.target.style.boxShadow = 'none';
+                  }}
+                >
+                  <option value="ALL" className="bg-white dark:bg-[#25272E]">Tất cả trạng thái</option>
+                  <option value="Đang thực hiện" className="bg-white dark:bg-[#25272E]">Đang thực hiện</option>
+                  <option value="Hoàn thành" className="bg-white dark:bg-[#25272E]">Hoàn thành</option>
+                  <option value="Đã hủy" className="bg-white dark:bg-[#25272E]">Đã hủy</option>
+                </select>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleOpenCreateModal}
+                style={{ backgroundColor: TASK_MANAGER_ACCENT, boxShadow: `0 10px 24px ${TASK_MANAGER_ACCENT}40` }}
+                className="inline-flex items-center gap-1.5 py-2 px-3.5 type-button text-white rounded-xl hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer whitespace-nowrap"
               >
-                <option value="ALL" className="bg-white dark:bg-[#25272E]">Tất cả trạng thái</option>
-                <option value="Đang thực hiện" className="bg-white dark:bg-[#25272E]">Đang thực hiện</option>
-                <option value="Hoàn thành" className="bg-white dark:bg-[#25272E]">Hoàn thành</option>
-                <option value="Đã hủy" className="bg-white dark:bg-[#25272E]">Đã hủy</option>
-              </select>
+                <Plus className="w-4 h-4" />
+                <span>Tạo đợt</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleOpenAssignModal}
+                style={{ backgroundColor: TASK_MANAGER_ACCENT, boxShadow: `0 10px 24px ${TASK_MANAGER_ACCENT}40` }}
+                className="inline-flex items-center gap-1.5 py-2 px-3.5 type-button text-white rounded-xl hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer whitespace-nowrap"
+              >
+                <UserCheck className="w-4 h-4" />
+                <span>Phân công</span>
+              </button>
             </div>
           </div>
 

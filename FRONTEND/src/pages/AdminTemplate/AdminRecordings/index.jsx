@@ -234,30 +234,8 @@ export default function AdminRecordings() {
 
   return (
     <div className="w-full h-full flex flex-col justify-between text-left font-sans p-1 overflow-hidden transition-colors relative">
-      {/* Header & Filter */}
+      {/* Filter Bar + Nút Tải Dataset */}
       <div className="shrink-0 space-y-2">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-          <div>
-            <h2 className="text-[22px] font-bold text-[#16171C] dark:text-white tracking-tight flex items-center gap-2">
-              <Headphones className="w-5 h-5 text-[#16171C] dark:text-white shrink-0" />
-              Quản lý bản thu & bộ dữ liệu
-            </h2>
-            <p className="type-ui text-[#6E7078] dark:text-gray-400 mt-0.5">
-              Quản lý các bản thu âm Code-switching (Anh - Việt) và xuất tập dữ liệu
-            </p>
-          </div>
-
-          <button
-            onClick={handleExportDataset}
-            style={{ backgroundColor: ADMIN_ACCENT }}
-            className="px-4 py-2 text-white rounded-xl type-button flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer shadow-[0_4px_12px_rgba(22,163,74,0.25)] shrink-0"
-          >
-            <Download className="w-4 h-4" />
-            <span>Tải Dataset chuẩn (.ZIP)</span>
-          </button>
-        </div>
-
-        {/* Filter Bar */}
         <div className="bg-white dark:bg-[#1C1D22] rounded-2xl border border-[#E5E2D8] dark:border-gray-800 p-2.5 shadow-[0_1px_3px_rgba(16,17,20,0.04)] flex flex-col md:flex-row gap-2.5 justify-between items-center transition-colors">
           <div className="w-full md:w-auto flex-1 max-w-xl">
             <div 
@@ -291,29 +269,40 @@ export default function AdminRecordings() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
-            <Filter className="w-4 h-4 text-[#6E7078] dark:text-gray-400 shrink-0" />
-            <select
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="w-[160px] px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
-              onFocus={(e) => {
-                e.target.style.borderColor = ADMIN_ACCENT;
-                e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
-              }}
-              onBlur={(e) => {
-                e.target.style.borderColor = '';
-                e.target.style.boxShadow = 'none';
-              }}
+          <div className="flex items-center gap-2.5 w-full md:w-auto shrink-0 flex-wrap md:flex-nowrap justify-end">
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-[#6E7078] dark:text-gray-400 shrink-0" />
+              <select
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-[160px] px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
+                onFocus={(e) => {
+                  e.target.style.borderColor = ADMIN_ACCENT;
+                  e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = '';
+                  e.target.style.boxShadow = 'none';
+                }}
+              >
+                <option value="all" className="bg-white dark:bg-[#25272E]">Tất cả trạng thái</option>
+                <option value="Approved" className="bg-white dark:bg-[#25272E]">Đã phê duyệt</option>
+                <option value="Pending" className="bg-white dark:bg-[#25272E]">Chờ duyệt</option>
+                <option value="Rejected" className="bg-white dark:bg-[#25272E]">Từ chối</option>
+              </select>
+            </div>
+
+            <button
+              onClick={handleExportDataset}
+              style={{ backgroundColor: ADMIN_ACCENT }}
+              className="px-3.5 py-2 text-white rounded-xl type-button flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer shadow-[0_4px_12px_rgba(22,163,74,0.25)] whitespace-nowrap"
             >
-              <option value="all" className="bg-white dark:bg-[#25272E]">Tất cả trạng thái</option>
-              <option value="Approved" className="bg-white dark:bg-[#25272E]">Đã phê duyệt</option>
-              <option value="Pending" className="bg-white dark:bg-[#25272E]">Chờ duyệt</option>
-              <option value="Rejected" className="bg-white dark:bg-[#25272E]">Từ chối</option>
-            </select>
+              <Download className="w-4 h-4" />
+              <span>Tải Dataset chuẩn (.ZIP)</span>
+            </button>
           </div>
         </div>
       </div>
@@ -321,11 +310,10 @@ export default function AdminRecordings() {
       {/* Main Table Container */}
       <div className="bg-white dark:bg-[#1C1D22] rounded-2xl border border-[#E5E2D8] dark:border-gray-800 shadow-[0_1px_3px_rgba(16,17,20,0.04)] overflow-hidden transition-colors flex-1 flex flex-col justify-between my-1 min-h-0">
         <div className="flex-1 min-h-0 overflow-auto">
-          <table className="w-full h-full text-left border-collapse table-fixed min-w-[950px]">
+          <table className="w-full h-full text-left border-collapse table-fixed min-w-[900px]">
             <thead>
               <tr className="bg-[#F7F5EF] dark:bg-[#25272E] type-label text-[#9A9CA3] dark:text-gray-400 border-b border-[#E5E2D8] dark:border-gray-800 h-8">
-                <th className="w-[85px] px-2 text-center">Mã Audio</th>
-                <th className="w-[85px] px-2 text-center">Mã Text</th>
+                <th className="w-[65px] px-2 text-center">STT</th>
                 <th className="w-[150px] px-2 text-center">Nội dung câu</th>
                 <th className="w-[160px] px-2">Chủ đề</th>
                 <th className="w-[140px] px-2">Speaker</th>
@@ -337,7 +325,8 @@ export default function AdminRecordings() {
             <tbody className="divide-y divide-[#F0EEE6] dark:divide-gray-800 type-ui">
               {paginatedRecordings.length > 0 ? (
                 <>
-                  {paginatedRecordings.map((r) => {
+                  {paginatedRecordings.map((r, index) => {
+                    const stt = (currentPage - 1) * pageSize + index + 1;
                     const style = getCatStyle(r.topic);
                     const status = calculateRecordingStatus(r.reviewers);
                     const totalRev = (r.reviewers || []).length;
@@ -346,11 +335,7 @@ export default function AdminRecordings() {
                     return (
                       <tr key={r.id} className="hover:bg-[#F7F5EF]/70 dark:hover:bg-[#25272E]/50 transition-colors h-11">
                         <td className="px-2 text-center font-bold text-[#16171C] dark:text-gray-100 align-middle">
-                          {r.id}
-                        </td>
-
-                        <td className="px-2 text-center font-bold text-[#16171C] dark:text-gray-100 align-middle">
-                          {r.textId}
+                          {stt}
                         </td>
 
                         {/* Nút xem nội dung câu */}
@@ -463,13 +448,13 @@ export default function AdminRecordings() {
 
                   {Array.from({ length: emptyRowsCount }).map((_, idx) => (
                     <tr key={`empty-${idx}`} className="border-b border-transparent">
-                      <td colSpan="8" className="py-0.5">&nbsp;</td>
+                      <td colSpan="7" className="py-0.5">&nbsp;</td>
                     </tr>
                   ))}
                 </>
               ) : (
                 <tr>
-                  <td colSpan="8" className="py-16 text-center text-[#9A9CA3] dark:text-gray-500 type-ui">
+                  <td colSpan="7" className="py-16 text-center text-[#9A9CA3] dark:text-gray-500 type-ui">
                     Chưa có bản ghi âm nào phù hợp.
                   </td>
                 </tr>
@@ -573,7 +558,7 @@ export default function AdminRecordings() {
                     <Eye className="w-4 h-4" />
                   </div>
                   <h3 className="type-section text-[#16171C] dark:text-gray-100">
-                    Chi tiết nội dung câu ({selectedTextContent.textId})
+                    Chi tiết nội dung câu
                   </h3>
                 </div>
                 <button

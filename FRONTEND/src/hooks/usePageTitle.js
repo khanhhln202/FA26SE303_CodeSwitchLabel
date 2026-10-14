@@ -30,6 +30,23 @@ export const PAGE_TITLES = {
   '/reviewer/history-recording': 'Lịch sử kiểm duyệt ghi âm',
   '/reviewer/history-contribution': 'Lịch sử duyệt đề xuất câu',
   '/reviewer/profile': 'Hồ sơ cá nhân',
+
+  // --- TASK MANAGER ---
+  '/task-manager': 'Trang chủ',
+  '/task-manager/dashboard': 'Bảng điều khiển',
+  '/task-manager/speaker-tasks': 'Speaker',
+  '/task-manager/reviewer-tasks': 'Reviewer',
+  '/task-manager/management': 'Quản lý nhiệm vụ',
+  '/task-manager/profile': 'Hồ sơ cá nhân',
+
+  // --- ADMIN ---
+  '/admin': 'Bảng điều khiển',
+  '/admin/users': 'Quản lý người dùng',
+  '/admin/text-data': 'Quản lý dữ liệu văn bản',
+  '/admin/recordings': 'Quản lý bản thu và bộ dữ liệu',
+  '/admin/configuration/topic': 'Chủ đề',
+  '/admin/configuration/text': 'Câu đóng góp',
+  '/admin/profile': 'Hồ sơ cá nhân',
 };
 
 export default function usePageTitle() {

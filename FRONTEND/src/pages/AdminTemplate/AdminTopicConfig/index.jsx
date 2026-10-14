@@ -119,30 +119,8 @@ export default function AdminTopicConfig() {
   return (
     <div className="max-w-6xl mx-auto h-full flex flex-col justify-between text-left font-sans p-1 overflow-hidden relative transition-colors">
 
-      {/* Header & Toolbar */}
+      {/* Toolbar & Search Bar + Nút Thêm Chủ Đề */}
       <div className="shrink-0 space-y-2">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
-          <div>
-            <h2 className="text-[22px] font-bold text-[#16171C] dark:text-white tracking-tight flex items-center gap-2">
-              <FolderKanban className="w-5 h-5 text-[#16171C] dark:text-white shrink-0" />
-              Thiết lập danh mục chủ đề
-            </h2>
-            <p className="type-ui text-[#6E7078] dark:text-gray-400 mt-0.5">
-              Quản lý danh sách các chủ đề phân loại câu đóng góp trong hệ thống
-            </p>
-          </div>
-
-          <button
-            onClick={handleOpenAddModal}
-            style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 10px 24px ${ADMIN_ACCENT}40` }}
-            className="px-4 py-2 text-white rounded-xl type-button flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer shrink-0"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Thêm chủ đề mới</span>
-          </button>
-        </div>
-
-        {/* Toolbar & Search Bar */}
         <div className="bg-white dark:bg-[#1C1D22] rounded-2xl border border-[#E5E2D8] dark:border-gray-800 p-2.5 shadow-[0_1px_3px_rgba(16,17,20,0.04)] flex flex-col md:flex-row gap-2.5 justify-between items-center transition-colors">
           <div className="w-full md:w-auto flex-1 max-w-xl">
             <div 
@@ -175,6 +153,15 @@ export default function AdminTopicConfig() {
               </button>
             </div>
           </div>
+
+          <button
+            onClick={handleOpenAddModal}
+            style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 10px 24px ${ADMIN_ACCENT}40` }}
+            className="px-3.5 py-2 text-white rounded-xl type-button flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer whitespace-nowrap"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Thêm chủ đề mới</span>
+          </button>
         </div>
       </div>
 

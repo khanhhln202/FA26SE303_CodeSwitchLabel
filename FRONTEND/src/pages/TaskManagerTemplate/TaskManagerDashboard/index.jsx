@@ -141,17 +141,6 @@ export default function TaskManagerDashboard() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-4 text-left font-sans transition-colors p-1">
-      
-      {/* HEADER TỔNG */}
-      <div>
-        <h2 className="text-[22px] font-bold text-[#16171C] dark:text-white tracking-tight flex items-center gap-2">
-          <BarChart3 className="w-5 h-5 text-[#16171C] dark:text-white shrink-0" />
-          <span>Bảng điều khiển</span>
-        </h2>
-        <p className="type-ui text-[#6E7078] dark:text-gray-400 mt-1">
-          Thống kê chính xác số lượng và tình trạng các nhiệm vụ
-        </p>
-      </div>
 
       {/* 1. HÀNG THỐNG KÊ 1: TỔNG SỐ NHIỆM VỤ CỦA SPEAKER & REVIEWER */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">

@@ -267,30 +267,8 @@ export default function TaskManagerReviewerTasks() {
   return (
     <div className="w-full h-full flex flex-col justify-between text-left font-sans p-1 overflow-hidden relative transition-colors">
       
-      {/* Header & Filter */}
+      {/* Filter Bar + Nút Tạo Nhiệm Vụ */}
       <div className="shrink-0 space-y-2">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
-          <div>
-            <h2 className="text-[22px] font-bold text-[#16171C] dark:text-white tracking-tight flex items-center gap-2">
-              <FolderKanban className="w-5 h-5 text-[#16171C] dark:text-white shrink-0" />
-              Nhiệm vụ Reviewer
-            </h2>
-            <p className="type-ui text-[#6E7078] dark:text-gray-400 mt-0.5">
-              Quản lý danh sách nhiệm vụ kiểm duyệt cho các Reviewer
-            </p>
-          </div>
-
-          <button
-            onClick={handleOpenAddModal}
-            style={{ backgroundColor: TASK_MANAGER_ACCENT, boxShadow: `0 10px 24px ${TASK_MANAGER_ACCENT}40` }}
-            className="px-4 py-2 text-white rounded-xl type-button flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer shrink-0"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Tạo nhiệm vụ</span>
-          </button>
-        </div>
-
-        {/* Filter Bar */}
         <div className="bg-white dark:bg-[#1C1D22] rounded-2xl border border-[#E5E2D8] dark:border-gray-800 p-2.5 shadow-[0_1px_3px_rgba(16,17,20,0.04)] flex flex-col md:flex-row gap-2.5 justify-between items-center transition-colors">
           <div className="w-full md:w-auto flex-1 max-w-xl">
             <div 
@@ -324,29 +302,40 @@ export default function TaskManagerReviewerTasks() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
-            <Filter className="w-4 h-4 text-[#6E7078] dark:text-gray-400 shrink-0" />
-            <select
-              value={topicFilter}
-              onChange={(e) => {
-                setTopicFilter(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="min-w-[170px] w-auto px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 focus:bg-white dark:focus:bg-[#1C1D22] rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
-              onFocus={(e) => {
-                e.target.style.borderColor = TASK_MANAGER_ACCENT;
-                e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
-              }}
-              onBlur={(e) => {
-                e.target.style.borderColor = '';
-                e.target.style.boxShadow = 'none';
-              }}
+          <div className="flex items-center gap-2.5 w-full md:w-auto shrink-0 flex-wrap md:flex-nowrap justify-end">
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-[#6E7078] dark:text-gray-400 shrink-0" />
+              <select
+                value={topicFilter}
+                onChange={(e) => {
+                  setTopicFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="min-w-[150px] w-auto px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 focus:bg-white dark:focus:bg-[#1C1D22] rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
+                onFocus={(e) => {
+                  e.target.style.borderColor = TASK_MANAGER_ACCENT;
+                  e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = '';
+                  e.target.style.boxShadow = 'none';
+                }}
+              >
+                <option value="all" className="bg-white dark:bg-[#25272E]">Tất cả chủ đề</option>
+                <option value="Công nghệ thông tin" className="bg-white dark:bg-[#25272E]">Công nghệ thông tin</option>
+                <option value="Giáo dục" className="bg-white dark:bg-[#25272E]">Giáo dục</option>
+                <option value="Hội thoại hàng ngày" className="bg-white dark:bg-[#25272E]">Hội thoại hàng ngày</option>
+              </select>
+            </div>
+
+            <button
+              onClick={handleOpenAddModal}
+              style={{ backgroundColor: TASK_MANAGER_ACCENT, boxShadow: `0 10px 24px ${TASK_MANAGER_ACCENT}40` }}
+              className="px-3.5 py-2 text-white rounded-xl type-button flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer whitespace-nowrap"
             >
-              <option value="all" className="bg-white dark:bg-[#25272E]">Tất cả chủ đề</option>
-              <option value="Công nghệ thông tin" className="bg-white dark:bg-[#25272E]">Công nghệ thông tin</option>
-              <option value="Giáo dục" className="bg-white dark:bg-[#25272E]">Giáo dục</option>
-              <option value="Hội thoại hàng ngày" className="bg-white dark:bg-[#25272E]">Hội thoại hàng ngày</option>
-            </select>
+              <Plus className="w-4 h-4" />
+              <span>Tạo nhiệm vụ</span>
+            </button>
           </div>
         </div>
       </div>
