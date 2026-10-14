@@ -1,20 +1,17 @@
 import { useState, useEffect } from "react";
 import { 
   FileText, 
-  CheckCircle2, 
-  X,
   Sliders,
   Save
 } from "lucide-react";
+import { toast } from "sonner";
 import {
-  ADMIN_ACCENT,
-  SUCCESS
+  ADMIN_ACCENT
 } from "../../../constants/theme";
 import { adminService } from "../../../services/adminService";
 
 export default function AdminTextConfig() {
   const [maxEnglishWords, setMaxEnglishWords] = useState(5);
-  const [toast, setToast] = useState({ show: false, message: "" });
 
   const fetchConfig = async () => {
     try {
@@ -36,25 +33,12 @@ export default function AdminTextConfig() {
     fetchConfig();
   }, []);
 
-  useEffect(() => {
-    if (toast.show) {
-      const timer = setTimeout(() => {
-        setToast((prev) => ({ ...prev, show: false }));
-      }, 3500);
-      return () => clearTimeout(timer);
-    }
-  }, [toast.show]);
-
-  const showNotification = (msg) => {
-    setToast({ show: true, message: msg });
-  };
-
   const handleSaveConfig = async () => {
     try {
       await adminService.updateTextConfig("maxEnglishWords", maxEnglishWords);
-      showNotification(`Đã lưu cấu hình ${maxEnglishWords} từ thành công!`);
+      toast.success(`Đã lưu cấu hình ${maxEnglishWords} từ thành công!`);
     } catch (err) {
-      showNotification("Lưu cấu hình thất bại!");
+      toast.error("Lưu cấu hình thất bại!");
     }
   };
 
@@ -62,22 +46,6 @@ export default function AdminTextConfig() {
 
   return (
     <div className="max-w-6xl mx-auto h-full flex flex-col justify-between text-left font-sans p-1 overflow-hidden relative transition-colors">
-      
-      {/* Toast Notification */}
-      <div 
-        className={`fixed top-4 right-4 z-[9999] flex items-center gap-2.5 bg-[#16171C] dark:bg-white text-white dark:text-[#16171C] px-4 py-3 rounded-2xl shadow-2xl border border-[#3FA66B]/40 transform transition-all duration-300 ease-out ${
-          toast.show ? "translate-y-0 opacity-100 scale-100" : "-translate-y-4 opacity-0 scale-95 pointer-events-none"
-        }`}
-      >
-        <CheckCircle2 className="w-5 h-5 shrink-0" style={{ color: SUCCESS }} />
-        <span className="type-ui font-label">{toast.message}</span>
-        <button 
-          onClick={() => setToast((prev) => ({ ...prev, show: false }))} 
-          className="p-1 hover:bg-white/10 dark:hover:bg-black/10 rounded-lg transition-colors cursor-pointer ml-1"
-        >
-          <X className="w-4 h-4 text-[#9A9CA3] dark:text-[#6E7078]" />
-        </button>
-      </div>
 
       {/* Header Info */}
       <div className="shrink-0 mb-2">

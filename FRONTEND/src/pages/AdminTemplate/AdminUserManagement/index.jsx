@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
-import { Users, UserPlus, Search, Filter, Ban, CheckCircle2, X, Trash2, AlertTriangle, Lock, Unlock } from "lucide-react";
+import { Users, UserPlus, Search, Filter, Ban, CheckCircle2, Trash2, AlertTriangle, Lock, Unlock } from "lucide-react";
+import { toast } from "sonner";
 import Pagination from "../../../components/Pagination/Pagination";
 
 import { 
@@ -7,7 +8,6 @@ import {
   SPEAKER_ACCENT, 
   REVIEWER_ACCENT, 
   TASK_MANAGER_ACCENT,
-  SUCCESS,
   DANGER,
   CHIP_SUCCESS_BG,
   CHIP_SUCCESS_BORDER,
@@ -28,7 +28,6 @@ export default function AdminUserManagement() {
   
   const [userToDelete, setUserToDelete] = useState(null);
   const [userToToggleStatus, setUserToToggleStatus] = useState(null);
-  const [toast, setToast] = useState({ show: false, message: "" });
   const [newUser, setNewUser] = useState({ name: "", email: "", role: "Speaker" });
   
   const pageSize = 10;
@@ -60,19 +59,6 @@ export default function AdminUserManagement() {
     fetchUsers();
   }, [currentPage]);
 
-  useEffect(() => {
-    if (toast.show) {
-      const timer = setTimeout(() => {
-        setToast((prev) => ({ ...prev, show: false }));
-      }, 3500);
-      return () => clearTimeout(timer);
-    }
-  }, [toast.show]);
-
-  const showNotification = (msg) => {
-    setToast({ show: true, message: msg });
-  };
-
   const handleSearch = () => {
     setSearchTerm(searchInput);
     setCurrentPage(1);
@@ -91,15 +77,15 @@ export default function AdminUserManagement() {
     try {
       if (targetUser.status === "Active") {
         await adminService.lockUser(targetUser.rawId);
-        showNotification(`Đã vô hiệu hóa tài khoản "${targetUser.name}"!`);
+        toast.success(`Đã vô hiệu hóa tài khoản "${targetUser.name}"!`);
       } else {
         await adminService.unlockUser(targetUser.rawId);
-        showNotification(`Đã kích hoạt tài khoản "${targetUser.name}" thành công!`);
+        toast.success(`Đã kích hoạt tài khoản "${targetUser.name}" thành công!`);
       }
       fetchUsers();
     } catch (err) {
       const errorMsg = err.response?.data?.title || "Thao tác khoá/mở khoá tài khoản thất bại!";
-      showNotification(errorMsg);
+      toast.error(errorMsg);
     }
 
     setUserToToggleStatus(null);
@@ -116,12 +102,12 @@ export default function AdminUserManagement() {
         role: newUser.role
       });
       setIsAddModalOpen(false);
-      showNotification(`Đã tạo thành công người dùng "${newUser.name}"!`);
+      toast.success(`Đã tạo thành công người dùng "${newUser.name}"!`);
       setNewUser({ name: "", email: "", role: "Speaker" });
       fetchUsers();
     } catch (err) {
       const errorMsg = err.response?.data?.title || "Tạo người dùng mới thất bại!";
-      showNotification(errorMsg);
+      toast.error(errorMsg);
     }
   };
 
@@ -129,11 +115,11 @@ export default function AdminUserManagement() {
     if (!userToDelete) return;
     try {
       await adminService.deleteUser(userToDelete.rawId);
-      showNotification(`Đã xóa thành công người dùng "${userToDelete.name}"!`);
+      toast.success(`Đã xóa thành công người dùng "${userToDelete.name}"!`);
       fetchUsers();
     } catch (err) {
       const errorMsg = err.response?.data?.title || "Xóa người dùng thất bại!";
-      showNotification(errorMsg);
+      toast.error(errorMsg);
     }
     setUserToDelete(null);
   };
@@ -170,22 +156,6 @@ export default function AdminUserManagement() {
   return (
     <div className="max-w-6xl mx-auto h-full flex flex-col justify-between text-left font-sans p-1 overflow-hidden relative transition-colors">
       
-      {/* Toast Notification */}
-      <div 
-        className={`fixed top-4 right-4 z-[9999] flex items-center gap-2.5 bg-[#16171C] dark:bg-white text-white dark:text-[#16171C] px-4 py-3 rounded-2xl shadow-2xl border border-[#3FA66B]/40 transform transition-all duration-300 ease-out ${
-          toast.show ? "translate-y-0 opacity-100 scale-100" : "-translate-y-4 opacity-0 scale-95 pointer-events-none"
-        }`}
-      >
-        <CheckCircle2 className="w-5 h-5 shrink-0" style={{ color: SUCCESS }} />
-        <span className="type-ui font-label">{toast.message}</span>
-        <button 
-          onClick={() => setToast((prev) => ({ ...prev, show: false }))} 
-          className="p-1 hover:bg-white/10 dark:hover:bg-black/10 rounded-lg transition-colors cursor-pointer ml-1"
-        >
-          <X className="w-4 h-4 text-[#9A9CA3] dark:text-[#6E7078]" />
-        </button>
-      </div>
-
       {/* Header & Filter */}
       <div className="shrink-0 space-y-2">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
@@ -473,13 +443,13 @@ export default function AdminUserManagement() {
       {userToToggleStatus && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#16171C]/55 backdrop-blur-xs" onClick={() => setUserToToggleStatus(null)}>
           <div className="bg-white dark:bg-[#1C1D22] rounded-[24px] w-full max-w-sm shadow-[0_20px_50px_rgba(16,17,20,0.25)] overflow-hidden border border-[#E5E2D8] dark:border-gray-800 animate-in fade-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
-            <div className="h-1.5 w-full shrink-0" style={{ backgroundColor: userToToggleStatus.status === "Active" ? DANGER : SUCCESS }} />
+            <div className="h-1.5 w-full shrink-0" style={{ backgroundColor: userToToggleStatus.status === "Active" ? DANGER : CHIP_SUCCESS_BORDER }} />
             <div className="p-6 text-center space-y-3.5">
               <div 
                 className="w-11 h-11 rounded-full flex items-center justify-center mx-auto" 
                 style={{ 
-                  backgroundColor: `${userToToggleStatus.status === "Active" ? DANGER : SUCCESS}1A`, 
-                  color: userToToggleStatus.status === "Active" ? DANGER : SUCCESS 
+                  backgroundColor: `${userToToggleStatus.status === "Active" ? DANGER : CHIP_SUCCESS_BORDER}1A`, 
+                  color: userToToggleStatus.status === "Active" ? DANGER : CHIP_SUCCESS_BORDER 
                 }}
               >
                 {userToToggleStatus.status === "Active" ? (
@@ -507,8 +477,8 @@ export default function AdminUserManagement() {
                   onClick={ConfirmToggleStatusUser}
                   className="flex-1 py-2.5 text-white rounded-xl type-button transition-colors cursor-pointer hover:opacity-90 active:scale-[0.99]"
                   style={{ 
-                    backgroundColor: userToToggleStatus.status === "Active" ? DANGER : SUCCESS,
-                    boxShadow: `0 10px 24px ${userToToggleStatus.status === "Active" ? DANGER : SUCCESS}40`
+                    backgroundColor: userToToggleStatus.status === "Active" ? DANGER : CHIP_SUCCESS_BORDER,
+                    boxShadow: `0 10px 24px ${userToToggleStatus.status === "Active" ? DANGER : CHIP_SUCCESS_BORDER}40`
                   }}
                 >
                   {userToToggleStatus.status === "Active" ? "Vô hiệu hóa" : "Kích hoạt"}

@@ -11,10 +11,10 @@ import {
   X,
   AlertTriangle
 } from "lucide-react";
+import { toast } from "sonner";
 import Pagination from "../../../components/Pagination/Pagination";
 import {
   ADMIN_ACCENT,
-  SUCCESS,
   DANGER,
   CHIP_SUCCESS_BG,
   CHIP_SUCCESS_BORDER,
@@ -50,7 +50,6 @@ export default function AdminTextData() {
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState(null); 
   const [itemToDelete, setItemToDelete] = useState(null);
-  const [toast, setToast] = useState({ show: false, message: "" });
   const [formData, setFormData] = useState({ content: "", topic: "Công nghệ thông tin", status: "active" });
 
   const fetchTexts = async () => {
@@ -76,19 +75,6 @@ export default function AdminTextData() {
   useEffect(() => {
     fetchTexts();
   }, [currentPage]);
-
-  useEffect(() => {
-    if (toast.show) {
-      const timer = setTimeout(() => {
-        setToast((prev) => ({ ...prev, show: false }));
-      }, 3500);
-      return () => clearTimeout(timer);
-    }
-  }, [toast.show]);
-
-  const showNotification = (msg) => {
-    setToast({ show: true, message: msg });
-  };
 
   const handleSearch = () => {
     setActiveSearchTerm(searchInput);
@@ -123,20 +109,20 @@ export default function AdminTextData() {
           action: "Edited",
           editedCsContent: formData.content
         });
-        showNotification(`Đã cập nhật thành công văn bản ${editingItem.id}!`);
+        toast.success(`Đã cập nhật thành công văn bản ${editingItem.id}!`);
       } else {
         await adminService.createText({
           csContent: formData.content,
           veContent: formData.content,
           domain: formData.topic
         });
-        showNotification("Đã thêm văn bản mới!");
+        toast.success("Đã thêm văn bản mới!");
       }
       setShowModal(false);
       fetchTexts();
     } catch (err) {
       const errorMsg = err.response?.data?.title || "Thao tác cập nhật văn bản thất bại!";
-      showNotification(errorMsg);
+      toast.error(errorMsg);
     }
   };
 
@@ -144,11 +130,11 @@ export default function AdminTextData() {
     if (!itemToDelete) return;
     try {
       await adminService.deleteText(itemToDelete.id);
-      showNotification(`Đã xóa thành công văn bản ${itemToDelete.id}!`);
+      toast.success(`Đã xóa thành công văn bản ${itemToDelete.id}!`);
       fetchTexts();
     } catch (err) {
       const errorMsg = err.response?.data?.title || "Xóa văn bản thất bại!";
-      showNotification(errorMsg);
+      toast.error(errorMsg);
     }
     setItemToDelete(null);
   };
@@ -173,22 +159,6 @@ export default function AdminTextData() {
   return (
     <div className="max-w-6xl mx-auto h-full flex flex-col justify-between text-left font-sans p-1 overflow-hidden relative transition-colors">
       
-      {/* Toast Notification */}
-      <div 
-        className={`fixed top-4 right-4 z-[9999] flex items-center gap-2.5 bg-[#16171C] dark:bg-white text-white dark:text-[#16171C] px-4 py-3 rounded-2xl shadow-2xl border border-[#3FA66B]/40 transform transition-all duration-300 ease-out ${
-          toast.show ? "translate-y-0 opacity-100 scale-100" : "-translate-y-4 opacity-0 scale-95 pointer-events-none"
-        }`}
-      >
-        <CheckCircle2 className="w-5 h-5 shrink-0" style={{ color: SUCCESS }} />
-        <span className="type-ui font-label">{toast.message}</span>
-        <button 
-          onClick={() => setToast((prev) => ({ ...prev, show: false }))} 
-          className="p-1 hover:bg-white/10 dark:hover:bg-black/10 rounded-lg transition-colors cursor-pointer ml-1"
-        >
-          <X className="w-4 h-4 text-[#9A9CA3] dark:text-[#6E7078]" />
-        </button>
-      </div>
-
       {/* Header & Filter */}
       <div className="shrink-0 space-y-2">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">

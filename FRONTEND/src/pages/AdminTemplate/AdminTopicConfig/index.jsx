@@ -5,14 +5,13 @@ import {
   Search, 
   Trash2, 
   Edit3, 
-  CheckCircle2, 
   X,
   AlertTriangle
 } from "lucide-react";
+import { toast } from "sonner";
 import Pagination from "../../../components/Pagination/Pagination";
 import {
   ADMIN_ACCENT,
-  SUCCESS,
   DANGER
 } from "../../../constants/theme";
 import { adminService } from "../../../services/adminService";
@@ -28,7 +27,6 @@ export default function AdminTopicConfig() {
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState(null); 
   const [itemToDelete, setItemToDelete] = useState(null);
-  const [toast, setToast] = useState({ show: false, message: "" });
   const [formData, setFormData] = useState({ name: "" });
 
   const fetchTopics = async () => {
@@ -50,19 +48,6 @@ export default function AdminTopicConfig() {
   useEffect(() => {
     fetchTopics();
   }, []);
-
-  useEffect(() => {
-    if (toast.show) {
-      const timer = setTimeout(() => {
-        setToast((prev) => ({ ...prev, show: false }));
-      }, 3500);
-      return () => clearTimeout(timer);
-    }
-  }, [toast.show]);
-
-  const showNotification = (msg) => {
-    setToast({ show: true, message: msg });
-  };
 
   const handleSearch = () => {
     setActiveSearchTerm(searchInput);
@@ -97,14 +82,14 @@ export default function AdminTopicConfig() {
             : item
         )
       );
-      showNotification(`Đã cập nhật chủ đề "${formData.name}" thành công!`);
+      toast.success(`Đã cập nhật chủ đề "${formData.name}" thành công!`);
     } else {
       const newItem = {
         id: `TOPIC-${String(topicList.length + 1).padStart(3, '0')}`,
         name: formData.name
       };
       setTopicList((prev) => [...prev, newItem]);
-      showNotification("Đã thêm chủ đề mới thành công!");
+      toast.success("Đã thêm chủ đề mới thành công!");
     }
     setShowModal(false);
   };
@@ -112,7 +97,7 @@ export default function AdminTopicConfig() {
   const handleConfirmDelete = () => {
     if (!itemToDelete) return;
     setTopicList((prev) => prev.filter((t) => t.id !== itemToDelete.id));
-    showNotification(`Đã xóa thành công chủ đề "${itemToDelete.name}"!`);
+    toast.success(`Đã xóa thành công chủ đề "${itemToDelete.name}"!`);
     setItemToDelete(null);
   };
 
@@ -133,22 +118,6 @@ export default function AdminTopicConfig() {
 
   return (
     <div className="max-w-6xl mx-auto h-full flex flex-col justify-between text-left font-sans p-1 overflow-hidden relative transition-colors">
-      
-      {/* Toast Notification */}
-      <div 
-        className={`fixed top-4 right-4 z-[9999] flex items-center gap-2.5 bg-[#16171C] dark:bg-white text-white dark:text-[#16171C] px-4 py-3 rounded-2xl shadow-2xl border border-[#3FA66B]/40 transform transition-all duration-300 ease-out ${
-          toast.show ? "translate-y-0 opacity-100 scale-100" : "-translate-y-4 opacity-0 scale-95 pointer-events-none"
-        }`}
-      >
-        <CheckCircle2 className="w-5 h-5 shrink-0" style={{ color: SUCCESS }} />
-        <span className="type-ui font-label">{toast.message}</span>
-        <button 
-          onClick={() => setToast((prev) => ({ ...prev, show: false }))} 
-          className="p-1 hover:bg-white/10 dark:hover:bg-black/10 rounded-lg transition-colors cursor-pointer ml-1"
-        >
-          <X className="w-4 h-4 text-[#9A9CA3] dark:text-[#6E7078]" />
-        </button>
-      </div>
 
       {/* Header & Toolbar */}
       <div className="shrink-0 space-y-2">

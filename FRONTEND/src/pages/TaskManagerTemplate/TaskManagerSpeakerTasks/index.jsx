@@ -1,10 +1,10 @@
 import { useState, useMemo, useEffect } from "react";
+import { toast } from "sonner";
 import { 
   FolderKanban,
   Plus, 
   Search, 
   Filter, 
-  CheckCircle2, 
   Edit3, 
   Trash2, 
   X, 
@@ -15,7 +15,6 @@ import {
 import Pagination from "../../../components/Pagination/Pagination";
 import {
   TASK_MANAGER_ACCENT,
-  SUCCESS,
   DANGER
 } from "../../../constants/theme";
 import { taskService } from "../../../services/taskService";
@@ -67,7 +66,6 @@ export default function TaskManagerSpeakerTasks() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [taskToDelete, setTaskToDelete] = useState(null);
-  const [toast, setToast] = useState({ show: false, message: "" });
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -129,17 +127,6 @@ export default function TaskManagerSpeakerTasks() {
     loadTasksFromApi();
   }, []);
 
-  useEffect(() => {
-    if (toast.show) {
-      const timer = setTimeout(() => setToast((prev) => ({ ...prev, show: false })), 3500);
-      return () => clearTimeout(timer);
-    }
-  }, [toast.show]);
-
-  const showNotification = (msg) => {
-    setToast({ show: true, message: msg });
-  };
-
   const handleSearch = () => {
     setSearchTerm(searchInput);
     setCurrentPage(1);
@@ -200,7 +187,7 @@ export default function TaskManagerSpeakerTasks() {
           targetQty: 10,
           deadline: isoDeadline
         });
-        showNotification(`Đã cập nhật nhiệm vụ "${formData.title}"!`);
+        toast.success(`Đã cập nhật nhiệm vụ "${formData.title}"!`);
       } else {
         // 1. Tạo Task
         const newCreatedTask = await taskService.createTask({
@@ -226,7 +213,7 @@ export default function TaskManagerSpeakerTasks() {
           }).catch(err => console.warn("Lỗi autoFill domain:", err));
         }
 
-        showNotification(`Đã tạo thành công nhiệm vụ "${formData.title}"!`);
+        toast.success(`Đã tạo thành công nhiệm vụ "${formData.title}"!`);
       }
       setIsModalOpen(false);
       await loadTasksFromApi();
@@ -242,7 +229,7 @@ export default function TaskManagerSpeakerTasks() {
           errorMsg = `${responseData.errors[firstKey][0]}`;
         }
       }
-      showNotification(errorMsg);
+      toast.error(errorMsg);
     }
   };
 
@@ -256,7 +243,7 @@ export default function TaskManagerSpeakerTasks() {
       
       // Nếu BE xóa thành công trong DB -> mới cập nhật lại UI
       setTasks((prev) => prev.filter((t) => t.id !== targetId));
-      showNotification(`Đã xóa thành công nhiệm vụ "${taskToDelete.title}"!`);
+      toast.success(`Đã xóa thành công nhiệm vụ "${taskToDelete.title}"!`);
       setTaskToDelete(null);
     } catch (deleteError) {
       // 2. Nếu không xóa cứng được (do task đã có dữ liệu/phân công), chuyển sang gọi API Hủy (cancelTask)
@@ -264,7 +251,7 @@ export default function TaskManagerSpeakerTasks() {
         await taskService.cancelTask(targetId);
         
         // Hủy thành công -> tải lại danh sách từ BE để lấy trạng thái mới nhất
-        showNotification(`Đã hủy thành công nhiệm vụ "${taskToDelete.title}"!`);
+        toast.success(`Đã hủy thành công nhiệm vụ "${taskToDelete.title}"!`);
         setTaskToDelete(null);
         await loadTasksFromApi();
       } catch (cancelError) {
@@ -274,7 +261,7 @@ export default function TaskManagerSpeakerTasks() {
         const responseData = cancelError?.response?.data || deleteError?.response?.data;
         const errorMsg = responseData?.title || responseData?.message || "Không thể xóa/hủy nhiệm vụ này do ràng buộc dữ liệu!";
         
-        showNotification(errorMsg);
+        toast.error(errorMsg);
         setTaskToDelete(null);
       }
     }
@@ -298,23 +285,6 @@ export default function TaskManagerSpeakerTasks() {
   return (
     <div className="w-full h-full flex flex-col justify-between text-left font-sans p-1 overflow-hidden relative transition-colors">
       
-      {/* Toast Notification */}
-      <div 
-        className={`fixed top-4 right-4 z-[9999] flex items-center gap-2.5 bg-[#16171C] dark:bg-white text-white dark:text-[#16171C] px-4 py-3 rounded-2xl shadow-2xl border border-[#3FA66B]/40 transform transition-all duration-300 ease-out ${
-          toast.show ? "translate-y-0 opacity-100 scale-100" : "-translate-y-4 opacity-0 scale-95 pointer-events-none"
-        }`}
-      >
-        <CheckCircle2 className="w-5 h-5 shrink-0" style={{ color: SUCCESS }} />
-        <span className="type-ui font-label">{toast.message}</span>
-        <button 
-          type="button"
-          onClick={() => setToast((prev) => ({ ...prev, show: false }))} 
-          className="p-1 hover:bg-white/10 dark:hover:bg-black/10 rounded-lg transition-colors cursor-pointer ml-1"
-        >
-          <X className="w-4 h-4 text-[#9A9CA3] dark:text-[#6E7078]" />
-        </button>
-      </div>
-
       {/* Header & Filter */}
       <div className="shrink-0 space-y-2">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
