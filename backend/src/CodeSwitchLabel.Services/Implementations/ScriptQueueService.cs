@@ -1,6 +1,5 @@
 using CodeSwitchLabel.Repositories.Entities;
 using CodeSwitchLabel.Repositories.Enums;
-using CodeSwitchLabel.Repositories.Persistence;
 using CodeSwitchLabel.Repositories.Repositories;
 using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Common;
@@ -50,7 +49,7 @@ public class ScriptQueueService(
 
         // Hàng đợi và bảng script lệch nhau thì nghĩa là dữ liệu bị sửa tay bên ngoài.
         // Trả null an toàn hơn là trả một câu không tồn tại cho client.
-        return script is null ? null : ToDetail(script);
+        return script is null ? null : script.ToDetail();
     }
 
     public async Task<bool> CanReviewAsync(string scriptId, long userId, CancellationToken ct = default)
@@ -116,34 +115,4 @@ public class ScriptQueueService(
 
     public Task<QueueStatsDto> GetStatsAsync(QueueStage stage, CancellationToken ct = default) =>
         queue.GetStatsAsync(stage, ct);
-
-    /// <summary>
-    /// Cùng cách dựng ScriptDetailDto ở ScriptService nhưng tách riêng để không phải
-    /// phụ thuộc chéo: queue chỉ cần câu đúng hình dạng đó để trả cho client.
-    /// </summary>
-    private static ScriptDetailDto ToDetail(Script s)
-    {
-        string Cs, Vi;
-
-        try
-        {
-            Cs = CodeSwitchText.Strip(s.CsContent);
-            Vi = CodeSwitchText.Strip(s.ViContent);
-        }
-        catch (FormatException)
-        {
-            // Dữ liệu cũ hoặc ghi thẳng bằng SQL có thể thiếu nhãn — không vì thế mà vỡ API.
-            Cs = s.CsContent;
-            Vi = s.ViContent;
-        }
-
-        return new ScriptDetailDto(
-            s.ScriptId, s.CsContent, Cs, s.ViContent, Vi,
-            ScriptService.ToAlignment(s.Words),
-            s.Status, s.Domain, s.WordCount, s.EnWordCount, s.CreatedBy, s.ImportBatchId,
-            s.CreatedAt, s.UpdatedAt,
-            [.. s.Reviews.Select(r => new ScriptReviewDto(
-                r.ScriptReviewId, r.UserId, r.Action, r.ErrorReason?.ReasonCode,
-                r.EditedCsContent, r.EditedViContent, r.Comment, r.ReviewedAt))]);
-    }
 }
