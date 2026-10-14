@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { toast } from "sonner";
 import {
   ListTodo,
   Filter,
@@ -159,7 +160,6 @@ export default function TaskManagerManagement() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
-  const [toast, setToast] = useState({ show: false, message: "" });
 
   const todayIso = useMemo(() => new Date().toISOString().split("T")[0], []);
 
@@ -318,17 +318,6 @@ export default function TaskManagerManagement() {
     loadDataFromApi();
   }, []);
 
-  useEffect(() => {
-    if (toast.show) {
-      const timer = setTimeout(() => setToast((prev) => ({ ...prev, show: false })), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [toast.show]);
-
-  const showNotification = (msg) => {
-    setToast({ show: true, message: msg });
-  };
-
   const activeSpeakers = useMemo(() => {
     const speakers = allAdminUsers.filter(u => u.role === "Speaker" && u.status === "Active");
     return [...speakers].sort((a, b) => {
@@ -384,7 +373,7 @@ export default function TaskManagerManagement() {
 
   const handleOpenAssignModal = () => {
     if (batches.length === 0) {
-      showNotification("Vui lòng tạo đợt trước khi thực hiện phân công nhiệm vụ!");
+      toast.error("Vui lòng tạo đợt trước khi thực hiện phân công nhiệm vụ!");
       return;
     }
 
@@ -438,7 +427,7 @@ export default function TaskManagerManagement() {
         return { ...prev, assignedUsers: prev.assignedUsers.filter(u => u !== userName) };
       } else {
         if (prev.assignedUsers.length >= maxAllowedUsers) {
-          alert(`Số lượng ${currentSelectedTask?.role} chọn không được vượt quá số lượng đợt yêu cầu (${maxAllowedUsers} người)!`);
+          toast.error(`Số lượng ${currentSelectedTask?.role} chọn không được vượt quá số lượng đợt yêu cầu (${maxAllowedUsers} người)!`);
           return prev;
         }
         return { ...prev, assignedUsers: [...prev.assignedUsers, userName] };
@@ -455,7 +444,7 @@ export default function TaskManagerManagement() {
       const taskId = Number(taskObj?.id || taskObj?.taskId);
 
       if (!taskId || isNaN(targetBatchId)) {
-        showNotification("Vui lòng chọn đợt và nhiệm vụ hợp lệ!");
+        toast.error("Vui lòng chọn đợt và nhiệm vụ hợp lệ!");
         return;
       }
 
@@ -470,13 +459,13 @@ export default function TaskManagerManagement() {
         }
       }
 
-      showNotification(`Đã phân công nhiệm vụ "${taskObj.title}" vào đợt thành công!`);
+      toast.success(`Đã phân công nhiệm vụ "${taskObj.title}" vào đợt thành công!`);
       setIsAssignModalOpen(false);
       await loadDataFromApi();
     } catch (err) {
       console.error("Lỗi khi phân công nhiệm vụ vào đợt:", err?.response?.data || err);
       const msg = err?.response?.data?.title || err?.response?.data?.message || "Phân công thất bại!";
-      showNotification(msg);
+      toast.error(msg);
     }
   };
 
@@ -520,7 +509,7 @@ export default function TaskManagerManagement() {
     if (e) e.preventDefault();
 
     if (!batchFormData.name || !batchFormData.name.trim()) {
-      alert("Vui lòng nhập tên đợt!");
+      toast.error("Vui lòng nhập tên đợt!");
       return;
     }
 
@@ -541,7 +530,7 @@ export default function TaskManagerManagement() {
       const cleanEnd = parseToCleanIso(batchFormData.endDate);
 
       if (cleanEnd < cleanStart) {
-        alert("Ngày kết thúc phải lớn hơn hoặc bằng ngày bắt đầu!");
+        toast.error("Ngày kết thúc phải lớn hơn hoặc bằng ngày bắt đầu!");
         return;
       }
 
@@ -569,10 +558,10 @@ export default function TaskManagerManagement() {
 
       if (modalMode === "CREATE") {
         await taskService.createCampaign(campaignPayload);
-        showNotification(`Đã tạo thành công ${batchFormData.name}!`);
+        toast.success(`Đã tạo thành công ${batchFormData.name}!`);
       } else {
         await taskService.updateCampaign(modalTargetBatchId, campaignPayload);
-        showNotification(`Đã cập nhật ${batchFormData.name}!`);
+        toast.success(`Đã cập nhật ${batchFormData.name}!`);
       }
 
       setIsModalOpen(false);
@@ -591,7 +580,7 @@ export default function TaskManagerManagement() {
         }
       }
       
-      showNotification(apiErrorMsg);
+      toast.error(apiErrorMsg);
     }
   };
 
@@ -611,13 +600,13 @@ export default function TaskManagerManagement() {
         throw new Error("Không tìm thấy hàm deleteCampaign trong taskService");
       }
 
-      showNotification(`Đã xóa đợt ${deletingBatch.campaignName || deletingBatch.name}!`);
+      toast.success(`Đã xóa đợt ${deletingBatch.campaignName || deletingBatch.name}!`);
       setDeletingBatch(null);
       await loadDataFromApi();
     } catch (err) {
       console.error("Chi tiết lỗi xóa đợt từ Server:", err?.response || err);
       const errorMsg = err?.response?.data?.message || err?.response?.data?.title || "Server không cho phép xóa đợt này!";
-      alert(`Xóa thất bại: ${errorMsg}`);
+      toast.error(`Xóa thất bại: ${errorMsg}`);
       setDeletingBatch(null);
     }
   };
@@ -644,7 +633,7 @@ export default function TaskManagerManagement() {
         return { ...prev, assignedUsers: prev.assignedUsers.filter((u) => u !== userName) };
       } else {
         if (prev.assignedUsers.length >= maxUsers) {
-          alert(`Số lượng không được vượt quá số lượng đợt yêu cầu (${maxUsers} người)!`);
+          toast.error(`Số lượng không được vượt quá số lượng đợt yêu cầu (${maxUsers} người)!`);
           return prev;
         }
         return { ...prev, assignedUsers: [...prev.assignedUsers, userName] };
@@ -656,7 +645,7 @@ export default function TaskManagerManagement() {
     e.preventDefault();
 
     if (!editTaskFormData.title.trim()) {
-      alert("Tên nhiệm vụ không được để trống!");
+      toast.error("Tên nhiệm vụ không được để trống!");
       return;
     }
 
@@ -672,12 +661,12 @@ export default function TaskManagerManagement() {
         }
       }
 
-      showNotification(`Đã cập nhật nhiệm vụ "${editTaskFormData.title}" thành công!`);
+      toast.success(`Đã cập nhật nhiệm vụ "${editTaskFormData.title}" thành công!`);
       setIsEditTaskModalOpen(false);
       await loadDataFromApi();
     } catch (err) {
       console.error("Lỗi cập nhật nhiệm vụ:", err?.response?.data || err);
-      showNotification("Cập nhật nhiệm vụ thất bại!");
+      toast.error("Cập nhật nhiệm vụ thất bại!");
     }
   };
 
@@ -691,10 +680,10 @@ export default function TaskManagerManagement() {
 
     try {
       await taskService.detachTaskFromCampaign(Number(selectedBatchId), targetTaskId);
-      showNotification(`Đã gỡ nhiệm vụ "${deletingTask.title}" khỏi đợt thành công!`);
+      toast.success(`Đã gỡ nhiệm vụ "${deletingTask.title}" khỏi đợt thành công!`);
     } catch (err) {
       console.warn("Lỗi gỡ task khỏi đợt:", err?.response?.data || err);
-      showNotification(`Đã gỡ nhiệm vụ "${deletingTask.title}" khỏi đợt!`);
+      toast.success(`Đã gỡ nhiệm vụ "${deletingTask.title}" khỏi đợt!`);
     } finally {
       setAssignTasks((prev) =>
         prev.map((t) => (t.id === targetTaskId ? { ...t, campaignId: null } : t))
@@ -736,23 +725,6 @@ export default function TaskManagerManagement() {
 
   return (
     <div className="w-full h-full flex flex-col gap-3.5 text-left font-sans p-1 overflow-y-auto relative transition-colors">
-      
-      {/* Toast Notification */}
-      <div 
-        className={`fixed top-4 right-4 z-[9999] flex items-center gap-2.5 bg-[#16171C] dark:bg-white text-white dark:text-[#16171C] px-4 py-3 rounded-2xl shadow-2xl border border-[#3FA66B]/40 transform transition-all duration-300 ease-out ${
-          toast.show ? "translate-y-0 opacity-100 scale-100" : "-translate-y-4 opacity-0 scale-95 pointer-events-none"
-        }`}
-      >
-        <CheckCircle2 style={{ color: SUCCESS }} className="w-5 h-5 shrink-0" />
-        <span className="type-ui font-label">{toast.message}</span>
-        <button 
-          type="button"
-          onClick={() => setToast((prev) => ({ ...prev, show: false }))} 
-          className="p-1 hover:bg-white/10 dark:hover:bg-black/10 rounded-lg transition-colors cursor-pointer ml-1"
-        >
-          <X className="w-4 h-4 text-[#9A9CA3] dark:text-[#6E7078]" />
-        </button>
-      </div>
 
       {/* MODAL TẠO / CẬP NHẬT ĐỢT */}
       {isModalOpen && (

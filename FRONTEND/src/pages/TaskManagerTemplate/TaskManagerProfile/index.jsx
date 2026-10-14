@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Save, CheckCircle2, X, ArrowLeft, Loader2 } from 'lucide-react';
-import { TASK_MANAGER_ACCENT as ACCENT, SUCCESS } from '../../../constants/theme';
+import { Save, ArrowLeft, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { TASK_MANAGER_ACCENT as ACCENT } from '../../../constants/theme';
 import { getMeApi } from '../../../services/authApi';
 import { httpClient } from '../../../utils/setting';
 
@@ -29,7 +30,6 @@ export default function TaskManagerProfile() {
   const [saving, setSaving] = useState(false);
   
   const [formData, setFormData] = useState(DEFAULT_TASK_MANAGER);
-  const [toast, setToast] = useState({ show: false, message: "" });
 
   // Tải thông tin tài khoản đăng nhập từ GET /api/auth/me
   const loadUserProfile = async () => {
@@ -57,15 +57,6 @@ export default function TaskManagerProfile() {
     loadUserProfile();
   }, []);
 
-  useEffect(() => {
-    if (toast.show) {
-      const timer = setTimeout(() => {
-        setToast((prev) => ({ ...prev, show: false }));
-      }, 3500);
-      return () => clearTimeout(timer);
-    }
-  }, [toast.show]);
-
   const handleChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
@@ -83,11 +74,11 @@ export default function TaskManagerProfile() {
       });
 
       window.dispatchEvent(new Event("userProfileUpdated"));
-      setToast({ show: true, message: "Cập nhật hồ sơ cá nhân thành công!" });
+      toast.success("Cập nhật hồ sơ cá nhân thành công!");
     } catch (error) {
       console.error("Lỗi khi lưu thông tin cá nhân:", error);
       const msg = error?.response?.data?.title || "Cập nhật hồ sơ cá nhân thất bại!";
-      setToast({ show: true, message: msg });
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
@@ -103,23 +94,6 @@ export default function TaskManagerProfile() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-4 text-left font-sans relative transition-colors p-1">
-      {/* Floating Toast Notification */}
-      <div 
-        className={`fixed top-4 right-4 z-[9999] flex items-center gap-2.5 bg-[#16171C] dark:bg-white text-white dark:text-[#16171C] px-4 py-3 rounded-2xl shadow-2xl border border-[#3FA66B]/40 transform transition-all duration-300 ease-out ${
-          toast.show ? "translate-y-0 opacity-100 scale-100" : "-translate-y-4 opacity-0 scale-95 pointer-events-none"
-        }`}
-      >
-        <CheckCircle2 className="w-5 h-5 shrink-0" style={{ color: SUCCESS }} />
-        <span className="type-ui font-label">{toast.message}</span>
-        <button 
-          type="button"
-          onClick={() => setToast((prev) => ({ ...prev, show: false }))} 
-          className="p-1 hover:bg-white/10 dark:hover:bg-black/10 rounded-lg transition-colors cursor-pointer ml-1"
-        >
-          <X className="w-4 h-4 text-[#9A9CA3] dark:text-[#6E7078]" />
-        </button>
-      </div>
-
       {/* Header & Nút Quay lại */}
       <div className="flex items-center justify-between gap-4">
         <div>
