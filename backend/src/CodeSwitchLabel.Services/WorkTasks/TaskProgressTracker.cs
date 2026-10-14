@@ -25,6 +25,18 @@ public interface ITaskProgressTracker
     /// <summary>Cặp câu bị từ chối nội dung thì mọi task đang chứa nó đều mất mục đó.</summary>
     Task OnScriptRejectedAsync(string scriptId, CancellationToken ct = default);
 
+    /// <summary>
+    /// TEAM_010: bản ghi bị loại nhưng câu giữ lại (nút "Chỉ xóa audio") — người đọc
+    /// sẽ thu lại, nên mục câu phải quay về hàng chờ và chỉ tiêu phải bị trừ.
+    /// </summary>
+    Task OnRecordingReturnedAsync(Recording recording, long? taskId, CancellationToken ct = default);
+
+    /// <summary>
+    /// TEAM_010: xoá cả cặp (nút "Xóa hoàn toàn") — câu không còn là mục công việc của
+    /// task nào nữa, và mọi task chứa nó phải tính lại chỉ tiêu.
+    /// </summary>
+    Task OnPairDiscardedAsync(string scriptId, CancellationToken ct = default);
+
     Task RefreshStatusAsync(long taskId, CancellationToken ct = default);
 }
 
@@ -59,6 +71,30 @@ public class TaskProgressTracker(ITaskRepository tasks) : ITaskProgressTracker
                     touched.Add(item.TaskId);
                 }
             }
+
+            // TEAM_010 (yêu cầu 4.2) — TRỪ KPI khi bản ghi bị từ chối.
+            //
+            // Trước đây task_script chỉ đi được Pending → Completed, không có đường lùi.
+            // Nên câu đã tính xong rồi bị từ chối vẫn giữ nguyên Done, task vẫn đứng ở
+            // Completed dù chỉ tiêu thực tế đã tụt. Người nhận không bao giờ được biết
+            // là phải thu bù.
+            if (finalStatus == RecordingStatus.Rejected)
+            {
+                foreach (var item in await tasks.GetCompletedScriptItemsAsync(recording.ScriptId, ct))
+                {
+                    item.Status = TaskScriptStatus.Pending;
+                    touched.Add(item.TaskId);
+                }
+
+                // Mục trong task DUYỆT cũng phải rút lại: bản ghi đã bị loại thì lượt
+                // duyệt của nó không còn đóng góp cho chỉ tiêu nữa. Chuyển sang Skipped
+                // chứ không phải Queued — bản ghi đã chốt rồi, không ai duyệt lại được.
+                foreach (var item in await tasks.GetReviewedRecordingItemsAsync(recording.RecordingId, ct))
+                {
+                    item.Status = TaskRecordingStatus.Skipped;
+                    touched.Add(item.TaskId);
+                }
+            }
         }
 
         await tasks.SaveChangesAsync(ct);
@@ -87,6 +123,42 @@ public class TaskProgressTracker(ITaskRepository tasks) : ITaskProgressTracker
         }
     }
 
+    public async Task OnRecordingReturnedAsync(Recording recording, long? taskId, CancellationToken ct = default)
+    {
+        var touched = new HashSet<long>();
+        if (taskId.HasValue) touched.Add(taskId.Value);
+
+        // Cặp câu còn dùng được nên mục vẫn giữ trong task — nhưng phải về lại hàng
+        // chờ vì kết quả cũ đã bị gỡ. Không sửa thì task vẫn tính câu này là xong.
+        foreach (var item in await tasks.GetCompletedScriptItemsAsync(recording.ScriptId, ct))
+        {
+            item.Status = TaskScriptStatus.Pending;
+            touched.Add(item.TaskId);
+        }
+
+        await tasks.SaveChangesAsync(ct);
+
+        foreach (var id in touched) await RefreshStatusAsync(id, ct);
+    }
+
+    public async Task OnPairDiscardedAsync(string scriptId, CancellationToken ct = default)
+    {
+        var pending = await tasks.GetPendingScriptItemsAsync(scriptId, ct);
+        var completed = await tasks.GetCompletedScriptItemsAsync(scriptId, ct);
+
+        if (pending.Count == 0 && completed.Count == 0) return;
+
+        // Gom taskId TRƯỚC khi sửa: sau khi lưu thì truy vấn lại sẽ trả về rỗng.
+        var taskIds = pending.Concat(completed).Select(i => i.TaskId).Distinct().ToList();
+
+        foreach (var item in pending) item.Status = TaskScriptStatus.Rejected;
+        foreach (var item in completed) item.Status = TaskScriptStatus.Rejected;
+
+        await tasks.SaveChangesAsync(ct);
+
+        foreach (var id in taskIds) await RefreshStatusAsync(id, ct);
+    }
+
     public async Task RefreshStatusAsync(long taskId, CancellationToken ct = default)
     {
         var task = await tasks.GetForUpdateAsync(taskId, ct);
@@ -95,7 +167,7 @@ public class TaskProgressTracker(ITaskRepository tasks) : ITaskProgressTracker
         if (task is null || row is null) return;
 
         var next = TaskStateMachine.Evaluate(
-            task.Status, row.AssigneeId.HasValue, row.Started, row.Done, task.TargetQty);
+            task.Status, row.AssigneeCount, row.Started, row.Done, task.TargetQty);
 
         if (next == task.Status) return;
 

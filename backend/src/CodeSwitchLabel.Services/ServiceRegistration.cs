@@ -64,6 +64,8 @@ public static class ServiceRegistration
 
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IScriptRepository, ScriptRepository>();
+        services.AddScoped<IScriptQueueRepository, ScriptQueueRepository>();
+        services.AddScoped<IScriptQueueService, ScriptQueueService>();
         services.AddScoped<IRecordingRepository, RecordingRepository>();
         services.AddScoped<IReviewRepository, ReviewRepository>();
         services.AddScoped<ITaskRepository, TaskRepository>();
@@ -122,7 +124,10 @@ public static class ServiceRegistration
         (typeof(ReviewDecision), "review_decision"),
         (typeof(RejectionCategory), "rejection_category"),
         (typeof(DatasetStatus), "dataset_status"),
-        (typeof(DatasetFileFormat), "dataset_file_format")
+        (typeof(DatasetFileFormat), "dataset_file_format"),
+        // TEAM_010
+        (typeof(QueueStage), "queue_stage"),
+        (typeof(QueueState), "queue_state")
     ];
 
     private static NpgsqlDataSource BuildDataSource(string connectionString)

@@ -104,6 +104,9 @@ const gio = bayGio.getHours();
 const phut = String(bayGio.getMinutes()).padStart(2, '0');
 const giay = String(bayGio.getSeconds()).padStart(2, '0');
 
+// Cả hai câu cùng chủ đề IT/Technology, khớp chủ đề của chiến dịch/task ở MÀN 3. Lệch chủ đề
+// thì câu bị bỏ qua khi thêm vào task (rule task_domain_mismatch_campaign), rồi chỉ tiêu 2 vượt
+// số mục thật và lệnh giao task trả 422 — lỗi của dữ liệu mẫu, không phải của hệ thống.
 const cauNhap = [
   {
     id: `demo-${dau}-1`,
@@ -114,7 +117,7 @@ const cauNhap = [
   },
   {
     id: `demo-${dau}-2`,
-    domain: 'Education',
+    domain: 'IT/Technology',
     cs_transcript: `[vi]Em nộp [en]assignment [vi]trước ${gio} giờ ${giay} hôm nay nhé.`,
     vi_equivalent: `[vi]Em nộp bài tập trước ${gio} giờ ${giay} hôm nay nhé.`,
     alignment: [{ source: 'assignment', source_lang: 'en', target: 'bài tập', target_lang: 'vi', relation: 'semantic_equivalent' }]
@@ -142,9 +145,9 @@ const maCau = nhap.body.scriptIds;
 
 sql('Số câu SAU khi nhập', 'select count(*) as tong_so_cau from script;');
 sql('Hai câu vừa nhập, đọc thẳng từ bảng script',
-  `select script_id, domain, status, left(cs_transcript, 46) as cau from script where script_id in ('${maCau.join("','")}');`);
+  `select script_id, domain, status, left(cs_content, 46) as cau from script where script_id in ('${maCau.join("','")}');`);
 sql('Lô nhập vừa tạo — hệ thống ghi lại ai nhập, lúc nào, bao nhiêu câu',
-  'select batch_id, file_name, total_rows, success_rows, status from import_batch order by batch_id desc limit 1;');
+  'select batch_id, file_name, script_count, imported_by from import_batch order by batch_id desc limit 1;');
 
 // ====================================================== MÀN 2 · DUYỆT CÂU
 man('MÀN 2 · DUYỆT CÂU  (Reviewer) — bắt buộc trước khi giao việc');
@@ -185,7 +188,7 @@ B('3.4', 'manager', 'POST', `/api/tasks/${maTask}/items`,
   (b) => ({ daThem: b.added, boQua: b.skipped?.length ?? 0 }));
 
 B('3.5', 'manager', 'POST', `/api/tasks/${maTask}/assign`,
-  await goi(manager.token, 'POST', `/api/tasks/${maTask}/assign`, { userId: speaker.userId }), 200,
+  await goi(manager.token, 'POST', `/api/tasks/${maTask}/assign`, { userIds: [speaker.userId] }), 200,
   (b) => ({ trangThai: b.summary.status, giaoCho: speaker.hoTen }));
 
 B('3.6', 'manager', 'GET', `/api/tasks/${maTask}`,

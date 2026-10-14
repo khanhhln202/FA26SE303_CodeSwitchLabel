@@ -283,15 +283,25 @@ Phụ thuộc đi một chiều: **Api → Services → Repositories**.
 
 ## Chỗ chưa làm
 
-`dataset` và `dataset_recording` đã có bảng nhưng chưa có endpoint.
+`dataset` và `dataset_recording` đã có đủ endpoint trong `DatasetsController` (tạo, tìm, chi tiết,
+phát hành, lưu trữ, tải ZIP). Phần còn dở: **test** — mới chỉ có kiểm tra ràng buộc ở
+`CheckConstraintTests`, chưa có test nào gọi thử các endpoint này.
+
+`docs/demo-test-api.html` là trang tĩnh, tự viết tay theo lần chạy của `03-demo-scenario` — **không
+có script nào sinh ra nó**. Nên khi kịch bản demo đổi (mã câu, mã bản ghi, mã lỗi), phần bảng bên
+trong vẫn là số của lần chạy cũ; muốn đúng thì sửa tay.
 
 Giới hạn đã biết:
 
-- **`review.rounds_required` phải giữ bằng 3**, vì trigger chốt đa số ghim cứng con số này.
+- **`review.rounds_required` đọc động từ `system_config`** và trigger `trg_review_majority` cũng
+  đọc từ đó. Con số `ReviewRules.RoundsRequiredInDatabase = 3` chỉ là mặc định; nếu đổi thì mọi chỗ
+  đang giả định "3 = ba người" phải rà lại. `ReviewService.RoundsRequiredAsync` sẽ ghi cảnh báo khi
+  hai bên lệch nhau.
 - **Ngưỡng thời lượng bản ghi (1–30 giây) là đề xuất của nhóm backend**, chưa có trong file lược đồ
   chung và chưa được giảng viên duyệt. Lược đồ có sẵn hai tham số khoảng lặng đầu/cuối nhưng
   **hệ thống chưa đo được khoảng lặng**.
-- **Reviewer chưa xem được danh sách bản ghi trong task của mình**, mới chỉ lấy lần lượt từng bản.
+- **Reviewer xem được danh sách bản ghi trong task của mình** qua
+  `GET /api/reviewer/tasks/{id}/recordings` (có phân trang, có bỏ bản đã tự duyệt).
 - **Không còn tính năng "bỏ qua" câu.** Thấy câu có vấn đề thì dùng Review Text để sửa hoặc từ chối.
   Một lượt từ chối là câu bị loại với mọi người — chưa có bước xác nhận của Admin.
 - **Bảng tổng hợp theo người nhận gom trong bộ nhớ**; nhiều task đang chạy thì nên chuyển xuống `GROUP BY`.

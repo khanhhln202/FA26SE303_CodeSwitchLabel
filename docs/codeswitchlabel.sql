@@ -27,6 +27,11 @@ CREATE TYPE recording_status      AS ENUM ('qc_failed','pending_review','approve
 CREATE TYPE task_recording_status AS ENUM ('queued','reviewed','skipped');
 CREATE TYPE review_decision       AS ENUM ('approved','rejected');
 CREATE TYPE rejection_category    AS ENUM ('content','audio_quality','pronunciation','other');
+
+-- TEAM_010: Một hàng đợi chung cho MỌI câu văn bản (yêu cầu 2.1). Mỗi câu đi qua
+-- hai chặng theo thứ tự: text_review -> recording. enqueued_at là mốc FIFO.
+CREATE TYPE queue_stage           AS ENUM ('text_review','recording');
+CREATE TYPE queue_state           AS ENUM ('queued','claimed','done','dropped');
 CREATE TYPE dataset_status        AS ENUM ('draft','released','archived');
 CREATE TYPE dataset_file_format   AS ENUM ('json','csv');
 
@@ -198,6 +203,7 @@ CREATE TABLE script_review (
 CREATE INDEX idx_script_review_script ON script_review (script_id);
 CREATE INDEX idx_script_review_user   ON script_review (user_id);
 
+
 -- ------------------------------------------------------------
 -- CAMPAIGN / TASK
 -- ------------------------------------------------------------
@@ -265,9 +271,11 @@ CREATE TABLE task_assignment (
     assignment_status assignment_status NOT NULL DEFAULT 'active'
 );
 
--- only one ACTIVE assignment per task
-CREATE UNIQUE INDEX uq_task_assignment_active
-    ON task_assignment (task_id) WHERE assignment_status = 'active';
+-- TEAM_010: Một task giao được cho NHIỀU người cùng lúc. Chỉ tiêu target_qty là của
+-- CẢ NHÓM (không nhân theo số người), nên quota đợt vẫn cộng đúng một lần.
+-- Ràng buộc còn lại: cùng một người không được có hai lượt giao active trên một task.
+CREATE UNIQUE INDEX uq_task_assignment_active_user
+    ON task_assignment (task_id, user_id) WHERE assignment_status = 'active';
 CREATE INDEX idx_task_assignment_user ON task_assignment (user_id);
 
 CREATE TABLE task_script (
@@ -278,6 +286,59 @@ CREATE TABLE task_script (
     PRIMARY KEY (task_id, script_id)
 );
 CREATE INDEX idx_task_script_script ON task_script (script_id);
+
+-- TEAM_010 — HÀNG ĐỢI CHUNG cho mọi câu văn bản (yêu cầu 2.1).
+--
+-- Một câu đi qua hai chặng theo thứ tự:
+--   1. text_review — chờ người duyệt nội dung (1 lượt). Admin nhập file, người dùng
+--      đóng góp và báo lỗi đều đi vào đây.
+--   2. recording   — đã duyệt nội dung, chờ người ghi âm (2 bản cs + vi).
+--
+-- Hàng được sinh bởi TRIGGER, không phải bởi code: script vừa INSERT hoặc chuyển
+-- sang pending_validation thì tự có mặt trong hàng đợi. Đó là điều kiện để không
+-- câu nào lọt qua được việc duyệt (giống cách trạng thái bản ghi do trigger chốt).
+--
+-- enqueued_at là mốc FIFO. claim là hàm fn_queue_claim_next dùng FOR UPDATE SKIP
+-- LOCKED, nên hai người KHÔNG THỂ nhận cùng một câu (yêu cầu 3.2). claim có hạn
+-- (claim_expires_at) để người mở rồi bỏ ngang không giữ câu vĩnh viễn.
+CREATE TABLE script_queue (
+    queue_id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    script_id        VARCHAR(11) NOT NULL REFERENCES script(script_id) ON DELETE CASCADE,
+    stage            queue_stage NOT NULL,
+
+    -- Mốc vào hàng đợi = thứ tự FIFO. Tách khỏi script.created_at vì một câu có thể
+    -- quay lại hàng đợi nhiều lần (audio bị từ chối), mỗi lần là một mốc mới.
+    enqueued_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    state            queue_state NOT NULL DEFAULT 'queued',
+
+    -- Người đang giữ câu. NULL = chưa ai nhận. Hết hạn thì ai cũng claim lại được.
+    claimed_by       BIGINT REFERENCES app_user(user_id) ON DELETE SET NULL,
+    claimed_at       TIMESTAMPTZ,
+    claim_expires_at TIMESTAMPTZ,
+
+    -- Task duyệt văn bản đã giao câu này cho người đó (yêu cầu 2.2: chia lô 100 câu/người).
+    -- NULL = câu đang nằm trong hàng đợi chung, ai cũng lấy được.
+    task_id          BIGINT REFERENCES task(task_id) ON DELETE CASCADE,
+
+    CONSTRAINT ck_script_queue_claim CHECK (
+        (state = 'claimed' AND claimed_by IS NOT NULL AND claim_expires_at IS NOT NULL) OR
+        state <> 'claimed')
+);
+
+-- FIFO: chỉ đọc hàng đang mở (queued/claimed), xếp theo enqueued_at.
+CREATE INDEX idx_script_queue_pick
+    ON script_queue (stage, state, enqueued_at) WHERE state IN ('queued','claimed');
+-- Truy tìm nhanh "câu này đang ở chặng nào".
+CREATE INDEX idx_script_queue_script ON script_queue (script_id, stage);
+-- Hết hạn: index phục vụ việc quét lại hàng đã claim quá hạn.
+CREATE INDEX idx_script_queue_claim_expiry
+    ON script_queue (claim_expires_at) WHERE state = 'claimed';
+CREATE INDEX idx_script_queue_task ON script_queue (task_id) WHERE task_id IS NOT NULL;
+
+-- Một câu chỉ được có MỘT hàng đang mở trong mỗi chặng. Câu bị bỏ (state='dropped')
+-- hay đã xong (state='done') thì được tạo hàng mới ở lần sau.
+CREATE UNIQUE INDEX uq_script_queue_open
+    ON script_queue (script_id, stage) WHERE state IN ('queued','claimed');
 
 -- ------------------------------------------------------------
 -- RECORDING / REVIEW  (the two protagonists)
@@ -293,6 +354,17 @@ CREATE TABLE recording (
     status           recording_status NOT NULL DEFAULT 'pending_review',
     duration_sec     NUMERIC(8,2) NOT NULL CHECK (duration_sec > 0),
     qc_metrics       JSONB,                        -- auto-QC result at upload; NULL until run
+
+    -- TEAM_010 (yêu cầu 2.4): dấu vết của nút "Chỉ xóa audio" và "Xóa hoàn toàn".
+    --
+    -- CỐ Ý KHÔNG ghi thành một hàng `review`: hai hành động này là quyết định dứt điểm
+    -- của người duyệt, KHÔNG phải một phiếu bầu. Ghi vào review sẽ làm lệch bộ đếm
+    -- 3 lượt và kích hoạt trg_review_majority — có thể kéo câu về hàng đợi duyệt nội
+    -- dung một cách không mong muốn.
+    discarded_at     TIMESTAMPTZ,
+    discarded_by     BIGINT REFERENCES app_user(user_id),
+    discard_note     TEXT,
+
     recorded_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT ck_recording_id_format CHECK
         (recording_id ~ '^r_(cs|vi)_[0-9]{9}(_t([2-9]|[1-9][0-9]+))?$'),
@@ -909,6 +981,218 @@ CREATE CONSTRAINT TRIGGER trg_script_consistency
     DEFERRABLE INITIALLY DEFERRED
     FOR EACH ROW EXECUTE FUNCTION fn_script_word_consistency();
 
+-- ============================================================
+-- TEAM_010 — HÀNG ĐỢI CHUNG (yêu cầu 2.1, 2.2, 3.1, 3.2)
+-- ============================================================
+
+-- Hàng đợi do TRIGGER quản lý, không phải code. Lý do: câu vừa được Admin nhập hàng
+-- loạt hay người dùng vừa đóng góp phải CÓ mặt trong hàng đợi ngay, kể cả khi
+-- đường ghi đó là SQL thẳng. Nếu để service tự thêm hàng thì mọi đường ghi bỏ qua
+-- service đều tạo câu không ai duyệt.
+CREATE OR REPLACE FUNCTION fn_script_queue_sync() RETURNS trigger AS $$ BEGIN
+    IF NEW.status = 'pending_validation' THEN
+        -- Vào chặng duyệt nội dung. Dùng 'queued' chứ không claim có chủ: ai đó sẽ
+        -- tự lấy sau. ON CONFLICT DO NOTHING vì câu có thể đã có hàng đang mở.
+        INSERT INTO script_queue (script_id, stage, state)
+        VALUES (NEW.script_id, 'text_review', 'queued')
+        ON CONFLICT (script_id, stage) WHERE state IN ('queued','claimed')
+        DO NOTHING;
+
+    ELSIF NEW.status = 'validated' THEN
+        -- Đã qua duyệt nội dung: đóng hàng chặng 1, mở chặng ghi âm.
+        UPDATE script_queue
+           SET state = 'dropped'
+         WHERE script_id = NEW.script_id AND stage = 'text_review' AND state IN ('queued','claimed');
+
+        INSERT INTO script_queue (script_id, stage, state)
+        VALUES (NEW.script_id, 'recording', 'queued')
+        ON CONFLICT (script_id, stage) WHERE state IN ('queued','claimed')
+        DO NOTHING;
+
+    ELSIF NEW.status IN ('rejected', 'deactivated') THEN
+        -- Câu hỏng hoặc đã xoá: rút khỏi mọi chặng, không ai nhận nữa.
+        UPDATE script_queue
+           SET state = 'dropped'
+         WHERE script_id = NEW.script_id AND state IN ('queued','claimed');
+    END IF;
+
+    RETURN NEW;
+END $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_script_queue_sync
+    AFTER INSERT OR UPDATE OF status ON script
+    FOR EACH ROW EXECUTE FUNCTION fn_script_queue_sync();
+
+-- Claim một câu cho một người, NGAY TRONG LÀ 1 TRANSACTION.
+--
+-- SKIP LOCKED là mấu chốt của yêu cầu 3.2: khi hai người gọi cùng lúc, transaction
+-- thứ nhất khoá hàng, thứ hai BỎ QUA hàng đó và lấy câu khác — thay vì đứng chờ
+-- rồi nhận trùng. Không có SKIP LOCKED thì "không cho 2 người cùng load 1 câu"
+-- chỉ có thể đảm bảo ở lúc upload, mà đến lúc đó đã quá muộn cho người đã đọc.
+--
+-- Hết hạn: claim của người bỏ ngang được nhặt lại sau claim_ttl phút, nếu không
+-- thì một câu có thể bị giữ vĩnh viễn chỉ vì ai đó bấm nhầm rồi đóng tab.
+CREATE OR REPLACE FUNCTION fn_queue_claim_next(
+    p_user_id   BIGINT,
+    p_stage     queue_stage,
+    p_task_id   BIGINT DEFAULT NULL,
+    p_ttl_minutes INT DEFAULT NULL
+) RETURNS TABLE (
+    script_id     VARCHAR,
+    queue_id      BIGINT,
+    enqueued_at   TIMESTAMPTZ,
+    claim_expires_at TIMESTAMPTZ
+) AS $$
+DECLARE
+    v_ttl    INT;
+    v_row    script_queue%ROWTYPE;
+BEGIN
+    SELECT COALESCE(NULLIF(config_value, '')::int, 30)
+      INTO v_ttl
+      FROM system_config WHERE config_key = 'queue.claim_ttl_minutes';
+    IF v_ttl IS NULL OR v_ttl < 1 THEN
+        v_ttl := 30;
+    END IF;
+    v_ttl := COALESCE(p_ttl_minutes, v_ttl);
+
+    SELECT q.* INTO v_row
+      FROM script_queue q
+      JOIN script s ON s.script_id = q.script_id
+     WHERE q.stage = p_stage
+       AND s.status = CASE q.stage
+                         WHEN 'text_review' THEN 'pending_validation'::script_status
+                         ELSE 'validated'::script_status
+                       END
+       -- Chưa ai giữ, hoặc đã giác người và hết hạn.
+       AND (q.state = 'queued' OR (q.state = 'claimed' AND q.claim_expires_at <= now()))
+       -- Chặng nào cũng phải tôn trọng p_task_id, nhưng cách "thuộc task" khác nhau:
+       --   duyệt văn bản -> task gắn thẳng vào hàng (q.task_id), do lô của Task Manager.
+       --   ghi âm       -> task gắn qua bảng trung gian task_script, vì một câu có thể
+       --                   nằm trong nhiều task cùng lúc.
+       -- Bỏ điều kiện này thì p_task_id trở thành vô nghĩa: mọi hàng đều task_id NULL
+       -- ở chặng ghi âm nên câu ngoài task cũng lọt vào.
+       AND (
+            p_task_id IS NULL
+            OR CASE q.stage
+                 WHEN 'text_review' THEN (
+                     q.task_id IS NULL
+                     OR q.task_id = p_task_id
+                     OR EXISTS (SELECT 1 FROM task_assignment a
+                                 WHERE a.task_id = q.task_id
+                                   AND a.user_id = p_user_id
+                                   AND a.assignment_status = 'active')
+                 )
+                 ELSE EXISTS (SELECT 1 FROM task_script ts
+                               WHERE ts.script_id = q.script_id
+                                 AND ts.task_id = p_task_id
+                                 AND ts.status = 'pending')
+               END
+           )
+     ORDER BY q.enqueued_at, q.queue_id
+     FOR UPDATE OF q SKIP LOCKED
+     LIMIT 1;
+
+    IF NOT FOUND THEN
+        RETURN;
+    END IF;
+
+    UPDATE script_queue
+       SET state = 'claimed',
+           claimed_by = p_user_id,
+           claimed_at = now(),
+           claim_expires_at = now() + make_interval(mins => v_ttl)
+     WHERE script_queue.queue_id = v_row.queue_id;
+
+    RETURN QUERY
+    SELECT v_row.script_id, v_row.queue_id, v_row.enqueued_at,
+           now() + make_interval(mins => v_ttl);
+END $$ LANGUAGE plpgsql;
+
+-- Claim cả lô cho một task duyệt văn bản (yêu cầu 2.2: 100 câu/người).
+-- Gán task_id ngay khi claim để câu đó gắn với đúng người được giao.
+CREATE OR REPLACE FUNCTION fn_queue_claim_batch(
+    p_task_id    BIGINT,
+    p_user_id    BIGINT,
+    p_count      INT,
+    p_stage      queue_stage DEFAULT 'text_review'
+) RETURNS SETOF VARCHAR AS $$
+DECLARE
+    v_claimed VARCHAR;
+BEGIN
+    FOR i IN 1..p_count LOOP
+        SELECT c.script_id INTO v_claimed
+          FROM fn_queue_claim_next(p_user_id, p_stage, p_task_id) c;
+
+        EXIT WHEN v_claimed IS NULL;
+
+        UPDATE script_queue
+           SET task_id = p_task_id
+         WHERE script_id = v_claimed AND stage = p_stage AND claimed_by = p_user_id;
+
+        RETURN NEXT v_claimed;
+    END LOOP;
+END $$ LANGUAGE plpgsql;
+
+-- Đóng claim: câu đã xong việc (done) hoặc trả lại hàng đợi (queued).
+--
+-- p_from cho biết được phép chuyển TỪ trạng thái nào. Không có nó thì chỉ chuyển
+-- được từ 'claimed', và bản ghi bị từ chối sẽ không quay lại được hàng đợi — vì hàng
+-- của nó đã ở 'done' từ lúc câu được thu đủ.
+--
+-- p_requeue_at_end đẩy câu xuống CUỐI hàng đợi (đặt lại mốc FIFO) thay vì giữ nguyên
+-- chỗ cũ. Cần cho mọi trường hợp "lấy được nhưng không dùng được": nếu trả về chỗ
+-- cũ thì câu đó vẫn đứng đầu hàng đợi và bị claim lại ngay lập tức, mãi mãi.
+CREATE OR REPLACE FUNCTION fn_queue_release(
+    p_script_id VARCHAR,
+    p_stage     queue_stage,
+    p_state     queue_state DEFAULT 'queued',
+    p_from      queue_state DEFAULT 'claimed',
+    p_requeue_at_end BOOLEAN DEFAULT FALSE
+) RETURNS INT AS $$
+DECLARE
+    v_count INT;
+BEGIN
+    UPDATE script_queue
+       SET state = p_state,
+           enqueued_at = CASE WHEN p_requeue_at_end THEN now() ELSE enqueued_at END,
+           claimed_by = NULL,
+           claimed_at = NULL,
+           claim_expires_at = NULL
+     WHERE script_id = p_script_id
+       AND stage = p_stage
+       AND state = p_from;
+
+    GET DIAGNOSTICS v_count = ROW_COUNT;
+    RETURN v_count;
+END $$ LANGUAGE plpgsql;
+
+-- Đưa câu trở lại hàng đợi ghi âm sau khi bản ghi bị loại: hàng cũ đang 'done' thì
+-- chuyển về 'queued', chưa có hàng thì tạo mới. Mốc FIFO đặt lại là lúc bị loại, nên
+-- câu bị từ chối được thu lại ở lượt sau chứ không nhảy về đầu hàng đợi cũ.
+CREATE OR REPLACE FUNCTION fn_queue_requeue(
+    p_script_id VARCHAR,
+    p_stage     queue_stage DEFAULT 'recording'
+) RETURNS INT AS $$
+DECLARE
+    v_moved INT;
+BEGIN
+    v_moved := fn_queue_release(p_script_id, p_stage, 'queued', 'done', TRUE);
+
+    IF v_moved = 0 THEN
+        v_moved := fn_queue_release(p_script_id, p_stage, 'queued', 'claimed', TRUE);
+    END IF;
+
+    IF v_moved = 0 THEN
+        INSERT INTO script_queue (script_id, stage, state)
+        VALUES (p_script_id, p_stage, 'queued')
+        ON CONFLICT (script_id, stage) WHERE state IN ('queued','claimed')
+        DO NOTHING;
+        v_moved := 1;
+    END IF;
+
+    RETURN v_moved;
+END $$ LANGUAGE plpgsql;
+
 -- [ERD] reviewer_id must NOT equal recording's speaker_id
 CREATE OR REPLACE FUNCTION fn_review_no_self_review() RETURNS trigger AS $$ DECLARE
     v_speaker BIGINT;
@@ -1016,6 +1300,13 @@ BEGIN
                 UPDATE script SET status = 'pending_validation'
                  WHERE script_id = (SELECT script_id FROM recording WHERE recording_id = NEW.recording_id)
                    AND status = 'validated';
+
+                -- TEAM_010: câu quay về bước duyệt nội dung thì không còn là mục công việc
+                -- nữa. Trước đây trigger để nguyên task_script ở 'pending' nên task treo
+                -- vĩnh viễn, không bao giờ đạt chỉ tiêu.
+                UPDATE task_script SET status = 'rejected'
+                 WHERE script_id = (SELECT script_id FROM recording WHERE recording_id = NEW.recording_id)
+                   AND status = 'pending';
             END IF;
         END IF;
     END IF;
@@ -1238,7 +1529,12 @@ INSERT INTO system_config (config_key, config_value, value_type, description) VA
     -- anti-junk thresholds: PLACEHOLDER values, confirm with supervisor
     ('quality.speaker_min_approval_rate',        '60', 'int', 'Min approval rate (%) before a speaker is flagged'),
     ('quality.speaker_max_consecutive_qc_fail',  '5',  'int', 'Consecutive qc_failed recordings before warning/suspension'),
-    ('quality.min_recordings_before_eval',       '20', 'int', 'Recordings needed before approval rate is evaluated');
+    ('quality.min_recordings_before_eval',       '20', 'int', 'Recordings needed before approval rate is evaluated'),
+    -- TEAM_010: hạn claim của hàng đợi. Người mở câu rồi bỏ ngang sẽ trả câu về
+    -- hàng đợi sau tối đa số phút này, thay vì giữ mãi.
+    ('queue.claim_ttl_minutes',                  '30',  'int', 'Minutes before an unclaimed queue item becomes claimable again'),
+    -- TEAM_010: lô câu văn bản Task Manager giao cho mỗi người duyệt (yêu cầu 2.2).
+    ('text_review.batch_size',                   '100', 'int', 'Default number of pending sentences claimed per reviewer');
 
 -- Bootstrap admin — valid bcrypt hash for initial password 'Codeswitch@2026'
 INSERT INTO app_user (role_id, full_name, email, password_hash, status)
@@ -1312,6 +1608,10 @@ SELECT
     t.status        AS task_status,
     t.target_qty,
     t.deadline,
+    -- TEAM_010: một task có thể giao cho nhiều người. Chỉ tiêu là của cả nhóm nên
+    -- không nhân theo số này — chỉ để báo cáo biết đang chia việc cho bao nhiêu người.
+    (SELECT COUNT(*) FROM task_assignment a
+        WHERE a.task_id = t.task_id AND a.assignment_status = 'active') AS assignee_count,
     (SELECT COUNT(*) FROM task_script ts WHERE ts.task_id = t.task_id) AS scripts_assigned,
     (SELECT COUNT(*) FROM task_script ts
         WHERE ts.task_id = t.task_id AND ts.status = 'completed')      AS scripts_completed,

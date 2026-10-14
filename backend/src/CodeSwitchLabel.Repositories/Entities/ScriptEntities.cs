@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using CodeSwitchLabel.Repositories.Enums;
 
 namespace CodeSwitchLabel.Repositories.Entities;
@@ -49,6 +51,9 @@ public class Script
     public ICollection<ScriptWord> Words { get; set; } = [];
     public ICollection<ScriptReview> Reviews { get; set; } = [];
     public ICollection<Recording> Recordings { get; set; } = [];
+
+    /// <summary>TEAM_010: các lượt câu này đã đi qua hàng đợi chung.</summary>
+    public ICollection<ScriptQueue> QueueRows { get; set; } = [];
     public ICollection<TaskScript> TaskScripts { get; set; } = [];
 }
 
@@ -83,6 +88,38 @@ public class ScriptErrorReason
     public string? Description { get; set; }
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
+}
+
+/// <summary>
+/// Một dòng hàng đợi: câu này đang chờ ở chặng nào và ai đang giữ.
+/// TEAM_010 — hàng được TRIGGER tạo, không phải service: mọi đường ghi vào bảng
+/// script (kể cả SQL thẳng) đều tự sinh hàng, nên không đường nào lọt được việc duyệt.
+///
+/// EnqueuedAt là mốc FIFO. ClaimExpiresAt giữ câu có chủ trong một khoảng thời gian:
+/// người mở câu rồi đóng tab không giữ nó vĩnh viễn.
+/// </summary>
+public class ScriptQueue
+{
+    // EF chỉ tự nhận khoá chính theo tên `Id` hoặc `<TênLớp>Id`; `QueueId` không khớp
+    // nên phải chỉ đích danh, nếu không model validation đòi HasNoKey.
+    [Key]
+    public long QueueId { get; set; }
+
+    public string ScriptId { get; set; } = string.Empty;
+    public QueueStage Stage { get; set; }
+    public DateTimeOffset EnqueuedAt { get; set; }
+    public QueueState State { get; set; }
+
+    public long? ClaimedBy { get; set; }
+    public DateTimeOffset? ClaimedAt { get; set; }
+    public DateTimeOffset? ClaimExpiresAt { get; set; }
+
+    /// <summary>Task duyệt văn bản đã giao câu này cho ai. Null = nằm trong hàng đợi chung.</summary>
+    public long? TaskId { get; set; }
+
+    public Script Script { get; set; } = null!;
+    public AppUser? ClaimedByUser { get; set; }
+    public WorkTask? Task { get; set; }
 }
 
 /// <summary>

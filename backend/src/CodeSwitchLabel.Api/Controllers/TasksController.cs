@@ -113,14 +113,14 @@ public class TasksController(ITaskService taskService) : ControllerBase
     public async Task<ActionResult<TaskDetailDto>> RemoveItem(long id, string itemId, CancellationToken ct)
         => Ok(await taskService.RemoveItemAsync(id, itemId, ct, User.GetUserId(), User.IsInRole("Admin")));
 
-    /// <summary>Giao task cho một người — hoặc chuyển sang người khác.</summary>
+    /// <summary>Giao task cho một hoặc nhiều người.</summary>
     /// <remarks>
-    /// Mỗi task **đúng một người nhận** tại một thời điểm. Task thu âm giao cho Speaker,
-    /// task duyệt giao cho Reviewer. Chỉ tiêu không được vượt số mục làm được.
+    /// TEAM_010: body `{ "userIds": [6, 7] }` — một task giao được cho NHIỀU người
+    /// cùng lúc. Người đang nhận không bị đuổi, lượt giao của họ giữ nguyên `active`.
+    /// Trước đây giao là điều phối lại: lượt giao cũ chuyển sang `reassigned`.
     ///
-    /// Giao cho người khác khi task đã có người nhận chính là **điều phối lại**: lượt giao cũ
-    /// chuyển sang Reassigned chứ không bị xoá, nên vẫn xem được ai từng nhận task.
-    /// Công việc người cũ đã làm vẫn tính cho task.
+    /// Chỉ tiêu là của CẢ NHÓM: task chỉ tiêu 100 giao cho 3 người vẫn là 100 câu,
+    /// mỗi người khoảng 34. Người đã có mặt trong `userIds` bị bỏ qua chứ không báo lỗi.
     /// </remarks>
     [HttpPost("{id:long}/assign")]
     [ProducesResponseType(typeof(TaskDetailDto), StatusCodes.Status200OK)]
@@ -129,7 +129,21 @@ public class TasksController(ITaskService taskService) : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<TaskDetailDto>> Assign(
         long id, [FromBody] AssignTaskRequest request, CancellationToken ct)
-        => Ok(await taskService.AssignAsync(id, request.UserId!.Value, ct, User.GetUserId(), User.IsInRole("Admin")));
+        => Ok(await taskService.AssignAsync(id, [.. request.UserIds], ct, User.GetUserId(), User.IsInRole("Admin")));
+
+    /// <summary>TEAM_010: gỡ một người khỏi task.</summary>
+    /// <remarks>
+    /// Lượt giao chuyển sang `reassigned` chứ không bị xoá, nên vẫn xem được ai từng nhận.
+    /// Không gỡ được người nhận cuối cùng khi task đã có việc — làm vậy task rơi về nháp
+    /// và không ai làm tiếp được. Muốn dừng hẳn thì dùng Huỷ.
+    /// </remarks>
+    [HttpDelete("{id:long}/assign/{userId:long}")]
+    [ProducesResponseType(typeof(TaskDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<TaskDetailDto>> Unassign(long id, long userId, CancellationToken ct)
+        => Ok(await taskService.UnassignAsync(id, userId, ct, User.GetUserId(), User.IsInRole("Admin")));
 
     /// <summary>Gắn task vào chiến dịch (attach), chuyển giữa các chiến dịch (move), hoặc gỡ ra (detach khi campaignId null).</summary>
     /// <remarks>

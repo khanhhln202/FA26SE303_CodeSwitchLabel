@@ -91,7 +91,9 @@ public class DatasetService(
                 recordingIds = request.RecordingIds
             }),
             Status = DatasetStatus.Draft,
-            RecordingCount = 0,
+            // Đếm ngay số bản vừa nhận. Trước đây để 0 rồi chỉ chốt lại lúc phát hành, nên mọi
+            // dataset ở trạng thái nháp đều hiện "0 bản ghi" dù đã có bản trong đó.
+            RecordingCount = accepted.Count,
             CreatedAt = now
         };
 
@@ -267,16 +269,32 @@ public class DatasetService(
 
     // ----------------------------------------------------------------- nội bộ
 
-    private async Task<List<DatasetMissingPairDto>> MissingPairsAsync(long datasetId, CancellationToken ct) =>
-        await db.DatasetRecordings.AsNoTracking()
+    private async Task<List<DatasetMissingPairDto>> MissingPairsAsync(long datasetId, CancellationToken ct)
+    {
+        // Gom ở ứng dụng chứ không trong SQL.
+        //
+        // Cách viết trước đây (GroupBy trong SQL rồi Any lồng bên trong Select) EF Core dịch
+        // không nổi và ném InvalidOperationException — tức mọi lần phát hành dataset lẫn mọi
+        // lần xem chi tiết đều thành lỗi 500. Chỉ cần đưa phần "gom theo cặp (câu, biến thể)"
+        // xuống đây là xong; một dataset chỉ chứa vài chục bản nên gom trong bộ nhớ rẻ hơn là
+        // viết SQL thủ công.
+        var pairs = await db.DatasetRecordings.AsNoTracking()
             .Where(dr => dr.DatasetId == datasetId)
-            .GroupBy(dr => dr.Recording.ScriptId)
-            .Select(g => new DatasetMissingPairDto(
-                g.Key,
-                g.Any(dr => dr.Recording.SentenceVariant == SentenceVariant.CodeSwitching),
-                g.Any(dr => dr.Recording.SentenceVariant == SentenceVariant.PureVietnamese)))
-            .Where(x => !x.HasCs || !x.HasVi)
+            .Select(dr => new { dr.Recording.ScriptId, dr.Recording.SentenceVariant })
+            .Distinct()
             .ToListAsync(ct);
+
+        return
+        [
+            .. pairs
+                .GroupBy(p => p.ScriptId)
+                .Select(g => new DatasetMissingPairDto(
+                    g.Key,
+                    g.Any(p => p.SentenceVariant == SentenceVariant.CodeSwitching),
+                    g.Any(p => p.SentenceVariant == SentenceVariant.PureVietnamese)))
+                .Where(x => !x.HasCs || !x.HasVi)
+        ];
+    }
 
     private static DatasetDto ToDto(Dataset d) => new(
         d.DatasetId, d.DatasetName, d.Version, d.Description, d.Status,

@@ -15,6 +15,12 @@ public interface IScriptRepository
     Task<Script?> GetForUpdateAsync(string id, CancellationToken ct = default);
     Task<Script?> GetWithReviewsAsync(string id, CancellationToken ct = default);
 
+    /// <summary>
+    /// TEAM_010: câu đã có lượt duyệt nội dung nào chưa. Dùng chặn duyệt lần thứ hai —
+    /// mỗi câu chỉ một lượt (yêu cầu 2.3).
+    /// </summary>
+    Task<bool> HasAcceptedReviewAsync(string scriptId, CancellationToken ct = default);
+
     Task<bool> ContentExistsAsync(string csContent, CancellationToken ct = default);
 
     Task<HashSet<string>> FindExistingContentsAsync(IEnumerable<string> csContents, CancellationToken ct = default);
@@ -26,15 +32,19 @@ public interface IScriptRepository
 
     Task<IReadOnlyList<string>> GetScriptIdsByBatchAsync(long batchId, CancellationToken ct = default);
 
-    /// <summary>
-    /// Cặp câu tiếp theo người này nên thu: đã được duyệt nội dung, CHƯA ai khác thu,
-    /// và bản thân người này còn thiếu ít nhất một trong hai biến thể cs/vi.
-    /// Kèm sẵn các bản ghi của chính người này để tầng trên biết còn thiếu biến thể nào.
-    /// </summary>
-    Task<Script?> GetNextForSpeakerAsync(long speakerId, long? taskId, CancellationToken ct = default);
-
     /// <summary>Script đã có bản ghi âm nào chưa — dùng để chặn sửa nội dung sau khi đã thu.</summary>
     Task<bool> HasRecordingsAsync(string scriptId, CancellationToken ct = default);
+
+    /// <summary>TEAM_010: các bản ghi của CHÍNH người đọc này.</summary>
+    Task<List<Recording>> GetRecordingsOfSpeakerAsync(
+        string scriptId, long speakerId, CancellationToken ct = default);
+
+    /// <summary>
+    /// TEAM_010: câu đã có người KHÁC đọc và bản ghi chưa trượt QC. Câu như vậy không
+    /// phát ra cho người này được — trigger trg_recording_single_speaker sẽ chặn lúc
+    /// thu, tức là sau khi người đó đã đọc xong câu rồi.
+    /// </summary>
+    Task<bool> IsRecordedByOtherAsync(string scriptId, long speakerId, CancellationToken ct = default);
 
     /// <summary>Gọi hàm fn_generate_script_id của database để lấy mã đúng chuẩn s_ + 9 chữ số.</summary>
     Task<string> GenerateIdAsync(
@@ -50,12 +60,6 @@ public interface IScriptRepository
     void AddWords(IEnumerable<ScriptWord> words);
     void RemoveWords(IEnumerable<ScriptWord> words);
     void ClearTracked();
-
-    /// <summary>
-    /// Chuyển hàng loạt sang Validated sau khi các lượt duyệt tự động đã nằm sẵn trong DB
-    /// (trigger trg_script_validated_domain kiểm tra từng hàng lúc UPDATE).
-    /// </summary>
-    Task<int> MarkValidatedAsync(IEnumerable<string> scriptIds, CancellationToken ct = default);
 
     Task<int> SaveChangesAsync(CancellationToken ct = default);
 }
@@ -106,6 +110,11 @@ public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
             .Include(s => s.Reviews.OrderByDescending(r => r.ReviewedAt))
                 .ThenInclude(r => r.ErrorReason)
             .FirstOrDefaultAsync(s => s.ScriptId == id, ct);
+
+    public Task<bool> HasAcceptedReviewAsync(string scriptId, CancellationToken ct = default) =>
+        db.ScriptReviews.AsNoTracking().AnyAsync(
+            r => r.ScriptId == scriptId &&
+                 (r.Action == ScriptReviewAction.Accepted || r.Action == ScriptReviewAction.Edited), ct);
 
     public Task<bool> ContentExistsAsync(string csContent, CancellationToken ct = default) =>
         db.Scripts.AsNoTracking().AnyAsync(s => s.CsContent == csContent, ct);
@@ -159,42 +168,18 @@ public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
             .Select(s => s.ScriptId)
             .ToListAsync(ct);
 
-    public Task<Script?> GetNextForSpeakerAsync(
-        long speakerId, long? taskId, CancellationToken ct = default)
-    {
-        var query = db.Scripts
-            .AsNoTracking()
-            .Include(s => s.Recordings.Where(r => r.SpeakerId == speakerId))
-            .Where(s => s.Status == ScriptStatus.Validated)
-
-            // Luật của lược đồ: một cặp câu chỉ một người đọc. Câu người khác đã đụng vào
-            // thì trigger sẽ chặn, nên đừng phát ra nữa. Bản trượt QC không giữ chỗ.
-            .Where(s => !s.Recordings.Any(r => r.SpeakerId != speakerId && r.Status != RecordingStatus.QcFailed))
-
-            // Còn thiếu ít nhất một biến thể. Bản bị từ chối hay trượt QC không tính là đã có.
-            .Where(s =>
-                !s.Recordings.Any(r => r.SpeakerId == speakerId &&
-                    r.SentenceVariant == SentenceVariant.CodeSwitching &&
-                    (r.Status == RecordingStatus.PendingReview || r.Status == RecordingStatus.Approved)) ||
-                !s.Recordings.Any(r => r.SpeakerId == speakerId &&
-                    r.SentenceVariant == SentenceVariant.PureVietnamese &&
-                    (r.Status == RecordingStatus.PendingReview || r.Status == RecordingStatus.Approved)));
-
-        if (taskId.HasValue)
-        {
-            query = query.Where(s => s.TaskScripts.Any(ts =>
-                ts.TaskId == taskId.Value && ts.Status == TaskScriptStatus.Pending));
-        }
-
-        return query
-            // Ưu tiên cặp đang làm dở để người đọc thu nốt bản còn thiếu, rồi mới tới cặp mới.
-            .OrderByDescending(s => s.Recordings.Any(r => r.SpeakerId == speakerId))
-            .ThenBy(s => s.ScriptId)
-            .FirstOrDefaultAsync(ct);
-    }
-
     public Task<bool> HasRecordingsAsync(string scriptId, CancellationToken ct = default) =>
         db.Recordings.AsNoTracking().AnyAsync(r => r.ScriptId == scriptId, ct);
+
+    public Task<List<Recording>> GetRecordingsOfSpeakerAsync(
+        string scriptId, long speakerId, CancellationToken ct = default) =>
+        db.Recordings.AsNoTracking()
+            .Where(r => r.ScriptId == scriptId && r.SpeakerId == speakerId)
+            .ToListAsync(ct);
+
+    public Task<bool> IsRecordedByOtherAsync(string scriptId, long speakerId, CancellationToken ct = default) =>
+        db.Recordings.AsNoTracking().AnyAsync(
+            r => r.ScriptId == scriptId && r.SpeakerId != speakerId && r.Status != RecordingStatus.QcFailed, ct);
 
     public async Task<string> GenerateIdAsync(
         int enWordCount, ScriptDomain domain, ScriptRelation relation, CancellationToken ct = default)
@@ -216,10 +201,6 @@ public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
     public void AddWords(IEnumerable<ScriptWord> words) => db.ScriptWords.AddRange(words);
     public void RemoveWords(IEnumerable<ScriptWord> words) => db.ScriptWords.RemoveRange(words);
     public void ClearTracked() => db.ChangeTracker.Clear();
-
-    public Task<int> MarkValidatedAsync(IEnumerable<string> scriptIds, CancellationToken ct = default) =>
-        db.Scripts.Where(s => scriptIds.Contains(s.ScriptId)).ExecuteUpdateAsync(
-            s => s.SetProperty(x => x.Status, ScriptStatus.Validated), ct);
 
     public Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction> BeginTransactionAsync(
         CancellationToken ct = default) =>

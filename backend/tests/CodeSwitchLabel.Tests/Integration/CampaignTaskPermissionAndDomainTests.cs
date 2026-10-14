@@ -307,7 +307,7 @@ public sealed class CampaignTaskPermissionAndDomainTests(DatabaseFixture fixture
         Assert.Equal(HttpStatusCode.OK, addRes.StatusCode);
 
         // 4. Giao việc cho Speaker
-        var assignRes = await PostAsync($"/api/tasks/{taskId}/assign", new { userId = speakerId }, managerToken);
+        var assignRes = await PostAsync($"/api/tasks/{taskId}/assign", new { userIds = new[] { speakerId } }, managerToken);
         Assert.Equal(HttpStatusCode.OK, assignRes.StatusCode);
 
         // 5. Xoá task đã có việc -> 409 task_has_work

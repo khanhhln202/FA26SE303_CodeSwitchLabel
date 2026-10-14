@@ -26,9 +26,12 @@ public sealed class TaskProgressTrackerTests
         CreatedAt = DateTimeOffset.UtcNow
     };
 
-    private static TaskRow Row(long id = 7, long? assignee = 9, int started = 1, int done = 0, int target = 10) => new(
-        id, 1, "Chiến dịch", TaskType.Recording, ScriptDomain.ItTechnology, null, WorkTaskStatus.Open, target,
-        null, DateTimeOffset.UtcNow, assignee, "Người nhận", started, done, started, 1, 1);
+    private static TaskRow Row(
+        long id = 7, long? assignee = 9, int started = 1, int done = 0, int target = 10) => new(
+        id, 1, "Đợt 1", TaskType.Recording, ScriptDomain.ItTechnology, null, WorkTaskStatus.Open, target,
+        null, DateTimeOffset.UtcNow,
+        assignee.HasValue ? [new TaskAssigneeRow(assignee.Value, "Người nhận")] : [],
+        started, done, started, 1, 1);
 
     [Fact]
     public async Task RefreshStatus_DatChiTieu_ChuyenCompletedVaLuu()
@@ -140,5 +143,108 @@ public sealed class TaskProgressTrackerTests
         Assert.Equal(TaskScriptStatus.Completed, scriptItem.Status);
         _tasks.Verify(t => t.GetForUpdateAsync(7, It.IsAny<CancellationToken>()), Times.Once);
         _tasks.Verify(t => t.GetForUpdateAsync(8, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    /// <summary>
+    /// TEAM_010 (yêu cầu 4.2) — BUG THẬT trước đây: câu đã tính xong rồi bản ghi bị
+    /// từ chối thì mục vẫn giữ `Completed`, nên Done không giảm và task đứng ở
+    /// Completed dù chỉ tiêu đã tụt. Người nhận không được biết phải thu bù.
+    /// </summary>
+    [Fact]
+    public async Task OnReviewSubmitted_BanGhiTuChoi_LuiMucCauVaLuiMucDuyet()
+    {
+        // Arrange — task thu âm đã có 1 cặp câu xong, và task duyệt đã đếm 1 lượt.
+        var recording = new Recording { RecordingId = "r_cs_111000001", ScriptId = "s_111000001" };
+
+        var doneScriptItem = new TaskScript
+        {
+            TaskId = 7, ScriptId = recording.ScriptId, Status = TaskScriptStatus.Completed
+        };
+        var reviewedItem = new TaskRecording
+        {
+            TaskId = 8, RecordingId = recording.RecordingId, Status = TaskRecordingStatus.Reviewed
+        };
+
+        var task7 = Task(id: 7, status: WorkTaskStatus.Completed, target: 10);
+        var task8 = Task(id: 8, status: WorkTaskStatus.Completed, target: 10);
+
+        _tasks.Setup(t => t.GetQueuedRecordingItemsAsync(recording.RecordingId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        _tasks.Setup(t => t.IsScriptFullyApprovedAsync(recording.ScriptId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        _tasks.Setup(t => t.GetCompletedScriptItemsAsync(recording.ScriptId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([doneScriptItem]);
+        _tasks.Setup(t => t.GetReviewedRecordingItemsAsync(recording.RecordingId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([reviewedItem]);
+        _tasks.Setup(t => t.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        _tasks.Setup(t => t.GetForUpdateAsync(7, It.IsAny<CancellationToken>())).ReturnsAsync(task7);
+        _tasks.Setup(t => t.GetForUpdateAsync(8, It.IsAny<CancellationToken>())).ReturnsAsync(task8);
+
+        // Done tụt từ 10/10 xuống 9/10 sau khi trừ một câu.
+        _tasks.Setup(t => t.GetRowAsync(7, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Row(started: 10, done: 9, target: 10));
+        _tasks.Setup(t => t.GetRowAsync(8, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Row(started: 10, done: 9, target: 10));
+
+        // Act
+        await Tracker.OnReviewSubmittedAsync(recording, RecordingStatus.Rejected, 7, TestContext.Current.CancellationToken);
+
+        // Assert — mục câu lùi về Pending, mục duyệt thành Skipped (không phải Queued:
+        // bản ghi đã chốt rồi, không ai duyệt lại được), và cả hai task rời Completed.
+        Assert.Equal(TaskScriptStatus.Pending, doneScriptItem.Status);
+        Assert.Equal(TaskRecordingStatus.Skipped, reviewedItem.Status);
+        Assert.Equal(WorkTaskStatus.InProgress, task7.Status);
+        Assert.Equal(WorkTaskStatus.InProgress, task8.Status);
+    }
+
+    /// <summary>TEAM_010: khi bản ghi ĐẠT thì không được đụng vào mục đã xong — chỉ đường lùi mới lùi.</summary>
+    [Fact]
+    public async Task OnReviewSubmitted_BanGhiDat_KhongLuiMucNao()
+    {
+        // Arrange
+        var recording = new Recording { RecordingId = "r_cs_111000001", ScriptId = "s_111000001" };
+        var task = Task(id: 7, status: WorkTaskStatus.InProgress);
+
+        _tasks.Setup(t => t.GetQueuedRecordingItemsAsync(recording.RecordingId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        _tasks.Setup(t => t.IsScriptFullyApprovedAsync(recording.ScriptId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        _tasks.Setup(t => t.GetPendingScriptItemsAsync(recording.ScriptId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
+        _tasks.Setup(t => t.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+        _tasks.Setup(t => t.GetForUpdateAsync(7, It.IsAny<CancellationToken>())).ReturnsAsync(task);
+        _tasks.Setup(t => t.GetRowAsync(7, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Row(started: 10, done: 10, target: 10));
+
+        // Act
+        await Tracker.OnReviewSubmittedAsync(recording, RecordingStatus.Approved, 7, TestContext.Current.CancellationToken);
+
+        // Assert
+        _tasks.Verify(
+            t => t.GetCompletedScriptItemsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _tasks.Verify(
+            t => t.GetReviewedRecordingItemsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Equal(WorkTaskStatus.Completed, task.Status);
+    }
+
+    /// <summary>
+    /// TEAM_010: task có nhiều người nhận thì RefreshStatus phải tính bằng SỐ người,
+    /// không phải "có người hay không". Task không còn ai nhận thì về nháp.
+    /// </summary>
+    [Fact]
+    public async Task RefreshStatus_KhongConNguoiNhan_QuVeNhap()
+    {
+        // Arrange
+        var task = Task(status: WorkTaskStatus.InProgress);
+        _tasks.Setup(t => t.GetForUpdateAsync(7, It.IsAny<CancellationToken>())).ReturnsAsync(task);
+        _tasks.Setup(t => t.GetRowAsync(7, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Row(assignee: null, started: 5, done: 2, target: 10));
+        _tasks.Setup(t => t.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
+
+        // Act
+        await Tracker.RefreshStatusAsync(7, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(WorkTaskStatus.Draft, task.Status);
     }
 }

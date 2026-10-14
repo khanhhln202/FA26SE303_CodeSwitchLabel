@@ -124,9 +124,8 @@ public static partial class DatabaseSeeder
 
         var now = DateTimeOffset.UtcNow;
 
-        // Hạn nằm trong khoảng ngày của chiến dịch — trigger trg_task_campaign_window chặn nếu lệch,
-        // và chặn cả khi deadline bằng đúng 0 giờ ngày cuối vì ngày đó tính trọn vẹn.
-        var deadline = EndOfDayUtc(campaign.EndDate);
+        // Hạn nằm trong khoảng ngày của chiến dịch — trigger trg_task_campaign_window chặn nếu lệch.
+        var deadline = EndOfCampaignDay(campaign.EndDate);
 
         var recordingTask = new WorkTask
         {
@@ -213,12 +212,19 @@ public static partial class DatabaseSeeder
     private const string RecordingTaskName = "Ghi âm đợt mẫu";
     private const string ReviewTaskName = "Duyệt bản ghi đợt mẫu";
 
+    /// <summary>Múi giờ của ngày trong chiến dịch — phải khớp 'Asia/Ho_Chi_Minh' trong lược đề.</summary>
+    internal static readonly TimeSpan CampaignTimeZone = TimeSpan.FromHours(7);
+
     /// <summary>
-    /// 23:59:59 UTC của một ngày trong chiến dịch.
+    /// 23:59:59 giờ Việt Nam của một ngày trong chiến dịch, đổi sang UTC.
     ///
-    /// Phải chỉ định UTC tường minh: DateOnly.ToDateTime trả về DateTime không có kiểu, nên
-    /// Npgsql hiểu là giờ địa phương của máy và từ chối ghi vào cột timestamptz.
+    /// Ngày của chiến dịch là ngày LỊCH ở Việt Nam: trigger trg_task_campaign_window quy
+    /// đổi sang giờ địa phương (+07) rồi mới so, nên "23:59:59 UTC" là 7 giờ vượt sang
+    /// ngày hôm sau và bị trigger chặn — seeder vỡ, API không lên được với database mới.
+    ///
+    /// Phải trả về DateTimeOffset có offset 0: Npgsql từ chối ghi DateTimeOffset lệch UTC
+    /// vào cột timestamptz.
     /// </summary>
-    private static DateTimeOffset EndOfDayUtc(DateOnly day) =>
-        new(DateTime.SpecifyKind(day.ToDateTime(new TimeOnly(23, 59, 59)), DateTimeKind.Utc));
+    internal static DateTimeOffset EndOfCampaignDay(DateOnly day) =>
+        new DateTimeOffset(day.ToDateTime(new TimeOnly(23, 59, 59)), CampaignTimeZone).ToUniversalTime();
 }

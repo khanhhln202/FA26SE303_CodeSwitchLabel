@@ -15,15 +15,21 @@ namespace CodeSwitchLabel.Services.WorkTasks;
 /// bỏ qua, giao lại, sửa chỉ tiêu — thay vì cộng trừ từng bước. Tính lại thì không bao giờ lệch.
 ///
 /// Completed không phải trạng thái cuối: Task Manager nâng chỉ tiêu thì task tự mở lại.
+/// Nhánh "chưa ai nhận" cũng tự mở lại được: bản ghi bị từ chối làm chỉ tiêu tụt,
+/// task rơi về InProgress và người nhận phải thu bù (yêu cầu 4.2).
 /// </summary>
 public static class TaskStateMachine
 {
+    /// <param name="activeAssigneeCount">
+    /// TEAM_010: một task giao cho nhiều người, nên đếm số người chứ không phải kiểm
+    /// "có hay không". Chỉ cần biết có người nào không (0 hay ít nhất 1).
+    /// </param>
     public static WorkTaskStatus Evaluate(
-        WorkTaskStatus current, bool hasActiveAssignee, int started, int done, int target)
+        WorkTaskStatus current, int activeAssigneeCount, int started, int done, int target)
     {
         if (current == WorkTaskStatus.Cancelled) return WorkTaskStatus.Cancelled;
         if (target > 0 && done >= target) return WorkTaskStatus.Completed;
-        if (!hasActiveAssignee) return WorkTaskStatus.Draft;
+        if (activeAssigneeCount == 0) return WorkTaskStatus.Draft;
 
         return started > 0 ? WorkTaskStatus.InProgress : WorkTaskStatus.Open;
     }

@@ -68,10 +68,16 @@ public record AutoFillCriteria
     public long? SpeakerId { get; init; }
 }
 
+/// <summary>
+/// TEAM_010: giao cho NHIỀU người cùng lúc. Chỉ tiêu là của cả nhóm, không nhân theo
+/// số người — nên giao 3 người vào task chỉ tiêu 100 vẫn là 100 câu, chia đều ra.
+/// </summary>
 public record AssignTaskRequest
 {
-    [Required(ErrorMessage = "Phải chọn người nhận.")]
-    public long? UserId { get; init; }
+    /// <summary>Phải có ít nhất một người nhận. Trùng lặp trong danh sách được bỏ qua.</summary>
+    [Required(ErrorMessage = "Phải chọn ít nhất một người nhận.")]
+    [MinLength(1, ErrorMessage = "Phải chọn ít nhất một người nhận.")]
+    public List<long> UserIds { get; init; } = [];
 }
 
 /// <param name="Unit">Đơn vị của chỉ tiêu: cặp câu hay bản ghi.</param>
@@ -95,6 +101,9 @@ public record AttachTaskRequest
     public long? CampaignId { get; init; }
 }
 
+/// <summary>TEAM_010: một người đang nhận task. Trước đây chỉ có một assigneeId/assigneeName.</summary>
+public record TaskAssigneeDto(long UserId, string FullName);
+
 /// <param name="CanDelete">Task rảnh (chưa gắn đợt, chưa có ai nhận, chưa có mục) thì xoá cứng được.</param>
 /// <param name="DeleteBlockedReason">Vì sao không xoá được — tiếng Việt để frontend hiện thẳng cho người dùng.</param>
 public record TaskListItemDto(
@@ -105,8 +114,7 @@ public record TaskListItemDto(
     ScriptDomain Domain,
     string? Description,
     WorkTaskStatus Status,
-    long? AssigneeId,
-    string? AssigneeName,
+    IReadOnlyList<TaskAssigneeDto> Assignees,
     DateTimeOffset? Deadline,
     DateTimeOffset CreatedAt,
     TaskProgressDto Progress,
@@ -153,6 +161,9 @@ public record AssigneeSummaryDto(
     int OverdueTasks);
 
 /// <param name="TaskTitle">Tên nhiệm vụ (task.description) — cùng nghĩa với `taskTitle` ở lịch sử ghi âm.</param>
+/// <param name="MyProgress">TEAM_010: tiến độ của riêng người đang xem.</param>
+/// <param name="TeamProgress">TEAM_010: tiến độ của cả nhóm người nhận task.</param>
+/// <param name="Assignees">TEAM_010: ai cùng nhận task này.</param>
 public record SpeakerActiveTaskDto(
     long TaskId,
     string? TaskTitle,
@@ -161,7 +172,9 @@ public record SpeakerActiveTaskDto(
     TaskType TaskType,
     WorkTaskStatus Status,
     DateTimeOffset? Deadline,
-    TaskProgressDto Progress);
+    TaskProgressDto MyProgress,
+    TaskProgressDto TeamProgress,
+    IReadOnlyList<TaskAssigneeDto> Assignees);
 
 public record SpeakerProgressDto(
     int TotalSubmitted,
