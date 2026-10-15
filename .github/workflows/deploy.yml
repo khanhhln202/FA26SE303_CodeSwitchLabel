@@ -8,18 +8,21 @@ name: Deploy máy chủ
 # chủ rồi chạy `deploy/deploy.sh`, nơi mọi bước an toàn (sao lưu, sổ
 # migration, kiểm tra /health) đã nằm sẵn.
 #
-# Chỉ chạy khi `build-and-test` của workflow "Backend" đã xanh — `needs` +
-# `workflow_run` nên không có đường nào để deploy code chưa qua test.
+# Chỉ chạy khi `build-and-test` của workflow "Backend" đã xanh.
+#
+# KHÔNG khai báo `push` ở đây. `workflow_run` là cổng chặn thật: nó nổ ra từ
+# workflow Backend, mà Backend đã tự lọc theo `paths` (backend/**, migrations/**,
+# deploy/**...). Khai báo thêm `push` chỉ tạo ra một run luôn `skipped` mỗi lần
+# push — đúng thứ đã che mất lỗi này suốt ba ngày qua.
 on:
-  push:
+  workflow_run:
+    workflows: ['Backend']
+    types: [completed]
+    # Lọc nhánh của workflow kích hoạt. Nhánh phải khai ở đây chứ không đọc
+    # `github.event.head_branch` trong `if`: payload `workflow_run` không có
+    # field `head_branch` ở cấp gốc nên biểu thức đó luôn rỗng -> job luôn
+    # skipped. Đúng phải là `github.event.workflow_run.*`.
     branches: [main]
-    paths:
-      - 'backend/**'
-      - 'docs/codeswitchlabel.sql'
-      - 'migrations/**'
-      - 'global.json'
-      - 'deploy/**'
-      - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
 # Hai lần deploy chạy chồng thì `git pull`, `docker compose up --build` và sổ
@@ -40,10 +43,12 @@ jobs:
     # để sắp thứ tự các job CÙNG chạy. Job này nằm ở workflow riêng, chạy
     # SAU "Backend" bằng workflow_run — `ci` không tồn tại ở đây nên GitHub
     # báo "must contain at least one job with no dependencies" và hỏng cả file.
-    # Cổng chặn thật sự nằm ở `if` bên dưới.
+    # Cổng chặn thật sự nằm ở `on: workflow_run` + `if` bên dưới.
     if: >-
-      github.event_name == 'workflow_run' && github.event.workflow.name == 'Backend' &&
-      github.event.conclusion == 'success' && github.event.head_branch == 'main'
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.event == 'push' &&
+       github.event.workflow.name == 'Backend' &&
+       github.event.workflow_run.conclusion == 'success')
 
     steps:
       # `restrict` ở authorized_keys trên máy chủ đã chặn port/agent forwarding.
@@ -67,6 +72,8 @@ jobs:
           printf '%s\n' "$DEPLOY_HOST_KEY" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/deploy_key ~/.ssh/known_hosts
           # Không có -t: deploy.sh in rollback bằng printf, không cần TTY.
+          # HEALTH_* nâng mặc định 120s của deploy.sh lên 10 phút: B2s build xong
+          # còn lạnh, lần chạy đầu tiên thường hụt mặc định và deploy fail oan.
           ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
               -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" \
-              "cd '$DEPLOY_REPO_DIR' && ./deploy/deploy.sh"
+              "cd '$DEPLOY_REPO_DIR' && HEALTH_MAX_TRIES=120 HEALTH_INTERVAL=5 ./deploy/deploy.sh"
