@@ -71,3 +71,5 @@ export const GET_REVIEWER_REJECT_REASONS_API = 'GET_REVIEWER_REJECT_REASONS_API'
 export const GET_TOP_REJECTED_SENTENCES_API = 'GET_TOP_REJECTED_SENTENCES_API'
 // Người bị từ chối nhiều nhất (GET /api/reviewer/stats/top-rejected-speakers)
 export const GET_TOP_REJECTED_SPEAKERS_API = 'GET_TOP_REJECTED_SPEAKERS_API'
+// Lịch sử duyệt đề xuất câu của Reviewer (GET /api/reviewer/history/contributions)
+export const GET_REVIEWER_CONTRIBUTION_HISTORY_API = 'GET_REVIEWER_CONTRIBUTION_HISTORY_API'
