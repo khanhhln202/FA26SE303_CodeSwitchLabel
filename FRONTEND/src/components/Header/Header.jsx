@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Bell, ChevronDown, User, LogOut } from 'lucide-react';
+import { Bell, ChevronDown, User, LogOut, KeyRound } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -159,6 +159,15 @@ export default function Header({ role }) {
               >
                 <User className="w-4 h-4 text-[#6E7078] dark:text-gray-400" /> Hồ sơ cá nhân
               </button>
+              {config.changePasswordPath && (
+                <button
+                  role="menuitem"
+                  onClick={() => { setMenuOpen(false); navigate(config.changePasswordPath); }}
+                  className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-ui font-label hover:bg-black/[0.04] dark:hover:bg-white/[0.06] transition-colors text-left text-[#2B2C31] dark:text-gray-200 cursor-pointer"
+                >
+                  <KeyRound className="w-4 h-4 text-[#6E7078] dark:text-gray-400" /> Đổi mật khẩu
+                </button>
+              )}
               <div className="h-px mx-1 my-1 bg-[#E5E2D8] dark:bg-gray-800" />
               <button
                 role="menuitem"

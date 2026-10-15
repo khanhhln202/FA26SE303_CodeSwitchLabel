@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useFormik } from "formik";
 import { toast } from "sonner";
 import * as Yup from "yup";
+import { AlertCircle } from "lucide-react";
 import { getPostLoginPath, ONBOARDING_PATH, ROLE_HOME_PATH } from "../../../constants/auth";
 import { loginApi } from "../../../services/authApi";
 import { getCurrentUser, saveSession } from "../../../utils/authStorage";
@@ -44,7 +45,7 @@ export default function Login({ onLoginSuccess }) {
 
   const queryClient = useQueryClient();
   // Mutation đăng nhập
-  const { mutate: login, isPending: isLoggingIn } = useMutation({
+  const { mutate: login, isPending: isLoggingIn, error: loginError, reset: clearLoginError } = useMutation({
     mutationKey: [LOGIN_API],
     mutationFn: loginApi,
     onSuccess: (data) => {
@@ -58,8 +59,7 @@ export default function Login({ onLoginSuccess }) {
       // Speaker chưa có hồ sơ -> màn Hoàn thiện hồ sơ, còn lại về trang chủ của vai
       navigate(getRedirectPath(data.user, from), { replace: true });
     },
-    // Sai email/mật khẩu, tài khoản bị khoá, máy chủ không phản hồi... -> loginApi đã đổi thành câu báo lỗi
-    onError: (error) => toast.error(error.message),
+    // Sai email/mật khẩu, tài khoản bị khoá, máy chủ không phản hồi... -> hiện khung lỗi ngay trên form (loginError), không dùng toast
   });
 
   const formik = useFormik({
@@ -76,6 +76,11 @@ export default function Login({ onLoginSuccess }) {
   if (sessionUser) return <Navigate to={getRedirectPath(sessionUser, from)} replace />;
 
   const errorOf = (name) => (formik.touched[name] && formik.errors[name]) || undefined;
+  // Gõ lại vào ô nào thì ẩn khung lỗi đăng nhập
+  const handleChange = (e) => {
+    if (loginError) clearLoginError();
+    formik.handleChange(e);
+  };
 
   return (
     <AuthSplitLayout
@@ -86,6 +91,17 @@ export default function Login({ onLoginSuccess }) {
       <AuthTabs active="login" />
 
       <form onSubmit={formik.handleSubmit} noValidate className="mt-7 flex flex-col gap-3.5">
+        {/* Lỗi đăng nhập hiện ngay trong form như các trang lớn (không tự biến mất) */}
+        {loginError && (
+          <div role="alert" className="flex items-start gap-2 rounded-xl border border-[#F3C9C9] bg-[#FDEAEA] px-3 py-2.5 text-[#9F2D2D]">
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+            <div className="type-meta">
+              <p className="font-emphasis">{loginError.message}</p>
+              <p>Kiểm tra lại rồi thử lần nữa.</p>
+            </div>
+          </div>
+        )}
+
         <FormField id="email" label="Email" error={errorOf("email")}>
           <TextInput
             id="email"
@@ -94,9 +110,9 @@ export default function Login({ onLoginSuccess }) {
             autoComplete="email"
             placeholder="ban@gmail.com"
             value={formik.values.email}
-            onChange={formik.handleChange}
+            onChange={handleChange}
             onBlur={formik.handleBlur}
-            invalid={Boolean(errorOf("email"))}
+            invalid={Boolean(errorOf("email") || loginError)}
           />
         </FormField>
 
@@ -107,9 +123,9 @@ export default function Login({ onLoginSuccess }) {
             autoComplete="current-password"
             placeholder="Nhập mật khẩu"
             value={formik.values.password}
-            onChange={formik.handleChange}
+            onChange={handleChange}
             onBlur={formik.handleBlur}
-            invalid={Boolean(errorOf("password"))}
+            invalid={Boolean(errorOf("password") || loginError)}
           />
         </FormField>
 

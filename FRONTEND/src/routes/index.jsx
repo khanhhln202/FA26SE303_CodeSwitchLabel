@@ -71,6 +71,10 @@ const routes = [
         element: lazy(() => import("../pages/HomeTemplate/Profile/index")),
       },
       {
+        path: "change-password",
+        element: lazy(() => import("../pages/HomeTemplate/ChangePassword/index")),
+      },
+      {
         path: "help-center",
         element: HelpCenterLazy,
       },
@@ -122,6 +126,11 @@ const routes = [
       {
         path: "profile",
         element: lazy(() => import("../pages/ReviewerTemplate/Profile/index")),
+      },
+      {
+        // Dùng chung trang Đổi mật khẩu với Speaker
+        path: "change-password",
+        element: lazy(() => import("../pages/HomeTemplate/ChangePassword/index")),
       },
       {
         path: "help-center",
