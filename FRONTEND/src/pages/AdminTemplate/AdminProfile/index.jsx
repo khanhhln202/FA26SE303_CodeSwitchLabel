@@ -30,18 +30,90 @@ export default function AdminProfile() {
 
   const fetchProfile = async () => {
     try {
-      const user = await adminService.getProfile();
-      if (user) {
-        setFormData((prev) => ({
-          ...prev,
-          id: `ADM-${String(user.userId || user.id || 1).padStart(3, '0')}`,
-          name: user.fullName || user.name || "",
-          email: user.email || "",
-          role: user.role || "Administrator"
-        }));
+      let user = null;
+
+      // 1. Thử gọi API profile
+      if (typeof adminService.getProfile === "function") {
+        user = await adminService.getProfile().catch(() => null);
       }
+
+      // 2. Helper giải mã JWT Token (nếu đăng nhập lưu token)
+      const parseJwt = (token) => {
+        try {
+          const base64Url = token.split('.')[1];
+          const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+          const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+          return JSON.parse(jsonPayload);
+        } catch (e) {
+          return null;
+        }
+      };
+
+      // 3. Tìm thông tin trong LocalStorage / SessionStorage
+      let fetchedName = "";
+      let fetchedEmail = "";
+      let fetchedId = 1;
+
+      if (user) {
+        const target = user.data || user.user || user;
+        fetchedName = target.fullName || target.name || target.userName || target.displayName || "";
+        fetchedEmail = target.email || target.userEmail || "";
+        fetchedId = target.userId || target.id || 1;
+      }
+
+      // Nếu API không trả về thông tin, quét Storage
+      if (!fetchedName || !fetchedEmail) {
+        const storageKeys = ["user", "userInfo", "admin", "adminUser", "currentUser", "auth", "profile"];
+        
+        for (const key of storageKeys) {
+          const item = localStorage.getItem(key) || sessionStorage.getItem(key);
+          if (item) {
+            try {
+              const parsed = JSON.parse(item);
+              const obj = parsed.user || parsed.data || parsed;
+              if (!fetchedName) fetchedName = obj.fullName || obj.name || obj.userName || obj.displayName || obj.unique_name;
+              if (!fetchedEmail) fetchedEmail = obj.email || obj.userEmail || obj.emailAddress || obj.sub;
+              if (obj.id || obj.userId) fetchedId = obj.id || obj.userId;
+            } catch (e) {
+              // Nếu item là chuỗi JWT Token
+              if (typeof item === "string" && item.includes(".")) {
+                const decoded = parseJwt(item);
+                if (decoded) {
+                  if (!fetchedName) fetchedName = decoded.fullName || decoded.name || decoded.unique_name || decoded.userName;
+                  if (!fetchedEmail) fetchedEmail = decoded.email || decoded.sub || decoded.emailAddress;
+                }
+              }
+            }
+          }
+        }
+
+        // Kiểm tra riêng key token/accessToken
+        const token = localStorage.getItem("token") || localStorage.getItem("accessToken") || sessionStorage.getItem("token");
+        if (token && (!fetchedName || !fetchedEmail)) {
+          const decoded = parseJwt(token);
+          if (decoded) {
+            if (!fetchedName) fetchedName = decoded.fullName || decoded.name || decoded.unique_name || "System Admin";
+            if (!fetchedEmail) fetchedEmail = decoded.email || decoded.sub || "admin@codeswitchlabel.com";
+          }
+        }
+      }
+
+      // Fallback giá trị mặc định nếu hoàn toàn không tìm thấy
+      setFormData((prev) => ({
+        ...prev,
+        id: `ADM-${String(fetchedId).padStart(3, '0')}`,
+        name: fetchedName || "System Admin",
+        email: fetchedEmail || "admin@codeswitchlabel.com",
+        role: "Administrator"
+      }));
+
     } catch (err) {
       console.error("Lỗi tải thông tin cá nhân:", err);
+      setFormData((prev) => ({
+        ...prev,
+        name: "System Admin",
+        email: "admin@codeswitchlabel.com"
+      }));
     }
   };
 
