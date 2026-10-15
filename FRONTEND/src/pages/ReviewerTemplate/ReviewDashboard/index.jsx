@@ -1,7 +1,24 @@
 import { useState } from 'react';
 import { ArrowRight, PieChart, FolderKanban, CircleCheck, CircleX, Clock, FileWarning, UserX, Eye, X, AlertTriangle, BarChart3 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import Pagination from '../../../components/Pagination/Pagination';
+import Loading from '../../../components/Loading/Loading';
+import ErrorState from '../../../components/ErrorState/ErrorState';
+import {
+  getReviewerProgressApi,
+  getReviewerTotalsApi,
+  getReviewerRejectReasonsApi,
+  getTopRejectedSentencesApi,
+  getTopRejectedSpeakersApi,
+} from '../../../services/reviewerApi';
+import {
+  GET_REVIEWER_PROGRESS_API,
+  GET_REVIEWER_TOTALS_API,
+  GET_REVIEWER_REJECT_REASONS_API,
+  GET_TOP_REJECTED_SENTENCES_API,
+  GET_TOP_REJECTED_SPEAKERS_API,
+} from '../../../utils/queryKey';
 import {
   SPEAKER_ACCENT_ACTIVE_ICON as ACCENT, // màu thương hiệu xanh lá (cùng logo, sidebar) - dùng cho mọi chỗ "đang chọn / bấm được"
   SIDEBAR_ACTIVE_TEXT_SPEAKER as ACCENT_TEXT, // xanh lá đậm cho chữ trên nền nhạt
@@ -13,9 +30,10 @@ const ACCENT_SOFT = 'rgba(22,163,74,0.08)';
 // Xanh dương chỉ dùng cho phần "tiếng Anh" (từ tiếng Anh, nhãn VI-EN) - cùng AUDIO_PRIMARY như các trang khác
 const ENGLISH_BLUE = AUDIO_PRIMARY;
 const ENGLISH_BLUE_SOFT = `${AUDIO_PRIMARY}1A`;
-import { TOP_REJECTED_SENTENCES, TOP_REJECTED_SPEAKERS, REJECT_STATS_DATA, ONGOING_TASKS, REVIEW_TOTALS } from '../../../mocks/reviewer/dashboard';
 
 const ITEMS_PER_PAGE = 5;
+// API top câu / top người trả tối đa 20 dòng -> phân trang 5 dòng ở FE
+const TOP_LIMIT = 20;
 
 // "Lý do từ chối phổ biến" cùng một loại dữ liệu (đều là từ chối) -> MỘT màu đỏ, đậm nhạt theo thứ hạng.
 // (Trước đây đỏ-cam-vàng-xanh lá kiểu đèn giao thông: xanh lá dễ hiểu nhầm là "tốt".)
@@ -37,16 +55,21 @@ const CATEGORIES = [
 const rankColor = (rank) => RANK_COLORS[Math.min(rank, RANK_COLORS.length - 1)];
 const categoryShort = (name) => CATEGORIES.find((c) => c.key === name)?.short || name;
 
-// 4 lý do từ chối phổ biến toàn hệ thống - số liệu từ dữ liệu mẫu, màu gán theo đúng CATEGORIES ở trên
-const REJECT_STATS = REJECT_STATS_DATA.map((stat) => ({
-  ...stat,
-  color: CATEGORIES.find((c) => c.key === stat.label)?.color ?? RANK_COLORS[RANK_COLORS.length - 1],
-}));
+// "2026-11-07T23:59:59+00:00" -> "08/11/2026" (giờ máy người dùng)
+function formatDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+
+// Thoát ký tự đặc biệt để dùng từ tiếng Anh trong RegExp
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 function SentenceText({ sentence }) {
-  const words = sentence.englishWords || [];
+  const words = (sentence.englishWords || []).filter(Boolean);
   if (!words.length) return sentence.text;
-  return sentence.text.split(new RegExp(`(${words.join('|')})`, 'g')).map((part, index) =>
+  return sentence.text.split(new RegExp(`(${words.map(escapeRegExp).join('|')})`, 'g')).map((part, index) =>
     words.includes(part) ? <span key={index} style={{ color: ENGLISH_BLUE }}>{part}</span> : part
   );
 }
@@ -114,26 +137,63 @@ export default function ReviewDashboard() {
   const [speakerPage, setSpeakerPage] = useState(1);
   const [rejectionTab, setRejectionTab] = useState('sentences');
 
-  const ongoingTasks = ONGOING_TASKS;
+  // Call API lấy tổng số bản mình đã duyệt đạt / từ chối
+  const { data: totals, isLoading: isLoadingTotals, isError: isTotalsError, error: totalsError, refetch: refetchTotals } = useQuery({
+    queryKey: [GET_REVIEWER_TOTALS_API],
+    queryFn: getReviewerTotalsApi,
+  });
+
+  // Call API lấy nhiệm vụ duyệt đang giao (dùng chung với trang Nhiệm vụ / Kiểm duyệt ghi âm)
+  const { data: progress, isLoading: isLoadingProgress } = useQuery({
+    queryKey: [GET_REVIEWER_PROGRESS_API],
+    queryFn: getReviewerProgressApi,
+  });
+
+  // Call API lấy lý do từ chối mình dùng nhiều nhất
+  const { data: rejectReasons = [] } = useQuery({
+    queryKey: [GET_REVIEWER_REJECT_REASONS_API],
+    queryFn: getReviewerRejectReasonsApi,
+  });
+
+  // Call API lấy câu / người bị mình từ chối nhiều nhất
+  const { data: topSentences = [] } = useQuery({
+    queryKey: [GET_TOP_REJECTED_SENTENCES_API],
+    queryFn: () => getTopRejectedSentencesApi({ limit: TOP_LIMIT }),
+  });
+  const { data: topSpeakers = [] } = useQuery({
+    queryKey: [GET_TOP_REJECTED_SPEAKERS_API],
+    queryFn: () => getTopRejectedSpeakersApi({ limit: TOP_LIMIT }),
+  });
+
+  if (isLoadingTotals || isLoadingProgress) return <Loading />;
+  if (isTotalsError) return <ErrorState message={totalsError.message} onRetry={refetchTotals} />;
+
+  // daysLeft tính từ hoursRemaining của API để sắp xếp / cảnh báo gấp
+  const ongoingTasks = (progress?.activeTasks ?? []).map((task) => ({
+    ...task,
+    daysLeft: task.hoursRemaining == null ? Infinity : Math.max(0, Math.ceil(task.hoursRemaining / 24)),
+  }));
 
   // Nhiệm vụ chưa hoàn thành có hạn gần nhất - nếu ≤3 ngày thì coi là gấp (Hướng B: cảnh báo hoặc yên tâm)
   const URGENT_THRESHOLD_DAYS = 3;
-  const incompleteTasks = ongoingTasks.filter((t) => t.reviewed < t.target);
+  const incompleteTasks = ongoingTasks.filter((t) => t.done < t.targetQty);
   const nearestTask = incompleteTasks.length
     ? incompleteTasks.reduce((a, b) => (a.daysLeft < b.daysLeft ? a : b))
     : null;
   const urgentTask = nearestTask && nearestTask.daysLeft <= URGENT_THRESHOLD_DAYS ? nearestTask : null;
 
-  const { approvedCount, rejectedCount } = REVIEW_TOTALS;
+  const { approvedCount, rejectedCount } = totals;
   const totalReviewed = approvedCount + rejectedCount;
-  const approvedPercent = Math.round((approvedCount / totalReviewed) * 100);
-  const rejectedPercent = Math.round((rejectedCount / totalReviewed) * 100);
+  const percentOf = (n) => (totalReviewed ? Math.round((n / totalReviewed) * 100) : 0);
+  const approvedPercent = percentOf(approvedCount);
+  const rejectedPercent = percentOf(rejectedCount);
 
-  const sentenceTotalPages = Math.ceil(TOP_REJECTED_SENTENCES.length / ITEMS_PER_PAGE);
-  const pagedSentences = TOP_REJECTED_SENTENCES.slice((sentencePage - 1) * ITEMS_PER_PAGE, sentencePage * ITEMS_PER_PAGE);
+  const sentenceTotalPages = Math.max(1, Math.ceil(topSentences.length / ITEMS_PER_PAGE));
+  const pagedSentences = topSentences.slice((sentencePage - 1) * ITEMS_PER_PAGE, sentencePage * ITEMS_PER_PAGE);
 
-  const speakerTotalPages = Math.ceil(TOP_REJECTED_SPEAKERS.length / ITEMS_PER_PAGE);
-  const pagedSpeakers = TOP_REJECTED_SPEAKERS.slice((speakerPage - 1) * ITEMS_PER_PAGE, speakerPage * ITEMS_PER_PAGE);
+  const speakerTotalPages = Math.max(1, Math.ceil(topSpeakers.length / ITEMS_PER_PAGE));
+  const pagedSpeakers = topSpeakers.slice((speakerPage - 1) * ITEMS_PER_PAGE, speakerPage * ITEMS_PER_PAGE);
+  const rejectionItems = rejectionTab === 'sentences' ? pagedSentences : pagedSpeakers;
 
   return (
     <div className="flex flex-col gap-2 text-left font-sans min-[850px]:min-h-[calc(100dvh-129px)] lg:[@media(max-height:800px)]:-my-[22px]">
@@ -159,28 +219,33 @@ export default function ReviewDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 items-stretch lg:flex-[0.75_0_auto]">
         <Panel className="lg:col-span-3 flex flex-col">
           <PanelHeader icon={FolderKanban} iconColor="#6E7078" title="Tiến độ nhiệm vụ"
-            right={<span className="type-meta text-[#6E7078]">{incompleteTasks.length} nhiệm vụ đang thực hiện</span>} />
+            right={<span className="type-meta text-[#6E7078]">{ongoingTasks.length} nhiệm vụ đang thực hiện</span>} />
           <div className="grid auto-rows-fr gap-2 flex-1">
+            {ongoingTasks.length === 0 && (
+              <p className="type-meta text-[#9A9CA3] flex items-center justify-center">Chưa được giao nhiệm vụ duyệt nào.</p>
+            )}
             {[...ongoingTasks].sort((a, b) => a.daysLeft - b.daysLeft).map((task) => {
-              const percent = Math.round((task.reviewed / task.target) * 100);
+              const percent = Math.min(100, task.percent);
               const urgent = task === urgentTask;
+              const title = task.description || `Nhiệm vụ #${task.taskId}`;
               return (
-                <div key={task.title} className={`rounded-xl border px-3 py-1 lg:flex lg:items-center lg:gap-3 ${urgent ? 'border-[#F5DFC0] bg-[#FFFAF1]' : 'border-[#F0EEE6]'}`}>
+                <div key={task.taskId} className={`rounded-xl border px-3 py-1 lg:flex lg:items-center lg:gap-3 ${urgent ? 'border-[#F5DFC0] bg-[#FFFAF1]' : 'border-[#F0EEE6]'}`}>
                   <div className="flex items-center justify-between gap-3 min-w-0 flex-1">
                     <div className="min-w-0">
-                      <p className="text-ui font-emphasis text-[#16171C]">{task.title}</p>
+                      <p className="text-ui font-emphasis text-[#16171C]">{title}</p>
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-0.5 type-meta">
-                        <span className="text-[#6E7078] flex items-center gap-1"><Clock className="w-3 h-3" /> Hạn {task.deadline}</span>
-                        {urgent && <span className="flex items-center gap-1 font-label text-[#A85E12]"><AlertTriangle className="w-3 h-3" /> Còn {task.daysLeft} ngày</span>}
+                        <span className="text-[#6E7078] flex items-center gap-1"><Clock className="w-3 h-3" /> Hạn {formatDate(task.deadline)}</span>
+                        {task.isOverdue && <span className="flex items-center gap-1 font-label text-[#C63B3B]"><AlertTriangle className="w-3 h-3" /> Quá hạn</span>}
+                        {urgent && !task.isOverdue && <span className="flex items-center gap-1 font-label text-[#A85E12]"><AlertTriangle className="w-3 h-3" /> Còn {task.daysLeft} ngày</span>}
                       </div>
                     </div>
-                    <button onClick={() => navigate(`/reviewer/recording?task=${encodeURIComponent(task.title)}`)} className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[var(--accent-soft)]" style={{ color: ACCENT, '--accent-soft': ACCENT_SOFT }} aria-label={`Kiểm duyệt ${task.title}`}>
+                    <button onClick={() => navigate(`/reviewer/recording?taskId=${task.taskId}`)} className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[var(--accent-soft)]" style={{ color: ACCENT, '--accent-soft': ACCENT_SOFT }} aria-label={`Kiểm duyệt ${title}`}>
                       <ArrowRight className="w-4 h-4" />
                     </button>
                   </div>
                   <div className="flex items-center gap-3 mt-2 lg:mt-0 lg:w-[32%] lg:flex-col lg:items-stretch lg:gap-1">
                     <div className="w-full h-1.5 rounded-full bg-[#EAE7DF] overflow-hidden"><div className="h-full rounded-full" style={{ width: `${percent}%`, background: urgent ? '#D9A441' : ACCENT }} /></div>
-                    <span className="type-meta text-[#6E7078] shrink-0">{task.reviewed}/{task.target} bản · <span className="font-emphasis text-[#16171C]">{percent}%</span></span>
+                    <span className="type-meta text-[#6E7078] shrink-0">{task.done}/{task.targetQty} bản · <span className="font-emphasis text-[#16171C]">{percent}%</span></span>
                   </div>
                 </div>
               );
@@ -188,9 +253,16 @@ export default function ReviewDashboard() {
           </div>
         </Panel>
         <Panel className="lg:col-span-2 flex flex-col">
-          <PanelHeader icon={PieChart} iconColor="#6E7078" title="Lý do từ chối phổ biến" right={<span className="type-meta text-[#9A9CA3]">Hệ thống</span>} />
+          <PanelHeader icon={PieChart} iconColor="#6E7078" title="Lý do từ chối phổ biến" right={<span className="type-meta text-[#9A9CA3]">Của bạn</span>} />
           <div className="flex flex-col justify-between gap-3 mt-2 flex-1">
-            {REJECT_STATS.map((stat) => <StatBar key={stat.label} label={stat.label} count={stat.count} percent={stat.percentage} color={stat.color} compact />)}
+            {/* Luôn đủ 4 nhóm lý do, xếp theo tỉ lệ cao nhất trước (bằng nhau thì giữ thứ tự gốc); nhóm API không trả thì 0 lần · 0% */}
+            {CATEGORIES
+              .map(({ key, color }) => {
+                const stat = rejectReasons.find((r) => r.label === key);
+                return { key, color, count: stat?.count ?? '0 lần', percent: stat?.percentage ?? 0 };
+              })
+              .sort((a, b) => b.percent - a.percent)
+              .map((stat) => <StatBar key={stat.key} label={stat.key} count={stat.count} percent={stat.percent} color={stat.color} compact />)}
           </div>
         </Panel>
       </div>
@@ -202,16 +274,20 @@ export default function ReviewDashboard() {
               <button key={key} id={`rejection-tab-${key}`} role="tab" aria-selected={rejectionTab === key} aria-controls="rejection-panel" onClick={() => setRejectionTab(key)} className={`px-3 py-2 rounded-md text-meta font-label transition-colors ${rejectionTab === key ? 'bg-white shadow-sm' : 'text-[#6E7078] hover:text-[#16171C]'}`} style={rejectionTab === key ? { color: ACCENT_TEXT } : undefined}>{label}</button>
             ))}
           </div>
-          <span className="type-meta text-[#9A9CA3]">7 ngày qua</span>
         </div>
         <div id="rejection-panel" role="tabpanel" aria-labelledby={`rejection-tab-${rejectionTab}`} className="min-h-[225px] flex-1 grid auto-rows-fr divide-y divide-[#F0EEE6]">
           {/* Luôn đủ ITEMS_PER_PAGE ô: trang cuối thiếu dòng thì thêm ô trống cùng chiều cao -> khung không đổi, các dòng không giãn */}
-          {[...(rejectionTab === 'sentences' ? pagedSentences : pagedSpeakers), ...Array(ITEMS_PER_PAGE).fill(null)]
+          {[...rejectionItems, ...Array(ITEMS_PER_PAGE).fill(null)]
             .slice(0, ITEMS_PER_PAGE)
             .map((item, idx) => !item ? (
-            <div key={`empty-${idx}`} className="px-4 py-1" aria-hidden="true"><div className="min-h-[42px]" /></div>
+            <div key={`empty-${idx}`} className="px-4 py-1" aria-hidden={rejectionItems.length > 0 || idx > 0}>
+              {/* Chưa có dữ liệu thì ô đầu tiên báo trống, các ô còn lại giữ chỗ */}
+              <div className="min-h-[42px] flex items-center justify-center type-meta text-[#9A9CA3]">
+                {rejectionItems.length === 0 && idx === 0 && (rejectionTab === 'sentences' ? 'Chưa có câu nào bị bạn từ chối.' : 'Chưa có người đọc nào bị bạn từ chối.')}
+              </div>
+            </div>
           ) : (
-            <div key={item.id || item.name} className="flex items-center gap-3 px-4 py-1 hover:bg-[#FAF9F6]">
+            <div key={item.scriptId ?? item.speakerId} className="flex items-center gap-3 px-4 py-1 hover:bg-[#FAF9F6]">
               <span className="w-5 text-center text-meta tabular-nums text-[#9A9CA3] shrink-0">{((rejectionTab === 'sentences' ? sentencePage : speakerPage) - 1) * ITEMS_PER_PAGE + idx + 1}</span>
               {/* Cao tối thiểu bằng dòng "Câu" (2 câu VI-EN/VI = 42px) -> đổi tab không làm khung co/giãn, các thẻ phía trên không nhảy */}
               <div className="min-w-0 flex-1 min-h-[42px] flex flex-col justify-center">

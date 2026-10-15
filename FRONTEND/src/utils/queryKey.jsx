@@ -61,3 +61,13 @@ export const GET_REVIEW_RECORDING_API = 'GET_REVIEW_RECORDING_API'
 export const GET_REJECTION_REASONS_API = 'GET_REJECTION_REASONS_API'
 // Nộp kết quả duyệt (POST /api/recordings/{id}/reviews)
 export const SUBMIT_REVIEW_API = 'SUBMIT_REVIEW_API'
+
+// ===== Reviewer: thống kê trang Tổng quan =====
+// Tổng số bản đã duyệt đạt / từ chối (GET /api/reviewer/stats/totals)
+export const GET_REVIEWER_TOTALS_API = 'GET_REVIEWER_TOTALS_API'
+// Lý do từ chối dùng nhiều nhất (GET /api/reviewer/stats/reject-reasons)
+export const GET_REVIEWER_REJECT_REASONS_API = 'GET_REVIEWER_REJECT_REASONS_API'
+// Câu bị từ chối nhiều nhất (GET /api/reviewer/stats/top-rejected-sentences)
+export const GET_TOP_REJECTED_SENTENCES_API = 'GET_TOP_REJECTED_SENTENCES_API'
+// Người bị từ chối nhiều nhất (GET /api/reviewer/stats/top-rejected-speakers)
+export const GET_TOP_REJECTED_SPEAKERS_API = 'GET_TOP_REJECTED_SPEAKERS_API'
