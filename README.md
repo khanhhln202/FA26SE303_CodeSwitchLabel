@@ -54,11 +54,12 @@ Phụ thuộc backend đi một chiều: **Api → Services → Repositories**.
 ```
 FA26SE303_CodeSwitchLabel/
 ├── docker-compose.yml            # dev: postgres + minio (+ api profile cho FE)
+├── docker-compose.local.yml      # bản đè image MinIO, dùng cho e2e 03 (tắt bật lại hệ thống)
 ├── backend/
 │   ├── CodeSwitchLabel.sln
 │   ├── Dockerfile                # build SDK 10 + runtime aspnet 10 + ffmpeg
 │   ├── README.md                 # tài liệu backend chi tiết (tiếng Việt)
-│   ├── src/CodeSwitchLabel.Api/          # Program.cs, Controllers/* (11), appsettings*.json
+│   ├── src/CodeSwitchLabel.Api/          # Program.cs, Controllers/*, appsettings*.json
 │   ├── src/CodeSwitchLabel.Services/     # nghiệp vụ, DTO, Audio, Reviews, WorkTasks, Seeding
 │   ├── src/CodeSwitchLabel.Repositories/ # entity, DbContext, Storage/S3
 │   └── tests/
@@ -69,14 +70,13 @@ FA26SE303_CodeSwitchLabel/
 │   └── README.md
 ├── docs/
 │   ├── codeswitchlabel.sql       # LƯỢC ĐỒ — nguồn sự thật duy nhất, không dùng EF migration
-│   ├── migrations/               # script SQL phát sinh sau khi chốt lược đồ (áp tay)
 │   ├── FE-INTEGRATION.md         # hợp đồng API cho frontend
 │   ├── Requirement.txt           # yêu cầu 4 actor + mẫu input_text.json
 │   └── demo-test-api.html
-├── migrations/                   # V2__task_independent_of_campaign.sql + V2__verify (tách task khỏi campaign)
-├── deploy/                       # prod: docker-compose.prod.yml, Caddyfile, .env.example, README.md
-├── demo/                         # input_text_demo.json (7 câu, 3 câu lỗi cố ý) + wav/m4a mẫu + test-them/
-└── .github/workflows/backend.yml # CI: build + test
+├── migrations/                   # V2..V7 + file verify (tách task khỏi campaign, hàng đợi văn bản, đa người nhận)
+├── deploy/                       # prod: docker-compose.prod.yml, Caddyfile, deploy.sh, .env.example, README.md
+├── demo/                         # input_text_demo.json + demo-live-import.json (7 câu, 3 câu lỗi cố ý) + wav/m4a mẫu + test-them/
+└── .github/workflows/            # backend.yml (CI build + test), deploy.yml (tự động lên máy chủ)
 ```
 
 Tài liệu chi tiết:
@@ -93,7 +93,7 @@ Tài liệu chi tiết:
 | Backend | .NET 10 LTS (`net10.0`), ASP.NET Core Web API, EF Core + Npgsql, JWT Bearer, Swashbuckle, BCrypt.Net-Next, AWSSDK.S3 |
 | DB / Storage | PostgreSQL 16-alpine (schema SQL thuần, không migration), MinIO (S3-compatible), ffmpeg/ffprobe (chuẩn hoá WAV 16 kHz mono + QC) |
 | Infra | Docker + Docker Compose, Caddy 2 (auto HTTPS), Azure (trial), GitHub Actions |
-| Frontend | React 19 + Vite 7/8, react-router-dom 7, TanStack Query 5, axios, TailwindCSS 4 + shadcn, lucide-react, sonner, wavesurfer.js, formik + yup, Vercel |
+| Frontend | React 19 + Vite 8, react-router-dom 7, TanStack Query 5, axios, TailwindCSS 4 + shadcn, lucide-react, sonner, wavesurfer.js, formik + yup, Vercel |
 | Test | xunit.v3 + Moq + Testcontainers.PostgreSql + coverlet, E2E Node 18+ (`fetch`/`FormData`, không cần cài gói) |
 
 Quy ước API: JSON `camelCase` (trừ `alignment` giữ `snake_case`), enum dạng string, thời gian UTC ISO8601, phân trang `?page&pageSize` (max 100) kèm sắp xếp `?sort=<cột>&dir=asc|desc` (bỏ `sort` là thứ tự mặc định của endpoint, sai tên cột cũng vậy), `204` = hết việc, lỗi nghiệp vụ trả `code + title + traceId`.
@@ -173,7 +173,7 @@ Cần 3 reviewer vì **mỗi bản ghi cần 3 lượt duyệt của 3 người 
 
 Luồng chính (7 bước):
 
-1. `admin`: `POST /api/scripts/import` file JSON theo mẫu `docs/Requirement.txt` → mã mới dạng `s_211000007`, trạng thái `PendingValidation`
+1. `admin`: `POST /api/scripts/import` file JSON theo mẫu `docs/Requirement.txt` → mã mới dạng `s_211000016`, trạng thái `PendingValidation`
 2. `speaker1`: `POST /api/scripts/{id}/review` `{ "action": "Accepted" }` → `Validated`
 3. `GET /api/speaker/scripts/next` → cặp câu kèm cả 2 biến thể
 4. `POST /api/recordings` 2 lần (`CodeSwitching` rồi `PureVietnamese`)
@@ -202,7 +202,7 @@ Luồng chính (7 bước):
 |---|---|
 | `backend/src/CodeSwitchLabel.Api/appsettings.json` + `appsettings.Development.json` | connection string, JWT (480 phút dev), CORS (5173, 3000), `Seed:DefaultPassword` |
 | `FRONTEND/.env.example` → `.env.local` | `VITE_API_BASE_URL` |
-| `deploy/.env.example` → `deploy/.env` | `API_DOMAIN`, `FILES_DOMAIN`, `FE_ORIGIN`, `POSTGRES_PASSWORD`, `MINIO_*`, `JWT_KEY` (base64 48), `JWT_EXPIRY_MINUTES`, `SWAGGER_ENABLED`, `SEED_PASSWORD` |
+| `deploy/.env.example` → `deploy/.env` | `API_DOMAIN`, `FILES_DOMAIN`, `CADDYFILE`, `FE_ORIGIN`, `FE_ORIGIN_PREVIEW`, `FE_ORIGIN_LOCAL`, `POSTGRES_PASSWORD`, `MINIO_*`, `JWT_KEY` (base64 48), `JWT_EXPIRY_MINUTES`, `SWAGGER_ENABLED`, `SEED_PASSWORD` |
 
 Lưu ý `ObjectStorage:ServiceUrl` (API gọi MinIO trong mạng Docker, `http://minio:9000`) vs `PublicUrl` (trình duyệt mở, `http://localhost:9000` dev / `https://files.*` prod) — link nghe tạm 15 phút phải ký đúng địa chỉ trình duyệt dùng.
 
@@ -227,11 +227,13 @@ docker exec csl-postgres psql -U csl -d codeswitchlabel -c "select changed_at, u
 
 - Swagger là nguồn sự thật khi backend chạy: `http://localhost:5053` (dev) / `https://api.<domain>` (prod). Export: `curl -o swagger.json http://localhost:5053/swagger/v1/swagger.json`
 - `docs/FE-INTEGRATION.md`: auth, format lỗi (`401/403` rỗng, `400` validation `errors`, nghiệp vụ `code+title+traceId`), recording/review/tasks/enum
-- 11 controller: `Auth, Scripts, Recordings, Reviews, Speaker, Tasks, Campaigns, Datasets, Users, Admin, Config` — xem chi tiết trong [`backend/README.md`](backend/README.md)
+- 12 controller: `Auth, Scripts, Recordings, Reviews, ScriptQueue, Speaker, Tasks, Campaigns, Datasets, Users, Admin, Config` — xem chi tiết trong [`backend/README.md`](backend/README.md). Thêm controller thì đếm lại: `ls backend/src/CodeSwitchLabel.Api/Controllers/*.cs | wc -l`
 
 ## Deploy
 
 Xem [`deploy/README.md`](deploy/README.md): Docker prod + Caddy tự xin Let's Encrypt, chế độ 2-domain vs 1-host (Azure free domain), checklist nghiệm thu bằng E2E, backup `pg_dump` + volume MinIO định kỳ, lưu ý credit Azure trial (~3 tháng với máy B2s).
+
+Push code backend lên `main` thì workflow `.github/workflows/deploy.yml` tự chạy `deploy/deploy.sh` trên máy chủ (chỉ chạy sau khi CI build + test xanh). Lệnh dưới đây là **đường chạy tay**, dùng khi workflow hỏng hoặc deploy thử:
 
 ```bash
 docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build
@@ -243,7 +245,7 @@ docker compose -f deploy/docker-compose.prod.yml logs -f api
 - **Ba lượt duyệt đều là của người**, chốt đa số 2/3; **không có phiếu của hệ thống**. Một thời có dự định thêm lượt kiểm tra tự động ở vòng duyệt nhưng đã bỏ: auto-QC chạy lúc nộp và bản trượt thì `qc_failed` — không bao giờ tới vòng duyệt, nên lượt đó không bao giờ có tác dụng. `review.rounds_required` giữ bằng **3**.
 - **Ngưỡng thời lượng 1–30s là đề xuất của nhóm backend**, chưa được duyệt chính thức; hệ thống chưa đo khoảng lặng đầu/cuối.
 - **Chưa có hệ thống nhắc nhở tự động** (ghi là "yêu cầu 3.3" nhưng `docs/Requirement.txt` không có mục này) — không có bảng `notification`, không có background service. Mọi số liệu để nhắc (`deadline`, `hoursRemaining`, `isOverdue`, `overdueTasks`) backend đã trả sẵn, nên khi nào thật sự cần thì làm bằng một endpoint + một con badge là đủ, không cần bảng riêng.
-- **Trạng thái task tự tính, không sửa tay** — ngoài `POST /api/tasks/{id}/cancel`. Ghi là "yêu cầu 4.1" ở `README.md` cũ nhưng `Requirement.txt` cũng không có; trạng thái tự tính từ số liệu thật là thiết kế đúng, sửa tay sẽ đụng `TaskStateMachine` và phải chốt rõ ai là nguồn sự thật khi hai bên lệch nhau.
+- **Trạng thái task tự tính, không sửa tay** — ngoài `POST /api/tasks/{id}/cancel` và `DELETE /api/tasks/{id}` (xoá được task rỗng thôi: chưa giao, chưa có việc/mục/người nhận, chưa gắt chiến dịch; trả 409 `task_in_campaign` / `task_has_work` nếu ngược lại). Ghi là "yêu cầu 4.1" ở `README.md` cũ nhưng `Requirement.txt` cũng không có; trạng thái tự tính từ số liệu thật là thiết kế đúng, sửa tay sẽ đụng `TaskStateMachine` và phải chốt rõ ai là nguồn sự thật khi hai bên lệch nhau.
 - **Không xoá tài khoản** (chỉ khoá), không xoá cứng `rejection_reason` (chỉ tắt `is_active`), không tự đặt `recording.status` / trạng thái task ngoài `TaskStateMachine`. Xoá cặp câu dùng **xoá mềm** (`script.status = 'deactivated'`) — dữ liệu vẫn còn để truy vết.
 
 ### Việc chưa làm ở frontend

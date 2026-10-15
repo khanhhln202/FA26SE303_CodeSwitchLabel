@@ -292,6 +292,16 @@ Lỗi hệ thống trả 500 với `code: "internal_error"`. Gặp lỗi này th
 | `script_already_recorded` | 409 | Sửa câu đã có bản ghi | Ẩn nút sửa khi câu đã có bản ghi |
 | `target_exceeds_items` | 422 / 409 | Chỉ tiêu lớn hơn số mục người nhận làm được. **422** khi giao task hoặc sửa chỉ tiêu, **409** khi gỡ mục | Hiện `title` — trong đó có luôn danh sách mục bị vướng |
 | `assignee_role_mismatch` | 422 | Giao task thu âm cho Reviewer, hoặc ngược lại | Lọc người nhận theo loại task |
+| `assignee_required` | 422 (giao) / 403 (chia lô câu) | Giao task mà không chọn người nhận, hoặc chia lô câu cho người không giữ task | Chặn ngay ở form: bắt chọn người nhận hợp lệ |
+| `assignee_not_found` | 404 | Gỡ một người không giữ task đó | Tải lại chi tiết task |
+| `campaign_not_owned` | 403 | Chiến dịch thuộc Task Manager khác quản lý | Ẩn nút sửa/xoá chiến dịch ngoài danh sách của mình |
+| `task_in_campaign` / `task_has_work` / `task_not_owned` | 409 / 409 / 403 | Xoá task đang gắn chiến dịch, task đã có người nhận hoặc công việc, hay task không của mình | Hiện `title`; chỉ hiện nút **Xoá** cho task rỗng thuộc quyền mình |
+| `task_domain_mismatch_campaign` | 422 | Chủ đề của task khác chủ đề của chiến dịch | Khoá ô chọn chủ đề theo chủ đề chiến dịch |
+| `batch_size_invalid` | 422 | Chia lô câu với `count` < 1 | Chặn ở ô nhập số câu |
+| `not_a_review_task` / `text_review_not_assigned` | 422 / 403 | Chia lô câu cho task không phải task duyệt, hoặc duyệt câu chưa được giao cho mình | Tải lại danh sách lô được giao |
+| `text_review_already_done` | 409 | Câu đã có người duyệt nội dung rồi | Bỏ câu khỏi danh sách, tải lại |
+| `invalid_file_type` | 422 | File nhập câu không phải JSON (mở rộng lạ) | Chọn đúng file `.json` theo mẫu |
+| `email_taken` | 409 | Tự đăng ký Speaker bằng email đã có | Hiện lỗi cạnh ô email |
 | `task_cancelled` / `task_completed` | 409 | Sửa task đã huỷ, hoặc huỷ task đã xong | Ẩn nút theo `status` của task |
 | `email_already_exists` | 409 | Tạo tài khoản bằng email đã có, kể cả khi chỉ khác chữ hoa | Hiện lỗi cạnh ô email |
 | `user_has_active_tasks` | 409 | Đổi vai người còn đang nhận task chưa xong | Hiện `title` — trong đó có mã các task cần giao lại. `activeTasks` ở chi tiết tài khoản cũng có sẵn danh sách này |
@@ -331,6 +341,7 @@ Các mã còn lại: `alignment_incomplete`, `alignment_word_missing`, `already_
 | Màn hình | API |
 |---|---|
 | Đăng nhập | `POST /api/auth/login` |
+| Tự đăng ký làm Speaker | `POST /api/auth/register-speaker` `{ "fullName", "email", "password", "phone"?, "speakerProfile"? }` — **không cần token**, trả **200** luôn kèm token đăng nhập; tài khoản ra `Active` ngay kèm hồ sơ người đọc trống; trùng email trả **409 `email_taken`** (khác `email_already_exists` — mã đó dùng cho Admin tạo tài khoản) |
 | Tải lại trang, biết mình là ai | `GET /api/auth/me` |
 | Đổi mật khẩu | `PUT /api/me/password` `{ "currentPassword": "…", "newPassword": "…" }` |
 | Đọc cấu hình (mọi vai) | `GET /api/config`, `GET /api/config/{key}` — ghi vẫn chỉ Admin qua `PUT /api/admin/config/{key}` |
@@ -646,16 +657,22 @@ giao) — các dòng có `canReview: false`, nộp duyệt vẫn trả 403 `task
 
 **Task có thể độc lập (không thuộc chiến dịch nào), gắn vào chiến dịch sau, hoặc gỡ ra mà không bị xoá.**
 
-1. **Admin** tạo chiến dịch (`POST /api/campaigns`) rồi **giao** cho một Task Manager
-   (`POST /api/campaigns/{id}/assign`). Task Manager không tạo được chiến dịch — gọi sẽ nhận **403**
-   với `code: "forbidden"`.
+1. **Chiến dịch thì Admin hoặc Task Manager cùng quản lý được** (`POST/PATCH/DELETE /api/campaigns` cho
+   cả hai vai). Chỉ bước **giao chiến dịch** là của Admin: `POST /api/campaigns/{id}/assign` trả **403**
+   với `code: "forbidden"` khi gọi bằng vai Task Manager. Chiến dịch đã giao cho Task Manager khác thì
+   người đó không sửa/xoá được: **403 `campaign_not_owned`**.
 2. Task Manager tạo task **không cần `campaignId`** (bỏ trống hoặc `null` = task độc lập),
    rồi gắn sau bằng `PATCH /api/tasks/{id}/campaign`. Tạo kèm `campaignId` thì kiểm tra
    quota/hạn như cũ. Quy tắc quota (`task_target_exceeds_campaign`) và khung hạn
    (`task_deadline_outside_campaign`) **chỉ áp dụng khi task đang gắn với chiến dịch**.
 3. **Gỡ chứ không xoá:** `DELETE /api/campaigns/{id}/tasks/{taskId}` chỉ gỡ task khỏi chiến dịch
-   (task còn tồn tại với `campaignId: null`, giữ assignments/items). Task không bao giờ bị xoá cứng
-   qua API — muốn đóng task thì dùng `POST /api/tasks/{id}/cancel` (task ở lại với trạng thái `Cancelled`).
+   (task còn tồn tại với `campaignId: null`, giữ assignments/items). Muốn đóng task thì dùng
+   `POST /api/tasks/{id}/cancel` (task ở lại với trạng thái `Cancelled`).
+4. **Xoá task rỗng** là việc duy nhất API cho phép xoá cứng: `DELETE /api/tasks/{id}` → **204**.
+   Chỉ xoá được task **chưa giao ai, chưa có việc/mục/dữ liệu nộp**; đã gắn chiến dịch thì
+   **409 `task_in_campaign`**, đã hoàn thành thì **409 `task_completed`**, còn có người nhận hoặc
+   công việc thì **409 `task_has_work`**. Task không của mình thì **403 `task_not_owned`**
+   (Admin thì qua được).
 
 | Lỗi | Nghĩa |
 |---|---|
@@ -670,6 +687,7 @@ giao) — các dòng có `canReview: false`, nộp duyệt vẫn trả 403 `task
 | Tạo task | `POST /api/tasks` `{ "campaignId": 2, "taskType": "Recording", "description": "…", "targetQty": 10, "deadline": "2026-09-30T17:00:00+07:00" }` — `campaignId` để trống/`null` = task độc lập |
 | Gắn/chuyển/gỡ chiến dịch | `PATCH /api/tasks/{id}/campaign` `{ "campaignId": 2 }` — `null` = gỡ về độc lập |
 | Gỡ task khỏi chiến dịch (giữ task) | `DELETE /api/campaigns/{id}/tasks/{taskId}` |
+| Xoá task rỗng | `DELETE /api/tasks/{id}` → 204 — chỉ task chưa giao, chưa có việc, chưa gắn chiến dịch |
 | Chi tiết task | `GET /api/tasks/{id}` — tiến độ, lịch sử giao, danh sách mục (`campaignId`/`campaignName` có thể `null`) |
 | Sửa task | `PATCH /api/tasks/{id}` — chỉ gửi trường cần đổi (không đổi chiến dịch ở đây) |
 | Thêm mục chọn tay | `POST /api/tasks/{id}/items` `{ "ids": ["s_211000001", "s_131000002"] }` |
@@ -713,6 +731,7 @@ Task chưa giao cho ai thì không được cướp câu của người khác �
 | Chất lượng người đọc | `GET /api/admin/statistics/speakers` |
 | Hiệu suất người duyệt | `GET /api/admin/statistics/reviewers` |
 | Lý do từ chối phổ biến | `GET /api/admin/statistics/rejection-reasons` |
+| Tiến độ theo chiến dịch | `GET /api/admin/statistics/campaigns` |
 
 Kết quả nhập file có `imported`, `scriptIds` và `skipped` (kèm lý do từng câu bị loại). Một câu hỏng không làm hỏng cả file.
 
@@ -725,14 +744,15 @@ Kết quả nhập file có `imported`, `scriptIds` và `skipped` (kèm lý do t
 > kể cả khi tài khoản đó thật sự có chủ đề trong database. Vì vậy đừng dùng endpoint này để đoán Admin nhập
 > được file hay không.
 
-**Chiến dịch** — chỉ Admin tạo, sửa và giao
+**Chiến dịch** — Admin và Task Manager cùng tạo/sửa/xoá được; **riêng bước giao là của Admin**
 
 | Việc | API |
 |---|---|
 | Tạo | `POST /api/campaigns` `{ "campaignName": "Thu dữ liệu đợt 1", "targetQty": 2000, "startDate": "2026-10-05", "endDate": "2027-01-05" }` |
 | Danh sách, chi tiết | `GET /api/campaigns`, `GET /api/campaigns/{id}` |
 | Sửa | `PATCH /api/campaigns/{id}` — chỉ gửi trường cần đổi, kể cả `status` |
-| Giao cho Task Manager | `POST /api/campaigns/{id}/assign` `{ "assignedToUserId": 2 }` |
+| Xoá | `DELETE /api/campaigns/{id}` — 204; không phải của mình thì **403 `campaign_not_owned`** (Admin qua được). Task đang gắn vào không mất: nó thành task độc lập (`campaignId: null`). **Đăng ký của người đọc thì bị xoá hẳn** (`campaign_registration` khai `ON DELETE CASCADE`) — không có API lấy lại, nên hỏi trước khi bấm |
+| Giao cho Task Manager | `POST /api/campaigns/{id}/assign` `{ "assignedToUserId": 2 }` — **chỉ Admin** |
 
 - `targetQty` **phải từ 2000 đến 5000** cặp câu; ngoài khoảng đó là **400**. Đây là giới hạn của lược đồ database.
 - `startDate` và `endDate` là **ngày thuần** dạng `YYYY-MM-DD`, không có giờ và không có múi giờ.
