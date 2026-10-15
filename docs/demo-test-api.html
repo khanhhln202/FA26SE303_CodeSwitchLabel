@@ -563,7 +563,7 @@ released_datasets     | 0`, n: 'Số trên API lấy thẳng từ view này, nê
       ['7.7', 0, 'admin', 'GET', '/api/admin/statistics/reviewers', null, 200, 'Mỗi người duyệt 2 lượt; reviewer2 có 1 lượt từ chối.']
     ]},
     { t: 'Màn 8 · Cấu hình hệ thống', g: 'System Configuration', time: '2 phút', steps: [
-      ['8.1', 0, 'admin', 'GET', '/api/admin/config', null, 200, '9 tham số. Có tác dụng: thời lượng tối thiểu và tối đa, số lần thu lại, số câu mỗi lần nhập. <code>review.rounds_required</code> phải giữ 3; hai tham số khoảng lặng và định dạng âm thanh chưa được dùng.'],
+      ['8.1', 0, 'admin', 'GET', '/api/admin/config', null, 200, '9 tham số. Có tác dụng: thời lượng tối thiểu và tối đa, số lần thu lại, số câu mỗi lần nhập. <code>review.rounds_required</code> đọc động, trigger cũng đọc cùng tham số này; hai tham số khoảng lặng và định dạng âm thanh chưa được dùng.'],
       ['8.2', 1, 'admin', 'PUT', '/api/admin/config/recording.min_duration_sec', { value: '5' }, 204, 'Nâng thời lượng tối thiểu lên 5 giây, không phải sửa code hay khởi động lại.', V.config],
       ['8.3', 0, 'speaker2', 'GET', '/api/speaker/scripts/next', null, 200, '<code>s_121000004</code> “Thầy cho em xin slide của buổi hôm nay với”, <code>guidance.minDurationSec = 5</code>: hướng dẫn đổi theo ngay.'],
       ['8.4', 1, 'speaker2', 'POST', '/api/recordings', 'Audio = demo/giong-4s.m4a · ScriptId = s_121000004 · SentenceVariant = CodeSwitching', 201, '<code>r_cs_121000004</code>, <code>QcFailed</code>: 4,02 giây ngắn hơn mức mới 5 giây. Cùng file này ở bước 5.2 thì đạt.', V.configEffect],

@@ -571,24 +571,11 @@ public class ReviewService(
         r.SentenceVariant == SentenceVariant.CodeSwitching ? r.Script.CsContent : r.Script.ViContent;
 
     /// <summary>
-    /// Số lượt duyệt cần có. Trigger của database ghim cứng con số 3, nên đặt tham số khác đi
-    /// là hai bên lệch nhau — cảnh báo ngay thay vì để dữ liệu sai âm thầm.
+    /// Số lượt duyệt cần có, đọc từ `system_config` — cùng tham số mà trigger
+    /// `trg_review_majority` đọc, nên không có chuyện hai bên lệch nhau.
     /// </summary>
-    private async Task<int> RoundsRequiredAsync(CancellationToken ct)
-    {
-        var rounds = await config.GetIntAsync(
-            ConfigKeys.ReviewRoundsRequired, ReviewRules.RoundsRequiredInDatabase, ct);
-
-        if (rounds != ReviewRules.RoundsRequiredInDatabase)
-        {
-            logger.LogWarning(
-                "Tham số {Key} đang là {Value} nhưng trigger trg_review_majority chốt ở {Expected} lượt. " +
-                "Phải sửa trigger trong docs/codeswitchlabel.sql cho khớp.",
-                ConfigKeys.ReviewRoundsRequired, rounds, ReviewRules.RoundsRequiredInDatabase);
-        }
-
-        return rounds;
-    }
+    private Task<int> RoundsRequiredAsync(CancellationToken ct) =>
+        config.GetIntAsync(ConfigKeys.ReviewRoundsRequired, ReviewRules.DefaultRoundsRequired, ct);
 
     private async Task<TaskRecording?> ResolveTaskAsync(
         long? taskId, long reviewerId, string recordingId, CancellationToken ct)

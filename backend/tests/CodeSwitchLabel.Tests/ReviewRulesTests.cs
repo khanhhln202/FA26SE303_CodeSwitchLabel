@@ -13,16 +13,10 @@ public class ReviewRulesTests
     private const ReviewDecision Ok = ReviewDecision.Approved;
     private const ReviewDecision No = ReviewDecision.Rejected;
 
-    // Ghim cứng con số trigger đang chờ. Không dùng RoundsRequiredInDatabase trực tiếp:
-    // dùng hằng của code thì đổi hằng là test tự xanh mà database vẫn chờ số cũ.
+    // Ghim cứng con số, không dùng hằng của code: dùng hằng thì đổi hằng là test tự xanh
+    // mà database vẫn chờ số cũ. Tham số `review.rounds_required` đổi được, nên 3 ở đây là
+    // luật của các test này chứ không phải luật của hệ thống.
     private const int Required = 3;
-
-    [Fact]
-    public void SoVongDatabase_DangChoDungBaLuot()
-    {
-        // Arrange + Act + Assert — lệch là báo động: phải sửa trigger hoặc code cùng lúc.
-        Assert.Equal(3, ReviewRules.RoundsRequiredInDatabase);
-    }
 
     [Theory]
     [InlineData(0, 1)]
