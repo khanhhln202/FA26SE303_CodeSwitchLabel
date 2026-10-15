@@ -17,6 +17,24 @@ export const loginApi = async (values) => {
   }
 };
 
+// Tự đăng ký làm Speaker: POST /api/auth/register-speaker
+// values: { fullName, email, password } - hồ sơ người đọc điền sau ở màn Onboarding
+// Trả về { accessToken, expiresAt, user } giống đăng nhập (tài khoản hoạt động ngay); trùng email -> 409
+export const registerSpeakerApi = async (values) => {
+  try {
+    // skipAuthRedirect: lỗi thì báo tại chỗ, không bị interceptor đẩy về /login
+    const response = await httpClient.post("/api/auth/register-speaker", values, {
+      skipAuthRedirect: true,
+    });
+    return response.data;
+  } catch (error) {
+    const message =
+      error.response?.data?.title ||
+      "Không kết nối được máy chủ, vui lòng thử lại!";
+    throw new Error(message, { cause: error });
+  }
+};
+
 // Tài khoản đang đăng nhập: GET /api/auth/me
 export const getMeApi = async () => {
   try {

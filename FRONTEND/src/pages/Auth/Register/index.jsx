@@ -1,9 +1,13 @@
-import { Navigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useFormik } from "formik";
 import { toast } from "sonner";
 import * as Yup from "yup";
+import { AlertCircle } from "lucide-react";
 import { getPostLoginPath } from "../../../constants/auth";
-import { getCurrentUser } from "../../../utils/authStorage";
+import { registerSpeakerApi } from "../../../services/authApi";
+import { getCurrentUser, saveSession } from "../../../utils/authStorage";
+import { REGISTER_SPEAKER_API, GET_ME_API } from "../../../utils/queryKey";
 import AuthSplitLayout from "../../../components/Auth/AuthSplitLayout";
 import AuthTabs from "../../../components/Auth/AuthTabs";
 import {
@@ -13,9 +17,7 @@ import {
 /**
  * Đăng ký tối thiểu (theo Notion, Figma, Linear): chỉ họ tên + email + mật khẩu.
  * Hồ sơ người đọc hỏi sau, ở màn Hoàn thiện hồ sơ (/onboarding) khi đăng nhập lần đầu.
- *
- * TODO: backend chưa có API đăng ký (sau này đăng ký bằng Gmail) -> khi có thì thêm register() vào
- * services/authApi.js (registerApi) + useMutation({ mutationKey: [REGISTER_API], mutationFn: registerApi }) ngay trong trang.
+ * API: POST /api/auth/register-speaker - tài khoản hoạt động ngay, trả token như đăng nhập.
  */
 const registerSchema = Yup.object({
   fullName: Yup.string()
@@ -28,18 +30,39 @@ const registerSchema = Yup.object({
   password: Yup.string()
     .required("Vui lòng nhập mật khẩu")
     .min(8, "Mật khẩu ít nhất 8 ký tự")
+    .max(128, "Mật khẩu tối đa 128 ký tự")
     .matches(/[A-Za-z]/, "Mật khẩu cần có chữ cái")
     .matches(/\d/, "Mật khẩu cần có chữ số"),
 });
 
 export default function Register() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  // Mutation đăng ký - thành công thì đăng nhập luôn rồi sang màn Hoàn thiện hồ sơ
+  const { mutate: register, isPending: isRegistering, error: registerError, reset: clearRegisterError } = useMutation({
+    mutationKey: [REGISTER_SPEAKER_API],
+    mutationFn: registerSpeakerApi,
+    onSuccess: (data) => {
+      saveSession(data);
+      queryClient.setQueryData([GET_ME_API], data.user);
+      toast.success(`Chào mừng ${data.user.fullName}! Hoàn thiện hồ sơ để bắt đầu ghi âm.`);
+      // Speaker mới chưa có hồ sơ người đọc -> getPostLoginPath đưa vào /onboarding
+      navigate(getPostLoginPath(data.user), { replace: true });
+    },
+    // Trùng email (409), dữ liệu không hợp lệ (400), mất mạng... -> hiện khung lỗi ngay trên form, không dùng toast
+  });
 
   const formik = useFormik({
     initialValues: { fullName: "", email: "", password: "" },
     validationSchema: registerSchema,
-    onSubmit: () => {
-      // TODO: gọi useRegister().mutate(values) khi backend có API đăng ký
-      toast.info("Chức năng đăng ký đang được hoàn thiện. Vui lòng liên hệ quản trị viên để được cấp tài khoản.");
+    onSubmit: (values) => {
+      if (isRegistering) return;
+      register({
+        fullName: values.fullName.trim(),
+        email: values.email.trim().toLowerCase(),
+        password: values.password,
+      });
     },
   });
 
@@ -52,7 +75,11 @@ export default function Register() {
     id: name,
     name,
     value: formik.values[name],
-    onChange: formik.handleChange,
+    // Gõ lại vào ô nào thì ẩn khung lỗi đăng ký
+    onChange: (e) => {
+      if (registerError) clearRegisterError();
+      formik.handleChange(e);
+    },
     onBlur: formik.handleBlur,
     invalid: Boolean(errorOf(name)),
   });
@@ -66,6 +93,14 @@ export default function Register() {
       <AuthTabs active="register" />
 
       <form onSubmit={formik.handleSubmit} noValidate className="mt-5 flex flex-col gap-3.5">
+        {/* Lỗi đăng ký hiện ngay trong form (cùng kiểu trang Đăng nhập) */}
+        {registerError && (
+          <div role="alert" className="flex items-start gap-2 rounded-xl border border-[#F3C9C9] bg-[#FDEAEA] px-3 py-2.5 text-[#9F2D2D]">
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+            <p className="type-meta font-emphasis">{registerError.message}</p>
+          </div>
+        )}
+
         <FormField id="fullName" label="Họ và tên" error={errorOf("fullName")}>
           <TextInput {...fieldProps("fullName")} autoComplete="name" placeholder="Nguyễn Văn A" />
         </FormField>
@@ -75,7 +110,9 @@ export default function Register() {
         <FormField id="password" label="Mật khẩu" error={errorOf("password")} hint="Tối thiểu 8 ký tự, gồm chữ cái và số.">
           <PasswordInput {...fieldProps("password")} autoComplete="new-password" placeholder="Tạo mật khẩu" />
         </FormField>
-        <PrimaryButton type="submit" className="mt-1">Tạo tài khoản</PrimaryButton>
+        <PrimaryButton type="submit" disabled={isRegistering} className="mt-1">
+          {isRegistering ? "Đang tạo tài khoản..." : "Tạo tài khoản"}
+        </PrimaryButton>
       </form>
 
       <Divider>hoặc</Divider>
