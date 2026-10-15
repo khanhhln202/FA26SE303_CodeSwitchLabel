@@ -87,3 +87,51 @@ export const submitReviewApi = async ({ recordingId, ...values }) => {
     throw new Error(message, { cause: error });
   }
 };
+
+// Tổng số bản chính mình đã duyệt đạt / từ chối: GET /api/reviewer/stats/totals
+// Trả về { approvedCount, rejectedCount }
+export const getReviewerTotalsApi = async () => {
+  try {
+    const response = await httpClient.get("/api/reviewer/stats/totals");
+    return response.data;
+  } catch (error) {
+    const message = error.response?.data?.title || "Không lấy được số liệu kiểm duyệt!";
+    throw new Error(message, { cause: error });
+  }
+};
+
+// Lý do từ chối mình dùng nhiều nhất: GET /api/reviewer/stats/reject-reasons
+// Trả về [{ label, percentage, count: "9 lần" }] - label là 1 trong 4 nhóm lý do, đã xếp giảm dần
+export const getReviewerRejectReasonsApi = async () => {
+  try {
+    const response = await httpClient.get("/api/reviewer/stats/reject-reasons");
+    return response.data;
+  } catch (error) {
+    const message = error.response?.data?.title || "Không lấy được lý do từ chối!";
+    throw new Error(message, { cause: error });
+  }
+};
+
+// Các câu mình từ chối nhiều nhất: GET /api/reviewer/stats/top-rejected-sentences?limit= (tối đa 20)
+// Trả về [{ scriptId, text (câu Việt-Anh đã bỏ nhãn), viText, englishWords, task, count, breakdown: [{ category, count }], example }]
+export const getTopRejectedSentencesApi = async ({ limit = 20 } = {}) => {
+  try {
+    const response = await httpClient.get("/api/reviewer/stats/top-rejected-sentences", { params: { limit } });
+    return response.data;
+  } catch (error) {
+    const message = error.response?.data?.title || "Không lấy được câu bị từ chối!";
+    throw new Error(message, { cause: error });
+  }
+};
+
+// Người đọc có bản ghi mình từ chối nhiều nhất: GET /api/reviewer/stats/top-rejected-speakers?limit= (tối đa 20)
+// Trả về [{ speakerId, name, count, topReason, breakdown: [{ category, count }], example }]
+export const getTopRejectedSpeakersApi = async ({ limit = 20 } = {}) => {
+  try {
+    const response = await httpClient.get("/api/reviewer/stats/top-rejected-speakers", { params: { limit } });
+    return response.data;
+  } catch (error) {
+    const message = error.response?.data?.title || "Không lấy được người bị từ chối!";
+    throw new Error(message, { cause: error });
+  }
+};
