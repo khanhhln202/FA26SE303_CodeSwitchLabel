@@ -73,7 +73,9 @@ public class CampaignService(
             TargetQty = request.TargetQty!.Value,
             StartDate = start,
             EndDate = end,
-            Status = CampaignStatus.Draft,
+            // TEAM_013: đợt mới tạo chưa có nhiệm vụ nào nên là Open. Sau đó trạng thái
+            // đợt là hàm của các task, tự tính lại ở CampaignRepository.RefreshStatusAsync.
+            Status = CampaignStatus.Open,
             CreatedBy = createdById,
             // Task Manager tự tạo đợt thì tự động gán cho chính mình để có quyền tạo/gắn task
             AssignedTo = isAdmin ? null : createdById,
@@ -95,7 +97,11 @@ public class CampaignService(
 
         if (request.CampaignName is not null) campaign.CampaignName = request.CampaignName.Trim();
         if (request.Domain.HasValue) campaign.Domain = request.Domain.Value;
-        if (request.Status.HasValue) campaign.Status = request.Status.Value;
+
+        // TEAM_013: UpdateCampaignRequest không còn trường `status`. Trạng thái đợt là hàm
+        // của các task bên trong nên không bấm tay được — sửa tên/chủ đề/ngày không được đổi nó,
+        // và nó cũng không cần đổi vì những thay đổi đó không đụng tới task.
+
         if (request.StartDate.HasValue) campaign.StartDate = request.StartDate.Value;
         if (request.EndDate.HasValue) campaign.EndDate = request.EndDate.Value;
 

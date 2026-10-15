@@ -146,7 +146,7 @@ public class RecordingRepository(CodeSwitchLabelDbContext db) : IRecordingReposi
         db.WorkTasks.AsNoTracking().AnyAsync(t =>
             t.TaskId == taskId &&
             t.TaskType == TaskType.Recording &&
-            (t.Status == WorkTaskStatus.Open || t.Status == WorkTaskStatus.InProgress) &&
+            (t.Status == WorkTaskStatus.InProgress) &&
             t.Assignments.Any(a => a.UserId == speakerId && a.AssignmentStatus == AssignmentStatus.Active) &&
             t.TaskScripts.Any(ts => ts.ScriptId == scriptId && ts.Status == TaskScriptStatus.Pending), ct);
 
@@ -155,7 +155,7 @@ public class RecordingRepository(CodeSwitchLabelDbContext db) : IRecordingReposi
         db.WorkTasks
             .AsNoTracking()
             .Where(t => t.TaskType == TaskType.Recording)
-            .Where(t => t.Status == WorkTaskStatus.Open || t.Status == WorkTaskStatus.InProgress)
+            .Where(t => t.Status == WorkTaskStatus.InProgress)
             .Where(t => t.Assignments.Any(a => a.UserId == speakerId && a.AssignmentStatus == AssignmentStatus.Active))
             .Where(t => t.TaskScripts.Any(ts => ts.ScriptId == scriptId && ts.Status == TaskScriptStatus.Pending))
             .OrderBy(t => t.Deadline ?? DateTimeOffset.MaxValue)

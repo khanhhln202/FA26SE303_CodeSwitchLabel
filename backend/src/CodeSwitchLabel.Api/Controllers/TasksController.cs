@@ -17,9 +17,13 @@ namespace CodeSwitchLabel.Api.Controllers;
 /// - **Recording** — danh sách script giao cho một Speaker thu âm.
 /// - **Review** — danh sách bản ghi vòng 1 giao cho một Reviewer duyệt.
 ///
-/// Trạng thái **tự chạy theo công việc thật**, không ai bấm tay — trừ Huỷ:
+/// Trạng thái **tự chạy theo công việc thật**: đạt chỉ tiêu thì Completed, chưa đạt thì
+/// InProgress, đã huỷ thì giữ nguyên.
 ///
-/// Draft (chưa giao) → Open (đã giao) → InProgress (có việc đầu tiên) → Completed (đạt chỉ tiêu).
+/// TEAM_013: còn đúng ba trạng thái — `InProgress`, `Completed`, `Cancelled`. Trước đây có
+/// thêm `Draft` và `Open`, nhưng hai trạng thái đó chỉ nói về việc giao chứ không nói về việc
+/// làm. Task Manager vẫn đổi trạng thái bằng tay được qua `PATCH /api/tasks/{id}`; hệ thống
+/// không ghi đè ngay, chỉ tính lại khi chỉ tiêu hoặc việc nộp/duyệt thật sự thay đổi.
 /// </remarks>
 [ApiController]
 [Route("api/tasks")]
@@ -27,7 +31,7 @@ namespace CodeSwitchLabel.Api.Controllers;
 [Authorize(Roles = "TaskManager,Admin")]
 public class TasksController(ITaskService taskService) : ControllerBase
 {
-    /// <summary>Tạo task mới — ở trạng thái Draft. campaignId để trống = task độc lập, gắn sau.</summary>
+    /// <summary>Tạo task mới — ở trạng thái InProgress. campaignId để trống = task độc lập, gắn sau.</summary>
     /// <remarks>
     /// Task gắn chiến dịch thì hạn hoàn thành phải nằm trong khoảng ngày của chiến dịch;
     /// task độc lập bỏ qua kiểm tra này. Hạn gửi kèm múi giờ nào cũng được, ví dụ
@@ -68,10 +72,18 @@ public class TasksController(ITaskService taskService) : ControllerBase
     public async Task<ActionResult<TaskDetailDto>> Get(long id, CancellationToken ct)
         => Ok(await taskService.GetAsync(id, ct));
 
-    /// <summary>Sửa mô tả, chỉ tiêu hoặc hạn. Trường nào để trống thì giữ nguyên.</summary>
+    /// <summary>Sửa mô tả, chỉ tiêu, hạn, hoặc đổi trạng thái bằng tay. Trường nào để trống thì giữ nguyên.</summary>
     /// <remarks>
     /// Task đã giao thì chỉ tiêu không được vượt số mục còn làm được.
     /// Nâng chỉ tiêu của task đã Completed thì task **tự mở lại**; hạ chỉ tiêu có thể làm task xong ngay.
+    /// Task **chưa có người nhận** thì cứ đặt chỉ tiêu trước, thêm mục vào sau — cùng luật
+    /// cũ khi còn trạng thái `Draft`, nay hỏi bằng "đã giao cho ai chưa" thay vì hỏi trạng thái.
+    ///
+    /// TEAM_013: gửi kèm `status` để Task Manager đổi trạng thái bằng tay —
+    /// `InProgress` (mở lại task đã xong), `Completed` (chốt sớm) hoặc `Cancelled` (dừng).
+    /// Chọn `Cancelled` thì mọi lượt giao đang hoạt động cũng chuyển sang `cancelled`, y hệt nút Huỷ.
+    /// Giá trị bấm tay được giữ tới khi có việc thật đổi chỉ tiêu hoặc nộp bản ghi/duyệt —
+    /// lúc đó hệ thống tính lại và có thể ghi đè. Sửa mô tả, hạn hay chủ đề không đụng tới nó.
     /// </remarks>
     [HttpPatch("{id:long}")]
     [ProducesResponseType(typeof(TaskDetailDto), StatusCodes.Status200OK)]
@@ -125,6 +137,9 @@ public class TasksController(ITaskService taskService) : ControllerBase
     ///
     /// Chỉ tiêu là của CẢ NHÓM: task chỉ tiêu 100 giao cho 3 người vẫn là 100 câu,
     /// mỗi người khoảng 34. Người đã có mặt trong `userIds` bị bỏ qua chứ không báo lỗi.
+    ///
+    /// TEAM_013: giao task không còn làm đổi trạng thái nữa — task đã là `InProgress` ngay từ
+    /// lúc tạo. Trạng thái chỉ đổi khi đạt chỉ tiêu, khi bị huỷ, hoặc khi Task Manager bấm tay.
     /// </remarks>
     [HttpPost("{id:long}/assign")]
     [ProducesResponseType(typeof(TaskDetailDto), StatusCodes.Status200OK)]
@@ -138,8 +153,8 @@ public class TasksController(ITaskService taskService) : ControllerBase
     /// <summary>TEAM_010: gỡ một người khỏi task.</summary>
     /// <remarks>
     /// Lượt giao chuyển sang `reassigned` chứ không bị xoá, nên vẫn xem được ai từng nhận.
-    /// Không gỡ được người nhận cuối cùng khi task đã có việc — làm vậy task rơi về nháp
-    /// và không ai làm tiếp được. Muốn dừng hẳn thì dùng Huỷ.
+    /// Không gỡ được người nhận cuối cùng khi task đã có việc — làm vậy thì không ai làm
+    /// tiếp được, dữ liệu đã làm thì còn nguyên nhưng không ai dùng. Muốn dừng hẳn thì dùng Huỷ.
     /// </remarks>
     [HttpDelete("{id:long}/assign/{userId:long}")]
     [ProducesResponseType(typeof(TaskDetailDto), StatusCodes.Status200OK)]
@@ -162,11 +177,15 @@ public class TasksController(ITaskService taskService) : ControllerBase
         long id, [FromBody] AttachTaskRequest request, CancellationToken ct)
         => Ok(await taskService.AttachAsync(id, request.CampaignId, ct, User.GetUserId(), User.IsInRole("Admin")));
 
-    /// <summary>Huỷ task — việc duy nhất phải bấm tay.</summary>
+    /// <summary>Huỷ task.</summary>
     /// <remarks>
+    /// TEAM_013: nút này và `PATCH /api/tasks/{id}` với `status = "Cancelled"` là CÙNG một việc
+    /// — cả hai gọi chung một hàm, nên không thể xảy ra tình trạng một đường huỷ lượt giao còn
+    /// đường kia không.
+    ///
     /// Task đã huỷ không mở lại được và không sửa được nữa. Các mục giữ nguyên để còn dấu vết,
     /// nhưng không còn giữ chỗ — bản ghi trong đó lại được thêm vào task khác.
-    /// Task đã Completed thì không huỷ được.
+    /// Task đã Completed thì không huỷ được (dùng `status = "InProgress"` để mở lại rồi huỷ).
     /// </remarks>
     [HttpPost("{id:long}/cancel")]
     [ProducesResponseType(typeof(TaskDetailDto), StatusCodes.Status200OK)]

@@ -238,12 +238,12 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         if (overdue == true)
         {
             query = query.Where(t => t.Deadline != null && t.Deadline < now &&
-                (t.Status == WorkTaskStatus.Open || t.Status == WorkTaskStatus.InProgress));
+                (t.Status == WorkTaskStatus.InProgress));
         }
         else if (overdue == false)
         {
             query = query.Where(t => !(t.Deadline != null && t.Deadline < now &&
-                (t.Status == WorkTaskStatus.Open || t.Status == WorkTaskStatus.InProgress)));
+                (t.Status == WorkTaskStatus.InProgress)));
         }
 
         var total = await query.CountAsync(ct);
@@ -289,7 +289,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         ProjectRows(db.WorkTasks
                 .AsNoTracking()
                 .Where(t => t.TaskType == type)
-                .Where(t => t.Status == WorkTaskStatus.Open || t.Status == WorkTaskStatus.InProgress)
+                .Where(t => t.Status == WorkTaskStatus.InProgress)
                 .Where(t => t.Assignments.Any(a => a.UserId == userId && a.AssignmentStatus == AssignmentStatus.Active))
                 .OrderBy(t => t.Deadline))
             .ToListAsync(ct);
@@ -341,7 +341,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         // thì EF dịch không ổn định.
         var rows = await ProjectRows(db.WorkTasks
                 .AsNoTracking()
-                .Where(t => t.Status == WorkTaskStatus.Open || t.Status == WorkTaskStatus.InProgress)
+                .Where(t => t.Status == WorkTaskStatus.InProgress)
                 .Where(t => t.Assignments.Any(a => a.AssignmentStatus == AssignmentStatus.Active)))
             .ToListAsync(ct);
 
@@ -440,17 +440,17 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
                 ActiveTasks = db.TaskAssignments.Count(a =>
                     a.UserId == u.UserId &&
                     a.AssignmentStatus == AssignmentStatus.Active &&
-                    (a.Task.Status == WorkTaskStatus.Open || a.Task.Status == WorkTaskStatus.InProgress)),
+                    (a.Task.Status == WorkTaskStatus.InProgress)),
                 TotalTarget = db.TaskAssignments
                     .Where(a =>
                         a.UserId == u.UserId &&
                         a.AssignmentStatus == AssignmentStatus.Active &&
-                        (a.Task.Status == WorkTaskStatus.Open || a.Task.Status == WorkTaskStatus.InProgress))
+                        (a.Task.Status == WorkTaskStatus.InProgress))
                     .Sum(a => (int?)a.Task.TargetQty) ?? 0,
                 OverdueTasks = db.TaskAssignments.Count(a =>
                     a.UserId == u.UserId &&
                     a.AssignmentStatus == AssignmentStatus.Active &&
-                    (a.Task.Status == WorkTaskStatus.Open || a.Task.Status == WorkTaskStatus.InProgress) &&
+                    (a.Task.Status == WorkTaskStatus.InProgress) &&
                     a.Task.Deadline != null && a.Task.Deadline < now),
                 ApprovalRatePct = db.SpeakerPerformance
                     .Where(s => s.UserId == u.UserId)
@@ -474,7 +474,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         db.WorkTasks.AsNoTracking().AnyAsync(t =>
             t.TaskId == taskId &&
             t.TaskType == type &&
-            (t.Status == WorkTaskStatus.Open || t.Status == WorkTaskStatus.InProgress) &&
+            t.Status == WorkTaskStatus.InProgress &&
             t.Assignments.Any(a => a.UserId == userId && a.AssignmentStatus == AssignmentStatus.Active), ct);
 
     public async Task<HashSet<string>> FindScriptsQueuedInOtherActiveTasksAsync(
@@ -485,9 +485,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         var query = db.TaskScripts.AsNoTracking()
             .Where(ts => scriptIds.Contains(ts.ScriptId) && ts.TaskId != excludeTaskId &&
                          ts.Status == TaskScriptStatus.Pending &&
-                         (ts.Task.Status == WorkTaskStatus.Draft ||
-                          ts.Task.Status == WorkTaskStatus.Open ||
-                          ts.Task.Status == WorkTaskStatus.InProgress));
+                         ts.Task.Status == WorkTaskStatus.InProgress);
 
         // TEAM_010: "cùng người" giờ nghĩa là "có chung ít nhất một người nhận". Task giao
         // cho nhiều người nên câu đang nằm ở task kia thuộc về bất kỳ ai trong số này.
@@ -510,9 +508,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         var query = db.TaskScripts
             .Where(ts => scriptIds.Contains(ts.ScriptId) && ts.TaskId != excludeTaskId &&
                          ts.Status == TaskScriptStatus.Pending &&
-                         (ts.Task.Status == WorkTaskStatus.Draft ||
-                          ts.Task.Status == WorkTaskStatus.Open ||
-                          ts.Task.Status == WorkTaskStatus.InProgress));
+                         ts.Task.Status == WorkTaskStatus.InProgress);
 
         // TEAM_010: "cùng người" giờ nghĩa là "có chung ít nhất một người nhận". Task giao
         // cho nhiều người nên câu đang nằm ở task kia thuộc về bất kỳ ai trong số này.
@@ -534,9 +530,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         var rows = await db.TaskRecordings.AsNoTracking()
             .Where(tr => recordingIds.Contains(tr.RecordingId) && tr.TaskId != excludeTaskId &&
                          tr.Status == TaskRecordingStatus.Queued &&
-                         (tr.Task.Status == WorkTaskStatus.Draft ||
-                          tr.Task.Status == WorkTaskStatus.Open ||
-                          tr.Task.Status == WorkTaskStatus.InProgress))
+                         tr.Task.Status == WorkTaskStatus.InProgress)
             .Select(tr => tr.RecordingId)
             .Distinct()
             .ToListAsync(ct);
@@ -583,9 +577,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
                 // Chưa nằm trong task thu âm khác đang giao cho CHÍNH những người này.
                 .Where(s => !s.TaskScripts.Any(ts =>
                     ts.Status == TaskScriptStatus.Pending &&
-                    (ts.Task.Status == WorkTaskStatus.Draft ||
-                     ts.Task.Status == WorkTaskStatus.Open ||
-                     ts.Task.Status == WorkTaskStatus.InProgress) &&
+                    ts.Task.Status == WorkTaskStatus.InProgress &&
                     ts.Task.Assignments.Any(a =>
                         ids.Contains(a.UserId) && a.AssignmentStatus == AssignmentStatus.Active)));
         }
@@ -621,9 +613,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
             // Chưa bị một task duyệt khác đang chạy giữ.
             .Where(r => !r.TaskRecordings.Any(tr =>
                 tr.Status == TaskRecordingStatus.Queued &&
-                (tr.Task.Status == WorkTaskStatus.Draft ||
-                 tr.Task.Status == WorkTaskStatus.Open ||
-                 tr.Task.Status == WorkTaskStatus.InProgress)));
+                tr.Task.Status == WorkTaskStatus.InProgress));
 
         if (speakerId.HasValue) query = query.Where(r => r.SpeakerId == speakerId.Value);
 

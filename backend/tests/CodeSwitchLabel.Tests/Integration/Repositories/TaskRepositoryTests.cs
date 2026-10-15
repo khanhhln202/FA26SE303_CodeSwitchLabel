@@ -192,7 +192,7 @@ public class TaskRepositoryTests : IntegrationTestBase
         await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var overdue = await CreateTaskAsync(CampaignId, TaskType.Recording, 1, ManagerUserId,
-            deadline: DateTimeOffset.UtcNow.AddDays(-1), status: WorkTaskStatus.Open);
+            deadline: DateTimeOffset.UtcNow.AddDays(-1), status: WorkTaskStatus.InProgress);
         Db.TaskAssignments.Add(new TaskAssignment
         {
             TaskId = overdue.TaskId,

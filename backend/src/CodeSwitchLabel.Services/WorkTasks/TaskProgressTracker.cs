@@ -40,7 +40,8 @@ public interface ITaskProgressTracker
     Task RefreshStatusAsync(long taskId, CancellationToken ct = default);
 }
 
-public class TaskProgressTracker(ITaskRepository tasks) : ITaskProgressTracker
+public class TaskProgressTracker(ITaskRepository tasks, ICampaignRepository campaigns)
+    : ITaskProgressTracker
 {
     public Task OnRecordingSubmittedAsync(long taskId, CancellationToken ct = default) =>
         RefreshStatusAsync(taskId, ct);
@@ -166,12 +167,19 @@ public class TaskProgressTracker(ITaskRepository tasks) : ITaskProgressTracker
 
         if (task is null || row is null) return;
 
-        var next = TaskStateMachine.Evaluate(
-            task.Status, row.AssigneeCount, row.Started, row.Done, task.TargetQty);
+        var next = TaskStateMachine.Evaluate(task.Status, row.Done, task.TargetQty);
 
-        if (next == task.Status) return;
+        if (next == task.Status)
+        {
+            // TEAM_013: status không đổi thì đợt cũng không đổi theo — bỏ qua cho khỏi
+            // khoá dòng campaign ở mọi lần nộp bản ghi/duyệt (hàng chục lần một task).
+            return;
+        }
 
         task.Status = next;
         await tasks.SaveChangesAsync(ct);
+
+        // TEAM_013: trạng thái đợt là hàm của task, nên task đổi trạng thái thì đợt tính lại.
+        if (task.CampaignId.HasValue) await campaigns.RefreshStatusAsync(task.CampaignId.Value, ct);
     }
 }

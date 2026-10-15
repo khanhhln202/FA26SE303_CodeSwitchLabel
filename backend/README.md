@@ -189,10 +189,14 @@ Admin nhập input_text.json  →  script: pending_validation
 ## Giao việc
 
 ```
-Draft ─ giao người ─► Open ─ việc đầu tiên ─► InProgress ─ đạt chỉ tiêu ─► Completed
-                                                  ▲                            │
-                                                  └────── nâng chỉ tiêu ───────┘
+Mới tạo ──────────────────────────► InProgress ─ đạt chỉ tiêu ─► Completed
+                                           ▲                            │
+                                           └── nâng chỉ tiêu ───────────┘
+                                           └── bấm tay Completed/InProgress/Cancelled (PATCH, giữ tới khi có việc thật)
 ```
+
+Task mới tạo ra đã là `InProgress` — không còn `Draft`/`Open` (TEAM_013: hai trạng thái
+đó chỉ nói về việc giao chứ không nói về việc làm).
 
 - **Chỉ tiêu task thu âm đếm theo CẶP CÂU.** Một cặp chỉ tính là xong khi **cả hai** bản cs và vi
   đều được duyệt đạt. Chỉ tiêu task duyệt đếm theo số bản ghi.
@@ -200,7 +204,12 @@ Draft ─ giao người ─► Open ─ việc đầu tiên ─► InProgress �
   `{ "userIds": [6, 7] }` và giao **thêm**, không đuổi người đang nhận. Index
   `uq_task_assignment_active_user` chặn giao trùng một người; gỡ người ra thì lượt giao chuyển
   `reassigned`, không bị xoá. `target_qty` là của cả nhóm, không nhân theo số người nhận.
-- **Trạng thái task tự tính lại** từ số liệu thật sau mỗi việc xảy ra; chỉ Huỷ là bấm tay.
+- **Trạng thái task tự tính lại** từ số liệu thật sau mỗi việc xảy ra (đạt chỉ tiêu →
+  `Completed`, chưa đạt → `InProgress`); chỉ còn ba giá trị (`InProgress`/`Completed`/`Cancelled`).
+  Task Manager đổi tay được qua `PATCH /api/tasks/{id}` với `status` — `Cancelled` bấm tay
+  y hệt nút Huỷ (mọi lượt giao đang hoạt động cũng chuyển `cancelled`). Trạng thái đợt thì
+  **không bấm tay**: nó là hàm của task (`Open` chưa có nhiệm vụ nào, `InProgress` đang làm,
+  `Completed` khi mọi nhiệm vụ xong).
 - **Giao việc kiểm tra người nhận có làm được không**: cặp câu người khác đã thu, hay bản ghi do
   chính người đó thu, đều không tính là mục làm được.
 

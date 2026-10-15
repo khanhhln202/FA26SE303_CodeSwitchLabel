@@ -18,8 +18,9 @@ CREATE TYPE script_domain         AS ENUM ('it_technology','education','daily_li
 CREATE TYPE script_review_action  AS ENUM ('accepted','edited','rejected');
 CREATE TYPE script_word_relation  AS ENUM ('semantic_equivalent','proper_noun');
 CREATE TYPE task_type             AS ENUM ('recording','review');
-CREATE TYPE campaign_status         AS ENUM ('draft','open','in_progress','completed','cancelled');
-CREATE TYPE task_status           AS ENUM ('draft','open','in_progress','completed','cancelled');
+-- TEAM_013: task còn ba trạng thái. Đợt còn ba trạng thái và là HÀM của task, không bấm tay.
+CREATE TYPE campaign_status         AS ENUM ('open','in_progress','completed');
+CREATE TYPE task_status           AS ENUM ('in_progress','completed','cancelled');
 CREATE TYPE assignment_status     AS ENUM ('active','completed','reassigned','cancelled');
 CREATE TYPE task_script_status    AS ENUM ('pending','completed','rejected');
 CREATE TYPE sentence_variant      AS ENUM ('code_switching','pure_vietnamese');
@@ -218,7 +219,7 @@ CREATE TABLE campaign (
     target_qty    INT NOT NULL,
     start_date    DATE NOT NULL,
     end_date      DATE NOT NULL,
-    status        campaign_status NOT NULL DEFAULT 'draft',
+    status        campaign_status NOT NULL DEFAULT 'open',
     created_by    BIGINT NOT NULL REFERENCES app_user(user_id),
     assigned_to   BIGINT REFERENCES app_user(user_id) ON DELETE SET NULL,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -256,7 +257,7 @@ CREATE TABLE task (
     description  TEXT,
     target_qty   INT NOT NULL CHECK (target_qty > 0),
     deadline     TIMESTAMPTZ,
-    status       task_status NOT NULL DEFAULT 'draft',
+    status       task_status NOT NULL DEFAULT 'in_progress',
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
