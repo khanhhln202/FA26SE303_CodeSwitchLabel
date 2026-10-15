@@ -135,3 +135,19 @@ export const getTopRejectedSpeakersApi = async ({ limit = 20 } = {}) => {
     throw new Error(message, { cause: error });
   }
 };
+
+// Lịch sử duyệt đề xuất câu của chính mình: GET /api/reviewer/history/contributions?Kind=&Category=&Search=&Page=&PageSize=
+// Kind: "contribution" (đã chấp nhận) | "edit" (đã sửa) | "report" (đã từ chối) - suy ra từ quyết định của mình
+// Trả về { items: [{ scriptId, kind, category, csTranscript, viEquivalent, myAction: "Accepted" | "Edited" | "Rejected",
+//   scriptStatus, reviewedAt }], page, pageSize, total, totalPages, hasNext }
+export const getReviewerContributionHistoryApi = async ({ kind, category, search, page = 1, pageSize = 10 } = {}) => {
+  try {
+    const response = await httpClient.get("/api/reviewer/history/contributions", {
+      params: { Kind: kind || undefined, Category: category || undefined, Search: search || undefined, Page: page, PageSize: pageSize },
+    });
+    return response.data;
+  } catch (error) {
+    const message = error.response?.data?.title || "Không lấy được lịch sử duyệt câu!";
+    throw new Error(message, { cause: error });
+  }
+};
