@@ -93,26 +93,52 @@ for (const n of ['manager', 'reviewer', 'reviewer2', 'reviewer3', 'speaker1', 's
 S('1.6', 'speaker1', 'GET', '/api/users', await call(T.speaker1, 'GET', '/api/users'), 403);
 
 console.log('\n== Màn 2 · Nhập kho câu');
-S('2.1', 'admin', 'POST', '/api/scripts/import', await call(T.admin, 'POST', '/api/scripts/import', fileForm('File', 'input_text_demo.json', 'application/json')), 200, (b) => ({ imported: b.imported, scriptIds: b.scriptIds, skipped: b.skipped.length }));
-S('2.2', 'admin', 'GET', '/api/scripts/s_211000007', await call(T.admin, 'GET', '/api/scripts/s_211000007'), 200, (b) => ({ status: b.status, importBatchId: b.importBatchId, createdBy: b.createdBy }));
+r = S('2.1', 'admin', 'POST', '/api/scripts/import', await call(T.admin, 'POST', '/api/scripts/import', fileForm('File', 'input_text_demo.json', 'application/json')), 200, (b) => ({ imported: b.imported, scriptIds: b.scriptIds, skipped: b.skipped.length }));
+// Mọi mã câu phía dưới lấy từ đây. Ghi cứng mã của seeder thì mỗi lần seeder đổi số thứ tự
+// là bộ e2e hỏng, mà lỗi nằm ở tập dữ liệu chứ không phải ở hệ thống.
+const maNhap = r.body.scriptIds[0];
+S('2.2', 'admin', 'GET', `/api/scripts/${maNhap}`, await call(T.admin, 'GET', `/api/scripts/${maNhap}`), 200, (b) => ({ status: b.status, importBatchId: b.importBatchId, createdBy: b.createdBy }));
 S('2.3', 'admin', 'GET', '/api/scripts?status=PendingValidation', await call(T.admin, 'GET', '/api/scripts?status=PendingValidation'), 200, (b) => ({ total: b.total }));
 Q('2a', 'select batch_id, file_name, script_count, imported_by from import_batch;');
-Q('2b', 'select script_id, status, domain, en_word_count, import_batch_id from script where import_batch_id = 1 order by script_id;');
-Q('2c', "select script_id, cs_content, ve_content, alignment from script where script_id = 's_211000007';", true);
+Q('2b', 'select script_id, status, domain, en_word_count, import_batch_id from script where import_batch_id = (select max(batch_id) from import_batch) order by script_id;');
+// script không lưu alignment trong một cột: từng từ nằm ở bảng script_word.
+Q('2c', `select s.script_id, s.cs_content, s.vi_content, w.en_word, w.vi_word, w.relation from script s left join script_word w on w.script_id = s.script_id where s.script_id = '${maNhap}';`, true);
 
 console.log('\n== Màn 3 · Duyệt câu trước khi thu');
-S('3.2', 'speaker1', 'POST', '/api/scripts/s_131000010/review', await call(T.speaker1, 'POST', '/api/scripts/s_131000010/review', { action: 'Rejected' }), 422);
-S('3.3', 'speaker1', 'POST', '/api/scripts/s_131000010/review', await call(T.speaker1, 'POST', '/api/scripts/s_131000010/review',
+// Chuẩn bị cho 3.2–3.3: speaker1 phải có câu của chính mình thì mới tự từ chối được.
+// Câu này không tính vào bảng kết quả — nó chỉ là dữ liệu dựng trước cho hai bước kế.
+const cauCuaSpeaker = await call(T.speaker1, 'POST', '/api/speaker/scripts/contribute', {
+  csContent: '[vi]Chiều nay [en]deadline [vi]của em là mấy giờ ạ?',
+  veContent: '[vi]Chiều nay hạn chót của em là mấy giờ ạ?',
+  domain: 'ItTechnology',
+  alignment: [
+    { source: 'deadline', source_lang: 'en', target: 'hạn chót', target_lang: 'vi', relation: 'semantic_equivalent' }
+  ]
+});
+const maCuaSpeaker = cauCuaSpeaker.body.scriptId;
+S('3.2', 'speaker1', 'POST', `/api/scripts/${maCuaSpeaker}/review`, await call(T.speaker1, 'POST', `/api/scripts/${maCuaSpeaker}/review`, { action: 'Rejected' }), 422);
+S('3.3', 'speaker1', 'POST', `/api/scripts/${maCuaSpeaker}/review`, await call(T.speaker1, 'POST', `/api/scripts/${maCuaSpeaker}/review`,
   { action: 'Rejected', errorReasonCode: 'unnatural', comment: 'Người Việt không chêm "very" vào giữa câu như vậy' }), 200, (b) => ({ status: b.status }));
-S('3.4', 'reviewer', 'POST', '/api/scripts/s_121000008/review', await call(T.reviewer, 'POST', '/api/scripts/s_121000008/review', {
+// Câu đang chờ duyệt thì lấy từ hàng đợi của chính reviewer, không ghi cứng mã câu.
+const choDuyet = await call(T.reviewer, 'GET', '/api/reviewer/scripts/next');
+const maChoDuyet = choDuyet.body.scriptId;
+// Quy tắc en_word_count_locked: bản sửa phải giữ đúng số từ tiếng Anh của câu gốc. Câu lấy từ
+// hàng đợi có số từ tuỳ lúc seeder, nên câu sửa ở đây dựng theo số từ thật của câu đó.
+const soEn = (await call(T.reviewer, 'GET', `/api/scripts/${maChoDuyet}`)).body.enWordCount;
+const nhieuHon = soEn > 1;
+S('3.4', 'reviewer', 'POST', `/api/scripts/${maChoDuyet}/review`, await call(T.reviewer, 'POST', `/api/scripts/${maChoDuyet}/review`, {
   action: 'Edited',
-  editedCsContent: '[vi]Cô vừa đăng [en]quiz [vi]mới lên hệ thống, cả lớp làm trước tối nay nhé.',
-  editedVeContent: '[vi]Cô vừa đăng bài kiểm tra ngắn mới lên hệ thống, cả lớp làm trước tối nay nhé.',
+  editedCsContent: nhieuHon
+    ? '[vi]Cô vừa đăng [en]quiz [vi]mới lên [en]online [vi], cả lớp làm trước tối nay nhé.'
+    : '[vi]Cô vừa đăng [en]quiz [vi]mới lên hệ thống, cả lớp làm trước tối nay nhé.',
+  editedVeContent: nhieuHon
+    ? '[vi]Cô vừa đăng bài kiểm tra ngắn mới lên mạng, cả lớp làm trước tối nay nhé.'
+    : '[vi]Cô vừa đăng bài kiểm tra ngắn mới lên hệ thống, cả lớp làm trước tối nay nhé.',
   comment: 'Thêm "lên hệ thống" cho rõ nghĩa'
 }), 200, (b) => ({ status: b.status }));
-S('3.5', 'reviewer', 'POST', '/api/scripts/s_211000007/review', await call(T.reviewer, 'POST', '/api/scripts/s_211000007/review',
+S('3.5', 'reviewer', 'POST', `/api/scripts/${maNhap}/review`, await call(T.reviewer, 'POST', `/api/scripts/${maNhap}/review`,
   { action: 'Accepted', comment: 'Câu tự nhiên, đúng kiểu nói hằng ngày' }), 200, (b) => ({ status: b.status }));
-S('3.6', 'speaker1', 'POST', '/api/speaker/scripts/contribute', await call(T.speaker1, 'POST', '/api/speaker/scripts/contribute', {
+r = S('3.6', 'speaker1', 'POST', '/api/speaker/scripts/contribute', await call(T.speaker1, 'POST', '/api/speaker/scripts/contribute', {
   csContent: '[vi]Tối nay mình phải [en]fix bug [vi]gấp cho khách.',
   veContent: '[vi]Tối nay mình phải sửa lỗi gấp cho khách.',
   domain: 'ItTechnology',
@@ -121,9 +147,10 @@ S('3.6', 'speaker1', 'POST', '/api/speaker/scripts/contribute', await call(T.spe
     { source: 'bug', source_lang: 'en', target: 'lỗi', target_lang: 'vi', relation: 'semantic_equivalent' }
   ]
 }), 201, (b) => ({ scriptId: b.scriptId, status: b.status }));
+const maDongGop = r.body.scriptId;
 Q('3a', 'select sr.script_id, sr.action, e.reason_code, sr.user_id, s.status from script_review sr left join script_error_reason e on e.reason_id = sr.error_reason_id join script s on s.script_id = sr.script_id order by sr.script_review_id;');
-Q('3b', "select script_id, cs_content from script where script_id = 's_121000008';");
-Q('3c', "select script_id, status, created_by from script where script_id = 's_211000011';");
+Q('3b', `select script_id, cs_content from script where script_id = '${maChoDuyet}';`);
+Q('3c', `select script_id, status, created_by from script where script_id = '${maDongGop}';`);
 
 console.log('\n== Màn 4 · Giao việc');
 const batDau = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
@@ -139,43 +166,45 @@ S('4.0c', 'admin', 'POST', '/api/campaigns/' + campaignId + '/assign',
 r = S('4.2', 'manager', 'POST', '/api/tasks', await call(T.manager, 'POST', '/api/tasks', { campaignId, taskType: 'Recording', description: 'Thu âm câu chủ đề IT', targetQty: 1, deadline: DEADLINE }), 201, (b) => ({ taskId: b.summary.taskId }));
 const taskId = r.body.summary.taskId;
 S('4.3', 'manager', 'POST', `/api/tasks/${taskId}/items`, await call(T.manager, 'POST', `/api/tasks/${taskId}/items`, { autoFill: { count: 2, domain: 'ItTechnology' } }), 200, (b) => ({ added: b.added }));
-S('4.5', 'manager', 'POST', `/api/tasks/${taskId}/assign`, await call(T.manager, 'POST', `/api/tasks/${taskId}/assign`, { userId: 6 }), 200, (b) => ({ status: b.summary.status }));
+S('4.5', 'manager', 'POST', `/api/tasks/${taskId}/assign`, await call(T.manager, 'POST', `/api/tasks/${taskId}/assign`, { userIds: [6] }), 200, (b) => ({ status: b.summary.status }));
 Q('4a', "select task_id, task_type, target_qty, status, deadline at time zone 'Asia/Ho_Chi_Minh' as han_gio_vn from task;");
-Q('4b', 'select script_id, status from task_script where task_id = 1 order by script_id;');
-Q('4c', 'select user_id, assignment_status from task_assignment where task_id = 1;');
+Q('4b', `select script_id, status from task_script where task_id = ${taskId} order by script_id;`);
+Q('4c', `select user_id, assignment_status from task_assignment where task_id = ${taskId};`);
 
 console.log('\n== Màn 5 · Thu âm');
 r = S('5.1', 'speaker1', 'GET', `/api/speaker/scripts/next?taskId=${taskId}`, await call(T.speaker1, 'GET', `/api/speaker/scripts/next?taskId=${taskId}`), 200, (b) => ({ scriptId: b.scriptId }));
 const X = r.body.scriptId;
-S('5.2', 'speaker1', 'POST', '/api/recordings', await call(T.speaker1, 'POST', '/api/recordings', audioForm('giong-4s.m4a', X, 'CodeSwitching', taskId)), 201, (b) => ({ recordingId: b.recording.recordingId, status: b.recording.status }));
+r = S('5.2', 'speaker1', 'POST', '/api/recordings', await call(T.speaker1, 'POST', '/api/recordings', audioForm('giong-4s.m4a', X, 'CodeSwitching', taskId)), 201, (b) => ({ recordingId: b.recording.recordingId, status: b.recording.status }));
+const recCs = r.body.recording.recordingId;
 S('5.5', 'speaker1', 'POST', '/api/recordings', await call(T.speaker1, 'POST', '/api/recordings', audioForm('qua-ngan.wav', X, 'PureVietnamese', taskId)), 201, (b) => ({ recordingId: b.recording.recordingId, status: b.recording.status }));
-S('5.6', 'speaker1', 'POST', '/api/recordings', await call(T.speaker1, 'POST', '/api/recordings', audioForm('giong-3s.wav', X, 'PureVietnamese', taskId)), 201, (b) => ({ recordingId: b.recording.recordingId, status: b.recording.status }));
+r = S('5.6', 'speaker1', 'POST', '/api/recordings', await call(T.speaker1, 'POST', '/api/recordings', audioForm('giong-3s.wav', X, 'PureVietnamese', taskId)), 201, (b) => ({ recordingId: b.recording.recordingId, status: b.recording.status }));
+const recVi = r.body.recording.recordingId;
 Q('5a', 'select recording_id, sentence_variant, status, duration_sec, audio_format, task_id from recording order by recorded_at;');
-Q('5b', "select recording_id, cloud_link from recording where recording_id = 'r_cs_111000003';");
-Q('5c', 'select status from task where task_id = 1;');
-r = await call(T.speaker1, 'GET', '/api/recordings/r_cs_111000003/audio-url');
-probe('5d r_cs_111000003', r.body.url);
+Q('5b', `select recording_id, cloud_link from recording where recording_id = '${recCs}';`);
+Q('5c', `select status from task where task_id = ${taskId};`);
+r = await call(T.speaker1, 'GET', `/api/recordings/${recCs}/audio-url`);
+probe(`5d ${recCs}`, r.body.url);
 
 console.log('\n== Màn 6 · Duyệt ba lượt mù');
-S('6.3', 'reviewer', 'POST', '/api/recordings/r_cs_111000003/reviews', await call(T.reviewer, 'POST', '/api/recordings/r_cs_111000003/reviews', { decision: 'Approved', expectedRound: 1 }), 201);
-S('6.8', 'reviewer2', 'POST', '/api/recordings/r_cs_111000003/reviews', await call(T.reviewer2, 'POST', '/api/recordings/r_cs_111000003/reviews',
+S('6.3', 'reviewer', 'POST', `/api/recordings/${recCs}/reviews`, await call(T.reviewer, 'POST', `/api/recordings/${recCs}/reviews`, { decision: 'Approved', expectedRound: 1 }), 201);
+S('6.8', 'reviewer2', 'POST', `/api/recordings/${recCs}/reviews`, await call(T.reviewer2, 'POST', `/api/recordings/${recCs}/reviews`,
   { decision: 'Rejected', expectedRound: 2, rejectionReasonCodes: ['background_noise'], comment: 'Có tiếng quạt ở nền' }), 201);
-Q('6x', "select recording_id, status from recording where recording_id = 'r_cs_111000003';");
-S('6.11', 'reviewer3', 'POST', '/api/recordings/r_cs_111000003/reviews', await call(T.reviewer3, 'POST', '/api/recordings/r_cs_111000003/reviews',
+Q('6x', `select recording_id, status from recording where recording_id = '${recCs}';`);
+S('6.11', 'reviewer3', 'POST', `/api/recordings/${recCs}/reviews`, await call(T.reviewer3, 'POST', `/api/recordings/${recCs}/reviews`,
   { decision: 'Approved', expectedRound: 3, comment: 'Tiếng quạt nhỏ, vẫn nghe rõ từng từ' }), 201, (b) => ({ isFinal: b.isFinal, recordingStatus: b.recordingStatus }));
 for (const [who, round] of [['reviewer', 1], ['reviewer2', 2], ['reviewer3', 3]]) {
-  S('6.13', who, 'POST', '/api/recordings/r_vi_111000003_t2/reviews', await call(T[who], 'POST', '/api/recordings/r_vi_111000003_t2/reviews', { decision: 'Approved', expectedRound: round }), 201);
+  S('6.13', who, 'POST', `/api/recordings/${recVi}/reviews`, await call(T[who], 'POST', `/api/recordings/${recVi}/reviews`, { decision: 'Approved', expectedRound: round }), 201);
 }
 Q('6a', 'select recording_id, review_round, reviewer_id, decision, left(comment, 35) as ghi_chu from review order by review_id;');
 Q('6b', 'select r.recording_id, r.review_round, rr.reason_code, rr.category from review_rejection_reason x join review r on r.review_id = x.review_id join rejection_reason rr on rr.reason_id = x.reason_id;');
-Q('6c', "select recording_id, status from recording where recording_id in ('r_cs_111000003', 'r_vi_111000003_t2');");
+Q('6c', `select recording_id, status from recording where recording_id in ('${recCs}', '${recVi}');`);
 
 console.log('\n== Màn 7 · Tiến độ và thống kê');
 S('7.1', 'manager', 'GET', `/api/tasks/${taskId}`, await call(T.manager, 'GET', `/api/tasks/${taskId}`), 200, (b) => ({ status: b.summary.status }));
 S('7.4', 'admin', 'GET', '/api/admin/dashboard', await call(T.admin, 'GET', '/api/admin/dashboard'), 200, (b) => b);
 Q('7a', 'select * from v_dashboard_summary;', true);
 Q('7b', 'select * from v_rejection_reason_stats;');
-Q('7c', "select task_id, status from task; select script_id, status from task_script where task_id = 1 order by script_id;");
+Q('7c', `select task_id, status from task; select script_id, status from task_script where task_id = ${taskId} order by script_id;`);
 
 console.log('\n== Màn 8 · Cấu hình hệ thống');
 r = await call(T.admin, 'PUT', '/api/admin/config/recording.min_duration_sec', { value: '5' });
@@ -225,27 +254,30 @@ S('A.6c', 'admin', 'PUT', '/api/admin/config/import.max_scripts_per_batch', r, 2
 Q('A-lo', 'select batch_id, file_name, script_count, imported_by from import_batch order by batch_id;');
 
 console.log('\n== Bổ sung B · Nộp file âm thanh');
-S('B.1', 'speaker2', 'POST', '/api/recordings', await call(T.speaker2, 'POST', '/api/recordings', audioForm(EXTRA + 'audio-giong-2s.webm', 's_121000005', 'CodeSwitching')), 201,
+r = S('B.1', 'speaker2', 'POST', '/api/recordings', await call(T.speaker2, 'POST', '/api/recordings', audioForm(EXTRA + 'audio-giong-2s.webm', Y, 'CodeSwitching')), 201,
   (b) => ({ recordingId: b.recording.recordingId, status: b.recording.status, durationSec: b.recording.durationSec, audioFormat: b.recording.audioFormat, qcPassed: b.qcPassed }));
-S('B.2', 'speaker2', 'POST', '/api/recordings', await call(T.speaker2, 'POST', '/api/recordings', audioForm(EXTRA + 'audio-qua-dai-35s.wav', 's_121000005', 'PureVietnamese')), 201,
+const recCs2 = r.body.recording.recordingId;
+S('B.2', 'speaker2', 'POST', '/api/recordings', await call(T.speaker2, 'POST', '/api/recordings', audioForm(EXTRA + 'audio-qua-dai-35s.wav', Y, 'PureVietnamese')), 201,
   (b) => ({ recordingId: b.recording.recordingId, status: b.recording.status, durationSec: b.recording.durationSec, qcPassed: b.qcPassed, qcIssues: b.qcIssues }));
-S('B.3', 'speaker2', 'POST', '/api/recordings', await call(T.speaker2, 'POST', '/api/recordings', audioForm(EXTRA + 'audio-rong.wav', 's_121000005', 'PureVietnamese')), 422);
-S('B.4', 'speaker2', 'POST', '/api/recordings', await call(T.speaker2, 'POST', '/api/recordings', audioForm(EXTRA + 'audio-khong-phai-am-thanh.m4a', 's_121000005', 'PureVietnamese')), 422);
-Q('B', "select recording_id, status, duration_sec, audio_format from recording where script_id = 's_121000005' order by recorded_at;");
-r = await call(T.speaker2, 'GET', '/api/recordings/r_cs_121000005/audio-url');
-probe('B r_cs_121000005 (gốc webm)', r.body.url);
+S('B.3', 'speaker2', 'POST', '/api/recordings', await call(T.speaker2, 'POST', '/api/recordings', audioForm(EXTRA + 'audio-rong.wav', Y, 'PureVietnamese')), 422);
+S('B.4', 'speaker2', 'POST', '/api/recordings', await call(T.speaker2, 'POST', '/api/recordings', audioForm(EXTRA + 'audio-khong-phai-am-thanh.m4a', Y, 'PureVietnamese')), 422);
+Q('B', `select recording_id, status, duration_sec, audio_format from recording where script_id = '${Y}' order by recorded_at;`);
+r = await call(T.speaker2, 'GET', `/api/recordings/${recCs2}/audio-url`);
+probe(`B ${recCs2} (gốc webm)`, r.body.url);
 
 console.log('\n== Bổ sung C · Tắt bật lại hệ thống, dữ liệu còn không');
 const countsBefore = psqlRaw('select (select count(*) from script) as cau, (select count(*) from recording) as ban_ghi, (select count(*) from app_user) as tai_khoan;').trim();
-execFileSync('docker', ['compose', '--profile', 'api', 'down'], { cwd: fileURLToPath(ROOT), stdio: 'ignore' });
-execFileSync('docker', ['compose', '--profile', 'api', 'up', '-d'], { cwd: fileURLToPath(ROOT), stdio: 'ignore' });
+// Dựng lại container trên đúng bộ compose của máy đang dev (docker-compose.local.yml đè
+// image MinIO). Gọi không có -f thì compose dùng file trong repo và tạo lại container khác.
+execFileSync('docker', ['compose', '-f', 'docker-compose.local.yml', '--profile', 'api', 'down'], { cwd: fileURLToPath(ROOT), stdio: 'ignore' });
+execFileSync('docker', ['compose', '-f', 'docker-compose.local.yml', '--profile', 'api', 'up', '-d'], { cwd: fileURLToPath(ROOT), stdio: 'ignore' });
 for (let i = 0; i < 90; i++) { try { const h = await fetch(BASE + '/health'); if (h.ok) break; } catch {} await new Promise((res) => setTimeout(res, 2000)); }
 const countsAfter = psqlRaw('select (select count(*) from script) as cau, (select count(*) from recording) as ban_ghi, (select count(*) from app_user) as tai_khoan;').trim();
 console.log('  truoc:\n' + countsBefore + '\n  sau:\n' + countsAfter);
 sqlLog.push({ label: 'C', sql: 'counts', out: countsBefore + '\n---\n' + countsAfter });
-S('C.1', 'admin', 'GET', '/api/scripts/s_211000007', await call(T.admin, 'GET', '/api/scripts/s_211000007'), 200, (b) => ({ status: b.status }));
-r = await call(T.speaker1, 'GET', '/api/recordings/r_cs_111000003/audio-url');
-probe('C r_cs_111000003 sau khi bật lại', r.body.url);
+S('C.1', 'admin', 'GET', `/api/scripts/${maNhap}`, await call(T.admin, 'GET', `/api/scripts/${maNhap}`), 200, (b) => ({ status: b.status }));
+r = await call(T.speaker1, 'GET', `/api/recordings/${recCs}/audio-url`);
+probe(`C ${recCs} sau khi bật lại`, r.body.url);
 
 writeFileSync(OUT, JSON.stringify({ results, sqlLog }, null, 2));
 console.log(`\n${results.filter((x) => x.ok).length}/${results.length} lệnh gọi đúng kỳ vọng`);

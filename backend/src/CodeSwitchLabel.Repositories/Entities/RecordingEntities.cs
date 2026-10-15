@@ -30,6 +30,17 @@ public class Recording
     /// </summary>
     public string? QcMetrics { get; set; }
 
+    /// <summary>
+    /// TEAM_010: dấu vết cho nút "Chỉ xóa audio" / "Xóa hoàn toàn" (yêu cầu 2.4).
+    ///
+    /// CỐ Ý không nằm ở bảng review: hai hành động đó là quyết định dứt điểm, không
+    /// phải phiếu bầu. Ghi vào review sẽ làm lệch bộ đếm 3 lượt và kích hoạt
+    /// trigger chốt đa số.
+    /// </summary>
+    public DateTimeOffset? DiscardedAt { get; set; }
+    public long? DiscardedBy { get; set; }
+    public string? DiscardNote { get; set; }
+
     public Script Script { get; set; } = null!;
     public AppUser Speaker { get; set; } = null!;
     public WorkTask? Task { get; set; }
@@ -55,6 +66,7 @@ public class Review
 {
     public long ReviewId { get; set; }
     public string RecordingId { get; set; } = string.Empty;
+
     public long ReviewerId { get; set; }
 
     /// <summary>Null nghĩa là duyệt ngoài task.</summary>

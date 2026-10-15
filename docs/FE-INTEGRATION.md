@@ -178,6 +178,38 @@ POST /api/auth/login
   ```json
   { "items": [], "page": 1, "pageSize": 20, "total": 0, "totalPages": 0, "hasNext": false }
   ```
+- **Sắp xếp** — cùng bộ tham số đó, thêm `?sort=<cột>&dir=asc|desc`:
+
+  ```
+  GET /api/scripts?page=1&sort=createdAt&dir=desc
+  ```
+
+  - Không gửi `sort` thì ra **đúng thứ tự cũ** của endpoint — client cũ không phải sửa gì.
+  - `dir` bỏ trống = `asc`. Có `sort` mà bỏ `dir` thì là tăng dần, **không** phải thứ tự mặc định.
+    Muốn "mới nhất trước" thì phải gửi cả hai: `sort=createdAt&dir=desc`.
+  - Tên cột không phân biệt hoa thường. Gõ sai tên cột **không phải lỗi** — API bỏ qua và trả thứ tự
+    mặc định, y hệt lúc không gửi `sort`. (Chỉ `sort`/`dir` quá dài mới bị 400 vì chặn độ dài.)
+  - Mỗi endpoint có bộ cột riêng, xem bảng bên dưới. Cột không nằm trong bảng thì coi như chưa gửi.
+  - Với `GET /api/tasks`, sắp theo `deadline` giữ nguyên quy tắc của mặc định ở **cả hai chiều**:
+    task không đặt hạn luôn ở cuối, không bao giờ nhảy lên đầu bảng.
+  - `GET /api/speaker/recordings/history` chỉ nhận `lastRecordedAt` và `scriptId`. Mỗi dòng là một
+    **cặp** bản ghi, cặp không có cột riêng nên trạng thái/thời lượng của cặp là thứ tính ra *sau khi
+    đã cắt trang* — không sắp xếp được trước đó.
+
+  | Endpoint | Cột `sort` nhận được | Mặc định khi bỏ `sort` |
+  |---|---|---|
+  | `GET /api/scripts` | `scriptId` `createdAt` `domain` `status` | `createdAt` giảm dần |
+  | `GET /api/scripts/import/batches` | `batchId` `createdAt` `fileName` `scriptCount` | `batchId` giảm dần |
+  | `GET /api/recordings` | `recordingId` `recordedAt` `status` `scriptId` `durationSec` | `recordedAt` giảm dần |
+  | `GET /api/tasks` | `taskId` `deadline` `status` `taskType` `createdAt` `targetQty` | hạn gần nhất trước, không hạn ở cuối |
+  | `GET /api/users` | `userId` `fullName` `email` `status` `role` `createdAt` | `fullName` tăng dần |
+  | `GET /api/campaigns` | `campaignId` `startDate` `endDate` `status` `createdAt` | `startDate` giảm dần |
+  | `GET /api/datasets` | `datasetId` `createdAt` `status` `datasetName` `recordingCount` | `createdAt` giảm dần |
+  | `GET /api/reviewer/tasks/{id}/recordings` | `recordedAt` `status` `reviewCount` `scriptId` | bản gần đủ lượt duyệt trước |
+  | `GET /api/reviewer/history/recordings` | `reviewedAt` `decision` `status` `scriptId` | `reviewedAt` giảm dần |
+  | `GET /api/reviewer/history/contributions` | `reviewedAt` `action` `status` `domain` | `reviewedAt` giảm dần |
+  | `GET /api/speaker/recordings/history` | `lastRecordedAt` `scriptId` | `lastRecordedAt` giảm dần |
+  | `GET /api/speaker/contributions/history` | `createdAt` `scriptId` `domain` `status` | `createdAt` giảm dần |
 - **`204 No Content`** ở các endpoint "lấy việc tiếp theo" nghĩa là **hết việc** — không phải lỗi.
 
 ### Câu có nhãn ngôn ngữ
@@ -808,6 +840,103 @@ không viết cứng trong frontend — Admin ẩn hay thêm lý do thì giao di
 
 ---
 
+## 7b. TEAM_010 — hàng đợi văn bản & đa người nhận task
+
+Bốn thay đổi dưới đây **phá vỡ** so với bản trước. Chọn clean break thay vì giữ tương
+thích, nên code cũ phải sửa.
+
+### 8.1 `POST /api/tasks/{id}/assign` nhận NHIỀU người
+
+```diff
+- { "userId": 6 }
++ { "userIds": [6, 7, 8] }
+```
+
+- Giao **thêm**, không đuổi người đang nhận. Trước đây giao là điều phối lại: lượt giao
+  cũ chuyển sang `reassigned`.
+- `target_qty` là của **cả nhóm** — không nhân theo số người. Mỗi người khoảng
+  `ceil(targetQty / n)`.
+- Người đã có trong `userIds` bị bỏ qua. Giao mà tất cả đã có thì trả `409 already_assigned`.
+- Vai: Task thu âm chỉ nhận Speaker, task duyệt chỉ nhận Reviewer — sai vai trả
+  `422 assignee_role_mismatch`.
+
+### 8.2 `DELETE /api/tasks/{id}/assign/{userId}` — gỡ một người (mới)
+
+Lượt giao chuyển sang `reassigned`, lịch sử giữ nguyên. Không gỡ được **người nhận cuối
+cùng** khi task đã có việc (`409 cannot_remove_last_assignee`) — làm vậy task rơi về
+nháp và không ai làm tiếp được. Muốn dừng hẳn thì dùng `POST /tasks/{id}/cancel`.
+
+### 8.3 Người nhận trả về là MẢNG
+
+Mọi DTO có `assigneeId` / `assigneeName` giờ trả `assignees`:
+
+```json
+{ "assignees": [ { "userId": 6, "fullName": "Speaker 1" } ], "assigneeCount": 1 }
+```
+
+`GET /api/tasks`, `GET /api/tasks/{id}`, `POST /api/tasks/{id}/assign` đều dùng hình
+dạng này. Trước đây `assigneeName` lấy bằng `.FirstOrDefault()` nên khi có nhiều người
+sẽ hiện một người bất kỳ — không còn chuyện đó.
+
+### 8.4 Tiến độ cá nhân — `GET /api/speaker/progress`
+
+`activeTasks[].progress` tách thành **hai** bộ số, vì task có thể có nhiều người:
+
+```json
+{
+  "taskId": 7,
+  "myProgress":   { "targetQty": 30, "done": 3,  "percent": 10 },  // của riêng tôi
+  "teamProgress": { "targetQty": 30, "done": 12, "percent": 40 },  // của cả nhóm
+  "assignees": [ { "userId": 9, "fullName": "A" } ]
+}
+```
+
+Hiển thị đồng thời cả hai. Chỉ trả một bộ thì người đó hoặc tưởng mình làm cả nhiệm vụ,
+hoặc tưởng cả nhóm không làm gì cả.
+
+### 8.5 Endpoint mới
+
+| Endpoint | Vai | Dùng để |
+|---|---|---|
+| `GET /api/reviewer/scripts/next?taskId=` | Reviewer | Lấy câu **chờ duyệt nội dung** kế tiếp (FIFO). Hết câu → `204` |
+| `GET /api/task-manager/text-queue/stats` | TM | Số câu đang tồn trong hàng đợi, để quyết định chia lô |
+| `POST /api/tasks/{id}/text-items` | TM | Chia lô câu: `{ "userId": 7, "count": 100 }`, bỏ `count` thì dùng `text_review.batch_size` |
+| `POST /api/recordings/{id}/reject-audio` | Reviewer | Nút **Chỉ xóa audio** |
+| `POST /api/recordings/{id}/discard-pair` | Reviewer | Nút **Xóa hoàn toàn** |
+
+**Hệ quả cần biết:** câu nhập từ file giờ **vào hàng đợi chờ duyệt**, không còn tự
+động `validated`. Màn hình sau khi import phải có bước "duyệt câu" thật, nếu không sẽ
+tưởng đã nhập xong là dùng được.
+
+### 8.6 Hai nút xử lý bản ghi mới
+
+```http
+POST /api/recordings/r_cs_211000001/reject-audio
+{ "rejectionReasonCodes": ["background_noise"], "comment": "Nghe rõ ở đầu, nhưng lúc đó đang có tiếng bàn." }
+
+→ 200 { "recordingId": "...", "scriptId": "s_211000001",
+        "requeuedForSpeaker": 6, "recordingStatus": "Rejected" }
+```
+
+- **Câu văn bản được giữ lại**, và câu quay về hàng đợi ghi âm cho **chính người đọc cũ**
+  (`requeuedForSpeaker`) — không phải người khác, vì luật một cặp câu chỉ một người đọc.
+- Chỉ áp dụng khi bản ghi còn `pendingReview`; đã chốt thì dùng `/reviews` như cũ.
+
+```http
+POST /api/recordings/r_cs_211000001/discard-pair
+{ "rejectionReasonCodes": ["other"], "comment": "Câu vô nghĩa." }
+
+→ 200 { "recordingId": "...", "scriptId": "s_211000001",
+        "scriptStatus": "Deactivated", "recordingsRemoved": 2 }
+```
+
+- **Xoá mềm**: câu chuyển `deactivated` nên rút khỏi mọi hàng đợi; dữ liệu vẫn còn để
+  truy vết. Mọi task chứa câu đó bị trừ chỉ tiêu và có thể tự rời trạng thái `Completed`.
+- Hai nút này **không** ghi vào bảng `review` — là quyết định dứt điểm, không phải
+  phiếu bầu, ghi vào đó sẽ làm lệch bộ đếm 3 lượt.
+
+---
+
 ## 8. Đã đổi so với API cũ
 
 Ai đã code theo bản API trước ngày 22/09/2026 thì cần sửa:
@@ -821,6 +950,13 @@ Ai đã code theo bản API trước ngày 22/09/2026 thì cần sửa:
 | `GET /api/recordings/mine` | Gộp vào `GET /api/recordings` — Speaker tự động chỉ thấy bản của mình |
 | Duyệt: vòng 1 quyết định, có rút mẫu kiểm tra | **Luôn ba lượt duyệt mù**, chốt theo đa số. Không còn trường `kind`, không còn ý kiến vòng trước |
 | Mã lý do viết hoa (`AUDIO_NOISE`) | Viết thường theo database (`background_noise`) — lấy từ API |
+| Giao task cho **một** người, giao là đuổi người cũ | TEAM_010: giao cho **nhiều** người (`userIds[]`), giao thêm không đuổi ai |
+| Không có nút gỡ người khỏi task | TEAM_010: `DELETE /api/tasks/{id}/assign/{userId}` |
+| `assigneeId` / `assigneeName` (một người) | TEAM_010: `assignees[]` — một task có nhiều người nhận |
+| Tiến độ Speaker một bộ số | TEAM_010: `myProgress` + `teamProgress` |
+| Câu nhập từ file tự `validated` | TEAM_010: **vào hàng đợi chờ duyệt** như mọi câu khác |
+| Chỉ có 2 nút duyệt bản ghi | TEAM_010: thêm `reject-audio` và `discard-pair` |
+| Không có endpoint lấy câu chờ duyệt nội dung | TEAM_010: `GET /api/reviewer/scripts/next` |
 | — | Mới: nhập file `POST /api/scripts/import`, và nhóm thống kê `/api/admin/*` |
 | — | Mới: quản lý người dùng `/api/users`, trang cá nhân `/api/me/*`, ô chọn người nhận `GET /api/tasks/assignable-users` |
 | `PUT /api/me/password` trả 204 | Trả **200 kèm token mới** — thay token đang lưu |

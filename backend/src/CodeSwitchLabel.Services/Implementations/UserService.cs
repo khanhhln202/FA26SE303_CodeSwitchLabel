@@ -45,7 +45,8 @@ public class UserService(
         UserSearchRequest request, CancellationToken ct = default)
     {
         var (items, total) = await users.SearchAsync(
-            request.Role, request.Status, request.Keyword, request.Page, request.PageSize, ct);
+            request.Role, request.Status, request.Keyword, request.Page, request.PageSize,
+            request.ToSort<UserSortField>(), ct);
 
         return new PagedResult<UserListItemDto>(
             [.. items.Select(u => u.ToListItem())], request.Page, request.PageSize, total);

@@ -29,6 +29,8 @@ internal static class ReviewMapper
 public class ReviewService(
     IReviewRepository reviews,
     IRecordingRepository recordings,
+    IScriptRepository scripts,
+    IScriptQueueService queue,
     IObjectStorage storage,
     ISystemConfigService config,
     ITaskProgressTracker taskTracker,
@@ -72,7 +74,8 @@ public class ReviewService(
         var roundsRequired = await RoundsRequiredAsync(ct);
 
         var (rows, total) = await reviews.GetTaskReviewRowsAsync(
-            taskId, reviewerId, query.OnlyReviewable, roundsRequired, query.Page, query.PageSize, ct);
+            taskId, reviewerId, query.OnlyReviewable, roundsRequired, query.Page, query.PageSize,
+            query.ToSort<TaskReviewSortField>(), ct);
 
         // Một lần lấy đủ hai bản của mọi cặp câu trên trang, thay vì gọi N lần cho từng dòng.
         var pairs = (await reviews.GetSummariesByScriptsAsync(
@@ -284,6 +287,126 @@ public class ReviewService(
         return new SubmitReviewResult(
             review.ReviewId, round, roundsRequired, previous.Count + 1,
             status, status != RecordingStatus.PendingReview);
+    }
+
+    public async Task<RejectAudioResult> RejectAudioAsync(
+        string recordingId, long reviewerId, RejectAudioRequest request, CancellationToken ct = default)
+    {
+        if (request.RejectionReasonCodes.Count == 0)
+        {
+            throw new UnprocessableException(
+                "rejection_reason_required", "Bỏ audio thì phải chọn ít nhất một lý do.");
+        }
+
+        await using var transaction = await reviews.BeginTransactionAsync(ct);
+
+        var recording = await reviews.LockRecordingAsync(recordingId, ct)
+                        ?? throw new NotFoundException(
+                            "recording_not_found", $"Không tìm thấy bản ghi {recordingId}.");
+
+        EnsureReviewable(recording, reviewerId);
+
+        var reasons = await LoadActiveReasonsAsync(
+            [.. request.RejectionReasonCodes.Where(c => !string.IsNullOrWhiteSpace(c))
+                .Select(c => c.Trim()).Distinct()], ct);
+
+        var taskRecording = request.TaskId.HasValue
+            ? await reviews.GetQueuedTaskRecordingAsync(
+                request.TaskId.Value, reviewerId, recordingId, ct)
+            : null;
+
+        // Chỉ xoá AUDIO. Câu văn bản giữ nguyên status 'validated', và câu quay về
+        // hàng đợi ghi âm cho CHÍNH người đọc cũ — trigger trg_recording_single_speaker
+        // cấm người khác đọc cặp câu này, nên "giao cho người khác" là việc không làm được.
+        recording.Status = RecordingStatus.Rejected;
+
+        if (taskRecording is not null) taskRecording.Status = TaskRecordingStatus.Reviewed;
+
+        // Ghi lại lý do loại. Cố ý KHÔNG thêm hàng `review`: đây là quyết định dứt điểm,
+        // không phải phiếu bầu — thêm vào sẽ lệch bộ đếm 3 lượt và kích hoạt
+        // trg_review_majority, có thể kéo câu về hàng đợi duyệt nội dung ngoài ý muốn.
+        recording.DiscardedAt = clock.GetUtcNow();
+        recording.DiscardedBy = reviewerId;
+        recording.DiscardNote = BuildDiscardNote(reasons, request.Comment);
+
+        await reviews.SaveChangesAsync(ct);
+
+        // Hàng của câu đang 'done' (đã thu đủ) nên phải chuyển TỪ 'done' về 'queued';
+        // fn_queue_release mặc định chỉ nhận 'claimed' nên cần hàm riêng.
+        await queue.RequeueAsync(recording.ScriptId, QueueStage.Recording, ct);
+
+        await taskTracker.OnRecordingReturnedAsync(recording, taskRecording?.TaskId, ct);
+
+        await transaction.CommitAsync(ct);
+
+        return new RejectAudioResult(recordingId, recording.ScriptId, recording.SpeakerId, recording.Status);
+    }
+
+    public async Task<DiscardPairResult> DiscardPairAsync(
+        string recordingId, long reviewerId, DiscardPairRequest request, CancellationToken ct = default)
+    {
+        if (request.RejectionReasonCodes.Count == 0)
+        {
+            throw new UnprocessableException(
+                "rejection_reason_required", "Xoá cặp câu thì phải chọn ít nhất một lý do.");
+        }
+
+        await using var transaction = await reviews.BeginTransactionAsync(ct);
+
+        var recording = await reviews.LockRecordingAsync(recordingId, ct)
+                        ?? throw new NotFoundException(
+                            "recording_not_found", $"Không tìm thấy bản ghi {recordingId}.");
+
+        EnsureReviewable(recording, reviewerId);
+
+        var reasons = await LoadActiveReasonsAsync(
+            [.. request.RejectionReasonCodes.Where(c => !string.IsNullOrWhiteSpace(c))
+                .Select(c => c.Trim()).Distinct()], ct);
+
+        // Xoá mềm: câu chuyển sang 'deactivated' nên trigger fn_script_queue_sync rút nó
+        // khỏi MỌI chặng — không ai nhận lại được nữa, không quay vòng trong kho.
+        var script = await scripts.GetForUpdateAsync(recording.ScriptId, ct)
+                     ?? throw NotFoundException.Script(recording.ScriptId);
+
+        script.Status = ScriptStatus.Deactivated;
+        script.UpdatedAt = clock.GetUtcNow();
+
+        var removed = await recordings.MarkAllRejectedAsync(recording.ScriptId, ct);
+
+        recording.DiscardedAt = clock.GetUtcNow();
+        recording.DiscardedBy = reviewerId;
+        recording.DiscardNote = BuildDiscardNote(reasons, request.Comment);
+
+        await taskTracker.OnPairDiscardedAsync(recording.ScriptId, ct);
+
+        await transaction.CommitAsync(ct);
+
+        return new DiscardPairResult(recordingId, recording.ScriptId, script.Status, removed);
+    }
+
+    /// <summary>Gộp mã lý do và bình luận thành một chuỗi để lưu vào cột discard_note.</summary>
+    private static string BuildDiscardNote(IReadOnlyList<RejectionReason> reasons, string? comment)
+    {
+        var codes = string.Join(", ", reasons.Select(r => r.ReasonCode));
+        var text = string.IsNullOrWhiteSpace(comment) ? codes : $"{codes} — {comment.Trim()}";
+        return text.Length <= 1000 ? text : text[..1000];
+    }
+
+    /// <summary>Điều kiện chung cho hai nút xử lý bản ghi đang chờ.</summary>
+    private static void EnsureReviewable(Recording recording, long reviewerId)
+    {
+        if (recording.Status != RecordingStatus.PendingReview)
+        {
+            throw new ConflictException(
+                "recording_not_reviewable",
+                $"Bản ghi {recording.RecordingId} đang ở trạng thái {recording.Status}, không xử lý được nữa.");
+        }
+
+        if (recording.SpeakerId == reviewerId)
+        {
+            throw new ForbiddenException(
+                "self_review_forbidden", "Bạn không được duyệt bản ghi do chính mình thu.");
+        }
     }
 
     public async Task<IReadOnlyList<ReviewDto>> GetHistoryAsync(

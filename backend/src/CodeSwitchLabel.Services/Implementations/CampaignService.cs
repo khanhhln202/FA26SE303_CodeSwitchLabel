@@ -27,7 +27,8 @@ public class CampaignService(
         }
 
         var (items, total) = await campaigns.SearchAsync(
-            request.Status, assignedTo, request.Page, request.PageSize, ct);
+            request.Status, assignedTo, request.Page, request.PageSize,
+            request.ToSort<CampaignSortField>(), ct);
 
         var ids = items.Select(c => c.CampaignId).ToList();
         var progress = (await campaigns.GetProgressAsync(ids, ct))

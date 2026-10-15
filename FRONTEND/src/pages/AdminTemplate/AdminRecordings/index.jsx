@@ -23,7 +23,7 @@ const CATEGORY_COLORS = {
   'Giáo dục': { bg: '#FCE7F0', text: '#9D2662', border: '#F8CFE0' },
 };
 
-const getCatStyle = (cat) => CATEGORY_COLORS[cat] || { bg: '#F9FAFB', text: '#2B2C31', border: '#E5E7EB' };
+const getCatStyle = (cat) => CATEGORY_COLORS[cat] || { bg: '#F7F5EF', text: '#6E7078', border: '#E5E2D8' };
 
 const formatDurationText = (sec) => {
   const integerSec = Math.round(Number(sec));
@@ -66,7 +66,6 @@ export default function AdminRecordings() {
 
   const fetchRecordings = async () => {
     try {
-      // 1. Gọi song song danh sách bản thu và danh sách users để lấy tên thật của Speaker
       const [recRes, usersRes] = await Promise.all([
         adminService.getRecordings({ page: currentPage, pageSize: 100 }),
         adminService.getUsers({ page: 1, pageSize: 200 })
@@ -75,7 +74,6 @@ export default function AdminRecordings() {
       const items = recRes.items || recRes || [];
       const userItems = usersRes.items || usersRes || [];
       
-      // Tạo dictionary { userId: fullName }
       const userMap = {};
       userItems.forEach((u) => {
         userMap[u.userId || u.id] = u.fullName || u.name;
@@ -89,7 +87,6 @@ export default function AdminRecordings() {
           content: r.csContent || r.scriptText || r.content || "",
           contentVietnamese: r.veContent || r.contentVietnamese || "",
           topic: r.domain || r.topic || "Công nghệ thông tin",
-          // Map đúng tên thật từ userMap, nếu không có mới fallback về User #id
           speaker: userMap[r.speakerId] || (r.speakerId ? `User #${r.speakerId}` : "Chưa xác định"),
           reviewers: Array.isArray(r.reviewers) ? r.reviewers : [],
           durationSec: r.durationSec || 0,
@@ -105,11 +102,9 @@ export default function AdminRecordings() {
     fetchRecordings();
   }, [currentPage]);
 
-  // Hàm gọi API lấy chi tiết nội dung cặp câu khi người dùng bấm xem
   const handleOpenTextDetail = async (recording) => {
     if (!recording.textId || recording.textId === "N/A") return;
     
-    // Đặt state tạm thời
     setSelectedTextContent({
       ...recording,
       content: recording.content || "Đang tải dữ liệu...",
@@ -131,7 +126,6 @@ export default function AdminRecordings() {
     }
   };
 
-  // Hàm gọi API lấy lịch sử kiểm duyệt thực tế khi click xem phản hồi
   const handleOpenReviewersModal = async (recording) => {
     setSelectedReviewersList({
       ...recording,
@@ -240,122 +234,125 @@ export default function AdminRecordings() {
 
   return (
     <div className="w-full h-full flex flex-col justify-between text-left font-sans p-1 overflow-hidden transition-colors relative">
-      {/* Header & Filter */}
-      <div className="shrink-0 space-y-1">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-          <div>
-            <h2 className="text-[22px] font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-              <Headphones className="w-5 h-5 text-slate-900 dark:text-white shrink-0" />
-              Quản lý bản thu & bộ dữ liệu
-            </h2>
-            <p className="text-[13px] font-semibold bg-clip-text text-transparent bg-gradient-to-r from-[#15803D] via-emerald-600 to-teal-700 dark:from-[#1DB954] dark:via-emerald-400 dark:to-green-300 mt-1">
-              Quản lý các bản thu âm Code-switching (Anh - Việt) và xuất tập dữ liệu
-            </p>
-          </div>
-
-          <button
-            onClick={handleExportDataset}
-            style={{ backgroundColor: ADMIN_ACCENT }}
-            className="px-3 py-1 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 hover:opacity-90 transition-all cursor-pointer shadow-xs shrink-0"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Tải Dataset chuẩn (.ZIP)</span>
-          </button>
-        </div>
-
-        {/* Filter Bar */}
-        <div className="bg-white dark:bg-[#1C1D22] rounded-xl border border-[#E5E7EB] dark:border-gray-800 p-2 shadow-xs flex flex-col md:flex-row gap-2 justify-between items-center transition-colors">
+      {/* Filter Bar + Nút Tải Dataset */}
+      <div className="shrink-0 space-y-2">
+        <div className="bg-white dark:bg-[#1C1D22] rounded-2xl border border-[#E5E2D8] dark:border-gray-800 p-2.5 shadow-[0_1px_3px_rgba(16,17,20,0.04)] flex flex-col md:flex-row gap-2.5 justify-between items-center transition-colors">
           <div className="w-full md:w-auto flex-1 max-w-xl">
-            <div className="relative w-full flex items-center bg-[#F9FAFB] dark:bg-[#25272E] rounded-xl border border-[#E5E7EB] dark:border-gray-700 focus-within:border-gray-400 dark:focus-within:border-gray-500 focus-within:bg-white dark:focus-within:bg-[#1C1D22] transition-all p-1">
-              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9A9CA6] pointer-events-none z-10" />
+            <div 
+              className="relative w-full flex items-center bg-[#F7F5EF] dark:bg-[#25272E] rounded-xl border border-[#E5E2D8] dark:border-gray-700 transition-all p-1"
+              onFocus={(e) => {
+                e.currentTarget.style.borderColor = ADMIN_ACCENT;
+                e.currentTarget.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.borderColor = '';
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+            >
+              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9A9CA3] pointer-events-none z-10" />
               <input
                 type="text"
                 placeholder="Tìm kiếm bản thu âm, nội dung, speaker..."
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                className="w-full pl-10 pr-28 py-1.5 bg-transparent border-none text-xs font-medium text-[#2B2C31] dark:text-white outline-none transition-all placeholder:text-gray-400"
+                className="w-full pl-10 pr-28 py-1.5 bg-transparent border-none type-ui text-[#16171C] dark:text-white outline-none transition-all placeholder:text-[#9A9CA3]"
               />
               <button
                 type="button"
                 onClick={handleSearch}
                 style={{ backgroundColor: ADMIN_ACCENT }}
-                className="absolute right-1 top-1/2 -translate-y-1/2 px-4 py-1.5 text-white rounded-lg text-xs font-bold hover:opacity-90 transition-all cursor-pointer z-10 shadow-xs"
+                className="absolute right-1 top-1/2 -translate-y-1/2 px-4 py-1.5 text-white rounded-lg type-button hover:opacity-90 transition-all cursor-pointer z-10"
               >
                 Tìm kiếm
               </button>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
-            <Filter className="w-3.5 h-3.5 text-[#6E7078] dark:text-gray-400 shrink-0" />
-            <select
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="w-[150px] px-2.5 py-2 bg-[#F9FAFB] dark:bg-[#25272E] border border-[#E5E7EB] dark:border-gray-700 focus:bg-white dark:focus:bg-[#1C1D22] focus:border-gray-400 dark:focus:border-gray-500 rounded-xl text-xs font-bold text-[#2B2C31] dark:text-white outline-none cursor-pointer transition-all font-sans"
+          <div className="flex items-center gap-2.5 w-full md:w-auto shrink-0 flex-wrap md:flex-nowrap justify-end">
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-[#6E7078] dark:text-gray-400 shrink-0" />
+              <select
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-[160px] px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
+                onFocus={(e) => {
+                  e.target.style.borderColor = ADMIN_ACCENT;
+                  e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = '';
+                  e.target.style.boxShadow = 'none';
+                }}
+              >
+                <option value="all" className="bg-white dark:bg-[#25272E]">Tất cả trạng thái</option>
+                <option value="Approved" className="bg-white dark:bg-[#25272E]">Đã phê duyệt</option>
+                <option value="Pending" className="bg-white dark:bg-[#25272E]">Chờ duyệt</option>
+                <option value="Rejected" className="bg-white dark:bg-[#25272E]">Từ chối</option>
+              </select>
+            </div>
+
+            <button
+              onClick={handleExportDataset}
+              style={{ backgroundColor: ADMIN_ACCENT }}
+              className="px-3.5 py-2 text-white rounded-xl type-button flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer shadow-[0_4px_12px_rgba(22,163,74,0.25)] whitespace-nowrap"
             >
-              <option value="all" className="bg-white dark:bg-[#25272E]">Tất cả trạng thái</option>
-              <option value="Approved" className="bg-white dark:bg-[#25272E]">Đã phê duyệt</option>
-              <option value="Pending" className="bg-white dark:bg-[#25272E]">Chờ duyệt</option>
-              <option value="Rejected" className="bg-white dark:bg-[#25272E]">Từ chối</option>
-            </select>
+              <Download className="w-4 h-4" />
+              <span>Tải Dataset chuẩn (.ZIP)</span>
+            </button>
           </div>
         </div>
       </div>
 
       {/* Main Table Container */}
-      <div className="bg-white dark:bg-[#1C1D22] rounded-xl border border-[#E5E7EB] dark:border-gray-800 shadow-xs overflow-hidden transition-colors flex-1 flex flex-col justify-between my-1 min-h-0">
-        <div className="flex-1 min-h-0 overflow-hidden">
-          <table className="w-full h-full text-left border-collapse table-fixed">
+      <div className="bg-white dark:bg-[#1C1D22] rounded-2xl border border-[#E5E2D8] dark:border-gray-800 shadow-[0_1px_3px_rgba(16,17,20,0.04)] overflow-hidden transition-colors flex-1 flex flex-col justify-between my-1 min-h-0">
+        <div className="flex-1 min-h-0 overflow-auto">
+          <table className="w-full h-full text-left border-collapse table-fixed min-w-[900px]">
             <thead>
-              <tr className="bg-[#F9FAFB] dark:bg-[#25272E] text-[10px] uppercase tracking-wider text-[#6E7078] dark:text-gray-400 border-b border-[#E5E7EB] dark:border-gray-800 font-bold h-7">
-                <th className="w-[80px] px-1.5 text-center">Mã Audio</th>
-                <th className="w-[80px] px-1.5 text-center">Mã Text</th>
-                <th className="w-[150px] px-1.5 text-center">Nội dung câu</th>
-                <th className="w-[160px] px-1.5">Chủ đề</th>
-                <th className="w-[140px] px-1.5">Speaker</th>
-                <th className="w-[170px] px-1.5 text-center">Phản hồi</th>
-                <th className="w-[100px] px-1 text-center">Nghe</th>
-                <th className="w-[100px] px-1 text-center">Trạng thái</th>
+              <tr className="bg-[#F7F5EF] dark:bg-[#25272E] type-label text-[#9A9CA3] dark:text-gray-400 border-b border-[#E5E2D8] dark:border-gray-800 h-8">
+                <th className="w-[65px] px-2 text-center">STT</th>
+                <th className="w-[150px] px-2 text-center">Nội dung câu</th>
+                <th className="w-[160px] px-2">Chủ đề</th>
+                <th className="w-[140px] px-2">Speaker</th>
+                <th className="w-[170px] px-2 text-center">Phản hồi</th>
+                <th className="w-[100px] px-1.5 text-center">Nghe</th>
+                <th className="w-[100px] px-1.5 text-center">Trạng thái</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#E5E7EB] dark:divide-gray-800 text-[11px] font-medium">
+            <tbody className="divide-y divide-[#F0EEE6] dark:divide-gray-800 type-ui">
               {paginatedRecordings.length > 0 ? (
                 <>
-                  {paginatedRecordings.map((r) => {
+                  {paginatedRecordings.map((r, index) => {
+                    const stt = (currentPage - 1) * pageSize + index + 1;
                     const style = getCatStyle(r.topic);
                     const status = calculateRecordingStatus(r.reviewers);
                     const totalRev = (r.reviewers || []).length;
                     const rejectedRevCount = (r.reviewers || []).filter((rev) => rev?.status === "Rejected").length;
 
                     return (
-                      <tr key={r.id} className="hover:bg-[#F3F4F6] dark:hover:bg-[#25272E]/50 transition-colors">
-                        <td className="px-1.5 text-center font-bold text-[#2B2C31] dark:text-gray-100 align-middle py-0.5">
-                          {r.id}
-                        </td>
-
-                        <td className="px-1.5 text-center font-bold text-[#2B2C31] dark:text-gray-100 align-middle py-0.5">
-                          {r.textId}
+                      <tr key={r.id} className="hover:bg-[#F7F5EF]/70 dark:hover:bg-[#25272E]/50 transition-colors h-11">
+                        <td className="px-2 text-center font-bold text-[#16171C] dark:text-gray-100 align-middle">
+                          {stt}
                         </td>
 
                         {/* Nút xem nội dung câu */}
-                        <td className="px-1.5 text-center align-middle py-0.5">
+                        <td className="px-2 text-center align-middle">
                           <button
                             type="button"
                             onClick={() => handleOpenTextDetail(r)}
-                            className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#F9FAFB] dark:bg-[#25272E] hover:bg-[#E5E7EB] dark:hover:bg-gray-700 text-[#2B2C31] dark:text-gray-200 text-[11px] font-bold border border-[#E5E7EB] dark:border-gray-700 transition-colors cursor-pointer w-full"
+                            className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-xl bg-[#F7F5EF] dark:bg-[#25272E] hover:bg-[#E5E2D8] dark:hover:bg-gray-700 text-[#16171C] dark:text-gray-200 type-meta font-label border border-[#E5E2D8] dark:border-gray-700 transition-colors cursor-pointer w-full"
                           >
                             <Eye className="w-3.5 h-3.5 text-[#6E7078] dark:text-gray-400 shrink-0" />
                             <span>Xem nội dung câu</span>
                           </button>
                         </td>
 
-                        <td className="px-1.5 align-middle py-0.5">
+                        <td className="px-2 align-middle">
                           <span
-                            className="px-2 py-0.5 rounded-md text-[10.5px] font-bold border inline-block whitespace-nowrap"
+                            className="px-2.5 py-0.5 rounded-md type-caption font-label border inline-block whitespace-nowrap"
                             style={{
                               backgroundColor: style.bg,
                               color: style.text,
@@ -366,38 +363,38 @@ export default function AdminRecordings() {
                           </span>
                         </td>
 
-                        <td className="px-1.5 font-bold text-[#2B2C31] dark:text-gray-100 align-middle truncate py-0.5">
+                        <td className="px-2 font-bold text-[#16171C] dark:text-gray-100 align-middle truncate">
                           <span title={r.speaker}>{r.speaker}</span>
                         </td>
 
                         {/* Cột Phản hồi */}
-                        <td className="px-1.5 text-center align-middle py-0.5">
+                        <td className="px-2 text-center align-middle">
                           <button
                             type="button"
                             onClick={() => handleOpenReviewersModal(r)}
-                            className="inline-flex items-center justify-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium border bg-[#F7FAFC] dark:bg-[#25272E] border-[#E2E8F0] dark:border-gray-700 hover:bg-[#EDF2F7] dark:hover:bg-gray-700 transition-all cursor-pointer mx-auto"
+                            className="inline-flex items-center justify-center gap-1.5 px-3 py-0.5 rounded-full type-caption font-label border bg-[#F7F5EF] dark:bg-[#25272E] border-[#E5E2D8] dark:border-gray-700 hover:bg-[#E5E2D8] dark:hover:bg-gray-700 transition-all cursor-pointer mx-auto"
                           >
                             <span
                               style={{
                                 color: rejectedRevCount > 0 ? CHIP_DANGER_TEXT : undefined
                               }}
-                              className={rejectedRevCount > 0 ? "font-semibold" : "text-[#4A5568] dark:text-gray-300"}
+                              className={rejectedRevCount > 0 ? "font-bold" : "text-[#6E7078] dark:text-gray-300"}
                             >
                               {totalRev > 0
                                 ? (rejectedRevCount > 0 ? `${rejectedRevCount}/${totalRev} từ chối` : `${totalRev} reviewers`)
                                 : "Xem phản hồi"}
                             </span>
-                            <Eye className="w-3 h-3 text-[#A0AEC0] dark:text-gray-400 shrink-0" />
+                            <Eye className="w-3 h-3 text-[#9A9CA3] dark:text-gray-400 shrink-0" />
                           </button>
                         </td>
 
                         {/* Nút Nghe */}
-                        <td className="px-1 text-center align-middle py-0.5">
+                        <td className="px-1.5 text-center align-middle">
                           <button
                             type="button"
                             onClick={() => openAudioPlayer(r)}
                             style={{ backgroundColor: ADMIN_ACCENT }}
-                            className="inline-flex items-center justify-center gap-1.5 w-[76px] py-1 rounded-md text-white text-[11px] font-bold hover:opacity-90 active:scale-95 transition-all cursor-pointer shadow-xs mx-auto"
+                            className="inline-flex items-center justify-center gap-1.5 w-[76px] py-1 rounded-lg text-white type-caption font-label hover:opacity-90 active:scale-95 transition-all cursor-pointer shadow-xs mx-auto"
                           >
                             <Play className="w-3 h-3 fill-white shrink-0" />
                             <span className="tabular-nums">{formatDurationText(r.durationSec)}</span>
@@ -405,43 +402,43 @@ export default function AdminRecordings() {
                         </td>
 
                         {/* Trạng thái */}
-                        <td className="px-1 text-center align-middle py-0.5">
+                        <td className="px-1.5 text-center align-middle">
                           {status === "Approved" && (
                             <span
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold border"
+                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full type-caption font-label border"
                               style={{
                                 backgroundColor: CHIP_SUCCESS_BG,
                                 borderColor: CHIP_SUCCESS_BORDER,
                                 color: CHIP_SUCCESS_TEXT
                               }}
                             >
-                              <CheckCircle2 className="w-2.5 h-2.5 shrink-0" style={{ color: CHIP_SUCCESS_TEXT }} /> Đã duyệt
+                              <CheckCircle2 className="w-3 h-3 shrink-0" style={{ color: CHIP_SUCCESS_TEXT }} /> Đã duyệt
                             </span>
                           )}
 
                           {status === "Pending" && (
                             <span
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold border"
+                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full type-caption font-label border"
                               style={{
                                 backgroundColor: CHIP_WARNING_BG,
                                 borderColor: CHIP_WARNING_BORDER,
                                 color: CHIP_WARNING_TEXT
                               }}
                             >
-                              <Clock className="w-2.5 h-2.5 shrink-0" style={{ color: CHIP_WARNING_TEXT }} /> Chờ duyệt
+                              <Clock className="w-3 h-3 shrink-0" style={{ color: CHIP_WARNING_TEXT }} /> Chờ duyệt
                             </span>
                           )}
 
                           {status === "Rejected" && (
                             <span
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold border"
+                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full type-caption font-label border"
                               style={{
                                 backgroundColor: CHIP_DANGER_BG,
                                 borderColor: CHIP_DANGER_BORDER,
                                 color: CHIP_DANGER_TEXT
                               }}
                             >
-                              <XCircle className="w-2.5 h-2.5 shrink-0" style={{ color: CHIP_DANGER_TEXT }} /> Từ chối
+                              <XCircle className="w-3 h-3 shrink-0" style={{ color: CHIP_DANGER_TEXT }} /> Từ chối
                             </span>
                           )}
                         </td>
@@ -451,13 +448,13 @@ export default function AdminRecordings() {
 
                   {Array.from({ length: emptyRowsCount }).map((_, idx) => (
                     <tr key={`empty-${idx}`} className="border-b border-transparent">
-                      <td colSpan="8" className="py-0.5">&nbsp;</td>
+                      <td colSpan="7" className="py-0.5">&nbsp;</td>
                     </tr>
                   ))}
                 </>
               ) : (
                 <tr>
-                  <td colSpan="8" className="py-16 text-center text-[#9A9CA6] dark:text-gray-500 text-xs">
+                  <td colSpan="7" className="py-16 text-center text-[#9A9CA3] dark:text-gray-500 type-ui">
                     Chưa có bản ghi âm nào phù hợp.
                   </td>
                 </tr>
@@ -467,60 +464,60 @@ export default function AdminRecordings() {
         </div>
 
         {/* Footer Pagination */}
-        <div className="px-2 py-0.5 border-t border-[#E5E7EB] dark:border-gray-800 shrink-0">
+        <div className="px-4 py-1 border-t border-[#E5E2D8] dark:border-gray-800 shrink-0 bg-white dark:bg-[#1C1D22]">
           <Pagination
             currentPage={currentPage}
             totalPages={totalPages}
             onPageChange={(p) => setCurrentPage(p)}
             accent={ADMIN_ACCENT}
+            variant="soft"
           />
         </div>
       </div>
 
       {/* MODAL 1: NGHE BẢN GHI ÂM */}
       {playingRecording && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#1C1D22] rounded-3xl border border-[#E5E7EB] dark:border-gray-800 shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-150">
-            
+        <div className="fixed inset-0 z-50 bg-[#16171C]/55 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#1C1D22] rounded-[24px] border border-[#E5E2D8] dark:border-gray-800 shadow-[0_20px_50px_rgba(16,17,20,0.25)] max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-150">
             <div 
               style={{ backgroundColor: ADMIN_ACCENT }} 
-              className="h-1.5 w-full rounded-t-3xl shrink-0" 
+              className="h-1.5 w-full shrink-0" 
             />
 
             <div className="p-6 space-y-5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-full bg-[#E6F0FE] dark:bg-blue-900/40 flex items-center justify-center text-[#1E40AF] dark:text-blue-300">
+                  <div className="w-9 h-9 rounded-full bg-[#E6F0FE] dark:bg-blue-900/40 flex items-center justify-center text-[#1E40AF] dark:text-blue-300">
                     <Headphones className="w-4 h-4" />
                   </div>
-                  <h3 className="text-sm font-bold text-[#2B2C31] dark:text-gray-100">
+                  <h3 className="type-section text-[#16171C] dark:text-gray-100">
                     Nghe bản ghi âm
                   </h3>
                 </div>
                 <button
                   type="button"
                   onClick={() => setPlayingRecording(null)}
-                  className="p-1.5 rounded-full text-[#9A9CA6] hover:bg-[#F3F4F6] dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                  className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#F0EEE6] dark:hover:bg-gray-800 transition-colors cursor-pointer"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-4 h-4 text-[#6E7078]" />
                 </button>
               </div>
 
-              <div className="p-4 bg-[#F8F9FA] dark:bg-[#25272E] rounded-2xl space-y-1.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#9A9CA6] dark:text-gray-400 block">
+              <div className="p-4 bg-[#F7F5EF] dark:bg-[#25272E] rounded-2xl border border-[#E5E2D8] dark:border-gray-700 space-y-1">
+                <span className="type-label text-[#9A9CA3] dark:text-gray-400 block">
                   NỘI DUNG CÂU
                 </span>
-                <p className="font-medium text-[#2B2C31] dark:text-gray-100 leading-relaxed text-xs">
+                <p className="type-body text-[#16171C] dark:text-gray-100 leading-relaxed">
                   "{playingRecording.content}"
                 </p>
               </div>
 
               <div className="space-y-1 pt-1">
-                <div className="relative w-full h-1 bg-[#E5E7EB] dark:bg-gray-700 rounded-full flex items-center cursor-pointer">
-                  <div className="h-full bg-gray-300 dark:bg-gray-500 rounded-full w-0" />
-                  <div className="w-3 h-3 bg-white dark:bg-gray-200 border-2 border-gray-400 dark:border-gray-500 rounded-full shadow-xs absolute left-0 -translate-x-1/2 cursor-pointer" />
+                <div className="relative w-full h-1.5 bg-[#E5E2D8] dark:bg-gray-700 rounded-full flex items-center cursor-pointer">
+                  <div className="h-full rounded-full w-0" style={{ backgroundColor: ADMIN_ACCENT }} />
+                  <div className="w-3 h-3 bg-white dark:bg-gray-200 border-2 rounded-full shadow-xs absolute left-0 -translate-x-1/2 cursor-pointer" style={{ borderColor: ADMIN_ACCENT }} />
                 </div>
-                <div className="flex items-center justify-between text-[11px] font-semibold text-[#9A9CA6] dark:text-gray-400 pt-1">
+                <div className="flex items-center justify-between type-caption font-label text-[#9A9CA3] dark:text-gray-400 pt-1">
                   <span>0:00</span>
                   <span>-{formatDurationText(playingRecording.durationSec)}</span>
                 </div>
@@ -547,47 +544,47 @@ export default function AdminRecordings() {
 
       {/* MODAL 2: HIỆN CẶP CÂU NỘI DUNG */}
       {selectedTextContent && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#1C1D22] rounded-3xl border border-[#E5E7EB] dark:border-gray-800 shadow-2xl max-w-lg w-full overflow-hidden animate-in fade-in zoom-in duration-150">
+        <div className="fixed inset-0 z-50 bg-[#16171C]/55 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#1C1D22] rounded-[24px] border border-[#E5E2D8] dark:border-gray-800 shadow-[0_20px_50px_rgba(16,17,20,0.25)] max-w-lg w-full overflow-hidden animate-in fade-in zoom-in duration-150">
             <div 
               style={{ backgroundColor: ADMIN_ACCENT }} 
-              className="h-1.5 w-full rounded-t-3xl shrink-0" 
+              className="h-1.5 w-full shrink-0" 
             />
 
             <div className="p-6 space-y-4">
-              <div className="flex items-center justify-between border-b border-[#E5E7EB] dark:border-gray-800 pb-3">
+              <div className="flex items-center justify-between border-b border-[#E5E2D8] dark:border-gray-800 pb-3">
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-[#F3F4F6] dark:bg-[#25272E] flex items-center justify-center text-[#2B2C31] dark:text-gray-200">
+                  <div className="w-8 h-8 rounded-full bg-[#F7F5EF] dark:bg-[#25272E] flex items-center justify-center text-[#16171C] dark:text-gray-200">
                     <Eye className="w-4 h-4" />
                   </div>
-                  <h3 className="text-sm font-bold text-[#2B2C31] dark:text-gray-100">
-                    Chi tiết nội dung câu ({selectedTextContent.textId})
+                  <h3 className="type-section text-[#16171C] dark:text-gray-100">
+                    Chi tiết nội dung câu
                   </h3>
                 </div>
                 <button
                   type="button"
                   onClick={() => setSelectedTextContent(null)}
-                  className="p-1 rounded-full text-[#6E7078] hover:bg-[#F3F4F6] dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                  className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#F0EEE6] dark:hover:bg-gray-800 transition-colors cursor-pointer"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-4 h-4 text-[#6E7078]" />
                 </button>
               </div>
 
-              <div className="space-y-3 text-xs">
-                <div className="p-3.5 bg-[#F9FAFB] dark:bg-[#25272E] rounded-2xl border border-[#E5E7EB]/60 dark:border-gray-700/60 space-y-1">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#6E7078] dark:text-gray-400">
+              <div className="space-y-3">
+                <div className="p-4 bg-[#F7F5EF] dark:bg-[#25272E] rounded-2xl border border-[#E5E2D8] dark:border-gray-700 space-y-1">
+                  <span className="type-label text-[#6E7078] dark:text-gray-400">
                     Câu trộn Ngôn ngữ (Vietnamese - English):
                   </span>
-                  <p className="font-semibold text-[#2B2C31] dark:text-gray-100 leading-relaxed text-sm">
+                  <p className="type-body font-label text-[#16171C] dark:text-gray-100 leading-relaxed">
                     "{selectedTextContent.content}"
                   </p>
                 </div>
 
-                <div className="p-3.5 bg-[#E6F0FE] dark:bg-[#1E293B] rounded-2xl border border-[#C9DEFB] dark:border-blue-900 space-y-1">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#1E40AF] dark:text-blue-300">
+                <div className="p-4 bg-[#E6F0FE] dark:bg-[#1E293B] rounded-2xl border border-[#C9DEFB] dark:border-blue-900 space-y-1">
+                  <span className="type-label text-[#1E40AF] dark:text-blue-300">
                     Câu thuần Tiếng Việt (Nghĩa hoàn toàn tương đồng):
                   </span>
-                  <p className="font-semibold text-[#1E40AF] dark:text-blue-200 leading-relaxed text-sm">
+                  <p className="type-body font-label text-[#1E40AF] dark:text-blue-200 leading-relaxed">
                     "{selectedTextContent.contentVietnamese}"
                   </p>
                 </div>
@@ -598,7 +595,7 @@ export default function AdminRecordings() {
                   type="button"
                   onClick={() => setSelectedTextContent(null)}
                   style={{ backgroundColor: ADMIN_ACCENT }}
-                  className="w-full py-2.5 text-white rounded-2xl text-xs font-bold hover:opacity-90 transition-all cursor-pointer shadow-sm text-center"
+                  className="w-full py-3 text-white rounded-xl type-button hover:opacity-90 transition-all cursor-pointer shadow-sm text-center"
                 >
                   Đóng
                 </button>
@@ -631,11 +628,11 @@ export default function AdminRecordings() {
             : CHIP_WARNING_BG;
 
         return (
-          <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-[#1C1D22] rounded-3xl border border-[#E5E7EB] dark:border-gray-800 shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-150 text-left">
+          <div className="fixed inset-0 z-50 bg-[#16171C]/55 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-[#1C1D22] rounded-[24px] border border-[#E5E2D8] dark:border-gray-800 shadow-[0_20px_50px_rgba(16,17,20,0.25)] max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-150 text-left">
               <div 
                 style={{ backgroundColor: topBorderBg }} 
-                className="h-1.5 w-full rounded-t-3xl shrink-0" 
+                className="h-1.5 w-full shrink-0" 
               />
 
               <div className="p-6 space-y-4">
@@ -646,15 +643,15 @@ export default function AdminRecordings() {
                   <div className="flex items-start gap-2.5">
                     <div 
                       style={{ backgroundColor: iconBg, color: topBorderBg }}
-                      className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5 transition-colors"
+                      className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 mt-0.5 transition-colors"
                     >
                       <AlertCircle className="w-4 h-4" />
                     </div>
                     <div>
-                      <h3 className="text-base font-bold text-[#2B2C31] dark:text-gray-100">
+                      <h3 className="type-section text-[#16171C] dark:text-gray-100">
                         Kết quả kiểm duyệt
                       </h3>
-                      <p className="text-xs font-semibold text-[#6E7078] dark:text-gray-400 mt-0.5">
+                      <p className="type-ui text-[#6E7078] dark:text-gray-400 mt-0.5">
                         {approvedCount}/{total} duyệt · {rejectedCount}/{total} từ chối →{" "}
                         <span
                           style={{
@@ -670,17 +667,17 @@ export default function AdminRecordings() {
                   <button
                     type="button"
                     onClick={() => setSelectedReviewersList(null)}
-                    className="p-1 rounded-full text-[#9A9CA6] hover:bg-[#F3F4F6] dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                    className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#F0EEE6] dark:hover:bg-gray-800 transition-colors cursor-pointer"
                   >
-                    <X className="w-4 h-4" />
+                    <X className="w-4 h-4 text-[#6E7078]" />
                   </button>
                 </div>
 
-                <div className="p-3.5 bg-[#F9FAFB] dark:bg-[#25272E] rounded-2xl space-y-1 border border-[#E5E7EB]/60 dark:border-gray-700/60">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#9A9CA6] dark:text-gray-400 block">
+                <div className="p-3.5 bg-[#F7F5EF] dark:bg-[#25272E] rounded-2xl space-y-1 border border-[#E5E2D8] dark:border-gray-700">
+                  <span className="type-label text-[#9A9CA3] dark:text-gray-400 block">
                     CÂU VĂN
                   </span>
-                  <p className="font-semibold text-[#2B2C31] dark:text-gray-100 text-xs leading-relaxed">
+                  <p className="type-body font-label text-[#16171C] dark:text-gray-100 leading-relaxed">
                     "{selectedReviewersList.content}"
                   </p>
                 </div>
@@ -707,25 +704,25 @@ export default function AdminRecordings() {
                           <div className="flex items-center gap-2">
                             <div
                               style={{ backgroundColor: itemText }}
-                              className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+                              className="w-6 h-6 rounded-full flex items-center justify-center type-caption font-bold text-white shrink-0"
                             >
                               {getInitials(rev?.name)}
                             </div>
 
-                            <span className="font-bold text-xs text-[#2B2C31] flex-1 truncate">
+                            <span className="type-ui font-bold text-[#16171C] flex-1 truncate">
                               {rev?.name || "Reviewer"}
                             </span>
 
                             <span
                               style={{ color: itemText }}
-                              className="text-xs font-bold"
+                              className="type-ui font-bold"
                             >
                               {isApp ? "Đã duyệt" : isRej ? "Từ chối" : "Chưa đánh giá"}
                             </span>
                           </div>
 
                           {isRej && rev?.reason && (
-                            <div className="pl-8 text-[11px] font-semibold text-[#2B2C31]">
+                            <div className="pl-8 type-meta font-label text-[#16171C]">
                               {rev.reason}
                             </div>
                           )}
@@ -733,7 +730,7 @@ export default function AdminRecordings() {
                       );
                     })
                   ) : (
-                    <div className="text-center py-6 text-xs text-gray-500">
+                    <div className="text-center py-6 type-ui text-[#6E7078]">
                       Bản ghi âm này chưa có lượt kiểm duyệt nào.
                     </div>
                   )}
@@ -744,7 +741,7 @@ export default function AdminRecordings() {
                     type="button"
                     onClick={() => setSelectedReviewersList(null)}
                     style={{ backgroundColor: ADMIN_ACCENT }}
-                    className="w-full py-2.5 text-white rounded-2xl text-xs font-bold hover:opacity-90 transition-all cursor-pointer shadow-sm text-center"
+                    className="w-full py-3 text-white rounded-xl type-button hover:opacity-90 transition-all cursor-pointer shadow-sm text-center"
                   >
                     Đóng
                   </button>

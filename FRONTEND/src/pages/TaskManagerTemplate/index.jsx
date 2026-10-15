@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import Sidebar from '../../components/Sidebar/Sidebar';
-import TaskManagerHeader from '../../components/TaskManagerHeader/TaskManagerHeader';
+import Header from '../../components/Header/Header';
 import Logo from '../../components/Logo/Logo';
 import usePageTitle from '../../hooks/usePageTitle';
 
@@ -39,7 +39,7 @@ export default function TaskManagerTemplate() {
         {/* Main Layout */}
         <main className="flex-1 lg:ml-64 h-full flex flex-col overflow-hidden bg-transparent pt-16 lg:pt-0 transition-colors">
           <div className="hidden lg:block">
-            <TaskManagerHeader />
+            <Header role="taskManager" />
           </div>
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
             <Outlet />

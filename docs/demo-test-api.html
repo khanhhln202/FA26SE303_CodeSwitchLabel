@@ -522,8 +522,8 @@ released_datasets     | 0`, n: 'Số trên API lấy thẳng từ view này, nê
       ['4.1', 1, 'manager', 'GET', '/api/tasks/assignable-users?taskType=Recording', null, 200, 'speaker1 (6) và speaker2 (7), đang nhận 0 task. Chỉ trả tên và khối lượng, không lộ email hay số điện thoại.'],
       ['4.2', 1, 'manager', 'POST', '/api/tasks', { campaignId: 2, taskType: 'Recording', description: 'Thu âm câu chủ đề IT', targetQty: 1, deadline: DEADLINE }, 201, 'Task #1, <code>Draft</code>. Hạn gửi theo giờ Việt Nam, backend lưu UTC. Chỉ tiêu 1 nghĩa là một cặp câu, cả hai bản phải đạt.'],
       ['4.3', 1, 'manager', 'POST', '/api/tasks/1/items', { autoFill: { count: 2, domain: 'ItTechnology' } }, 200, '<code>added = 2</code>: <code>s_111000003</code> và <code>s_211000001</code>. Hệ thống ưu tiên câu có ít giọng đã duyệt nhất.'],
-      ['4.4', 0, 'manager', 'POST', '/api/tasks/1/assign', { userId: 3 }, 422, '<code>assignee_role_mismatch</code>: task thu âm không giao được cho Reviewer.'],
-      ['4.5', 1, 'manager', 'POST', '/api/tasks/1/assign', { userId: 6 }, 200, 'Giao cho speaker1, task chuyển sang <code>Open</code>.', V.task],
+      ['4.4', 0, 'manager', 'POST', '/api/tasks/1/assign', { userIds: [3] }, 422, '<code>assignee_role_mismatch</code>: task thu âm không giao được cho Reviewer.'],
+      ['4.5', 1, 'manager', 'POST', '/api/tasks/1/assign', { userIds: [6] }, 200, 'Giao cho speaker1, task chuyển sang <code>Open</code>. Giao được cho nhiều người: body <code>{ "userIds": [6, 7] }</code>.', V.task],
       ['4.6', 0, 'admin', 'PUT', '/api/users/6/role', { role: 'Reviewer' }, 409, '<code>user_has_active_tasks</code>: speaker1 đang nhận task #1 nên chưa đổi vai được.']
     ]},
     { t: 'Màn 5 · Thu âm', g: 'Speaker · Recordings', time: '4 phút', steps: [

@@ -156,7 +156,8 @@ public class RecordingService(
         var speakerId = ownerOnlyUserId ?? request.SpeakerId;
 
         var (items, total) = await recordings.SearchAsync(
-            speakerId, request.ScriptId, request.Status, request.Page, request.PageSize, ct);
+            speakerId, request.ScriptId, request.Status, request.Page, request.PageSize,
+            request.ToSort<RecordingSortField>(), ct);
 
         return new PagedResult<RecordingDto>(
             [.. items.Select(r => r.ToDto())], request.Page, request.PageSize, total);

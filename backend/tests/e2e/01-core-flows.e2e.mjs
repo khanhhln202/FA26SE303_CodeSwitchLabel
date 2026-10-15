@@ -124,8 +124,9 @@ record('2.2', 'Mã sinh đúng quy tắc: 2 từ tiếng Anh, chủ đề IT, qu
   { status: 200, check: (b) => /^s_211\d{6}$/.test(b.scriptId ?? '') }, (b) => b);
 
 r = record('2.3', 'Chi tiết câu vừa nhập', await call(T.admin, 'GET', `/api/scripts/${ID.imported}`),
-  // Admin nhap file la cau vao thang Validated, kem mot luot duyet tu dong cua chinh Admin.
-  { status: 200, check: (b) => b.status === 'Validated' && b.enWordCount === 2 && b.alignment.length === 2 },
+  // TEAM_010: câu nhập từ file vào thẳng hàng đợi chờ duyệt (PendingValidation), không tự
+  // sang Validated như trước — người nhập không tự duyệt được câu của chính mình.
+  { status: 200, check: (b) => b.status === 'PendingValidation' && b.enWordCount === 2 && b.alignment.length === 2 },
   (b) => ({ status: b.status, wordCount: b.wordCount, enWordCount: b.enWordCount, csPlain: b.csPlain, alignment: b.alignment.map((a) => `${a.source}→${a.target}`) }));
 
 record('2.4', 'Nhập lại đúng file đó', await call(T.admin, 'POST', '/api/scripts/import', jsonForm('input_text.json', sample)),
@@ -172,7 +173,8 @@ record('3.1c', 'Chủ đề của reviewer do seed đặt sẵn',
 
 record('3.1', 'reviewer đúng chủ đề duyệt câu sang Validated',
   await call(T.reviewer, 'POST', `/api/scripts/${ID.imported}/review`, { action: 'Accepted', comment: 'Câu tự nhiên' }),
-  { status: 200, check: (b) => b.status === 'Validated' && b.reviews.length === 2 },
+  // Một lượt duyệt: trước đợt hàng đợi, lúc nhập file đã có sẵn một lượt tự động của Admin.
+  { status: 200, check: (b) => b.status === 'Validated' && b.reviews.length === 1 },
   (b) => ({ status: b.status, reviews: b.reviews.map((v) => v.action) }));
 
 // ------------------------------------------------------------ thu âm cặp câu
@@ -268,10 +270,13 @@ record('6.0b', 'Chỉ tiêu chiến dịch dưới 2000 bị chặn',
     { campaignName: 'Chiến dịch quá nhỏ', targetQty: 100, startDate: isoDate(0), endDate: isoDate(30) }),
   { status: 400 });
 
-record('6.0c', 'manager không tạo được chiến dịch',
+record('6.0c', 'task manager tạo được chiến dịch và tự giao cho mình',
   await call(T.manager, 'POST', '/api/campaigns',
-    { campaignName: 'Chiến dịch của manager', targetQty: 2000, startDate: isoDate(0), endDate: isoDate(30) }),
-  { status: 403 });
+    { campaignName: 'Chiến dịch của manager', targetQty: 2000, domain: 'ItTechnology', startDate: isoDate(0), endDate: isoDate(30) }),
+  // TEAM_003: quyền tạo/sửa đợt nới cho TaskManager, tạo xong tự giao đợt cho chính mình
+  // nên manager tạo task trong đợt đó được (6.0d kiểm đúng nhánh "chưa giao" là đợt của Admin).
+  { status: 201, check: (b) => b.assignedTo === ID.manager && b.createdBy === ID.manager },
+  (b) => ({ campaignId: b.campaignId, assignedTo: b.assignedTo, status: b.status }));
 
 record('6.0d', 'Chiến dịch chưa giao thì manager chưa tạo được task',
   await call(T.manager, 'POST', '/api/tasks',
@@ -293,8 +298,8 @@ ID.task = r.body?.summary?.taskId;
 record('6.2', 'Tự lấp 2 cặp câu', await call(T.manager, 'POST', `/api/tasks/${ID.task}/items`, { autoFill: { count: 2 } }),
   { status: 200, check: (b) => b.added >= 1 }, (b) => ({ added: b.added, items: b.task.items.map((i) => i.id) }));
 
-record('6.3', 'Giao cho speaker2', await call(T.manager, 'POST', `/api/tasks/${ID.task}/assign`, { userId: ID.speaker2 }),
-  { status: 200, check: (b) => b.summary.status === 'Open' }, (b) => ({ status: b.summary.status, assignee: b.summary.assigneeName }));
+record('6.3', 'Giao cho speaker2', await call(T.manager, 'POST', `/api/tasks/${ID.task}/assign`, { userIds: [ID.speaker2] }),
+  { status: 200, check: (b) => b.summary.status === 'Open' }, (b) => ({ status: b.summary.status, assignees: b.summary.assignees }));
 
 // Truy vấn này dùng mảng.Contains(...) trong LINQ — đúng chỗ C# 14 có thể đổi cách chọn hàm.
 record('6.3b', 'Tổng hợp theo người nhận', await call(T.manager, 'GET', '/api/tasks/by-assignee'),
@@ -392,8 +397,8 @@ record('10.4', 'Đưa ba bản ghi vào task duyệt',
   await call(T.manager, 'POST', `/api/tasks/${rvTask}/items`, { ids: [rvRec, rvRec2, rvRec3] }),
   { status: 200, check: (b) => b.added === 3 }, (b) => ({ added: b.added, items: b.task.items.map((i) => i.id) }));
 
-record('10.5', 'Giao task duyệt cho reviewer', await call(T.manager, 'POST', `/api/tasks/${rvTask}/assign`, { userId: ID.reviewer }),
-  { status: 200, check: (b) => b.summary.status === 'Open' }, (b) => ({ status: b.summary.status, assignee: b.summary.assigneeName }));
+record('10.5', 'Giao task duyệt cho reviewer', await call(T.manager, 'POST', `/api/tasks/${rvTask}/assign`, { userIds: [ID.reviewer] }),
+  { status: 200, check: (b) => b.summary.status === 'Open' }, (b) => ({ status: b.summary.status, assignees: b.summary.assignees }));
 
 record('10.5b', 'Task duyệt hiện trong tiến độ của reviewer', await call(T.reviewer, 'GET', '/api/reviewer/progress'),
   { status: 200, check: (b) => b.activeTasks.some((t) => t.taskId === rvTask) },

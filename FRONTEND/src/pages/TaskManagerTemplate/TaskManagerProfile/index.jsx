@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Save, CheckCircle2, X, ArrowLeft, Loader2 } from 'lucide-react';
+import { Save, ArrowLeft, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { TASK_MANAGER_ACCENT as ACCENT } from '../../../constants/theme';
 import { getMeApi } from '../../../services/authApi';
 import { httpClient } from '../../../utils/setting';
@@ -29,7 +30,6 @@ export default function TaskManagerProfile() {
   const [saving, setSaving] = useState(false);
   
   const [formData, setFormData] = useState(DEFAULT_TASK_MANAGER);
-  const [toast, setToast] = useState({ show: false, message: "" });
 
   // Tải thông tin tài khoản đăng nhập từ GET /api/auth/me
   const loadUserProfile = async () => {
@@ -57,15 +57,6 @@ export default function TaskManagerProfile() {
     loadUserProfile();
   }, []);
 
-  useEffect(() => {
-    if (toast.show) {
-      const timer = setTimeout(() => {
-        setToast((prev) => ({ ...prev, show: false }));
-      }, 3500);
-      return () => clearTimeout(timer);
-    }
-  }, [toast.show]);
-
   const handleChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
@@ -83,11 +74,11 @@ export default function TaskManagerProfile() {
       });
 
       window.dispatchEvent(new Event("userProfileUpdated"));
-      setToast({ show: true, message: "Cập nhật hồ sơ cá nhân thành công!" });
+      toast.success("Cập nhật hồ sơ cá nhân thành công!");
     } catch (error) {
       console.error("Lỗi khi lưu thông tin cá nhân:", error);
       const msg = error?.response?.data?.title || "Cập nhật hồ sơ cá nhân thất bại!";
-      setToast({ show: true, message: msg });
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
@@ -96,59 +87,43 @@ export default function TaskManagerProfile() {
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
+        <Loader2 className="w-8 h-8 animate-spin" style={{ color: ACCENT }} />
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-5 text-left font-sans relative transition-colors">
-      {/* Floating Toast Notification */}
-      <div 
-        className={`fixed top-6 right-6 z-[9999] flex items-center gap-3 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 px-4 py-3 rounded-2xl shadow-2xl border border-emerald-500/40 transform transition-all duration-300 ease-out ${
-          toast.show ? "translate-y-0 opacity-100 scale-100" : "-translate-y-4 opacity-0 scale-95 pointer-events-none"
-        }`}
-      >
-        <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
-        <span className="text-xs font-bold">{toast.message}</span>
-        <button 
-          type="button"
-          onClick={() => setToast((prev) => ({ ...prev, show: false }))} 
-          className="p-1 hover:bg-white/10 dark:hover:bg-black/10 rounded-lg transition-colors cursor-pointer ml-2"
-        >
-          <X className="w-4 h-4 text-gray-400 dark:text-gray-500" />
-        </button>
-      </div>
-
+    <div className="max-w-4xl mx-auto space-y-4 text-left font-sans relative transition-colors p-1">
       {/* Header & Nút Quay lại */}
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-[22px] font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">Thông tin cá nhân</h1>
-          <p className="text-[13px] font-semibold bg-clip-text text-transparent bg-gradient-to-r from-[#15803D] via-emerald-600 to-teal-700 dark:from-[#1DB954] dark:via-emerald-400 dark:to-green-300 mt-1">Cập nhật thông tin chi tiết tài khoản của bạn trên hệ thống</p>
+          <p className="type-ui text-[#6E7078] dark:text-gray-400">
+            Cập nhật thông tin cá nhân của bạn để hỗ trợ thu thập dữ liệu chính xác hơn.
+          </p>
         </div>
 
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1C1D22] text-gray-900 dark:text-gray-200 text-xs font-bold hover:bg-gray-50 dark:hover:bg-[#25272E] transition-colors cursor-pointer shrink-0 shadow-xs"
+          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#1C1D22] text-[#16171C] dark:text-gray-200 type-button hover:bg-[#F7F5EF] dark:hover:bg-[#25272E] transition-colors cursor-pointer shrink-0 shadow-xs"
         >
-          <ArrowLeft className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+          <ArrowLeft className="w-4 h-4 text-[#6E7078] dark:text-gray-400" />
           <span>Quay lại</span>
         </button>
       </div>
 
-      <div className="bg-white dark:bg-[#1C1D22] p-6 sm:p-8 rounded-[24px] border border-gray-200 dark:border-gray-800 shadow-[0_1px_3px_rgba(16,17,20,0.04)] space-y-6 transition-colors">
-        <h3 className="text-[15px] font-bold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-800 pb-3">Chi tiết hồ sơ</h3>
+      <div className="bg-white dark:bg-[#1C1D22] p-6 sm:p-8 rounded-[24px] border border-[#E5E2D8] dark:border-gray-800 shadow-[0_1px_3px_rgba(16,17,20,0.04)] space-y-6 transition-colors">
+        <h3 className="type-section text-[#16171C] dark:text-white border-b border-[#E5E2D8] dark:border-gray-800 pb-3">Chi tiết hồ sơ</h3>
 
         <form onSubmit={handleSave} className="space-y-4">
           <div>
-            <label className="block text-[12.5px] font-bold text-gray-900 dark:text-gray-200 mb-1.5">Họ và tên *</label>
+            <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">Họ và tên *</label>
             <input
               type="text"
               value={formData.name || ''}
               onChange={(e) => handleChange('name', e.target.value)}
               required
-              className="w-full px-3.5 py-2.5 rounded-xl border-[1.5px] border-gray-200 dark:border-gray-700 bg-white dark:bg-[#25272E] text-gray-900 dark:text-white text-[13px] font-medium transition-all outline-none"
+              className="w-full h-11 px-3.5 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white type-body font-medium transition-all outline-none"
               onFocus={(e) => {
                 e.target.style.borderColor = ACCENT;
                 e.target.style.boxShadow = `0 0 0 4px ${ACCENT}1A`;
@@ -162,11 +137,11 @@ export default function TaskManagerProfile() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-[12.5px] font-bold text-gray-900 dark:text-gray-200 mb-1.5">Giới tính *</label>
+              <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">Giới tính *</label>
               <select 
                 value={formData.gender || 'Nam'} 
                 onChange={(e) => handleChange('gender', e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border-[1.5px] border-gray-200 dark:border-gray-700 bg-white dark:bg-[#25272E] text-gray-900 dark:text-white text-[13px] font-medium transition-all outline-none cursor-pointer"
+                className="w-full h-11 px-3.5 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white type-body font-medium transition-all outline-none cursor-pointer"
                 onFocus={(e) => {
                   e.target.style.borderColor = ACCENT;
                   e.target.style.boxShadow = `0 0 0 4px ${ACCENT}1A`;
@@ -183,12 +158,12 @@ export default function TaskManagerProfile() {
             </div>
 
             <div>
-              <label className="block text-[12.5px] font-bold text-gray-900 dark:text-gray-200 mb-1.5">Ngày sinh *</label>
+              <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">Ngày sinh *</label>
               <input
                 type="date"
                 value={formData.dob || '1997-05-15'}
                 onChange={(e) => handleChange('dob', e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border-[1.5px] border-gray-200 dark:border-gray-700 bg-white dark:bg-[#25272E] text-gray-900 dark:text-white text-[13px] font-medium transition-all outline-none"
+                className="w-full h-11 px-3.5 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white type-body font-medium transition-all outline-none"
                 onFocus={(e) => {
                   e.target.style.borderColor = ACCENT;
                   e.target.style.boxShadow = `0 0 0 4px ${ACCENT}1A`;
@@ -203,21 +178,21 @@ export default function TaskManagerProfile() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-[12.5px] font-bold text-gray-900 dark:text-gray-200 mb-1.5">Email</label>
+              <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">Email</label>
               <input
                 type="email"
                 value={formData.email || ''}
                 disabled
-                className="w-full px-3.5 py-2.5 rounded-xl border-[1.5px] border-gray-200 dark:border-gray-800 bg-gray-100 dark:bg-[#121316] text-gray-500 dark:text-gray-500 text-[13px] font-medium cursor-not-allowed outline-none"
+                className="w-full h-11 px-3.5 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-800 bg-[#F7F5EF] dark:bg-[#121316] text-[#6E7078] dark:text-gray-500 type-body font-medium cursor-not-allowed outline-none"
               />
             </div>
 
             <div>
-              <label className="block text-[12.5px] font-bold text-gray-900 dark:text-gray-200 mb-1.5">Tỉnh / Thành phố *</label>
+              <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">Tỉnh / Thành phố *</label>
               <select
                 value={formData.city || 'TP. Hồ Chí Minh'}
                 onChange={(e) => handleChange('city', e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border-[1.5px] border-gray-200 dark:border-gray-700 bg-white dark:bg-[#25272E] text-gray-900 dark:text-white text-[13px] font-medium transition-all outline-none cursor-pointer font-sans"
+                className="w-full h-11 px-3.5 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white type-body font-medium transition-all outline-none cursor-pointer font-sans"
                 onFocus={(e) => {
                   e.target.style.borderColor = ACCENT;
                   e.target.style.boxShadow = `0 0 0 4px ${ACCENT}1A`;
@@ -240,7 +215,7 @@ export default function TaskManagerProfile() {
             <button
               type="submit"
               disabled={saving}
-              className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-white font-bold text-[13px] hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer disabled:opacity-50"
+              className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-white type-button hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer disabled:opacity-50"
               style={{ background: ACCENT, boxShadow: `0 10px 24px ${ACCENT}40` }}
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}

@@ -33,6 +33,10 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
     public DbSet<ScriptErrorReason> ScriptErrorReasons => Set<ScriptErrorReason>();
     public DbSet<ScriptReview> ScriptReviews => Set<ScriptReview>();
 
+    // TEAM_010: hàng đợi chung cho duyệt văn bản và ghi âm. Chỉ đọc — hàng do
+    // trigger fn_script_queue_sync sinh và hàm fn_queue_claim_next xử lý giữ chỗ.
+    public DbSet<ScriptQueue> ScriptQueue => Set<ScriptQueue>();
+
     public DbSet<Campaign> Campaigns => Set<Campaign>();
     public DbSet<CampaignRegistration> CampaignRegistrations => Set<CampaignRegistration>();
     public DbSet<WorkTask> WorkTasks => Set<WorkTask>();
@@ -118,6 +122,9 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         modelBuilder.HasPostgresEnum<RejectionCategory>();
         modelBuilder.HasPostgresEnum<DatasetStatus>();
         modelBuilder.HasPostgresEnum<DatasetFileFormat>();
+        // TEAM_010
+        modelBuilder.HasPostgresEnum<QueueStage>();
+        modelBuilder.HasPostgresEnum<QueueState>();
     }
 
     private static void MapUsers(ModelBuilder modelBuilder)
@@ -217,6 +224,29 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId);
             e.HasOne(x => x.ErrorReason).WithMany().HasForeignKey(x => x.ErrorReasonId);
         });
+
+        // TEAM_010: hàng đợi chung. Phải chỉ tường minh — quy ước của EF ghép
+        // `ClaimedBy` + `ClaimedByUser` thành khoá ngoại chỉ khi tên cột là
+        // `<Navigation>Id` hoặc `<Navigation>Key`. Tên `ClaimedBy` không khớp, nên EF
+        // tự sinh cột `claimed_by_user_user_id` — cột không tồn tại trong lược đồ.
+        modelBuilder.Entity<ScriptQueue>(e =>
+        {
+            e.ToTable("script_queue");
+            e.HasKey(x => x.QueueId);
+
+            e.HasOne(x => x.Script).WithMany(s => s.QueueRows).HasForeignKey(x => x.ScriptId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.ClaimedByUser).WithMany().HasForeignKey(x => x.ClaimedBy)
+                .OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.Task).WithMany().HasForeignKey(x => x.TaskId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Chỉ hàng ĐANG MỞ mới tính là "trong hàng đợi" — index một phần như lược đồ.
+            e.HasIndex(x => new { x.ScriptId, x.Stage })
+                .HasDatabaseName("uq_script_queue_open")
+                .IsUnique()
+                .HasFilter("state IN ('queued','claimed')");
+        });
     }
 
     private static void MapTasks(ModelBuilder modelBuilder)
@@ -261,9 +291,10 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.HasOne(x => x.Task).WithMany(t => t.Assignments).HasForeignKey(x => x.TaskId);
             e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId);
 
-            // Một task chỉ có một lượt giao đang hoạt động — index duy nhất có điều kiện của lược đồ.
-            e.HasIndex(x => x.TaskId)
-                .HasDatabaseName("uq_task_assignment_active")
+            // TEAM_010: một task giao cho NHIỀU người được. Ràng buộc còn lại là cùng
+            // một người không được nhận trùng — index một phần trên (task_id, user_id).
+            e.HasIndex(x => new { x.TaskId, x.UserId })
+                .HasDatabaseName("uq_task_assignment_active_user")
                 .IsUnique()
                 .HasFilter("assignment_status = 'active'");
         });
