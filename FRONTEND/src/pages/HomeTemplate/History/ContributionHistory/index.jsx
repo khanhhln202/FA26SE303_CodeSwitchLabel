@@ -8,8 +8,8 @@ import { stripTags } from "../../../../utils/codeSwitch";
 import Loading from "../../../../components/Loading/Loading";
 import ErrorState from "../../../../components/ErrorState/ErrorState";
 import EmptyState from "../../../../components/EmptyState/EmptyState";
-import { getAllSpeakerContributionHistoryApi } from "../../../../services/speakerApi";
-import { GET_SPEAKER_CONTRIBUTION_HISTORY_API } from "../../../../utils/queryKey";
+import { getAllSpeakerContributionHistoryApi, getSpeakerStatsApi } from "../../../../services/speakerApi";
+import { GET_SPEAKER_CONTRIBUTION_HISTORY_API, GET_SPEAKER_STATS_API } from "../../../../utils/queryKey";
 
 // "2026-09-05T07:20:00Z" -> "05/09/2026 - 14:20" (giờ máy người dùng)
 function formatDateTime(iso) {
@@ -140,14 +140,14 @@ export default function ContributionHistory() {
 
   const withStatus = useMemo(() => (contributions ?? []).map(toRow), [contributions]);
 
-  const stats = useMemo(() => {
-    const total = withStatus.length;
-    const approved = withStatus.filter((i) => i.status === "Approved").length;
-    const rejected = withStatus.filter((i) => i.status === "Rejected").length;
-    const pending = withStatus.filter((i) => i.status === "Pending").length;
-    const pct = (n) => (total ? Math.round((n / total) * 100) : 0);
-    return { total, approved, rejected, pending, approvedPct: pct(approved), rejectedPct: pct(rejected), pendingPct: pct(pending) };
-  }, [withStatus]);
+  // Call API lấy thống kê cho các thẻ trên cùng (dùng chung query với Lịch sử ghi âm)
+  const { data: speakerStats } = useQuery({
+    queryKey: [GET_SPEAKER_STATS_API],
+    queryFn: getSpeakerStatsApi,
+  });
+  // API trả { recording: {...}, contribution: { total, validated, rejected, pending } } - trang này dùng phần contribution
+  const stats = speakerStats?.contribution;
+  const pct = (n) => (stats?.total ? Math.round((n / stats.total) * 100) : 0);
 
   const categories = [...new Set(withStatus.map((item) => item.category))];
   const filteredData = useMemo(() => {
@@ -175,10 +175,10 @@ export default function ContributionHistory() {
 
       {/* THẺ THỐNG KÊ - ô cứng (không bấm để lọc) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
-        <StatCard icon={BarChart3} label="Tổng cộng" value={stats.total} accent="#16171C" bg="#F0EEE6" />
-        <StatCard icon={CheckCircle2} label="Đã duyệt" value={stats.approved} pct={stats.approvedPct} accent={SUCCESS} bg="#EAF7EF" />
-        <StatCard icon={XCircle} label="Từ chối" value={stats.rejected} pct={stats.rejectedPct} accent={DANGER} bg="#FDEAEA" />
-        <StatCard icon={Clock} label="Chờ duyệt" value={stats.pending} pct={stats.pendingPct} accent={WARNING} bg="#FFF1DE" />
+        <StatCard icon={BarChart3} label="Tổng cộng" value={stats?.total ?? 0} accent="#16171C" bg="#F0EEE6" />
+        <StatCard icon={CheckCircle2} label="Đã duyệt" value={stats?.validated ?? 0} pct={pct(stats?.validated ?? 0)} accent={SUCCESS} bg="#EAF7EF" />
+        <StatCard icon={XCircle} label="Từ chối" value={stats?.rejected ?? 0} pct={pct(stats?.rejected ?? 0)} accent={DANGER} bg="#FDEAEA" />
+        <StatCard icon={Clock} label="Chờ duyệt" value={stats?.pending ?? 0} pct={pct(stats?.pending ?? 0)} accent={WARNING} bg="#FFF1DE" />
       </div>
 
       {/* BẢNG */}

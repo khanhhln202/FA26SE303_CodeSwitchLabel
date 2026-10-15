@@ -13,7 +13,7 @@ import {
 } from "../../../constants/theme";
 import { formatTime } from "../../../utils/audio";
 import { uploadRecordingApi } from "../../../services/recordingApi";
-import { GET_NEXT_SCRIPT_API, GET_SPEAKER_PROGRESS_API, GET_SPEAKER_RECORDING_HISTORY_API, GET_SPEAKER_STATS_API, UPLOAD_RECORDING_API } from "../../../utils/queryKey";
+import { GET_NEXT_SCRIPT_API, GET_SPEAKER_PROGRESS_API, GET_SPEAKER_RECORDING_HISTORY_API, GET_SPEAKER_STATS_API, GET_SPEAKER_CURRENT_ROUND_API, GET_SPEAKER_REJECTED_RECORDINGS_API, UPLOAD_RECORDING_API } from "../../../utils/queryKey";
 
 // id bản ghi trên trang <-> biến thể câu của backend
 const VARIANT_OF = { cs: "CodeSwitching", vi: "PureVietnamese" };
@@ -151,6 +151,8 @@ export default function SubmitTask() {
       queryClient.invalidateQueries({ queryKey: [GET_NEXT_SCRIPT_API] });
       queryClient.invalidateQueries({ queryKey: [GET_SPEAKER_RECORDING_HISTORY_API] });
       queryClient.invalidateQueries({ queryKey: [GET_SPEAKER_STATS_API] });
+      queryClient.invalidateQueries({ queryKey: [GET_SPEAKER_CURRENT_ROUND_API] });
+      queryClient.invalidateQueries({ queryKey: [GET_SPEAKER_REJECTED_RECORDINGS_API] });
 
       const failed = results.filter((r) => !r.qcPassed);
       if (failed.length) {

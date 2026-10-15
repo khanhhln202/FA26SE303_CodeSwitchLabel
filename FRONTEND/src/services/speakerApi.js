@@ -29,7 +29,8 @@ export const updateSpeakerProfileApi = async (values) => {
 };
 
 // Tiến độ của chính mình: GET /api/speaker/progress
-// Trả về { totalSubmitted, totalApproved, activeTasks: [{ taskId, campaignName, taskType, deadline, progress: { targetQty, done, percent } }] }
+// Trả về { totalSubmitted, totalApproved, activeTasks: [{ taskId, taskTitle, description, campaignName, taskType, status, deadline,
+//   myProgress: { targetQty, done, percent, ... } (của mình), teamProgress: {...} (cả nhóm), assignees: [{ userId, fullName }] }] }
 export const getSpeakerProgressApi = async () => {
   try {
     const response = await httpClient.get("/api/speaker/progress");
@@ -58,8 +59,9 @@ export const getNextScriptApi = async (taskId) => {
 };
 
 // Lịch sử ghi âm của chính mình: GET /api/speaker/recordings/history?page=&pageSize= (tối đa 100/trang)
-// Mỗi phần tử là MỘT bản ghi (bản Việt-Anh hoặc bản tiếng Việt), mới nhất trước:
-// { recordingId: "r_cs_..." | "r_vi_...", scriptId, taskTitle, csText, viText, durationSec, status, recordedAt,
+// Mỗi phần tử là MỘT CẶP câu (bản Việt-Anh + bản tiếng Việt), mới nhất trước, phân trang theo cặp:
+// { scriptId, taskTitle, csText, viText, csRecordingId, viRecordingId (null = chưa ghi bản đó),
+//   csAudioUrl, viAudioUrl (link tạm 15 phút), durationSec, status (trạng thái của cả cặp), recordedAt,
 //   reviews: [{ round, decision: "Approved" | "Rejected", reason }] } - reviews chỉ có khi bản ghi đã chốt
 export const getSpeakerRecordingHistoryApi = async ({ page = 1, pageSize = 100 } = {}) => {
   try {
@@ -74,7 +76,8 @@ export const getSpeakerRecordingHistoryApi = async ({ page = 1, pageSize = 100 }
 };
 
 // Thống kê bản ghi của chính mình: GET /api/speaker/stats
-// Trả về { total, approved, rejected, pending } - pending gồm cả bản chờ duyệt và bản trượt QC
+// Trả về { recording: { total, approved, rejected, pending }, contribution: { total, validated, rejected, pending } }
+// recording.pending gồm cả bản chờ duyệt và bản trượt QC
 export const getSpeakerStatsApi = async () => {
   try {
     const response = await httpClient.get("/api/speaker/stats");
@@ -83,6 +86,49 @@ export const getSpeakerStatsApi = async () => {
     const message =
       error.response?.data?.title ||
       "Không lấy được thống kê bản ghi!";
+    throw new Error(message, { cause: error });
+  }
+};
+
+// Đợt đang tham gia (chiến dịch của task thu âm đang giao): GET /api/speaker/rounds/current
+// Trả về { campaignId, name, topic, status, startDate, endDate, endsIn, participants, target, submitted, approved, pending, isRegistered }
+// 204 = chưa tham gia đợt nào -> trả null
+export const getSpeakerCurrentRoundApi = async () => {
+  try {
+    const response = await httpClient.get("/api/speaker/rounds/current");
+    return response.status === 204 ? null : response.data;
+  } catch (error) {
+    const message =
+      error.response?.data?.title ||
+      "Không lấy được đợt đang tham gia!";
+    throw new Error(message, { cause: error });
+  }
+};
+
+// Bảng xếp hạng của một đợt: GET /api/speaker/rounds/{campaignId}/leaderboard?top=
+// Trả về [{ rank, userId, name, approved, isMe }] - chỉ người có bản được duyệt, xếp theo số bản được duyệt
+export const getRoundLeaderboardApi = async ({ campaignId, top = 5 }) => {
+  try {
+    const response = await httpClient.get(`/api/speaker/rounds/${campaignId}/leaderboard`, { params: { top } });
+    return response.data;
+  } catch (error) {
+    const message =
+      error.response?.data?.title ||
+      "Không lấy được bảng xếp hạng!";
+    throw new Error(message, { cause: error });
+  }
+};
+
+// Bản ghi bị từ chối của chính mình: GET /api/speaker/recordings/rejected?limit= (tối đa 20)
+// Trả về [{ recordingId, scriptId, transcript (câu Việt-Anh có nhãn), reason, audioUrl, audioUrlExpiresAt }]
+export const getSpeakerRejectedRecordingsApi = async ({ limit = 5 } = {}) => {
+  try {
+    const response = await httpClient.get("/api/speaker/recordings/rejected", { params: { limit } });
+    return response.data;
+  } catch (error) {
+    const message =
+      error.response?.data?.title ||
+      "Không lấy được bản ghi cần ghi lại!";
     throw new Error(message, { cause: error });
   }
 };

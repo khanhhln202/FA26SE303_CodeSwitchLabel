@@ -7,7 +7,7 @@ import { getTopicsApi } from '../../../services/configApi';
 import { evaluateSentence } from '../../../utils/sentenceValidation';
 import Loading from '../../../components/Loading/Loading';
 import ErrorState from '../../../components/ErrorState/ErrorState';
-import { CONTRIBUTE_SCRIPT_API, GET_SPEAKER_CONTRIBUTION_HISTORY_API, GET_TOPICS_API } from '../../../utils/queryKey';
+import { CONTRIBUTE_SCRIPT_API, GET_SPEAKER_CONTRIBUTION_HISTORY_API, GET_SPEAKER_STATS_API, GET_TOPICS_API } from '../../../utils/queryKey';
 import {
   SPEAKER_ACCENT_ACTIVE_ICON as ACCENT, // xanh lá thương hiệu
   AUDIO_PRIMARY, // màu phần tiếng Anh
@@ -144,6 +144,7 @@ export default function ContributeText() {
     onSuccess: () => {
       // Lịch sử đóng góp có thêm câu mới -> tải lại khi mở trang lịch sử
       queryClient.invalidateQueries({ queryKey: [GET_SPEAKER_CONTRIBUTION_HISTORY_API] });
+      queryClient.invalidateQueries({ queryKey: [GET_SPEAKER_STATS_API] });
       toast.success('Đã gửi đóng góp!', { description: 'Câu của bạn đang chờ duyệt.' });
       resetForm();
     },
