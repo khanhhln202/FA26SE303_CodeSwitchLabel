@@ -353,7 +353,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         DateOnly startDate,
         DateOnly endDate,
         long createdBy,
-        CampaignStatus status = CampaignStatus.Draft)
+        CampaignStatus status = CampaignStatus.Open)
     {
         var campaign = new Campaign
         {
@@ -377,7 +377,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         int targetQty,
         long createdBy,
         DateTimeOffset? deadline = null,
-        WorkTaskStatus status = WorkTaskStatus.Draft)
+        WorkTaskStatus status = WorkTaskStatus.InProgress)
     {
         var task = new WorkTask
         {

@@ -32,11 +32,11 @@ public class CheckConstraintTests : IntegrationTestBase
         var min = await CreateCampaignAsync(
             $"Boundary min {Guid.NewGuid():N}", 2000,
             DateOnly.FromDateTime(DateTime.Today), DateOnly.FromDateTime(DateTime.Today.AddDays(30)),
-            AdminUserId, CampaignStatus.Draft);
+            AdminUserId, CampaignStatus.Open);
         var max = await CreateCampaignAsync(
             $"Boundary max {Guid.NewGuid():N}", 5000,
             DateOnly.FromDateTime(DateTime.Today), DateOnly.FromDateTime(DateTime.Today.AddDays(30)),
-            AdminUserId, CampaignStatus.Draft);
+            AdminUserId, CampaignStatus.Open);
 
         // Act + Assert
         Assert.NotEqual(0, min.CampaignId);
@@ -56,7 +56,7 @@ public class CheckConstraintTests : IntegrationTestBase
                 TargetQty = 1000, // Below minimum 2000
                 StartDate = DateOnly.FromDateTime(DateTime.Today),
                 EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(30)),
-                Status = CampaignStatus.Draft,
+                Status = CampaignStatus.Open,
                 CreatedBy = AdminUserId,
                 CreatedAt = DateTimeOffset.UtcNow
             };
@@ -77,7 +77,7 @@ public class CheckConstraintTests : IntegrationTestBase
                 TargetQty = 6000, // Above maximum 5000
                 StartDate = DateOnly.FromDateTime(DateTime.Today),
                 EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(30)),
-                Status = CampaignStatus.Draft,
+                Status = CampaignStatus.Open,
                 CreatedBy = AdminUserId,
                 CreatedAt = DateTimeOffset.UtcNow
             };
@@ -98,7 +98,7 @@ public class CheckConstraintTests : IntegrationTestBase
                 TargetQty = 2000,
                 StartDate = DateOnly.FromDateTime(DateTime.Today.AddDays(10)),
                 EndDate = DateOnly.FromDateTime(DateTime.Today), // Before start
-                Status = CampaignStatus.Draft,
+                Status = CampaignStatus.Open,
                 CreatedBy = AdminUserId,
                 CreatedAt = DateTimeOffset.UtcNow
             };
@@ -346,7 +346,7 @@ public class CheckConstraintTests : IntegrationTestBase
                 CampaignId = CampaignId,
                 TaskType = TaskType.Recording,
                 TargetQty = 0, // Must be > 0
-                Status = WorkTaskStatus.Draft,
+                Status = WorkTaskStatus.InProgress,
                 CreatedBy = ManagerUserId,
                 CreatedAt = DateTimeOffset.UtcNow
             };

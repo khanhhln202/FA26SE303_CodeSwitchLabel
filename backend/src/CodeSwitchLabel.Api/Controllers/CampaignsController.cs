@@ -25,7 +25,8 @@ namespace CodeSwitchLabel.Api.Controllers;
 public class CampaignsController(ICampaignService campaignService) : ControllerBase
 {
     // TEAM_003: TaskManager và Admin đều tạo được đợt; TaskManager tự gán đợt cho mình
-    /// <summary>Tạo chiến dịch mới — ở trạng thái Draft. Chỉ tiêu từ 2000 đến 5000 cặp câu.</summary>
+    /// <summary>Tạo chiến dịch mới — ở trạng thái Open (chưa có nhiệm vụ nào).
+    /// Chỉ tiêu từ 2000 đến 5000 cặp câu.</summary>
     [HttpPost]
     [ProducesResponseType(typeof(CampaignDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
@@ -68,9 +69,14 @@ public class CampaignsController(ICampaignService campaignService) : ControllerB
         => Ok(await campaignService.GetAsync(id, ct));
 
     // TEAM_003: TaskManager phụ trách đợt và Admin đều sửa được
-    /// <summary>Sửa tên, chủ đề, chỉ tiêu, khoảng ngày hoặc trạng thái. Trường nào để trống thì giữ nguyên.</summary>
+    /// <summary>Sửa tên, chủ đề, chỉ tiêu hoặc khoảng ngày. Trường nào để trống thì giữ nguyên.</summary>
     /// <remarks>
     /// Không hạ chỉ tiêu xuống dưới phần đã chia cho các task — database sẽ từ chối.
+    ///
+    /// TEAM_013: body **không còn nhận `status`**. Trạng thái đợt là hàm của các nhiệm vụ bên
+    /// trong (chưa có nhiệm vụ nào → `Open`, có nhiệm vụ → `InProgress`, mọi nhiệm vụ đều
+    /// `Completed` → `Completed`) và được tính lại mỗi khi nhiệm vụ đổi, nên không có
+    /// đường nào để bấm tay đặt nó.
     /// </remarks>
     [HttpPatch("{id:long}")]
     [ProducesResponseType(typeof(CampaignDto), StatusCodes.Status200OK)]

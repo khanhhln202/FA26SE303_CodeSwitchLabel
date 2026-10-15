@@ -45,6 +45,17 @@ public record UpdateTaskRequest
     public int? TargetQty { get; init; }
 
     public DateTimeOffset? Deadline { get; init; }
+
+    /// <summary>
+    /// TEAM_013: Task Manager đổi trạng thái nhiệm vụ bằng tay. Gửi `InProgress` để mở
+    /// lại một task đã xong, `Completed` để chốt sớm, `Cancelled` để dừng (giống nút Huỷ:
+    /// mọi lượt giao đang hoạt động cũng chuyển sang `cancelled`).
+    ///
+    /// Giá trị này được giữ nguyên cho tới khi có việc thật xảy ra (nộp bản ghi, duyệt,
+    /// đổi chỉ tiêu…) — lúc đó `TaskStateMachine` tính lại và có thể ghi đè. Đổi sang
+    /// `InProgress` thì task mở lại ngay, không cần nâng chỉ tiêu nữa.
+    /// </summary>
+    public WorkTaskStatus? Status { get; init; }
 }
 
 /// <summary>Chọn đúng MỘT trong hai cách: gửi danh sách ids, hoặc gửi điều kiện autoFill.</summary>
@@ -182,9 +193,11 @@ public record SpeakerProgressDto(
     IReadOnlyList<SpeakerActiveTaskDto> ActiveTasks);
 
 /// <summary>Tổng quan cho trang chủ Task Manager: chiến dịch của mình + tải của từng người nhận.</summary>
+/// <param name="ActiveRecordingTasks">TEAM_013: đổi tên từ `OpenRecordingTasks` — trạng thái
+/// `Open` của task đã bị bỏ, "đang chạy" giờ chỉ có một giá trị là `InProgress`.</param>
 public record TaskManagerOverviewDto(
     IReadOnlyList<CampaignProgressDto> MyCampaigns,
     IReadOnlyList<AssigneeSummaryDto> ByAssignee,
-    int OpenRecordingTasks,
-    int OpenReviewTasks,
+    int ActiveRecordingTasks,
+    int ActiveReviewTasks,
     int OverdueTasks);

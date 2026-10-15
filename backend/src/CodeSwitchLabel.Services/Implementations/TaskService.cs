@@ -137,15 +137,10 @@ public class TaskService(
                         : $"Chiến dịch #{campaignId} đang giao cho người khác — bạn chỉ tạo được task trong chiến dịch của mình.");
             }
 
-            // Chiến dịch đã huỷ hoặc đã hoàn thành thì không nhận thêm việc nữa: đóng chiến dịch mà task vẫn
-            // chui vào được thì con số chỉ tiêu và báo cáo cuối đợt không còn đúng. Task đã tạo trước đó vẫn chạy.
-            if (campaign.Status is CampaignStatus.Completed or CampaignStatus.Cancelled)
-            {
-                throw new UnprocessableException(
-                    "campaign_not_accepting_tasks",
-                    $"Chiến dịch #{campaignId} đang ở trạng thái {campaign.Status} nên không nhận thêm task. " +
-                    "Mở lại chiến dịch hoặc chọn chiến dịch khác.");
-            }
+            // TEAM_013: bỏ luật "đợt đã đóng thì không nhận thêm task". Trước đây đợt `Completed`
+            // nghĩa là đã chốt kết quả; giờ nó chỉ có nghĩa là mọi task đã xong, và gắn task mới
+            // vào thì đợt tự quay lại `InProgress`. Chặn ở đây sẽ thành vòng luẩn quanh: đợt xong
+            // → không gắn được → không bao giờ mở lại được nữa.
 
             // Hạn task phải nằm trong khoảng ngày của chiến dịch (trigger của database cũng chặn).
             var deadlineDate = ToVietnamDate(deadline);
@@ -191,12 +186,18 @@ public class TaskService(
             Description = Clean(request.Description),
             TargetQty = targetQty,
             Deadline = deadline,
-            Status = WorkTaskStatus.Draft,
+            // TEAM_013: còn ba trạng thái (InProgress/Completed/Cancelled). Task vừa tạo chưa
+            // có việc gì nhưng KHÔNG còn trạng thái nháp nữa — chờ người nhận thì vẫn là
+            // InProgress, và chỉ tiêu vẫn được đặt trước rồi thêm mục vào sau.
+            Status = WorkTaskStatus.InProgress,
             CreatedAt = now
         };
 
         tasks.Add(task);
         await SaveTasksAsync(ct);
+
+        // TEAM_013: đợt vừa nhận nhiệm vụ đầu tiên thì phải rời Open.
+        if (campaign is not null) await campaigns.RefreshStatusAsync(campaign.CampaignId, ct);
 
         return await LoadDetailAsync(task.TaskId, ct);
     }
@@ -209,6 +210,10 @@ public class TaskService(
         await using var transaction = await BeginTransactionIfNeededAsync(ct);
         var task = await LoadEditableAsync(taskId, ct);
         await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
+
+        // TEAM_013: đợt cũ cũng phải được tính lại — rút task ra khỏi đợt xong thì đợt có
+        // thể hết nhiệm vụ (về lại Open) hoặc mọi task còn lại đều xong (về Completed).
+        var previousCampaignId = task.CampaignId;
 
         if (campaignId.HasValue)
         {
@@ -223,12 +228,7 @@ public class TaskService(
                     $"Chiến dịch #{campaignId} không giao cho bạn nên không gắn task vào được.");
             }
 
-            if (campaign.Status is CampaignStatus.Completed or CampaignStatus.Cancelled)
-            {
-                throw new UnprocessableException(
-                    "campaign_not_accepting_tasks",
-                    $"Chiến dịch #{campaignId} đang ở trạng thái {campaign.Status} nên không nhận thêm task.");
-            }
+            // TEAM_013: bỏ luật chặn nhận thêm task vào đợt đã đóng — xem ở CreateAsync.
 
             // TEAM_003: Nhiệm vụ phải cùng chủ đề với chiến dịch
             if (task.Domain != campaign.Domain)
@@ -263,6 +263,13 @@ public class TaskService(
 
         task.CampaignId = campaignId;
         await SaveTasksAsync(ct);
+
+        if (campaignId.HasValue) await campaigns.RefreshStatusAsync(campaignId.Value, ct);
+        if (previousCampaignId.HasValue && previousCampaignId != campaignId)
+        {
+            await campaigns.RefreshStatusAsync(previousCampaignId.Value, ct);
+        }
+
         if (transaction is not null) await transaction.CommitAsync(ct);
 
         return await LoadDetailAsync(taskId, ct);
@@ -368,10 +375,12 @@ public class TaskService(
                 }
             }
 
-            // Task còn nháp thì cứ để Task Manager đặt chỉ tiêu trước, thêm mục sau.
-            if (task.Status != WorkTaskStatus.Draft)
+            // TEAM_013: trước đây nhánh này bỏ qua khi task còn ở trạng thái `Draft`
+            // (chưa giao cho ai). `Draft` đã bị bỏ, nên điều kiện được hỏi lại đúng bằng nghĩa
+            // cũ: CHƯA CÓ NGƯỜI NHẬN thì cứ đặt chỉ tiêu trước, thêm mục vào sau.
+            var active = await tasks.GetActiveAssignmentsAsync(taskId, ct);
+            if (active.Count > 0)
             {
-                var active = await tasks.GetActiveAssignmentsAsync(taskId, ct);
                 var share = PerPersonQuota(request.TargetQty.Value, active.Count);
                 var (workable, blocked) = await CountWorkableAsync(task, active, null, ct);
 
@@ -388,11 +397,50 @@ public class TaskService(
 
         await SaveTasksAsync(ct);
 
-        // Đổi chỉ tiêu có thể làm task xong ngay, hoặc mở lại một task đã xong.
-        await tracker.RefreshStatusAsync(taskId, ct);
+        // TEAM_013: Task Manager bấm tay đổi trạng thái. Giá trị này được giữ nguyên —
+        // cố ý KHÔNG gọi tracker ở đây, vì tracker sẽ tính lại từ số liệu và ghi đè mất
+        // lựa chọn của người ngay lập tức. Trạng thái bấm tay chỉ bị tính lại khi có việc
+        // thật xảy ra sau đó (nộp bản ghi, duyệt, đổi chỉ tiêu...).
+        if (request.Status.HasValue) await ApplyManualStatusAsync(task, request.Status.Value, ct);
+
+        // Chỉ đổi CHỈ TIÊU mới là việc thật có ảnh hưởng tới trạng thái: nâng thì task
+        // đang xong phải mở lại, hạ thì task có thể xong ngay.
+        //
+        // Trước TEAM_013, tracker chạy ở MỌI lần PATCH — nên chỉ sửa mô tả cũng làm trạng
+        // thái Task Manager vừa bấm tay biến mất. Sửa tên, đổi hạn, đổi chủ đề đều không
+        // đụng tới số liệu nên không có lý do gì để tính lại.
+        if (!request.Status.HasValue && request.TargetQty.HasValue)
+        {
+            await tracker.RefreshStatusAsync(taskId, ct);
+        }
+
+        if (task.CampaignId.HasValue) await campaigns.RefreshStatusAsync(task.CampaignId.Value, ct);
+
         if (transaction is not null) await transaction.CommitAsync(ct);
 
         return await LoadDetailAsync(taskId, ct);
+    }
+
+    /// <summary>
+    /// TEAM_013: dùng chung cho nút Huỷ và cho việc Task Manager chọn `Cancelled` tay,
+    /// để hai đường không lệch nhau. Các mục giữ nguyên để còn dấu vết công việc; lượt giao
+    /// đang hoạt động thì chuyển sang `cancelled` — task đã dừng thì giữ chỗ là vô nghĩa.
+    /// </summary>
+    private async Task ApplyManualStatusAsync(WorkTask task, WorkTaskStatus status, CancellationToken ct)
+    {
+        if (task.Status == status) return;
+
+        task.Status = status;
+
+        if (status == WorkTaskStatus.Cancelled)
+        {
+            foreach (var assignment in await tasks.GetActiveAssignmentsAsync(task.TaskId, ct))
+            {
+                assignment.AssignmentStatus = AssignmentStatus.Cancelled;
+            }
+        }
+
+        await SaveTasksAsync(ct);
     }
 
     public async Task<AddTaskItemsResult> AddItemsAsync(
@@ -480,9 +528,15 @@ public class TaskService(
     private async Task ShrinkTargetToItemsAsync(long taskId, CancellationToken ct)
     {
         var task = await tasks.GetForUpdateAsync(taskId, ct);
-        if (task is null || task.Status == WorkTaskStatus.Draft) return;
+        if (task is null) return;
 
-        var (workable, _) = await CountWorkableAsync(task, await tasks.GetActiveAssignmentsAsync(taskId, ct), null, ct);
+        // TEAM_013: cũng bỏ qua khi task CHƯA CÓ NGƯỜI NHẬN — cùng nghĩa với `Draft`
+        // cũ mà nhánh này dùng để bỏ qua, chỉ là hỏi bằng tín hiệu còn tồn tại thay vì
+        // hỏi bằng trạng thái (trạng thái `Draft` không còn nữa).
+        var active = await tasks.GetActiveAssignmentsAsync(taskId, ct);
+        if (active.Count == 0) return;
+
+        var (workable, _) = await CountWorkableAsync(task, active, null, ct);
 
         if (workable < task.TargetQty)
         {
@@ -627,7 +681,9 @@ public class TaskService(
 
         await SaveTasksAsync(ct);
 
-        // Giao lần đầu: Draft → Open. Điều phối lại task đã có việc: giữ InProgress.
+        // TEAM_013: giao task không còn đổi trạng thái (task đã là InProgress từ lúc tạo),
+        // nhưng tracker vẫn chạy để một task bị Task Manager bấm tay về Completed rồi
+        // được giao thêm người sẽ tính lại đúng theo số liệu.
         await tracker.RefreshStatusAsync(taskId, ct);
         if (transaction is not null) await transaction.CommitAsync(ct);
 
@@ -637,9 +693,11 @@ public class TaskService(
     /// <summary>
     /// TEAM_010: gỡ một người khỏi task, giữ lịch sử (lượt giao chuyển sang Reassigned).
     ///
-    /// Không cho gỡ người CUỐI CÙNG khi task đã có việc: TaskStateMachine sẽ đưa task
-    /// về Draft, mà Draft thì không nhận công việc nữa — dữ liệu đã làm thì còn nguyên
-    /// nhưng không ai làm tiếp được nữa. Muốn dừng hẳn thì dùng Huỷ.
+    /// Không cho gỡ người CUỐI CÙNG khi task đã có việc: task sẽ không còn ai làm tiếp,
+    /// dữ liệu đã làm thì còn nguyên nhưng không ai dùng được nữa. Muốn dừng hẳn thì dùng Huỷ.
+    ///
+    /// TEAM_013: trước đây lý do cụ thể hơn là "task rơi về Draft, mà Draft không nhận việc
+    /// nữa" — trạng thái `Draft` đã bị bỏ nên luật này giữ nguyên vì lý do thật của nó.
     /// </summary>
     public async Task<TaskDetailDto> UnassignAsync(
         long taskId, long userId, CancellationToken ct = default,
@@ -667,8 +725,8 @@ public class TaskService(
                 throw new ConflictException(
                     "cannot_remove_last_assignee",
                     $"Đây là người nhận cuối cùng của task #{taskId} mà task đã có việc. " +
-                    "Gỡ người lúc này sẽ đưa task về nháp và không ai làm tiếp được. " +
-                    "Dùng chức năng Huỷ nếu muốn dừng hẳn.");
+                    "Gỡ người lúc này thì không ai làm tiếp được, dữ liệu đã làm thì còn nguyên " +
+                    "nhưng không ai dùng. Dùng chức năng Huỷ nếu muốn dừng hẳn.");
             }
         }
 
@@ -697,17 +755,13 @@ public class TaskService(
             throw new ConflictException("task_completed", $"Task #{taskId} đã hoàn thành, không huỷ được.");
         }
 
-        task.Status = WorkTaskStatus.Cancelled;
-
-        // TEAM_010: huỷ task thì huỷ lượt giao của TẤT CẢ người nhận, không chỉ một người.
-        foreach (var assignment in await tasks.GetActiveAssignmentsAsync(taskId, ct))
-        {
-            assignment.AssignmentStatus = AssignmentStatus.Cancelled;
-        }
+        // TEAM_013: đi qua helper chung với đường "Task Manager chọn Cancelled tay" ở
+        // UpdateAsync — một nơi ghi trạng thái, một nơi huỷ lượt giao.
+        await ApplyManualStatusAsync(task, WorkTaskStatus.Cancelled, ct);
 
         // Các mục giữ nguyên để còn dấu vết. Task đã huỷ không giữ chỗ gì nữa:
         // truy vấn tự lấp chỉ tránh những mục đang nằm trong task còn chạy.
-        await SaveTasksAsync(ct);
+        if (task.CampaignId.HasValue) await campaigns.RefreshStatusAsync(task.CampaignId.Value, ct);
 
         return await LoadDetailAsync(taskId, ct);
     }
@@ -817,18 +871,16 @@ public class TaskService(
 
         // Đếm task còn chạy theo loại + quá hạn: chỉ cần Total nên pageSize = 1.
         // Chỉ đếm nên thứ tự không quan trọng — SortSpec rỗng là thứ tự mặc định.
-        var (_, openRec) = await tasks.SearchAsync(
-            TaskType.Recording, WorkTaskStatus.Open, null, null, null, now, 1, 1, default, ct);
-        var (_, progRec) = await tasks.SearchAsync(
+        // TEAM_013: chỉ còn một trạng thái "đang chạy" là InProgress, nên không cộng
+        // `Open` với `InProgress` nữa.
+        var (_, activeRec) = await tasks.SearchAsync(
             TaskType.Recording, WorkTaskStatus.InProgress, null, null, null, now, 1, 1, default, ct);
-        var (_, openRev) = await tasks.SearchAsync(
-            TaskType.Review, WorkTaskStatus.Open, null, null, null, now, 1, 1, default, ct);
-        var (_, progRev) = await tasks.SearchAsync(
+        var (_, activeRev) = await tasks.SearchAsync(
             TaskType.Review, WorkTaskStatus.InProgress, null, null, null, now, 1, 1, default, ct);
         var (_, overdue) = await tasks.SearchAsync(
             null, null, null, null, true, now, 1, 1, default, ct);
 
-        return new TaskManagerOverviewDto(mine, byAssignee, openRec + progRec, openRev + progRev, overdue);
+        return new TaskManagerOverviewDto(mine, byAssignee, activeRec, activeRev, overdue);
     }
 
     // ----------------------------------------------------------------- nội bộ
@@ -945,10 +997,12 @@ public class TaskService(
 
     private async Task EnsureRemovalKeepsTargetAsync(WorkTask task, string itemId, CancellationToken ct)
     {
-        if (task.Status == WorkTaskStatus.Draft) return;
+        // TEAM_013: cùng nghĩa với nhánh `Draft` cũ — chưa giao cho ai thì chưa có mục nào
+        // để kiểm tra, cứ để Task Manager sửa tiếp.
+        var active = await tasks.GetActiveAssignmentsAsync(task.TaskId, ct);
+        if (active.Count == 0) return;
 
-        var (workable, blocked) = await CountWorkableAsync(
-            task, await tasks.GetActiveAssignmentsAsync(task.TaskId, ct), itemId, ct);
+        var (workable, blocked) = await CountWorkableAsync(task, active, itemId, ct);
 
         if (task.TargetQty > workable)
         {

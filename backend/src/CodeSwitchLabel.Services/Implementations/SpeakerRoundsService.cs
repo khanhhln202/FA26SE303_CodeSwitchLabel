@@ -20,7 +20,7 @@ public class SpeakerRoundsService(
         var task = await db.TaskAssignments.AsNoTracking()
             .Where(a => a.UserId == speakerId && a.AssignmentStatus == AssignmentStatus.Active)
             .Where(a => a.Task.TaskType == TaskType.Recording)
-            .Where(a => a.Task.Status == WorkTaskStatus.Open || a.Task.Status == WorkTaskStatus.InProgress)
+            .Where(a => a.Task.Status == WorkTaskStatus.InProgress)
             .OrderBy(a => a.Task.Deadline)
             .Select(a => a.Task)
             .FirstOrDefaultAsync(ct);
@@ -44,8 +44,11 @@ public class SpeakerRoundsService(
             .Select(r => r.CampaignId)
             .ToListAsync(ct);
 
+        // TEAM_013: đợt chưa có nhiệm vụ nào (Open) thì người đọc còn đăng ký được;
+        // đợt đã có nhiệm vụ rồi thì việc đến từ task, không phải từ đăng ký.
+        // Trước đây lọc cả `Draft` — trạng thái đó không tồn tại nữa, và đợt mới tạo đã là Open.
         var campaigns = await db.Campaigns.AsNoTracking()
-            .Where(c => c.Status == CampaignStatus.Draft || c.Status == CampaignStatus.Open)
+            .Where(c => c.Status == CampaignStatus.Open)
             .Where(c => c.EndDate >= today)
             .OrderBy(c => c.StartDate)
             .Take(3)
@@ -57,10 +60,8 @@ public class SpeakerRoundsService(
             null,
             c.TargetQty,
             $"{c.StartDate:dd/MM} – {c.EndDate:dd/MM}",
-            c.Status == CampaignStatus.Open
-                ? HumanizeDays((c.StartDate.ToDateTime(TimeOnly.MinValue) - today.ToDateTime(TimeOnly.MinValue)).Days)
-                : null,
-            c.Status == CampaignStatus.Draft ? c.StartDate.ToString("dd/MM") : null,
+            HumanizeDays((c.StartDate.ToDateTime(TimeOnly.MinValue) - today.ToDateTime(TimeOnly.MinValue)).Days),
+            null,
             mine.Contains(c.CampaignId)))];
     }
 
@@ -91,13 +92,9 @@ public class SpeakerRoundsService(
         var campaign = await db.Campaigns.FirstOrDefaultAsync(c => c.CampaignId == campaignId, ct)
             ?? throw new NotFoundException("campaign_not_found", $"Không tìm thấy chiến dịch #{campaignId}.");
 
-        if (campaign.Status is CampaignStatus.Completed or CampaignStatus.Cancelled)
-        {
-            throw new UnprocessableException(
-                "campaign_not_accepting_tasks",
-                $"Chiến dịch #{campaignId} đang ở trạng thái {campaign.Status} nên không nhận đăng ký.");
-        }
-
+        // TEAM_013: đợt chỉ còn Open/InProgress/Completed, và trạng thái đợt là hàm của task —
+        // đăng ký là việc của người đọc chứ không phải việc của task, nên đợt đang chạy hay
+        // đã xong đều không chặn. Luật cũ chặn cả Completed lẫn Cancelled đã bị gỡ.
         var exists = await db.CampaignRegistrations.AnyAsync(
             r => r.CampaignId == campaignId && r.SpeakerId == speakerId, ct);
 

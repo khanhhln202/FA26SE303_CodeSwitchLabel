@@ -156,8 +156,8 @@ public static partial class DatabaseSeeder
         db.WorkTasks.AddRange(recordingTask, reviewTask);
         await db.SaveChangesAsync(ct);
 
-        // Trạng thái đang chạy thì phải có người nhận: TaskStateMachine đánh giá lại sẽ
-        // đẩy task không người nhận về Draft.
+        // Trạng thái đang chạy thì phải có người nhận — không có thì không ai làm được
+        // và demo sẽ hiện nhiệm vụ không có người nhận trên màn hình Task Manager.
         db.TaskAssignments.AddRange(
             new TaskAssignment
             {

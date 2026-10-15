@@ -14,37 +14,70 @@ namespace CodeSwitchLabel.Tests.Integration;
 [Trait("Category", "Integration")]
 public sealed class CampaignRuleTests(DatabaseFixture fixture) : ApiTestBase(fixture)
 {
-    [Theory]
-    [InlineData("Cancelled")]
-    [InlineData("Completed")]
-    public async Task ChienDichDaDong_KhongNhanThemTask(string status)
-    {
-        var admin = await GetAdminTokenAsync();
-        var manager = await GetManagerTokenAsync();
-        var campaignId = await TaoChienDichDaGiaoAsync(admin, await LayUserIdAsync(manager));
-
-        var doiTrangThai = await PatchAsync($"/api/campaigns/{campaignId}", new { status }, admin);
-        Assert.Equal(HttpStatusCode.OK, doiTrangThai.StatusCode);
-
-        var taoTask = await PostAsync("/api/tasks", TaskMoi(campaignId), manager);
-
-        Assert.Equal(HttpStatusCode.UnprocessableEntity, taoTask.StatusCode);
-        Assert.Equal("campaign_not_accepting_tasks", await LayMaLoiAsync(taoTask));
-    }
-
+    /// <summary>
+    /// TEAM_013: đợt mới tạo chưa có nhiệm vụ nào thì là Open, và nhận task bình thường.
+    /// Trạng thái không cần mở bằng tay nữa — nó tự nhảy theo số nhiệm vụ bên trong.
+    /// </summary>
     [Fact]
-    public async Task ChienDichDangMo_VanNhanTask()
+    public async Task ChienDichMoiTao_LaDangMoVaVanNhanTask()
     {
         var admin = await GetAdminTokenAsync();
         var manager = await GetManagerTokenAsync();
         var campaignId = await TaoChienDichDaGiaoAsync(admin, await LayUserIdAsync(manager));
-
-        var moChienDich = await PatchAsync($"/api/campaigns/{campaignId}", new { status = "Open" }, admin);
-        Assert.Equal(HttpStatusCode.OK, moChienDich.StatusCode);
 
         var taoTask = await PostAsync("/api/tasks", TaskMoi(campaignId), manager);
 
         Assert.Equal(HttpStatusCode.Created, taoTask.StatusCode);
+    }
+
+    /// <summary>
+    /// TEAM_013: bỏ luật "đợt đã đóng thì không nhận thêm task". Gắn nhiệm vụ mới vào đợt
+    /// đã hoàn thành thì đợt phải mở lại chứ không phải từ chối — nếu chặn thì đợt xong
+    /// là không bao giờ làm tiếp được nữa.
+    /// </summary>
+    [Fact]
+    public async Task ChienDichDaHoanThanh_VanNhanTaskVaTuMoLai()
+    {
+        var admin = await GetAdminTokenAsync();
+        var manager = await GetManagerTokenAsync();
+        var campaignId = await TaoChienDichDaGiaoAsync(admin, await LayUserIdAsync(manager));
+
+        var taoTask = await PostAsync("/api/tasks", TaskMoi(campaignId), manager);
+        Assert.Equal(HttpStatusCode.Created, taoTask.StatusCode);
+
+        // Chốt nhiệm vụ vừa tạo → đợt không còn việc nào chưa xong nên thành Completed.
+        var taskId = (await DocJsonAsync(taoTask)).GetProperty("summary").GetProperty("taskId").GetInt64();
+        var chotXong = await PatchAsync($"/api/tasks/{taskId}", new { status = "Completed" }, manager);
+        Assert.Equal(HttpStatusCode.OK, chotXong.StatusCode);
+        Assert.Equal("Completed", (await DocJsonAsync(chotXong)).GetProperty("summary").GetProperty("status").GetString());
+
+        Assert.Equal("Completed", (await DocJsonAsync(await GetAsync($"/api/campaigns/{campaignId}", admin)))
+            .GetProperty("status").GetString());
+
+        // Gắn nhiệm vụ thứ hai → đợt mở lại.
+        var taoTask2 = await PostAsync("/api/tasks", TaskMoi(campaignId), manager);
+        Assert.Equal(HttpStatusCode.Created, taoTask2.StatusCode);
+
+        Assert.Equal("InProgress", (await DocJsonAsync(await GetAsync($"/api/campaigns/{campaignId}", admin)))
+            .GetProperty("status").GetString());
+    }
+
+    /// <summary>Trường `status` không còn trong body của PATCH chiến dịch — bỏ trống là giữ nguyên.</summary>
+    [Fact]
+    public async Task SuaChienDichKhongConTruongStatus()
+    {
+        var admin = await GetAdminTokenAsync();
+        var campaignId = await TaoChienDichAsync(admin);
+        var hienTai = await DocJsonAsync(await GetAsync($"/api/campaigns/{campaignId}", admin));
+
+        var sua = await PatchAsync($"/api/campaigns/{campaignId}",
+            new { status = "Completed", campaignName = "Đợt đã đổi tên" }, admin);
+
+        Assert.Equal(HttpStatusCode.OK, sua.StatusCode);
+
+        var sau = await DocJsonAsync(sua);
+        Assert.Equal("Đợt đã đổi tên", sau.GetProperty("campaignName").GetString());
+        Assert.Equal(hienTai.GetProperty("status").GetString(), sau.GetProperty("status").GetString());
     }
 
     /// <summary>Thông báo lỗi phải là tiếng Việt như mọi lỗi nghiệp vụ khác, vì frontend hiện thẳng cho người dùng.</summary>
@@ -115,5 +148,12 @@ public sealed class CampaignRuleTests(DatabaseFixture fixture) : ApiTestBase(fix
     {
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         return doc.RootElement.TryGetProperty("code", out var code) ? code.GetString() : null;
+    }
+
+    /// <summary>Đọc thẳng gốc JSON: các test dưới đây chỉ cần một trường, không cần bản ghi kiểu C#.</summary>
+    private static async Task<JsonElement> DocJsonAsync(HttpResponseMessage response)
+    {
+        var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        return doc.RootElement.Clone();
     }
 }

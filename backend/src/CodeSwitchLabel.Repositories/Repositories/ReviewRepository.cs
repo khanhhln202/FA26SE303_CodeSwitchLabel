@@ -139,7 +139,7 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
         db.WorkTasks.AsNoTracking().AnyAsync(t =>
             t.TaskId == taskId &&
             t.TaskType == TaskType.Review &&
-            (t.Status == WorkTaskStatus.Open || t.Status == WorkTaskStatus.InProgress) &&
+            (t.Status == WorkTaskStatus.InProgress) &&
             t.Assignments.Any(a => a.UserId == reviewerId && a.AssignmentStatus == AssignmentStatus.Active), ct);
 
     public Task<bool> IsReviewTaskOfAsync(
@@ -156,7 +156,7 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
             tr.RecordingId == recordingId &&
             tr.Status == TaskRecordingStatus.Queued &&
             tr.Task.TaskType == TaskType.Review &&
-            (tr.Task.Status == WorkTaskStatus.Open || tr.Task.Status == WorkTaskStatus.InProgress) &&
+            (tr.Task.Status == WorkTaskStatus.InProgress) &&
             tr.Task.Assignments.Any(a => a.UserId == reviewerId && a.AssignmentStatus == AssignmentStatus.Active), ct);
 
     public Task<List<TaskRecording>> GetQueuedItemsAsync(string recordingId, CancellationToken ct = default) =>
@@ -298,7 +298,7 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
             .AsNoTracking()
             .Where(a => a.UserId == reviewerId && a.AssignmentStatus == AssignmentStatus.Active)
             .Where(a => a.Task.TaskType == TaskType.Review)
-            .Where(a => a.Task.Status == WorkTaskStatus.Open || a.Task.Status == WorkTaskStatus.InProgress)
+            .Where(a => a.Task.Status == WorkTaskStatus.InProgress)
             .OrderBy(a => a.Task.Deadline)
             .Select(a => new ReviewTaskProgress(
                 a.TaskId,

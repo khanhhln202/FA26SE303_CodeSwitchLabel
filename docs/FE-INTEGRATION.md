@@ -302,13 +302,13 @@ Lỗi hệ thống trả 500 với `code: "internal_error"`. Gặp lỗi này th
 | `text_review_already_done` | 409 | Câu đã có người duyệt nội dung rồi | Bỏ câu khỏi danh sách, tải lại |
 | `invalid_file_type` | 422 | File nhập câu không phải JSON (mở rộng lạ) | Chọn đúng file `.json` theo mẫu |
 | `email_taken` | 409 | Tự đăng ký Speaker bằng email đã có | Hiện lỗi cạnh ô email |
-| `task_cancelled` / `task_completed` | 409 | Sửa task đã huỷ, hoặc huỷ task đã xong | Ẩn nút theo `status` của task |
+| `task_cancelled` | 409 | Sửa task đã huỷ (kể cả đổi trạng thái) — task huỷ là khoá hẳn | Ẩn mọi nút sửa theo `status` của task |
 | `email_already_exists` | 409 | Tạo tài khoản bằng email đã có, kể cả khi chỉ khác chữ hoa | Hiện lỗi cạnh ô email |
 | `user_has_active_tasks` | 409 | Đổi vai người còn đang nhận task chưa xong | Hiện `title` — trong đó có mã các task cần giao lại. `activeTasks` ở chi tiết tài khoản cũng có sẵn danh sách này |
 | `cannot_lock_self` / `cannot_change_own_role` | 409 | Admin khoá hoặc đổi vai chính mình | Ẩn hai nút này ở dòng tài khoản của chính mình |
 | `invalid_current_password` | 422 | Đổi mật khẩu mà nhập sai mật khẩu hiện tại | Hiện lỗi cạnh ô mật khẩu hiện tại |
 | `same_password` | 422 | Mật khẩu mới trùng mật khẩu hiện tại | Hiện lỗi cạnh ô mật khẩu mới |
-| `campaign_not_accepting_tasks` | 422 | Tạo task trong chiến dịch đã Huỷ hoặc đã Hoàn thành | Ẩn nút tạo task khi `status` của chiến dịch là `Cancelled` hoặc `Completed` |
+| `task_completed` | 409 | Huỷ hoặc xoá task đã xong — muốn huỷ thì mở lại bằng `PATCH ... { "status": "InProgress" }` trước | Hiện nút **Huỷ** nhưng kèm bước mở lại trong hộp thoại xác nhận |
 | `task_target_exceeds_campaign` | 422 | Chỉ tiêu task vượt phần còn lại của chiến dịch | Hiện `title` — trong đó có số đã chia và chỉ tiêu chiến dịch. Lấy `allocatedTaskQty` ở danh sách chiến dịch để chặn ngay trên form |
 | `task_deadline_outside_campaign` | 422 | Hạn của task nằm ngoài khoảng ngày của chiến dịch | Giới hạn ô chọn ngày theo `startDate` và `endDate` của chiến dịch |
 | `campaign_target_below_allocated` | 422 | Hạ chỉ tiêu chiến dịch xuống dưới phần đã chia cho task | Hiện `title`, có kèm con số đã chia |
@@ -702,8 +702,9 @@ Cặp câu đã có bản ghi nộp thì vẫn nằm trong `skipped` với lý d
 `Cặp câu đang nằm trong một task khác đang chạy và đã có bản ghi nộp.`
 Task chưa giao cho ai thì không được cướp câu của người khác — lý do kèm theo báo rõ cách xử lý.
 
-| Giao hoặc giao lại | `POST /api/tasks/{id}/assign` `{ "userId": 7 }` |
-| Huỷ | `POST /api/tasks/{id}/cancel` |
+| Giao hoặc giao lại | `POST /api/tasks/{id}/assign` `{ "userIds": [7] }` |
+| Huỷ | `POST /api/tasks/{id}/cancel` — hoặc `PATCH /api/tasks/{id}` với `{ "status": "Cancelled" }`, hai cách cho ra cùng kết quả |
+| Đổi trạng thái bằng tay | `PATCH /api/tasks/{id}` `{ "status": "InProgress" \| "Completed" \| "Cancelled" }` |
 | Tổng hợp theo người nhận | `GET /api/tasks/by-assignee` |
 | Ô chọn người nhận | `GET /api/tasks/assignable-users?taskType=Recording` — chỉ người đang hoạt động và đúng vai, kèm `activeTasks`, `totalTarget` để chia việc cho đều |
 | Tìm câu để thêm vào task | `GET /api/scripts?status=Validated` — thêm tuỳ chọn `domain`, `keyword` |
@@ -711,7 +712,10 @@ Task chưa giao cho ai thì không được cướp câu của người khác �
 | Tổng quan trang chủ | `GET /api/task-manager/overview` — chiến dịch mình phụ trách, tải từng người, số task còn chạy |
 
 - Chỉ tiêu task **thu âm đếm theo cặp câu**: một cặp chỉ xong khi cả hai bản đều đạt. Task **duyệt** đếm theo bản ghi. Trường `progress.unit` cho biết đơn vị để hiển thị.
-- **Trạng thái task tự chạy**, frontend không gửi trạng thái: `Draft` → `Open` (đã giao) → `InProgress` (có việc đầu tiên) → `Completed`. Chỉ có huỷ là bấm tay.
+- **Trạng thái task tự chạy theo số liệu thật**: đạt chỉ tiêu → `Completed`, chưa đạt → `InProgress`, đã huỷ → giữ `Cancelled`. Còn **đúng ba trạng thái** (`InProgress`, `Completed`, `Cancelled`) — `Draft` và `Open` đã bị bỏ vì chỉ nói về việc giao chứ không nói về việc làm.
+- **Task Manager đổi trạng thái bằng tay** được: gửi kèm `status` vào `PATCH /api/tasks/{id}` — `InProgress` (mở lại task đã xong), `Completed` (chốt sớm), `Cancelled` (dừng, giống hệt nút Huỷ: mọi lượt giao đang hoạt động cũng chuyển sang `cancelled`).
+  Giá trị bấm tay được **giữ tới khi có việc thật** (đổi `targetQty`, nộp bản ghi, duyệt) — lúc đó hệ thống tính lại và có thể ghi đè. Sửa mô tả, hạn hay chủ đề **không** làm mất nó.
+  Task đã `Cancelled` thì khoá, không sửa được nữa (409 `task_cancelled`).
 - **Chỉ tiêu không được vượt số mục trong task.** Giao task mà `targetQty` lớn hơn số mục người nhận làm được
   thì nhận **422 `target_exceeds_items`**. Thêm mục hoặc hạ chỉ tiêu trước khi giao.
 
@@ -750,13 +754,14 @@ Kết quả nhập file có `imported`, `scriptIds` và `skipped` (kèm lý do t
 |---|---|
 | Tạo | `POST /api/campaigns` `{ "campaignName": "Thu dữ liệu đợt 1", "targetQty": 2000, "startDate": "2026-10-05", "endDate": "2027-01-05" }` |
 | Danh sách, chi tiết | `GET /api/campaigns`, `GET /api/campaigns/{id}` |
-| Sửa | `PATCH /api/campaigns/{id}` — chỉ gửi trường cần đổi, kể cả `status` |
+| Sửa | `PATCH /api/campaigns/{id}` — chỉ gửi trường cần đổi (tên, chủ đề, chỉ tiêu, ngày). **Không nhận `status`**: trạng thái đợt tự tính từ task (`Open` chưa có nhiệm vụ nào, `InProgress` đang làm, `Completed` khi mọi nhiệm vụ xong) |
 | Xoá | `DELETE /api/campaigns/{id}` — 204; không phải của mình thì **403 `campaign_not_owned`** (Admin qua được). Task đang gắn vào không mất: nó thành task độc lập (`campaignId: null`). **Đăng ký của người đọc thì bị xoá hẳn** (`campaign_registration` khai `ON DELETE CASCADE`) — không có API lấy lại, nên hỏi trước khi bấm |
 | Giao cho Task Manager | `POST /api/campaigns/{id}/assign` `{ "assignedToUserId": 2 }` — **chỉ Admin** |
 
 - `targetQty` **phải từ 2000 đến 5000** cặp câu; ngoài khoảng đó là **400**. Đây là giới hạn của lược đồ database.
 - `startDate` và `endDate` là **ngày thuần** dạng `YYYY-MM-DD`, không có giờ và không có múi giờ.
-- Chiến dịch mới tạo ở `Draft` và `assignedTo: null`. **Chưa giao thì Task Manager chưa tạo được task nào trong đó.**
+- Chiến dịch mới tạo ở `Open` và `assignedTo: null`. **Chưa giao thì Task Manager chưa tạo được task nào trong đó.**
+- Gắn task mới vào đợt đã `Completed` thì đợt tự quay lại `InProgress` — đó là đường mở lại duy nhất, vì trạng thái đợt không bấm tay được.
 
 **Quản lý người dùng**
 
@@ -845,14 +850,14 @@ recorder.onstop = async () => {
 | `ReviewDecision` | `Approved`, `Rejected` |
 | `RejectionCategory` | `Content`, `AudioQuality`, `Pronunciation`, `Other` |
 | `TaskType` | `Recording`, `Review` |
-| `WorkTaskStatus` | `Draft`, `Open`, `InProgress`, `Completed`, `Cancelled` |
+| `WorkTaskStatus` | `InProgress`, `Completed`, `Cancelled` — task mới tạo ra đã là `InProgress` (không còn `Draft`/`Open`) |
 | `AssignmentStatus` | `Active`, `Completed`, `Reassigned`, `Cancelled` |
 | `TaskScriptStatus` | `Pending`, `Completed`, `Rejected` |
 | `TaskRecordingStatus` | `Queued`, `Reviewed`, `Skipped` |
 | `ReviewBlocker` | `None`, `OwnRecording`, `AlreadyReviewedByMe`, `NotPendingReview`, `RoundsFull` |
 | `RoleName` | `Speaker`, `Reviewer`, `TaskManager`, `Admin` |
 | `UserStatus` | `Active`, `Inactive` (bị khoá), `Suspended` |
-| `CampaignStatus` | `Draft`, `Open`, `InProgress`, `Completed`, `Cancelled` |
+| `CampaignStatus` | `Open` (chưa có nhiệm vụ nào), `InProgress` (đang làm), `Completed` (mọi nhiệm vụ xong) — không bấm tay, tự tính từ task |
 | `Occupation` | `Student`, `Employed`, `Other` |
 
 Mã lý do từ chối và lý do lỗi câu **luôn lấy từ API** (`/api/rejection-reasons`, `/api/script-error-reasons`),
@@ -883,8 +888,8 @@ thích, nên code cũ phải sửa.
 ### 8.2 `DELETE /api/tasks/{id}/assign/{userId}` — gỡ một người (mới)
 
 Lượt giao chuyển sang `reassigned`, lịch sử giữ nguyên. Không gỡ được **người nhận cuối
-cùng** khi task đã có việc (`409 cannot_remove_last_assignee`) — làm vậy task rơi về
-nháp và không ai làm tiếp được. Muốn dừng hẳn thì dùng `POST /tasks/{id}/cancel`.
+cùng** khi task đã có việc (`409 cannot_remove_last_assignee`) — làm vậy không còn ai làm
+tiếp được. Muốn dừng hẳn thì dùng `POST /tasks/{id}/cancel`.
 
 ### 8.3 Người nhận trả về là MẢNG
 

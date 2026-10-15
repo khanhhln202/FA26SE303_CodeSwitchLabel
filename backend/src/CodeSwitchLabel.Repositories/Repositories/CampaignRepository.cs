@@ -1,6 +1,7 @@
 using CodeSwitchLabel.Repositories.Entities;
 using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Repositories.Persistence;
+using CodeSwitchLabel.Repositories.WorkTasks;
 using Microsoft.EntityFrameworkCore;
 
 namespace CodeSwitchLabel.Repositories.Repositories;
@@ -32,6 +33,16 @@ public interface ICampaignRepository
 
     /// <summary>Kiểm tra user có role TaskManager không.</summary>
     Task<bool> IsTaskManagerAsync(long userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// TEAM_013: tính lại trạng thái đợt từ các task bên trong rồi lưu. Không ai bấm tay
+    /// được trạng thái đợt nữa, nên đây là chỗ DUY NHẤT được ghi nó.
+    ///
+    /// Khoá dòng campaign trước khi đếm: hai task cùng đợt đổi trạng thái song song thì
+    /// transaction thứ hai phải chờ, rồi mới đếm trên trạng thái mới nhất. Không khoá thì
+    /// kết quả là giá trị cũ của một transaction ghi đè lên kết quả của transaction kia.
+    /// </summary>
+    Task RefreshStatusAsync(long campaignId, CancellationToken ct = default);
 
     Task<int> SaveChangesAsync(CancellationToken ct = default);
 }
@@ -113,6 +124,23 @@ public class CampaignRepository(CodeSwitchLabelDbContext db) : ICampaignReposito
             .Where(u => u.UserId == userId)
             .Join(db.Roles, u => u.RoleId, r => r.RoleId, (u, r) => r.RoleName)
             .AnyAsync(r => r == RoleName.TaskManager, ct);
+    }
+
+    public async Task RefreshStatusAsync(long campaignId, CancellationToken ct = default)
+    {
+        var campaign = await db.Campaigns
+            .FromSqlInterpolated($"SELECT * FROM campaign WHERE campaign_id = {campaignId} FOR UPDATE")
+            .FirstOrDefaultAsync(ct);
+
+        if (campaign is null) return;
+
+        var taskCount = await db.WorkTasks.CountAsync(t => t.CampaignId == campaignId, ct);
+        var completed = await db.WorkTasks.CountAsync(
+            t => t.CampaignId == campaignId && t.Status == WorkTaskStatus.Completed, ct);
+
+        campaign.Status = CampaignStateMachine.Evaluate(taskCount, completed);
+
+        await db.SaveChangesAsync(ct);
     }
 
     public Task<int> SaveChangesAsync(CancellationToken ct = default) => db.SaveChangesAsync(ct);

@@ -99,7 +99,7 @@ public class CampaignRepositoryTests : IntegrationTestBase
             DateOnly.FromDateTime(DateTime.Today),
             DateOnly.FromDateTime(DateTime.Today.AddDays(14)),
             AdminUserId,
-            CampaignStatus.Draft);
+            CampaignStatus.Open);
 
         // Act
         var (items, total) = await Campaigns.SearchAsync(null, null, 1, 10, default, TestContext.Current.CancellationToken);

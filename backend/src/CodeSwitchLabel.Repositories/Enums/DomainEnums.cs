@@ -50,14 +50,22 @@ public enum TaskType { Recording, Review }
 /// <summary>
 /// Ứng với kiểu task_status. Đặt tên WorkTaskStatus để khỏi lẫn với
 /// System.Threading.Tasks.TaskStatus, nên phải khai báo tên kiểu PostgreSQL một cách tường minh.
+///
+/// TEAM_013: còn đúng ba trạng thái. Trước đây có thêm `Draft` (chưa giao) và `Open`
+/// (đã giao mà chưa làm), nhưng hai trạng thái đó chỉ nói về việc giao chứ không nói về
+/// việc làm — Task Manager nhìn bảng thì thấy y như nhau. Bỏ đi cho đúng ba.
 /// </summary>
-public enum WorkTaskStatus { Draft, Open, InProgress, Completed, Cancelled }
+public enum WorkTaskStatus { InProgress, Completed, Cancelled }
 
 /// <summary>
 /// Ứng với kiểu campaign_status. Một chiến dịch là đơn vị kế hoạch của Task Manager
-/// cho một đợt thu thập; mọi task đều phải thuộc một chiến dịch.
+/// cho một đợt thu thập.
+///
+/// TEAM_013: trạng thái KHÔNG bấm tay — nó là hàm của các task bên trong đợt, xem
+/// <c>CampaignStateMachine</c>. Không còn `Draft` (đợt mới tạo ra `Open`) và
+/// `Cancelled` (không có đường huỷ cả đợt).
 /// </summary>
-public enum CampaignStatus { Draft, Open, InProgress, Completed, Cancelled }
+public enum CampaignStatus { Open, InProgress, Completed }
 
 public enum AssignmentStatus { Active, Completed, Reassigned, Cancelled }
 

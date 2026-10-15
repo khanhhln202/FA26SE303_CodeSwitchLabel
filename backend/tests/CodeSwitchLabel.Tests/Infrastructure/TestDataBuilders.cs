@@ -95,7 +95,7 @@ public static class TestDataBuilders
         private int _targetQty = 100;
         private DateOnly _startDate = DateOnly.FromDateTime(DateTime.Today);
         private DateOnly _endDate = DateOnly.FromDateTime(DateTime.Today.AddDays(30));
-        private CampaignStatus _status = CampaignStatus.Draft;
+        private CampaignStatus _status = CampaignStatus.Open;
         private long _createdBy = 1;
 
         public CampaignBuilder WithName(string name) { _name = name; return this; }
@@ -127,7 +127,7 @@ public static class TestDataBuilders
         private ScriptDomain _domain = ScriptDomain.ItTechnology; // TEAM_003
         private int _targetQty = 50;
         private DateTimeOffset? _deadline = DateTimeOffset.UtcNow.AddDays(7);
-        private WorkTaskStatus _status = WorkTaskStatus.Draft;
+        private WorkTaskStatus _status = WorkTaskStatus.InProgress;
 
         public TaskBuilder WithCampaignId(long id) { _campaignId = id; return this; }
         public TaskBuilder WithType(TaskType type) { _type = type; return this; }
