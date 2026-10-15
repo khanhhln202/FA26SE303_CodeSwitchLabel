@@ -36,7 +36,11 @@ jobs:
     # Build image .NET trên B2s lâu hơn nhiều so với runner. Mặc định 6 phút
     # là luôn thất bại giả.
     timeout-minutes: 45
-    needs: ci
+    # KHÔNG `needs: ci`. `needs` chỉ trong phạm vi MỘT file workflow và chỉ
+    # để sắp thứ tự các job CÙNG chạy. Job này nằm ở workflow riêng, chạy
+    # SAU "Backend" bằng workflow_run — `ci` không tồn tại ở đây nên GitHub
+    # báo "must contain at least one job with no dependencies" và hỏng cả file.
+    # Cổng chặn thật sự nằm ở `if` bên dưới.
     if: >-
       github.event_name == 'workflow_run' && github.event.workflow.name == 'Backend' &&
       github.event.conclusion == 'success' && github.event.head_branch == 'main'
