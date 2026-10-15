@@ -292,7 +292,7 @@ public class TaskService(
         // TEAM_003: Truyền request.Domain xuống repository
         var (rows, total) = await tasks.SearchAsync(
             request.TaskType, request.Status, request.AssigneeId, request.Domain, request.Overdue,
-            now, request.Page, request.PageSize, ct);
+            now, request.Page, request.PageSize, request.ToSort<TaskSortField>(), ct);
 
         return new PagedResult<TaskListItemDto>(
             [.. rows.Select(r => r.ToListItem(now))], request.Page, request.PageSize, total);
@@ -816,16 +816,17 @@ public class TaskService(
         var byAssignee = await GetAssigneeSummaryAsync(ct);
 
         // Đếm task còn chạy theo loại + quá hạn: chỉ cần Total nên pageSize = 1.
+        // Chỉ đếm nên thứ tự không quan trọng — SortSpec rỗng là thứ tự mặc định.
         var (_, openRec) = await tasks.SearchAsync(
-            TaskType.Recording, WorkTaskStatus.Open, null, null, null, now, 1, 1, ct);
+            TaskType.Recording, WorkTaskStatus.Open, null, null, null, now, 1, 1, default, ct);
         var (_, progRec) = await tasks.SearchAsync(
-            TaskType.Recording, WorkTaskStatus.InProgress, null, null, null, now, 1, 1, ct);
+            TaskType.Recording, WorkTaskStatus.InProgress, null, null, null, now, 1, 1, default, ct);
         var (_, openRev) = await tasks.SearchAsync(
-            TaskType.Review, WorkTaskStatus.Open, null, null, null, now, 1, 1, ct);
+            TaskType.Review, WorkTaskStatus.Open, null, null, null, now, 1, 1, default, ct);
         var (_, progRev) = await tasks.SearchAsync(
-            TaskType.Review, WorkTaskStatus.InProgress, null, null, null, now, 1, 1, ct);
+            TaskType.Review, WorkTaskStatus.InProgress, null, null, null, now, 1, 1, default, ct);
         var (_, overdue) = await tasks.SearchAsync(
-            null, null, null, null, true, now, 1, 1, ct);
+            null, null, null, null, true, now, 1, 1, default, ct);
 
         return new TaskManagerOverviewDto(mine, byAssignee, openRec + progRec, openRev + progRev, overdue);
     }

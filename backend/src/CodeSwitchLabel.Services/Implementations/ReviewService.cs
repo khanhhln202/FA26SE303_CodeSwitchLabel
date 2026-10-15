@@ -74,7 +74,8 @@ public class ReviewService(
         var roundsRequired = await RoundsRequiredAsync(ct);
 
         var (rows, total) = await reviews.GetTaskReviewRowsAsync(
-            taskId, reviewerId, query.OnlyReviewable, roundsRequired, query.Page, query.PageSize, ct);
+            taskId, reviewerId, query.OnlyReviewable, roundsRequired, query.Page, query.PageSize,
+            query.ToSort<TaskReviewSortField>(), ct);
 
         // Một lần lấy đủ hai bản của mọi cặp câu trên trang, thay vì gọi N lần cho từng dòng.
         var pairs = (await reviews.GetSummariesByScriptsAsync(

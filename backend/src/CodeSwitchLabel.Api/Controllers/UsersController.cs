@@ -18,6 +18,10 @@ namespace CodeSwitchLabel.Api.Controllers;
 public class UsersController(IUserService userService) : ControllerBase
 {
     /// <summary>Danh sách tài khoản, lọc theo vai, trạng thái, họ tên hoặc email.</summary>
+    /// <remarks>
+    /// TEAM_012: `?sort=` nhận `userId`, `fullName`, `email`, `status`, `role`, `createdAt`;
+    /// `?dir=asc|desc` (mặc định `asc`). Bỏ trống `sort` thì ra họ tên A-Z.
+    /// </remarks>
     [HttpGet]
     [ProducesResponseType(typeof(PagedResult<UserListItemDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<PagedResult<UserListItemDto>>> Search(

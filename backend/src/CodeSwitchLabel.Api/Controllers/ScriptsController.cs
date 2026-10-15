@@ -18,7 +18,12 @@ namespace CodeSwitchLabel.Api.Controllers;
 public class ScriptsController(IScriptService scriptService) : ControllerBase
 {
     /// <summary>Tìm kiếm, lọc theo trạng thái và chủ đề, có phân trang.</summary>
-    /// <remarks>Từ khoá tìm trên cả hai câu của cặp.</remarks>
+    /// <remarks>
+    /// Từ khoá tìm trên cả hai câu của cặp.
+    ///
+    /// TEAM_012: `?sort=` nhận `scriptId`, `createdAt`, `domain`, `status`; `?dir=asc|desc`
+    /// (mặc định `asc`). Bỏ trống `sort` thì ra mới nhất trước — tức `sort=createdAt` + `dir=desc`.
+    /// </remarks>
     [HttpGet]
     [ProducesResponseType(typeof(PagedResult<ScriptListItemDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<PagedResult<ScriptListItemDto>>> Search(
@@ -107,6 +112,7 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
     }
 
     /// <summary>Danh sách batch đã nhập, mới nhất trước.</summary>
+    /// <remarks>TEAM_012: `?sort=` nhận `batchId`, `createdAt`, `fileName`, `scriptCount`.</remarks>
     [HttpGet("import/batches")]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(PagedResult<ImportBatchDto>), StatusCodes.Status200OK)]

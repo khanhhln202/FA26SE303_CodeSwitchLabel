@@ -96,7 +96,7 @@ Tài liệu chi tiết:
 | Frontend | React 19 + Vite 7/8, react-router-dom 7, TanStack Query 5, axios, TailwindCSS 4 + shadcn, lucide-react, sonner, wavesurfer.js, formik + yup, Vercel |
 | Test | xunit.v3 + Moq + Testcontainers.PostgreSql + coverlet, E2E Node 18+ (`fetch`/`FormData`, không cần cài gói) |
 
-Quy ước API: JSON `camelCase` (trừ `alignment` giữ `snake_case`), enum dạng string, thời gian UTC ISO8601, phân trang `?page&pageSize` (max 100), `204` = hết việc, lỗi nghiệp vụ trả `code + title + traceId`.
+Quy ước API: JSON `camelCase` (trừ `alignment` giữ `snake_case`), enum dạng string, thời gian UTC ISO8601, phân trang `?page&pageSize` (max 100) kèm sắp xếp `?sort=<cột>&dir=asc|desc` (bỏ `sort` là thứ tự mặc định của endpoint, sai tên cột cũng vậy), `204` = hết việc, lỗi nghiệp vụ trả `code + title + traceId`.
 
 ## Chạy nhanh (Quickstart)
 

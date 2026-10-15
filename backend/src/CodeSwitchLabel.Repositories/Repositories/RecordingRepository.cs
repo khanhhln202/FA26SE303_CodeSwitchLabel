@@ -18,9 +18,10 @@ public interface IRecordingRepository
 
     Task<Recording?> GetAsync(string recordingId, CancellationToken ct = default);
 
+    /// <summary>TEAM_012: <paramref name="sort"/> rỗng (Field = null) là thứ tự mặc định.</summary>
     Task<(IReadOnlyList<Recording> Items, int Total)> SearchAsync(
         long? speakerId, string? scriptId, RecordingStatus? status,
-        int page, int pageSize, CancellationToken ct = default);
+        int page, int pageSize, SortSpec<RecordingSortField> sort, CancellationToken ct = default);
 
     /// <summary>
     /// Người đã thu cặp câu này, nếu có. Lược đồ chỉ cho phép MỘT người đọc cho mỗi cặp câu,
@@ -71,7 +72,7 @@ public class RecordingRepository(CodeSwitchLabelDbContext db) : IRecordingReposi
 
     public async Task<(IReadOnlyList<Recording> Items, int Total)> SearchAsync(
         long? speakerId, string? scriptId, RecordingStatus? status,
-        int page, int pageSize, CancellationToken ct = default)
+        int page, int pageSize, SortSpec<RecordingSortField> sort, CancellationToken ct = default)
     {
         var query = db.Recordings.AsNoTracking();
 
@@ -81,8 +82,29 @@ public class RecordingRepository(CodeSwitchLabelDbContext db) : IRecordingReposi
 
         var total = await query.CountAsync(ct);
 
-        var items = await query
-            .OrderByDescending(r => r.RecordedAt).ThenBy(r => r.RecordingId)
+        // TEAM_012: nhánh cuối là thứ tự cũ (bản ghi mới nhất trước).
+        var ordered = sort.Field switch
+        {
+            RecordingSortField.RecordingId => sort.Descending
+                ? query.OrderByDescending(r => r.RecordingId)
+                : query.OrderBy(r => r.RecordingId),
+            RecordingSortField.RecordedAt => sort.Descending
+                ? query.OrderByDescending(r => r.RecordedAt)
+                : query.OrderBy(r => r.RecordedAt),
+            RecordingSortField.Status => sort.Descending
+                ? query.OrderByDescending(r => r.Status)
+                : query.OrderBy(r => r.Status),
+            RecordingSortField.ScriptId => sort.Descending
+                ? query.OrderByDescending(r => r.ScriptId)
+                : query.OrderBy(r => r.ScriptId),
+            RecordingSortField.DurationSec => sort.Descending
+                ? query.OrderByDescending(r => r.DurationSec)
+                : query.OrderBy(r => r.DurationSec),
+            _ => query.OrderByDescending(r => r.RecordedAt)
+        };
+
+        var items = await ordered
+            .ThenBy(r => r.RecordingId)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(ct);

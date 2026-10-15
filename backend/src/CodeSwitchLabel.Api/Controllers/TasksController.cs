@@ -50,6 +50,10 @@ public class TasksController(ITaskService taskService) : ControllerBase
     /// <remarks>
     /// Sắp theo hạn gần nhất trước. <c>overdue=true</c> chỉ lấy task **còn đang làm** mà đã quá hạn —
     /// task đã xong hay đã huỷ thì không tính là trễ.
+    ///
+    /// TEAM_012: `?sort=` nhận `taskId`, `deadline`, `status`, `taskType`, `createdAt`, `targetQty`;
+    /// `?dir=asc|desc` (mặc định `asc`). Bỏ trống `sort` thì ra hạn gần nhất trước, task không đặt hạn ở cuối —
+    /// sắp theo `deadline` cũng giữ nguyên quy tắc đó ở cả hai chiều.
     /// </remarks>
     [HttpGet]
     [ProducesResponseType(typeof(PagedResult<TaskListItemDto>), StatusCodes.Status200OK)]

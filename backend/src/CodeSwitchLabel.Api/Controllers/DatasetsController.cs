@@ -25,6 +25,10 @@ public class DatasetsController(IDatasetService datasets) : ControllerBase
     }
 
     /// <summary>Danh sách dataset, mới nhất trước.</summary>
+    /// <remarks>
+    /// TEAM_012: `?sort=` nhận `datasetId`, `createdAt`, `status`, `datasetName`, `recordingCount`;
+    /// `?dir=asc|desc` (mặc định `asc`). Bỏ trống `sort` thì ra mới nhất trước.
+    /// </remarks>
     [HttpGet]
     [ProducesResponseType(typeof(PagedResult<DatasetDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<PagedResult<DatasetDto>>> Search(

@@ -103,6 +103,77 @@ public sealed class DatasetServiceTests : IntegrationTestBase
         Assert.Equal("dataset_exists", loi.Code);
     }
 
+    // ---------------------------------------------------------------- TEAM_012: sắp xếp
+
+    /// <summary>Ba dataset rỗng (không cần bản ghi nào) với tên theo thứ tự ngược lại.</summary>
+    private async Task<(string Prefix, long[] Ids)> CreateThreeNamedDatasetsAsync()
+    {
+        var prefix = $"SapXep{Guid.NewGuid():N}"[..16];
+        var ids = new List<long>();
+
+        foreach (var name in new[] { "Charlie", "Alpha", "Bravo" })
+        {
+            var created = await _datasets.CreateAsync(
+                new CreateDatasetRequest
+                {
+                    DatasetName = $"{prefix} {name}", Version = "v1", RecordingIds = [], CampaignIds = []
+                },
+                AdminUserId, TestContext.Current.CancellationToken);
+
+            ids.Add(created.Dataset.DatasetId);
+        }
+
+        return (prefix, [.. ids]);
+    }
+
+    [Fact]
+    public async Task SearchAsync_KhongTruyenSort_GiuNguyenThuTuMoiNhatTruoc()
+    {
+        // Regression TEAM_012: mặc định của /api/datasets là mới nhất trước.
+        var (_, ids) = await CreateThreeNamedDatasetsAsync();
+
+        var page = await _datasets.SearchAsync(
+            new PageRequest { PageSize = 50 }, TestContext.Current.CancellationToken);
+
+        var mine = page.Items.Where(d => ids.Contains(d.DatasetId)).Select(d => d.DatasetId).ToList();
+        Assert.Equal(ids.Reverse(), mine);
+    }
+
+    [Fact]
+    public async Task SearchAsync_SapXepTheoTen_TheoQuerySortVaDir()
+    {
+        var (prefix, ids) = await CreateThreeNamedDatasetsAsync();
+
+        var page = await _datasets.SearchAsync(
+            new PageRequest { PageSize = 50, Sort = "datasetName", Dir = "asc" },
+            TestContext.Current.CancellationToken);
+
+        var mine = page.Items.Where(d => ids.Contains(d.DatasetId)).ToList();
+
+        // Tên lẫn lộn thứ tự tạo (Charlie, Alpha, Bravo) nên sắp theo tên là khác hẳn.
+        Assert.Equal(["Alpha", "Bravo", "Charlie"], mine.Select(d => d.DatasetName.Split(' ')[1]));
+        Assert.Equal(3, mine.Count);
+        Assert.StartsWith(prefix, mine[0].DatasetName);
+    }
+
+    [Fact]
+    public async Task SearchAsync_TenCotSao_TraVeThuTuMacDinh()
+    {
+        var (_, ids) = await CreateThreeNamedDatasetsAsync();
+
+        var macDinh = await _datasets.SearchAsync(
+            new PageRequest { PageSize = 50 }, TestContext.Current.CancellationToken);
+
+        var sai = await _datasets.SearchAsync(
+            new PageRequest { PageSize = 50, Sort = "khongCoCotNay", Dir = "desc" },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            macDinh.Items.Select(d => d.DatasetId),
+            sai.Items.Select(d => d.DatasetId));
+        Assert.Contains(macDinh.Items, d => ids.Contains(d.DatasetId));
+    }
+
     [Fact]
     public async Task PhatHanh_CauDuHaiBan_DuocPhatHanhVaTaiDuoc()
     {

@@ -117,10 +117,34 @@ public class DatasetService(
 
     public async Task<PagedResult<DatasetDto>> SearchAsync(PageRequest request, CancellationToken ct = default)
     {
-        var total = await db.Datasets.CountAsync(ct);
+        var query = db.Datasets.AsNoTracking();
+        var total = await query.CountAsync(ct);
 
-        var items = await db.Datasets.AsNoTracking()
-            .OrderByDescending(d => d.CreatedAt)
+        var sort = request.ToSort<DatasetSortField>();
+
+        // TEAM_012: nhánh cuối là thứ tự cũ (mới nhất trước).
+        var ordered = sort.Field switch
+        {
+            DatasetSortField.DatasetId => sort.Descending
+                ? query.OrderByDescending(d => d.DatasetId)
+                : query.OrderBy(d => d.DatasetId),
+            DatasetSortField.CreatedAt => sort.Descending
+                ? query.OrderByDescending(d => d.CreatedAt)
+                : query.OrderBy(d => d.CreatedAt),
+            DatasetSortField.Status => sort.Descending
+                ? query.OrderByDescending(d => d.Status)
+                : query.OrderBy(d => d.Status),
+            DatasetSortField.DatasetName => sort.Descending
+                ? query.OrderByDescending(d => d.DatasetName)
+                : query.OrderBy(d => d.DatasetName),
+            DatasetSortField.RecordingCount => sort.Descending
+                ? query.OrderByDescending(d => d.RecordingCount)
+                : query.OrderBy(d => d.RecordingCount),
+            _ => query.OrderByDescending(d => d.CreatedAt)
+        };
+
+        var items = await ordered
+            .ThenBy(d => d.DatasetId)
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
             .ToListAsync(ct);

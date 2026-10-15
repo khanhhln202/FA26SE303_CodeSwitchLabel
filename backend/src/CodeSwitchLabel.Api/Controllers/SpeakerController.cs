@@ -125,6 +125,12 @@ public class SpeakerController(
         => Ok(await roundsService.GetRejectedAsync(User.GetUserId(), limit, ct));
 
     /// <summary>Lịch sử ghi âm của chính mình, kèm kết quả duyệt đã chốt.</summary>
+    /// <remarks>
+    /// Mỗi dòng là MỘT CẶP bản ghi.
+    ///
+    /// TEAM_012: `?sort=` chỉ nhận `lastRecordedAt` và `scriptId` — trạng thái và thời lượng của
+    /// cặp là thứ tính ra sau khi đã cắt trang, nên không sắp xếp được trước đó.
+    /// </remarks>
     [HttpGet("recordings/history")]
     [ProducesResponseType(typeof(PagedResult<SpeakerRecordingHistoryDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<PagedResult<SpeakerRecordingHistoryDto>>> RecordingHistory(
@@ -132,6 +138,7 @@ public class SpeakerController(
         => Ok(await roundsService.GetRecordingHistoryAsync(User.GetUserId(), query, ct));
 
     /// <summary>Lịch sử đóng góp câu của chính mình.</summary>
+    /// <remarks>TEAM_012: `?sort=` nhận `createdAt`, `scriptId`, `domain`, `status`.</remarks>
     [HttpGet("contributions/history")]
     [ProducesResponseType(typeof(PagedResult<SpeakerContributionHistoryDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<PagedResult<SpeakerContributionHistoryDto>>> ContributionHistory(
