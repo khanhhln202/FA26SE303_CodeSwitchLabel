@@ -60,6 +60,14 @@ export const adminService = {
     const res = await httpClient.post(`/api/scripts/${id}/review`, data);
     return res.data;
   },
+  // Xóa/Loại bỏ văn bản đúng quy chuẩn Backend Review API
+  deleteText: async (id) => {
+    const res = await httpClient.post(`/api/scripts/${id}/review`, {
+      action: "Rejected",
+      errorReasonCode: "OTHER" // Hoặc mã lý do do Backend trả về từ API /api/script-error-reasons
+    });
+    return res.data;
+  },
 
   // 6. Quản lý Recordings (Bản thu)
   getRecordings: async (params) => {

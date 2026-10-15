@@ -1,6 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
 import { 
-  FileText, 
   Plus, 
   Search, 
   Filter, 
@@ -9,7 +8,8 @@ import {
   CheckCircle2, 
   Clock, 
   X,
-  AlertTriangle
+  AlertTriangle,
+  Upload
 } from "lucide-react";
 import { toast } from "sonner";
 import Pagination from "../../../components/Pagination/Pagination";
@@ -31,7 +31,7 @@ const CATEGORY_COLORS = {
   'Giáo dục': { bg: '#FCE7F0', text: '#9D2662', border: '#F8CFE0' },
 };
 
-// Chuẩn hóa tên chủ đề từ tiếng Anh/mã code sang tiếng Việt
+// Chuẩn hóa tên chủ đề từ tiếng Anh/mã code sang tiếng Việt để hiển thị giao diện
 const normalizeTopicName = (rawTopic) => {
   if (!rawTopic) return 'Công nghệ thông tin';
   const topicLower = String(rawTopic).trim().toLowerCase();
@@ -46,6 +46,23 @@ const normalizeTopicName = (rawTopic) => {
     return 'Giáo dục';
   }
   return rawTopic;
+};
+
+// Map chuẩn domain gửi về API Backend
+const mapDomainToApi = (rawTopic) => {
+  if (!rawTopic) return 'ItTechnology';
+  const topicLower = String(rawTopic).trim().toLowerCase();
+
+  if (topicLower.includes('it') || topicLower.includes('tech') || topicLower.includes('công nghệ')) {
+    return 'ItTechnology';
+  }
+  if (topicLower.includes('daily') || topicLower.includes('life') || topicLower.includes('hội thoại')) {
+    return 'DailyLife';
+  }
+  if (topicLower.includes('edu') || topicLower.includes('giáo dục')) {
+    return 'Education';
+  }
+  return 'ItTechnology';
 };
 
 const catStyle = (cat) => {
@@ -72,6 +89,9 @@ export default function AdminTextData() {
   const [editingItem, setEditingItem] = useState(null); 
   const [itemToDelete, setItemToDelete] = useState(null);
   const [formData, setFormData] = useState({ content: "", topic: "Công nghệ thông tin", status: "active" });
+  
+  const [selectedJsonFile, setSelectedJsonFile] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchTexts = async () => {
     try {
@@ -85,7 +105,7 @@ export default function AdminTextData() {
           id: item.scriptId || item.id,
           content: item.csContent || item.csPlain || item.content || "",
           topic: normalizeTopicName(item.domain || item.topic),
-          status: item.status === "Validated" || item.status === "active" ? "active" : "pending"
+          status: (item.status === "Validated" || item.status === "active") ? "active" : "pending"
         }))
       );
     } catch (err) {
@@ -111,39 +131,103 @@ export default function AdminTextData() {
   const handleOpenAddModal = () => {
     setEditingItem(null);
     setFormData({ content: "", topic: "Công nghệ thông tin", status: "active" });
+    setSelectedJsonFile(null);
     setShowModal(true);
   };
 
   const handleOpenEditModal = (item) => {
     setEditingItem(item);
     setFormData({ content: item.content, topic: item.topic, status: item.status });
+    setSelectedJsonFile(null);
     setShowModal(true);
   };
 
   const handleSubmitForm = async (e) => {
     e.preventDefault();
-    if (!formData.content.trim()) return;
 
     try {
       if (editingItem) {
-        await adminService.updateTextReview(editingItem.id, {
+        if (!formData.content.trim()) return;
+        await adminService.reviewScript(editingItem.id, {
           action: "Edited",
-          editedCsContent: formData.content
+          editedCsContent: formData.content,
+          editedVeContent: formData.content
         });
         toast.success(`Đã cập nhật thành công câu văn bản!`);
+        setShowModal(false);
+        fetchTexts();
       } else {
-        await adminService.createText({
-          csContent: formData.content,
-          veContent: formData.content,
-          domain: formData.topic
+        if (!selectedJsonFile) {
+          toast.error("Vui lòng chọn file JSON để thêm mới!");
+          return;
+        }
+
+        setIsSubmitting(true);
+
+        const fileContent = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (event) => resolve(event.target.result);
+          reader.onerror = (error) => reject(error);
+          reader.readAsText(selectedJsonFile, "UTF-8");
         });
-        toast.success("Đã thêm văn bản mới!");
+
+        let parsedData;
+        try {
+          parsedData = JSON.parse(fileContent);
+        } catch (jsonErr) {
+          console.error("Lỗi cú pháp file JSON:", jsonErr);
+          toast.error("File không đúng chuẩn JSON! Vui lòng kiểm tra lại cú pháp.");
+          setIsSubmitting(false);
+          return;
+        }
+
+        const itemsToUpload = Array.isArray(parsedData) ? parsedData : [parsedData];
+
+        if (itemsToUpload.length === 0) {
+          toast.error("File JSON rỗng!");
+          setIsSubmitting(false);
+          return;
+        }
+
+        let successCount = 0;
+        let lastErrorMsg = "";
+
+        for (const item of itemsToUpload) {
+          const csContent = item.cs_transcript || item.csContent || item.content || "";
+          const veContent = item.vi_equivalent || item.veContent || csContent;
+          const domain = mapDomainToApi(item.domain || item.topic);
+          const alignments = item.alignment || item.alignments || [];
+
+          if (csContent) {
+            try {
+              await adminService.createText({
+                csContent,
+                veContent,
+                domain,
+                alignment: alignments
+              });
+              successCount++;
+            } catch (apiErr) {
+              console.error("Lỗi gửi dữ liệu câu văn bản:", csContent, apiErr);
+              lastErrorMsg = apiErr.response?.data?.title || apiErr.response?.data?.message || apiErr.message;
+            }
+          }
+        }
+
+        if (successCount > 0) {
+          toast.success(`Đã thêm thành công ${successCount}/${itemsToUpload.length} văn bản!`);
+          setShowModal(false);
+          fetchTexts();
+        } else {
+          toast.error(`Không thể lưu dữ liệu: ${lastErrorMsg || "Lỗi API Server!"}`);
+        }
       }
-      setShowModal(false);
-      fetchTexts();
     } catch (err) {
+      console.error("Lỗi xử lý form:", err);
       const errorMsg = err.response?.data?.title || "Thao tác cập nhật văn bản thất bại!";
       toast.error(errorMsg);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -151,10 +235,18 @@ export default function AdminTextData() {
     if (!itemToDelete) return;
     try {
       await adminService.deleteText(itemToDelete.id);
-      toast.success(`Đã xóa thành công câu văn bản!`);
+      toast.success(`Đã loại bỏ thành công câu văn bản!`);
       fetchTexts();
     } catch (err) {
-      const errorMsg = err.response?.data?.title || "Xóa văn bản thất bại!";
+      console.error("Lỗi xóa văn bản:", err.response?.data);
+      const errorData = err.response?.data;
+      let errorMsg = errorData?.title || errorData?.message || "Loại bỏ văn bản thất bại!";
+      
+      if (errorData?.errors) {
+        const firstKey = Object.keys(errorData.errors)[0];
+        errorMsg = errorData.errors[firstKey][0] || errorMsg;
+      }
+      
       toast.error(errorMsg);
     }
     setItemToDelete(null);
@@ -382,93 +474,129 @@ export default function AdminTextData() {
                 </button>
               </div>
 
-              <div>
-                <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
-                  Chủ đề
-                </label>
-                <select
-                  value={formData.topic}
-                  onChange={(e) => setFormData({ ...formData, topic: e.target.value })}
-                  className="w-full h-11 px-3.5 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] type-body text-[#16171C] dark:text-white outline-none cursor-pointer transition-all font-sans"
-                  onFocus={(e) => {
-                    e.target.style.borderColor = ADMIN_ACCENT;
-                    e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = '';
-                    e.target.style.boxShadow = 'none';
-                  }}
-                >
-                  <option value="Công nghệ thông tin" className="bg-white dark:bg-[#25272E]">Công nghệ thông tin</option>
-                  <option value="Giáo dục" className="bg-white dark:bg-[#25272E]">Giáo dục</option>
-                  <option value="Hội thoại hàng ngày" className="bg-white dark:bg-[#25272E]">Hội thoại hàng ngày</option>
-                </select>
-              </div>
+              {editingItem ? (
+                <>
+                  <div>
+                    <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
+                      Chủ đề
+                    </label>
+                    <select
+                      value={formData.topic}
+                      onChange={(e) => setFormData({ ...formData, topic: e.target.value })}
+                      className="w-full h-11 px-3.5 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] type-body text-[#16171C] dark:text-white outline-none cursor-pointer transition-all font-sans"
+                      onFocus={(e) => {
+                        e.target.style.borderColor = ADMIN_ACCENT;
+                        e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+                      }}
+                      onBlur={(e) => {
+                        e.target.style.borderColor = '';
+                        e.target.style.boxShadow = 'none';
+                      }}
+                    >
+                      <option value="Công nghệ thông tin" className="bg-white dark:bg-[#25272E]">Công nghệ thông tin</option>
+                      <option value="Giáo dục" className="bg-white dark:bg-[#25272E]">Giáo dục</option>
+                      <option value="Hội thoại hàng ngày" className="bg-white dark:bg-[#25272E]">Hội thoại hàng ngày</option>
+                    </select>
+                  </div>
 
-              <div>
-                <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
-                  Nội dung câu mẫu
-                </label>
-                <textarea
-                  rows="4"
-                  required
-                  placeholder="Nhập câu mẫu..."
-                  value={formData.content}
-                  onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                  className="w-full p-3.5 bg-white dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-body text-[#16171C] dark:text-white outline-none transition-all resize-none"
-                  onFocus={(e) => {
-                    e.target.style.borderColor = ADMIN_ACCENT;
-                    e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = '';
-                    e.target.style.boxShadow = 'none';
-                  }}
-                ></textarea>
-                <div className="flex justify-between items-center mt-1 type-meta text-[#6E7078] dark:text-gray-400">
-                  <span>Không giới hạn độ dài câu</span>
-                  <span className="font-bold text-[#16171C] dark:text-gray-200">
-                    Số từ: {countWords(formData.content)} từ
-                  </span>
+                  <div>
+                    <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
+                      Nội dung câu mẫu
+                    </label>
+                    <textarea
+                      rows="4"
+                      required
+                      placeholder="Nhập câu mẫu..."
+                      value={formData.content}
+                      onChange={(e) => setFormData({ ...formData, content: e.target.value })}
+                      className="w-full p-3.5 bg-white dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-body text-[#16171C] dark:text-white outline-none transition-all resize-none"
+                      onFocus={(e) => {
+                        e.target.style.borderColor = ADMIN_ACCENT;
+                        e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+                      }}
+                      onBlur={(e) => {
+                        e.target.style.borderColor = '';
+                        e.target.style.boxShadow = 'none';
+                      }}
+                    ></textarea>
+                    <div className="flex justify-between items-center mt-1 type-meta text-[#6E7078] dark:text-gray-400">
+                      <span>Không giới hạn độ dài câu</span>
+                      <span className="font-bold text-[#16171C] dark:text-gray-200">
+                        Số từ: {countWords(formData.content)} từ
+                      </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
+                      Trạng thái
+                    </label>
+                    <select
+                      value={formData.status}
+                      onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                      className="w-full h-11 px-3.5 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] type-body text-[#16171C] dark:text-white outline-none cursor-pointer transition-all font-sans"
+                      onFocus={(e) => {
+                        e.target.style.borderColor = ADMIN_ACCENT;
+                        e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+                      }}
+                      onBlur={(e) => {
+                        e.target.style.borderColor = '';
+                        e.target.style.boxShadow = 'none';
+                      }}
+                    >
+                      <option value="active" className="bg-white dark:bg-[#25272E]">Sẵn sàng</option>
+                      <option value="pending" className="bg-white dark:bg-[#25272E]">Chờ duyệt</option>
+                    </select>
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-3">
+                  <label className="block type-label text-[#2B2C31] dark:text-gray-200">
+                    Tải lên file dữ liệu (.json)
+                  </label>
+                  <div className="border-2 border-dashed border-[#E5E2D8] dark:border-gray-700 rounded-2xl p-6 text-center hover:border-gray-400 dark:hover:border-gray-500 transition-colors bg-[#F7F5EF]/50 dark:bg-[#25272E]/50">
+                    <input
+                      type="file"
+                      accept=".json"
+                      id="json-file-input"
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          setSelectedJsonFile(e.target.files[0]);
+                        }
+                      }}
+                    />
+                    <label htmlFor="json-file-input" className="cursor-pointer flex flex-col items-center justify-center space-y-2">
+                      <div className="w-12 h-12 rounded-full bg-white dark:bg-[#1C1D22] flex items-center justify-center shadow-xs">
+                        <Upload className="w-6 h-6 text-[#6E7078] dark:text-gray-300" />
+                      </div>
+                      <span className="type-body font-medium text-[#16171C] dark:text-gray-200">
+                        {selectedJsonFile ? selectedJsonFile.name : "Nhấp để chọn file JSON"}
+                      </span>
+                      <span className="type-meta text-[#6E7078] dark:text-gray-400">
+                        Chấp nhận file JSON dạng 1 đối tượng hoặc mảng các câu văn bản
+                      </span>
+                    </label>
+                  </div>
                 </div>
-              </div>
-
-              <div>
-                <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
-                  Trạng thái
-                </label>
-                <select
-                  value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  className="w-full h-11 px-3.5 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] type-body text-[#16171C] dark:text-white outline-none cursor-pointer transition-all font-sans"
-                  onFocus={(e) => {
-                    e.target.style.borderColor = ADMIN_ACCENT;
-                    e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = '';
-                    e.target.style.boxShadow = 'none';
-                  }}
-                >
-                  <option value="active" className="bg-white dark:bg-[#25272E]">Sẵn sàng</option>
-                  <option value="pending" className="bg-white dark:bg-[#25272E]">Chờ duyệt</option>
-                </select>
-              </div>
+              )}
 
               <div className="flex gap-2.5 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="flex-1 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 type-button text-[#6E7078] dark:text-gray-300 hover:bg-[#F7F5EF] dark:hover:bg-[#25272E] cursor-pointer transition-colors"
+                  disabled={isSubmitting}
+                  className="flex-1 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 type-button text-[#6E7078] dark:text-gray-300 hover:bg-[#F7F5EF] dark:hover:bg-[#25272E] cursor-pointer transition-colors disabled:opacity-50"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
+                  disabled={isSubmitting}
                   style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 10px 24px ${ADMIN_ACCENT}40` }}
-                  className="flex-1 py-2.5 text-white rounded-xl type-button hover:opacity-90 active:scale-[0.99] cursor-pointer transition-all"
+                  className="flex-1 py-2.5 text-white rounded-xl type-button hover:opacity-90 active:scale-[0.99] cursor-pointer transition-all disabled:opacity-50"
                 >
-                  {editingItem ? "Lưu thay đổi" : "Lưu Văn Bản"}
+                  {isSubmitting ? "Đang xử lý..." : editingItem ? "Lưu thay đổi" : "Lưu Văn Bản"}
                 </button>
               </div>
             </form>
