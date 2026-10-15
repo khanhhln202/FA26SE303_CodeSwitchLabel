@@ -1,0 +1,72 @@
+name: Deploy máy chủ
+
+# Deploy tự động lên máy chủ thử nghiệm (Azure VM).
+#
+# KHÔNG gọi trực tiếp `docker compose` từ đây. Runner của GitHub không có
+# `deploy/.env`, không có volume `pg-data`, cũng không có MinIO — dựng lại ở
+# đây là dựng một máy chủ rỗng. Việc duy nhất workflow này làm là SSH vào máy
+# chủ rồi chạy `deploy/deploy.sh`, nơi mọi bước an toàn (sao lưu, sổ
+# migration, kiểm tra /health) đã nằm sẵn.
+#
+# Chỉ chạy khi `build-and-test` của workflow "Backend" đã xanh — `needs` +
+# `workflow_run` nên không có đường nào để deploy code chưa qua test.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'docs/codeswitchlabel.sql'
+      - 'migrations/**'
+      - 'global.json'
+      - 'deploy/**'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+
+# Hai lần deploy chạy chồng thì `git pull`, `docker compose up --build` và sổ
+# `schema_migration` của chúng đụng nhau trên cùng một database. Xếp hàng, đừng
+# huỷ: huỷ nửa chừng để lại container dở và migration chạy dở.
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy lên máy chủ
+    runs-on: ubuntu-latest
+    # Build image .NET trên B2s lâu hơn nhiều so với runner. Mặc định 6 phút
+    # là luôn thất bại giả.
+    timeout-minutes: 45
+    # KHÔNG `needs: ci`. `needs` chỉ trong phạm vi MỘT file workflow và chỉ
+    # để sắp thứ tự các job CÙNG chạy. Job này nằm ở workflow riêng, chạy
+    # SAU "Backend" bằng workflow_run — `ci` không tồn tại ở đây nên GitHub
+    # báo "must contain at least one job with no dependencies" và hỏng cả file.
+    # Cổng chặn thật sự nằm ở `if` bên dưới.
+    if: >-
+      github.event_name == 'workflow_run' && github.event.workflow.name == 'Backend' &&
+      github.event.conclusion == 'success' && github.event.head_branch == 'main'
+
+    steps:
+      # `restrict` ở authorized_keys trên máy chủ đã chặn port/agent forwarding.
+      # known_hosts GHI CỨNG, không ssh-keyscan lúc chạy: key này có quyền đụng
+      # dữ liệu thật, tin bất kỳ thứ gì tên miền đó là bằng chứng giả mạo.
+      - name: Chạy deploy/deploy.sh trên máy chủ
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_REPO_DIR: ${{ vars.DEPLOY_REPO_DIR }}
+          DEPLOY_HOST_KEY: ${{ vars.DEPLOY_HOST_KEY }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          # Thiếu variable thì `ssh` báo "cd: /deploy.sh: No such file" — đọc
+          # kiểu đó không ra nguyên nhân. Nói thẳng ra rồi mới dễ sửa.
+          for v in DEPLOY_HOST DEPLOY_USER DEPLOY_REPO_DIR DEPLOY_HOST_KEY DEPLOY_SSH_KEY; do
+            [ -n "${!v}" ] || { echo "::error::Thiếu $v trong Secrets/Variables của repo."; exit 1; }
+          done
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_HOST_KEY" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/deploy_key ~/.ssh/known_hosts
+          # Không có -t: deploy.sh in rollback bằng printf, không cần TTY.
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes \
+              -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" \
+              "cd '$DEPLOY_REPO_DIR' && ./deploy/deploy.sh"

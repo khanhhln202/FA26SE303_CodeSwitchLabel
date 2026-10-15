@@ -161,17 +161,96 @@ Kiểm tra bằng tay:
 - Đăng nhập, nộp thử một bản ghi, mở link nghe: địa chỉ phải bắt đầu bằng `https://files.<tên-miền>`.
 - Mở trang frontend trên Vercel, bấm một chức năng gọi API: không có lỗi CORS trong Console.
 
+## Deploy tự động
+
+Từ nay **push code backend lên `main` là máy chủ tự cập nhật**, không cần SSH.
+Workflow `.github/workflows/deploy.yml` chạy đúng `deploy/deploy.sh` trên máy
+chủ, và **chỉ chạy sau khi** workflow `Backend` đã build và test xanh.
+
+```text
+push lên main
+  └─ Backend (build + test)  ── đỏ ──> dừng, máy chủ không đụng vào
+       └─ Deploy máy chủ     ── SSH ──> ./deploy/deploy.sh trên VM
+```
+
+Push mà chỉ sửa `FRONTEND/**` thì không deploy: frontend nằm trên Vercel, tự
+deploy theo push của nó.
+
+### Cấu hình một lần
+
+Cần làm trên máy cá nhân và trên máy chủ. Chỉ làm khi bắt đầu dùng auto deploy,
+không phải làm lại mỗi lần deploy.
+
+**1. Tạo khoá riêng cho GitHub Actions** (không dùng khoá cá nhân của bạn):
+
+```bash
+ssh-keygen -t ed25519 -C github-actions-deploy -f csl_actions
+```
+
+**2. Cho khoá công khai vào máy chủ.** Dán đúng một dòng vào
+`~<tài-khoản-ssh>/.ssh/authorized_keys` trên VM:
+
+```
+restrict ssh-ed25519 AAAA... github-actions-deploy
+```
+
+`restrict` chặn port forwarding, agent forwarding và X11 — key này chỉ còn một
+việc là chạy script. Bỏ `restrict` thì key lọt vào được nhiều hơn mà không ích
+gì.
+
+**3. Thêm vào repo** (Settings → Secrets and variables → Actions):
+
+| Tên | Loại | Giá trị |
+|---|---|---|
+| `DEPLOY_SSH_KEY` | Secret | Nội dung **riêng** của `csl_actions`, gồm cả dòng `BEGIN`/`END` |
+| `DEPLOY_HOST` | Variable | IP máy chủ, ví dụ `104.208.64.22` |
+| `DEPLOY_USER` | Variable | tài khoản SSH trên VM (ví dụ `azureuser`) |
+| `DEPLOY_REPO_DIR` | Variable | đường dẫn repo trên VM, ví dụ `/home/azureuser/FA26SE303_CodeSwitchLabel` |
+| `DEPLOY_HOST_KEY` | Variable | dòng `known_hosts` của máy chủ (xem bước 4) |
+
+**4. Lấy khoá máy chủ.** Chạy trên máy cá nhân:
+
+```bash
+ssh-keyscan -t ed25519,ecdsa <IP máy chủ>
+```
+
+Dán nguyên kết quả vào `DEPLOY_HOST_KEY`. Workflow ghi cứng dòng này vào
+`known_hosts` và bật `StrictHostKeyChecking=yes` — không `ssh-keyscan` lúc chạy.
+Một khoá công khai là thứ **có thể** công khai; để workflow tin bất kỳ thứ gì
+tự giới thiệu tên miền đó thì mất luôn ý nghĩa của việc kiểm tra khoá.
+
+**5. Kiểm tra máy chủ `git pull` được không cần bàn phím.** `deploy.sh` chạy
+`git pull --ff-only`, mà workflow không cấp TTY cho nó:
+
+```bash
+ssh <máy-chủ> 'git -C /đường/dẫn/repo fetch --dry-run'
+```
+
+Lệnh này treo ở chỗ nào thì sửa chỗ đó **trước khi bật auto deploy** — không
+làm thì workflow sẽ treo ở `timeout-minutes` rồi bỏ deploy.
+
+### Khi auto deploy hỏng
+
+Log của workflow là nơi đọc lời giải thích: `deploy.sh` in ra đúng các lệnh
+lùi về, nhưng **không tự phục hồi database** (phục hồi bản sao lưu tạo vài
+phút trước là xoá mất dữ liệu ghi trong khoảng đó). Cần canh tay thì SSH vào
+chạy `./deploy/deploy.sh` như phần bên dưới.
+
+Chạy lại một lần mà không có code mới: tab **Actions** → chọn run → **Re-run
+jobs**.
+
 ## Việc phải làm định kỳ
 
 ```bash
 # Sao lưu database (đặt lịch chạy hằng ngày bằng cron)
 docker exec csl-postgres pg_dump -U csl codeswitchlabel | gzip > backup-$(date +%F).sql.gz
-
-# Cập nhật khi có code mới — script tự sao lưu, chạy migration, dựng lại, kiểm tra
-./deploy/deploy.sh
 ```
 
-### Cập nhật bằng `deploy/deploy.sh`
+### Cập nhật bằng `deploy/deploy.sh` (đường chạy tay)
+
+Đường này giờ là **dự phòng** cho auto deploy: dùng khi workflow hỏng, hoặc khi
+cần deploy thử một thứ gì đó không lên `main`. Một lệnh duy nhất, chạy từ thư
+mục gốc của repo trên máy chủ. Script làm theo đúng thứ tự này:
 
 Một lệnh duy nhất, chạy từ thư mục gốc của repo trên máy chủ. Script làm theo đúng thứ tự này:
 
