@@ -210,7 +210,8 @@ export default function ReviewText() {
     );
   }
 
-  const { done, targetQty, percent } = selectedTask.progress;
+  // API trả myProgress (của riêng mình) và teamProgress (cả nhóm cùng task) - thanh tiến độ ở đây là của mình
+  const { done, targetQty, percent } = selectedTask.myProgress;
   const barColor = percent >= 50 ? SUCCESS : WARNING;
 
   return (
@@ -234,7 +235,7 @@ export default function ReviewText() {
           >
             {activeTasks.map((t) => (
               <option key={t.taskId} value={t.taskId}>
-                {t.campaignName || t.description || `Nhiệm vụ #${t.taskId}`}
+                {t.description || `Nhiệm vụ #${t.taskId}`}
               </option>
             ))}
           </select>

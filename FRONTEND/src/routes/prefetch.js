@@ -42,6 +42,7 @@ const ROUTE_PREFETCH = {
   '/speaker/contribution-history': () => {
     import('../pages/HomeTemplate/History/ContributionHistory/index');
     prefetchData({ queryKey: [GET_SPEAKER_CONTRIBUTION_HISTORY_API], queryFn: getAllSpeakerContributionHistoryApi });
+    prefetchData({ queryKey: [GET_SPEAKER_STATS_API], queryFn: getSpeakerStatsApi });
   },
 };
 

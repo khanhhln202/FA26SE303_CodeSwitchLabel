@@ -1,54 +1,52 @@
-import { useState, useMemo } from 'react';
-import { Search, Filter, ArrowRight, UserCheck, Headphones, FileText } from 'lucide-react';
+import { useState } from 'react';
+import { Search, ArrowRight, Headphones } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import Pagination from '../../../components/Pagination/Pagination';
+import Loading from '../../../components/Loading/Loading';
+import ErrorState from '../../../components/ErrorState/ErrorState';
 import { SPEAKER_ACCENT_ACTIVE_ICON as ACCENT } from '../../../constants/theme'; // xanh lá thương hiệu
-import { ASSIGNED_TASKS } from '../../../mocks/reviewer/tasks';
+import { getReviewerProgressApi } from '../../../services/reviewerApi';
+import { GET_REVIEWER_PROGRESS_API } from '../../../utils/queryKey';
 
-// Thứ tự ưu tiên hiển thị theo nhóm trạng thái
-const STATUS_ORDER = { 'in-progress': 0, 'pending': 1, 'completed': 2 };
+// "2026-11-07T23:59:59+00:00" -> "07/11/2026" (giờ máy người dùng)
+function formatDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
 
-// Loại task quyết định trang kiểm duyệt được mở và đơn vị tiến độ
-const TASK_TYPES = {
-  recording: { label: 'Duyệt ghi âm', icon: Headphones, unit: 'bản', path: (task) => `/reviewer/recording?task=${encodeURIComponent(task.title)}` },
-  script: { label: 'Duyệt câu', icon: FileText, unit: 'câu', path: () => '/reviewer/contribution' },
-};
+// hoursRemaining của API -> "Còn 26 ngày" / "Còn 5 giờ"
+function remainingText(hours) {
+  if (hours === null || hours === undefined) return '';
+  return hours >= 24 ? `Còn ${Math.floor(hours / 24)} ngày` : `Còn ${Math.max(0, Math.floor(hours))} giờ`;
+}
 
 export default function ReviewTasks() {
   const navigate = useNavigate();
 
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterAssignee, setFilterAssignee] = useState('all');
-  const [filterStatus, setFilterStatus] = useState('all');
 
-  const assignedTasks = ASSIGNED_TASKS;
+  // Call API lấy nhiệm vụ duyệt đang giao cho mình (chỉ trả task còn đang chạy)
+  const { data: progress, isLoading, isError, error, refetch } = useQuery({
+    queryKey: [GET_REVIEWER_PROGRESS_API],
+    queryFn: getReviewerProgressApi,
+  });
 
-  const filteredTasks = useMemo(() => {
-    const list = assignedTasks.filter((task) => {
-      const matchSearch = task.title.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchAssignee = filterAssignee === 'all' || task.assignedBy.includes(filterAssignee);
-      const matchStatus = filterStatus === 'all' || task.statusType === filterStatus;
-      return matchSearch && matchAssignee && matchStatus;
-    });
-    // Sắp xếp: Đang thực hiện -> Chưa bắt đầu -> Hoàn thành (giữ thứ tự gốc trong từng nhóm)
-    return [...list].sort((a, b) => STATUS_ORDER[a.statusType] - STATUS_ORDER[b.statusType]);
-  }, [assignedTasks, searchTerm, filterAssignee, filterStatus]);
+  const query = searchTerm.trim().toLocaleLowerCase('vi');
+  const filteredTasks = (progress?.activeTasks ?? []).filter((task) =>
+    (task.description ?? '').toLocaleLowerCase('vi').includes(query),
+  );
 
   // Cố định 10 nhiệm vụ mỗi trang; trang đầy thì các dòng giãn đều hết khung (màn thấp thì bảng cuộn bên trong)
   const pageSize = 10;
   const totalPages = Math.ceil(filteredTasks.length / pageSize) || 1;
-  const paginatedTasks = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredTasks.slice(start, start + pageSize);
-  }, [filteredTasks, currentPage, pageSize]);
+  const paginatedTasks = filteredTasks.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-  // Style trạng thái theo hệ màu app
-  const statusStyle = (type) => {
-    if (type === 'completed') return { chip: 'bg-[#3FA66B]/10 text-[#1F5C3F]', dot: '#3FA66B' };
-    if (type === 'in-progress') return { chip: 'text-[#15803D]', dot: ACCENT, chipBg: 'rgba(22,163,74,0.10)' };
-    return { chip: 'bg-[#F0EEE6] text-[#6E7078]', dot: '#B7B4A9' };
-  };
+  if (isLoading) return <Loading />;
+  if (isError) return <ErrorState message={error.message} onRetry={refetch} />;
 
   return (
     <div className="h-full min-h-0 flex flex-col gap-4 text-left font-sans">
@@ -65,30 +63,6 @@ export default function ReviewTasks() {
             className="w-full pl-9 pr-4 py-2 text-meta border border-[#E5E2D8] rounded-xl outline-none focus:border-[#16A34A] focus:ring-4 focus:ring-[#16A34A]/10 transition-all"
           />
         </div>
-        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto justify-end">
-          <div className="flex items-center gap-2">
-            <Filter className="w-3.5 h-3.5 text-[#9A9CA3]" />
-            <select
-              value={filterAssignee}
-              onChange={(e) => { setFilterAssignee(e.target.value); setCurrentPage(1); }}
-              className="text-meta border border-[#E5E2D8] rounded-xl px-3 py-2 bg-white text-[#16171C] font-label outline-none focus:border-[#16A34A]"
-            >
-              <option value="all">Tất cả người giao</option>
-              <option value="Nguyễn Hoàng">Task Manager - Nguyễn Hoàng</option>
-              <option value="Trần Anh">Task Manager - Trần Anh</option>
-            </select>
-          </div>
-          <select
-            value={filterStatus}
-            onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1); }}
-            className="text-meta border border-[#E5E2D8] rounded-xl px-3 py-2 bg-white text-[#16171C] font-label outline-none focus:border-[#16A34A]"
-          >
-            <option value="all">Tất cả trạng thái</option>
-            <option value="in-progress">Đang thực hiện</option>
-            <option value="pending">Chưa bắt đầu</option>
-            <option value="completed">Hoàn thành</option>
-          </select>
-        </div>
       </div>
 
       {/* Bảng */}
@@ -98,59 +72,46 @@ export default function ReviewTasks() {
             <thead>
               <tr className="bg-[#F7F5EF] type-label text-[#9A9CA3] border-b border-[#E5E2D8] whitespace-nowrap">
                 <th className="py-2 px-3 text-center w-12">STT</th>
-                <th className="py-2 px-3 text-left w-[26%]">Nhiệm vụ</th>
-                <th className="py-2 px-3 text-left">Người giao</th>
+                <th className="py-2 px-3 text-left w-[38%]">Nhiệm vụ</th>
                 <th className="py-2 px-3 text-left min-w-[140px]">Mục tiêu (Target)</th>
                 <th className="py-2 px-3 text-left">Hạn chót</th>
-                <th className="py-2 px-3 text-left">Trạng thái</th>
                 <th className="py-2 px-3 text-left">Hành động</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0EEE6] type-ui">
               {paginatedTasks.length > 0 ? paginatedTasks.map((task, idx) => {
-                const percent = Math.round((task.reviewed / task.target) * 100);
-                const st = statusStyle(task.statusType);
-                const type = TASK_TYPES[task.type];
-                const TypeIcon = type.icon;
                 return (
-                  <tr key={task.id} className="hover:bg-[#F7F5EF]/70 transition-colors">
+                  <tr key={task.taskId} className="hover:bg-[#F7F5EF]/70 transition-colors">
                     <td className="py-1.5 px-3 text-center whitespace-nowrap">
                       <span className="text-[#9A9CA3] type-meta">{(currentPage - 1) * pageSize + idx + 1}</span>
                     </td>
                     <td className="py-1.5 px-3 text-left">
-                      <p className="text-ui font-emphasis text-[#16171C] break-words">{task.title}</p>
+                      <p className="text-ui font-emphasis text-[#16171C] break-words">{task.description || `Nhiệm vụ #${task.taskId}`}</p>
+                      {/* API này chỉ trả task duyệt ghi âm */}
                       <span className="mt-0.5 flex items-center gap-1 type-meta text-[#6E7078]">
-                        <TypeIcon className="w-3 h-3" /> {type.label}
-                      </span>
-                    </td>
-                    <td className="py-1.5 px-3 text-left whitespace-nowrap">
-                      <span className="flex items-center gap-1.5 min-w-0 text-[#6E7078]">
-                        <UserCheck className="w-3.5 h-3.5 text-[#9A9CA3] shrink-0" /> <span className="truncate" title={task.assignedBy}>{task.assignedBy.replace(/^Task Manager - /, '')}</span>
+                        <Headphones className="w-3 h-3" /> Duyệt ghi âm
                       </span>
                     </td>
                     <td className="py-1.5 px-3 text-left">
                       <div className="flex flex-col gap-1 max-w-[180px]">
                         <div className="flex justify-between gap-2 whitespace-nowrap type-meta text-[#6E7078]">
-                          <span>{task.reviewed}/{task.target} {type.unit}</span>
-                          <span className="font-emphasis text-[#16171C] tabular-nums">{percent}%</span>
+                          <span>{task.done}/{task.targetQty} bản</span>
+                          <span className="font-emphasis text-[#16171C] tabular-nums">{task.percent}%</span>
                         </div>
                         <div className="w-full bg-[#F0EEE6] h-1.5 rounded-full overflow-hidden">
-                          <div style={{ width: `${percent}%`, background: task.statusType === 'completed' ? '#3FA66B' : ACCENT }} className="h-full rounded-full transition-all duration-300" />
+                          <div style={{ width: `${Math.min(100, task.percent)}%`, background: ACCENT }} className="h-full rounded-full transition-all duration-300" />
                         </div>
                       </div>
                     </td>
                     <td className="py-1.5 px-3 text-left whitespace-nowrap">
-                      <span className="type-meta text-[#6E7078]">{task.deadline}</span>
-                    </td>
-                    <td className="py-1.5 px-3 text-left whitespace-nowrap">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 h-6 rounded-full type-caption ${st.chip}`} style={st.chipBg ? { background: st.chipBg } : {}}>
-                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: st.dot }} />
-                        {task.status}
-                      </span>
+                      <p className="type-meta text-[#16171C]">{formatDate(task.deadline)}</p>
+                      <p className={`type-caption ${task.isOverdue ? 'text-[#C63B3B]' : 'text-[#9A9CA3]'}`}>
+                        {task.isOverdue ? 'Quá hạn' : remainingText(task.hoursRemaining)}
+                      </p>
                     </td>
                     <td className="py-1.5 px-3 text-left whitespace-nowrap">
                       <button
-                        onClick={() => navigate(type.path(task))}
+                        onClick={() => navigate(`/reviewer/recording?taskId=${task.taskId}`)}
                         className="h-7 px-3 rounded-lg border bg-white type-label flex items-center gap-1 text-(--accent) border-(--accent) hover:bg-(--accent) hover:text-white transition-colors cursor-pointer"
                         style={{ '--accent': ACCENT }}
                       >
@@ -161,7 +122,9 @@ export default function ReviewTasks() {
                 );
               }) : (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-[#9A9CA3] text-meta">Không tìm thấy nhiệm vụ nào phù hợp với bộ lọc.</td>
+                  <td colSpan={5} className="py-8 text-center text-[#9A9CA3] text-meta">
+                    {progress?.activeTasks?.length ? 'Không tìm thấy nhiệm vụ nào phù hợp với từ khoá.' : 'Bạn chưa được giao nhiệm vụ duyệt nào.'}
+                  </td>
                 </tr>
               )}
             </tbody>

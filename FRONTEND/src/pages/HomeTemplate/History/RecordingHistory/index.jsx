@@ -24,10 +24,7 @@ import EmptyState from "../../../../components/EmptyState/EmptyState";
 import { getAllSpeakerRecordingHistoryApi, getSpeakerStatsApi } from "../../../../services/speakerApi";
 import { GET_SPEAKER_RECORDING_HISTORY_API, GET_SPEAKER_STATS_API } from "../../../../utils/queryKey";
 
-const VARIANT_LABEL = { cs: "Bản Việt-Anh", vi: "Bản tiếng Việt" };
 
-// Mã bản ghi có dạng r_cs_111000003 / r_vi_111000003 (thu lại thì thêm _t2...) -> biết là bản nào
-const variantOf = (recordingId) => (recordingId.includes("_vi_") ? "vi" : "cs");
 
 // Bản ghi tự do (không thuộc nhiệm vụ) thì API trả taskTitle = null
 const taskOf = (recording) => recording.taskTitle || "Thu âm tự do";
@@ -39,8 +36,8 @@ function formatDateTime(iso) {
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} - ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-/** Sóng âm của 1 bản (Việt-Anh / tiếng Việt): dùng đúng link API trả (csAudioUrl / viAudioUrl), null thì báo không có audio. */
-function RecordingAudio({ url, variant, duration }) {
+/** Sóng âm của 1 bản trong cặp: dùng đúng csAudioUrl / viAudioUrl API trả (link tạm 15 phút), null thì báo không có audio. */
+function RecordingAudio({ url, variant }) {
   if (!url) {
     return (
       <div className="h-5 flex items-center gap-2">
@@ -55,7 +52,6 @@ function RecordingAudio({ url, variant, duration }) {
       label={variant === "cs" ? "VI-EN" : "VI"}
       src={url}
       demoSeed={url}
-      demoDuration={duration}
     />
   );
 }
@@ -138,13 +134,17 @@ export default function RecordingHistory() {
   const { data: recordings, isLoading, isError, error, refetch } = useQuery({
     queryKey: [GET_SPEAKER_RECORDING_HISTORY_API],
     queryFn: getAllSpeakerRecordingHistoryApi,
+    // audioUrl hết hạn sau 15 phút -> quay lại trang sau 10 phút thì lấy lại link mới
+    staleTime: 10 * 60 * 1000,
   });
 
   // Call API lấy thống kê bản ghi cho các thẻ trên cùng
-  const { data: stats } = useQuery({
+  const { data: speakerStats } = useQuery({
     queryKey: [GET_SPEAKER_STATS_API],
     queryFn: getSpeakerStatsApi,
   });
+  // API trả { recording: { total, approved, rejected, pending }, contribution: {...} } - trang này dùng phần recording
+  const stats = speakerStats?.recording;
 
   const pct = (n) => (stats?.total ? Math.round((n / stats.total) * 100) : 0);
 
@@ -308,7 +308,7 @@ export default function RecordingHistory() {
               <tbody className="type-ui">
                 {pageItems.map((item, index) => (
                   <tr
-                    key={item.recordingId}
+                    key={item.scriptId}
                     // Dòng cuối vẫn có đường kẻ khi trang chưa đầy; trang đủ 10 dòng thì bỏ để không chồng lên viền của thanh phân trang
                     className={`border-b border-[#F0EEE6] ${pageItems.length === itemsPerPage ? "last:border-b-0" : ""}`}
                   >
@@ -340,7 +340,7 @@ export default function RecordingHistory() {
                         {/* Icon này CHỈ mở popup xem 2 câu - không hiện phản hồi/vote ở đây */}
                         <button
                           onClick={() => setSentenceItem(item)}
-                          aria-label={`Xem cả hai câu của ${item.recordingId}`}
+                          aria-label={`Xem cả hai câu của ${item.scriptId}`}
                           title="Xem đầy đủ hai câu"
                           className="shrink-0 w-6 h-6 rounded-md flex items-center justify-center text-[#9A9CA3] hover:text-[#16171C] hover:bg-[#F0EEE6] transition-colors cursor-pointer"
                         >
@@ -349,10 +349,11 @@ export default function RecordingHistory() {
                       </div>
                     </td>
                     <td className="px-3">
-                      {/* 2 dòng sóng âm khớp 2 dòng câu bên cạnh: bản Việt-Anh rồi bản tiếng Việt */}
+                      {/* Mỗi bản ghi API trả 1 audio, nhãn theo sentenceVariant */}
+                      {/* Mỗi dòng là 1 cặp: sóng âm bản Việt-Anh rồi bản tiếng Việt, khớp 2 dòng câu bên cạnh */}
                       <div className="flex flex-col gap-1">
-                        <RecordingAudio url={item.csAudioUrl} variant="cs" duration={item.durationSec} />
-                        <RecordingAudio url={item.viAudioUrl} variant="vi" duration={item.durationSec} />
+                        <RecordingAudio url={item.csAudioUrl} variant="cs" />
+                        <RecordingAudio url={item.viAudioUrl} variant="vi" />
                       </div>
                     </td>
                     <td className="px-3">
@@ -360,7 +361,7 @@ export default function RecordingHistory() {
                         status={item.status}
                         votedCount={item.reviews?.length ?? 0}
                         onClick={() => setDetailItem(item)}
-                        ariaLabel={`Xem kết quả kiểm duyệt ${item.recordingId}`}
+                        ariaLabel={`Xem kết quả kiểm duyệt ${item.scriptId}`}
                       />
                     </td>
                   </tr>
@@ -483,7 +484,6 @@ export default function RecordingHistory() {
                   </div>
                   <div className="flex flex-wrap items-center gap-2 mb-3">
                     <span className="px-2.5 py-1 rounded-md text-caption font-label border border-[#E5E2D8] bg-[#F0EEE6] text-[#6E7078]">{taskOf(detailItem)}</span>
-                    <span className="px-2.5 py-1 rounded-md text-caption font-label border border-[#E5E2D8] bg-white text-[#6E7078]">{VARIANT_LABEL[variantOf(detailItem.recordingId)]}</span>
                     <span className="type-meta text-[#9A9CA3]">{formatDateTime(detailItem.recordedAt)}</span>
                   </div>
                   <div className="bg-[#F7F5EF] p-3.5 rounded-xl border border-[#E5E2D8] mb-2.5 flex items-center gap-2.5">
