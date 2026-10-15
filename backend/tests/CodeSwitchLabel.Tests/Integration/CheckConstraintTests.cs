@@ -387,7 +387,7 @@ public class CheckConstraintTests : IntegrationTestBase
 
         // Upper bound is the configurable rounds guard: 4th review on a 3-round recording is rejected.
         Assert.Equal(4, ReviewRules.NextRound(3));
-        Assert.True(ReviewRules.NextRound(3) > ReviewRules.RoundsRequiredInDatabase);
+        Assert.True(ReviewRules.NextRound(3) > ReviewRules.DefaultRoundsRequired);
     }
 
 

@@ -1015,7 +1015,7 @@ public class TaskService(
     }
 
     private Task<int> RoundsRequiredAsync(CancellationToken ct) =>
-        config.GetIntAsync(ConfigKeys.ReviewRoundsRequired, ReviewRules.RoundsRequiredInDatabase, ct);
+        config.GetIntAsync(ConfigKeys.ReviewRoundsRequired, ReviewRules.DefaultRoundsRequired, ct);
 
     private async Task<WorkTask> LoadEditableAsync(long taskId, CancellationToken ct)
     {

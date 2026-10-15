@@ -1,6 +1,6 @@
 # Kiểm thử đầu–cuối bằng API thật
 
-Ba kịch bản gọi thẳng API đang chạy, không giả lập gì cả: mỗi bước gửi một request thật, so mã HTTP và
+Bốn kịch bản gọi thẳng API đang chạy, không giả lập gì cả: mỗi bước gửi một request thật, so mã HTTP và
 các trường trong kết quả với kỳ vọng, rồi in PASS/FAIL. Dùng để kiểm tra nhanh sau khi sửa code, và làm
 bằng chứng kiểm thử khi viết báo cáo.
 
@@ -13,6 +13,10 @@ kịch bản này cần cả hệ thống đang chạy.
 | `02-users.e2e.mjs` | Quản lý người dùng: mật khẩu tạm, đổi mật khẩu, khoá và đổi vai có hiệu lực ngay | 47 |
 | `03-demo-scenario.e2e.mjs` | Đúng kịch bản trong `docs/demo-test-api.html`, kèm câu truy vấn kiểm tra dữ liệu đã lưu và các trường hợp file lỗi | 53 |
 | `04-import-task-record.e2e.mjs` | Kịch bản trình bày: nhập câu → duyệt → phân task → ghi âm. Tự tạo dữ liệu riêng nên **chạy lại bao nhiêu lần cũng được** | 12 |
+
+Số bước là con số **in ra ở lần chạy gần nhất**, nên lệch khi kịch bản được thêm bước mới — lấy lại từ
+dòng cuối mà script in (`83/83 bước đúng kỳ vọng`) hoặc từ `last-run.json`. Không phải hợp đồng: script
+tự đếm, chạy xong thấy `KẾT QUẢ: x/y bước đúng` là biết.
 
 ## Cần có trước khi chạy
 
@@ -68,7 +72,8 @@ File `last-run.json` và `last-run-demo.json` là kết quả lần chạy gần
 
 Nằm trong thư mục `demo/` ở gốc repo, script tự tìm theo đường dẫn tương đối:
 
-- `input_text_demo.json` — 7 câu theo định dạng `input_text.json`, trong đó 3 câu cố ý sai.
+- `input_text_demo.json` — 7 câu theo định dạng `input_text.json`, trong đó 3 câu cố ý sai (kịch bản 03).
+- `demo-live-import.json` — file câu riêng cho kịch bản 04, không chứa lỗi cố ý.
 - `giong-4s.m4a`, `giong-3s.wav`, `qua-ngan.wav` — file âm thanh đạt và không đạt kiểm tra thời lượng.
 - `test-them/` — các trường hợp lỗi: JSON sai cú pháp, mảng rỗng, file văn bản, file âm thanh rỗng,
   file giả đặt đuôi `.m4a`, bản ghi dài 35 giây.

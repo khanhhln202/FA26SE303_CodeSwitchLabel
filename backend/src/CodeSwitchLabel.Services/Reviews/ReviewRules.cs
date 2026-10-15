@@ -25,22 +25,18 @@ public enum ReviewBlocker
 }
 
 /// <summary>
-/// Luật duyệt theo lược đồ nhóm chốt: mỗi bản ghi cần ĐỦ BA LƯỢT duyệt mù độc lập,
-/// rồi chốt theo đa số.
+/// Luật duyệt theo lược đồ nhóm chốt: mỗi bản ghi cần đủ số lượt duyệt mù độc lập
+/// (mặc định 3, đổi được qua <c>system_config</c>), rồi chốt theo đa số.
 ///
 /// CHỖ CHỐT THẬT SỰ NẰM DƯỚI DATABASE — trigger trg_review_majority. Lớp này chỉ là bản sao
 /// để tầng trên biết còn thiếu mấy lượt và để kiểm thử luật, KHÔNG được dùng để ghi trạng thái.
 ///
-/// TEAM_007: Trigger trg_review_majority giờ đọc động từ system_config (review.rounds_required),
-/// mặc định là 3 nếu chưa cấu hình.
+/// Trigger đọc cùng một tham số <c>review.rounds_required</c> nên hai bên không thể lệch nhau.
 /// </summary>
 public static class ReviewRules
 {
     /// <summary>Số lượt duyệt mặc định khi chưa có cấu hình.</summary>
     public const int DefaultRoundsRequired = 3;
-
-    // TEAM_007: Trigger database hiện đọc động từ system_config ('review.rounds_required'); hằng số này giữ giá trị mặc định fallback.
-    public const int RoundsRequiredInDatabase = 3;
 
     public static int NextRound(int existingReviews) => existingReviews + 1;
 
