@@ -25,9 +25,10 @@ public interface IUserRepository
 
     Task<List<AppUser>> GetByRoleAsync(RoleName role, CancellationToken ct = default);
 
+    /// <summary>TEAM_012: <paramref name="sort"/> rỗng (Field = null) là thứ tự mặc định.</summary>
     Task<(IReadOnlyList<AppUser> Items, int Total)> SearchAsync(
         RoleName? role, UserStatus? status, string? keyword,
-        int page, int pageSize, CancellationToken ct = default);
+        int page, int pageSize, SortSpec<UserSortField> sort, CancellationToken ct = default);
 
     Task<bool> EmailExistsAsync(string email, CancellationToken ct = default);
 
@@ -67,7 +68,7 @@ public class UserRepository(CodeSwitchLabelDbContext db) : IUserRepository
 
     public async Task<(IReadOnlyList<AppUser> Items, int Total)> SearchAsync(
         RoleName? role, UserStatus? status, string? keyword,
-        int page, int pageSize, CancellationToken ct = default)
+        int page, int pageSize, SortSpec<UserSortField> sort, CancellationToken ct = default)
     {
         var query = Load();
 
@@ -82,8 +83,32 @@ public class UserRepository(CodeSwitchLabelDbContext db) : IUserRepository
 
         var total = await query.CountAsync(ct);
 
-        var items = await query
-            .OrderBy(u => u.FullName).ThenBy(u => u.UserId)
+        // TEAM_012: nhánh cuối là thứ tự cũ (họ tên A-Z).
+        var ordered = sort.Field switch
+        {
+            UserSortField.UserId => sort.Descending
+                ? query.OrderByDescending(u => u.UserId)
+                : query.OrderBy(u => u.UserId),
+            UserSortField.FullName => sort.Descending
+                ? query.OrderByDescending(u => u.FullName)
+                : query.OrderBy(u => u.FullName),
+            UserSortField.Email => sort.Descending
+                ? query.OrderByDescending(u => u.Email)
+                : query.OrderBy(u => u.Email),
+            UserSortField.Status => sort.Descending
+                ? query.OrderByDescending(u => u.Status)
+                : query.OrderBy(u => u.Status),
+            UserSortField.Role => sort.Descending
+                ? query.OrderByDescending(u => u.Role.RoleName)
+                : query.OrderBy(u => u.Role.RoleName),
+            UserSortField.CreatedAt => sort.Descending
+                ? query.OrderByDescending(u => u.CreatedAt)
+                : query.OrderBy(u => u.CreatedAt),
+            _ => query.OrderBy(u => u.FullName)
+        };
+
+        var items = await ordered
+            .ThenBy(u => u.UserId)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(ct);

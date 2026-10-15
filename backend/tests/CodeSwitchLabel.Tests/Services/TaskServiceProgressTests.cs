@@ -112,7 +112,8 @@ public sealed class TaskServiceProgressTests
         // Cùng dữ liệu đó, nhưng Task Manager nhìn số đã duyệt — không tự nhảy lên 4.
         _tasks.Setup(t => t.SearchAsync(
                 TaskType.Recording, null, null, null, null, It.IsAny<DateTimeOffset>(),
-                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<SortSpec<TaskSortField>>(),
+                It.IsAny<CancellationToken>()))
             .ReturnsAsync(([Row(done: 0)], 1));
 
         var page = await _service.SearchAsync(

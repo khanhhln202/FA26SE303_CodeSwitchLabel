@@ -178,6 +178,38 @@ POST /api/auth/login
   ```json
   { "items": [], "page": 1, "pageSize": 20, "total": 0, "totalPages": 0, "hasNext": false }
   ```
+- **Sắp xếp** — cùng bộ tham số đó, thêm `?sort=<cột>&dir=asc|desc`:
+
+  ```
+  GET /api/scripts?page=1&sort=createdAt&dir=desc
+  ```
+
+  - Không gửi `sort` thì ra **đúng thứ tự cũ** của endpoint — client cũ không phải sửa gì.
+  - `dir` bỏ trống = `asc`. Có `sort` mà bỏ `dir` thì là tăng dần, **không** phải thứ tự mặc định.
+    Muốn "mới nhất trước" thì phải gửi cả hai: `sort=createdAt&dir=desc`.
+  - Tên cột không phân biệt hoa thường. Gõ sai tên cột **không phải lỗi** — API bỏ qua và trả thứ tự
+    mặc định, y hệt lúc không gửi `sort`. (Chỉ `sort`/`dir` quá dài mới bị 400 vì chặn độ dài.)
+  - Mỗi endpoint có bộ cột riêng, xem bảng bên dưới. Cột không nằm trong bảng thì coi như chưa gửi.
+  - Với `GET /api/tasks`, sắp theo `deadline` giữ nguyên quy tắc của mặc định ở **cả hai chiều**:
+    task không đặt hạn luôn ở cuối, không bao giờ nhảy lên đầu bảng.
+  - `GET /api/speaker/recordings/history` chỉ nhận `lastRecordedAt` và `scriptId`. Mỗi dòng là một
+    **cặp** bản ghi, cặp không có cột riêng nên trạng thái/thời lượng của cặp là thứ tính ra *sau khi
+    đã cắt trang* — không sắp xếp được trước đó.
+
+  | Endpoint | Cột `sort` nhận được | Mặc định khi bỏ `sort` |
+  |---|---|---|
+  | `GET /api/scripts` | `scriptId` `createdAt` `domain` `status` | `createdAt` giảm dần |
+  | `GET /api/scripts/import/batches` | `batchId` `createdAt` `fileName` `scriptCount` | `batchId` giảm dần |
+  | `GET /api/recordings` | `recordingId` `recordedAt` `status` `scriptId` `durationSec` | `recordedAt` giảm dần |
+  | `GET /api/tasks` | `taskId` `deadline` `status` `taskType` `createdAt` `targetQty` | hạn gần nhất trước, không hạn ở cuối |
+  | `GET /api/users` | `userId` `fullName` `email` `status` `role` `createdAt` | `fullName` tăng dần |
+  | `GET /api/campaigns` | `campaignId` `startDate` `endDate` `status` `createdAt` | `startDate` giảm dần |
+  | `GET /api/datasets` | `datasetId` `createdAt` `status` `datasetName` `recordingCount` | `createdAt` giảm dần |
+  | `GET /api/reviewer/tasks/{id}/recordings` | `recordedAt` `status` `reviewCount` `scriptId` | bản gần đủ lượt duyệt trước |
+  | `GET /api/reviewer/history/recordings` | `reviewedAt` `decision` `status` `scriptId` | `reviewedAt` giảm dần |
+  | `GET /api/reviewer/history/contributions` | `reviewedAt` `action` `status` `domain` | `reviewedAt` giảm dần |
+  | `GET /api/speaker/recordings/history` | `lastRecordedAt` `scriptId` | `lastRecordedAt` giảm dần |
+  | `GET /api/speaker/contributions/history` | `createdAt` `scriptId` `domain` `status` | `createdAt` giảm dần |
 - **`204 No Content`** ở các endpoint "lấy việc tiếp theo" nghĩa là **hết việc** — không phải lỗi.
 
 ### Câu có nhãn ngôn ngữ

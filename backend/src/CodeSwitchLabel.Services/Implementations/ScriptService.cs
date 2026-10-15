@@ -58,7 +58,8 @@ public class ScriptService(
         ScriptSearchRequest request, CancellationToken ct = default)
     {
         var (items, total) = await repository.SearchAsync(
-            request.Status, request.Domain, request.Keyword, request.Page, request.PageSize, ct);
+            request.Status, request.Domain, request.Keyword, request.Page, request.PageSize,
+            request.ToSort<ScriptSortField>(), ct);
 
         return new PagedResult<ScriptListItemDto>(
             [.. items.Select(s => s.ToListItem())], request.Page, request.PageSize, total);
@@ -280,7 +281,8 @@ public class ScriptService(
 
     public async Task<PagedResult<ImportBatchDto>> ListBatchesAsync(PageRequest request, CancellationToken ct = default)
     {
-        var (items, total) = await repository.ListBatchesAsync(request.Page, request.PageSize, ct);
+        var (items, total) = await repository.ListBatchesAsync(
+            request.Page, request.PageSize, request.ToSort<ImportBatchSortField>(), ct);
 
         return new PagedResult<ImportBatchDto>(
             [.. items.Select(b => new ImportBatchDto(b.BatchId, b.FileName, b.ScriptCount, b.ImportedBy, b.CreatedAt))],

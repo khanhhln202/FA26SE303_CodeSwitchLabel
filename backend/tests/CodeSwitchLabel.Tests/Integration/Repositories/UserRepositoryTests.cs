@@ -1,3 +1,4 @@
+using CodeSwitchLabel.Repositories.Entities;
 using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Tests.Infrastructure;
 
@@ -81,10 +82,85 @@ public class UserRepositoryTests : IntegrationTestBase
     public async Task SearchAsync_ReturnsUsers_WhenUsersExist()
     {
         // Act
-        var (items, total) = await Users.SearchAsync(null, null, null, 1, 10, TestContext.Current.CancellationToken);
+        var (items, total) = await Users.SearchAsync(null, null, null, 1, 10, default, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(total >= 4); // 4 seeded users
+    }
+
+    // ---------------------------------------------------------------- TEAM_012: sắp xếp
+
+    /// <summary>Ba tài khoản của riêng test này, họ tên cùng gốc để lọc và so thứ tự.</summary>
+    private async Task<(string Keyword, AppUser[] Users)> CreateThreeSortedUsersAsync()
+    {
+        var token = Guid.NewGuid().ToString("N")[..10];
+        var users = new List<AppUser>();
+
+        foreach (var name in new[] { "Alpha", "Bravo", "Charlie" })
+        {
+            users.Add(await CreateUserAsync(
+                $"{name.ToLowerInvariant()}-{token}@test.local", RoleName.Speaker, $"{name} {token}"));
+        }
+
+        return (token, [.. users]);
+    }
+
+    [Fact]
+    public async Task SearchAsync_KhongTruyenSort_GiuNguyenThuTuHoTenAZ()
+    {
+        // Regression TEAM_012: mặc định của /api/users là họ tên A-Z, không phải mới nhất trước.
+        var (keyword, users) = await CreateThreeSortedUsersAsync();
+
+        var (items, _) = await Users.SearchAsync(
+            null, null, keyword, 1, 10, default, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            [users[0].UserId, users[1].UserId, users[2].UserId],
+            items.Select(u => u.UserId));
+    }
+
+    [Fact]
+    public async Task SearchAsync_SapXepTheoFullName_GiamDan()
+    {
+        var (keyword, users) = await CreateThreeSortedUsersAsync();
+
+        var (items, _) = await Users.SearchAsync(
+            null, null, keyword, 1, 10,
+            SortSpec<UserSortField>.From("fullName", "desc"), TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            [users[2].UserId, users[1].UserId, users[0].UserId],
+            items.Select(u => u.UserId));
+    }
+
+    [Fact]
+    public async Task SearchAsync_SapXepTheoEmail_TangDan()
+    {
+        var (keyword, users) = await CreateThreeSortedUsersAsync();
+
+        var (items, _) = await Users.SearchAsync(
+            null, null, keyword, 1, 10,
+            SortSpec<UserSortField>.From("email", "asc"), TestContext.Current.CancellationToken);
+
+        // Họ tên Alpha/Bravo/Charlie viết thường trong email nên thứ tự email trùng thứ tự tạo.
+        Assert.Equal(
+            [users[0].UserId, users[1].UserId, users[2].UserId],
+            items.Select(u => u.UserId));
+    }
+
+    [Fact]
+    public async Task SearchAsync_SapXepTheoRole_TheoTenVai()
+    {
+        var reviewer = await CreateUserAsync(NewUniqueEmail("sortrev"), RoleName.Reviewer);
+        var speaker = await CreateUserAsync(NewUniqueEmail("sortspk"), RoleName.Speaker);
+
+        var (items, _) = await Users.SearchAsync(
+            null, null, null, 1, 50,
+            SortSpec<UserSortField>.From("role", "asc"), TestContext.Current.CancellationToken);
+
+        var roles = items.Select(u => u.UserId).ToList();
+        // Vai sắp theo tên: Admin < Reviewer < Speaker < TaskManager.
+        Assert.True(roles.IndexOf(reviewer.UserId) < roles.IndexOf(speaker.UserId));
     }
 
     [Fact]

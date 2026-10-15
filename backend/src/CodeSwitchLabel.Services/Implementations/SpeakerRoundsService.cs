@@ -189,10 +189,27 @@ public class SpeakerRoundsService(
         // (Distinct + OrderBy RecordedAt thì Postgres không nhận, nên gom bằng GroupBy/Max.)
         var total = await q.Select(r => r.ScriptId).Distinct().CountAsync(ct);
 
-        var pageScripts = await q
+        var pairs = q
             .GroupBy(r => r.ScriptId)
-            .Select(g => new { ScriptId = g.Key, Last = g.Max(r => r.RecordedAt) })
-            .OrderByDescending(x => x.Last)
+            .Select(g => new { ScriptId = g.Key, Last = g.Max(r => r.RecordedAt) });
+
+        var sort = query.ToSort<SpeakerPairSortField>();
+
+        // TEAM_012: chỉ hai cột của cặp là sắp xếp được trước khi cắt trang. Trạng thái và
+        // thời lượng của cặp là thứ TÍNH RA ở dưới, nên không có trong SpeakerPairSortField.
+        var orderedPairs = sort.Field switch
+        {
+            SpeakerPairSortField.ScriptId => sort.Descending
+                ? pairs.OrderByDescending(x => x.ScriptId)
+                : pairs.OrderBy(x => x.ScriptId),
+            SpeakerPairSortField.LastRecordedAt => sort.Descending
+                ? pairs.OrderByDescending(x => x.Last)
+                : pairs.OrderBy(x => x.Last),
+            _ => pairs.OrderByDescending(x => x.Last)
+        };
+
+        var pageScripts = await orderedPairs
+            .ThenBy(x => x.ScriptId)
             .Skip((query.Page - 1) * query.PageSize)
             .Take(query.PageSize)
             .Select(x => x.ScriptId)
@@ -208,8 +225,14 @@ public class SpeakerRoundsService(
         // hỏng cả dòng lịch sử.
         var items = new List<SpeakerRecordingHistoryDto>(pageScripts.Count);
 
-        foreach (var pair in rows.GroupBy(r => r.ScriptId))
+        // TEAM_012: dựng dòng theo đúng thứ tự pageScripts đã cắt trang, KHÔNG theo thứ tự
+        // của `rows` — `rows` xếp theo thời điểm thu, nên `?sort=scriptId` sẽ trả về thứ tự
+        // khác hẳn thứ tự client yêu cầu.
+        var rowsByScript = rows.ToLookup(r => r.ScriptId);
+
+        foreach (var scriptId in pageScripts)
         {
+            var pair = rowsByScript[scriptId];
             var cs = pair.Where(r => r.SentenceVariant == SentenceVariant.CodeSwitching)
                 .OrderByDescending(r => r.RecordedAt).FirstOrDefault();
             var vi = pair.Where(r => r.SentenceVariant == SentenceVariant.PureVietnamese)
@@ -218,7 +241,7 @@ public class SpeakerRoundsService(
             var takes = new[] { cs, vi }.OfType<Recording>().ToArray();
 
             items.Add(new SpeakerRecordingHistoryDto(
-                pair.Key,
+                scriptId,
                 (cs ?? vi)?.Task?.Description,
                 (cs ?? vi)!.Script.CsContent,
                 (cs ?? vi)!.Script.ViContent,
@@ -286,8 +309,28 @@ public class SpeakerRoundsService(
 
         var total = await q.CountAsync(ct);
 
-        var rows = await q
-            .OrderByDescending(s => s.CreatedAt)
+        var sort = query.ToSort<ScriptSortField>();
+
+        // TEAM_012: cùng bộ cột với GET /api/scripts vì hai danh sách này đọc cùng bảng.
+        var ordered = sort.Field switch
+        {
+            ScriptSortField.ScriptId => sort.Descending
+                ? q.OrderByDescending(s => s.ScriptId)
+                : q.OrderBy(s => s.ScriptId),
+            ScriptSortField.CreatedAt => sort.Descending
+                ? q.OrderByDescending(s => s.CreatedAt)
+                : q.OrderBy(s => s.CreatedAt),
+            ScriptSortField.Domain => sort.Descending
+                ? q.OrderByDescending(s => s.Domain)
+                : q.OrderBy(s => s.Domain),
+            ScriptSortField.Status => sort.Descending
+                ? q.OrderByDescending(s => s.Status)
+                : q.OrderBy(s => s.Status),
+            _ => q.OrderByDescending(s => s.CreatedAt)
+        };
+
+        var rows = await ordered
+            .ThenBy(s => s.ScriptId)
             .Skip((query.Page - 1) * query.PageSize)
             .Take(query.PageSize)
             .ToListAsync(ct);

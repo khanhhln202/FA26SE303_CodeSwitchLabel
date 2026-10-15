@@ -136,8 +136,28 @@ public class ReviewerStatsService(CodeSwitchLabelDbContext db) : IReviewerStatsS
 
         var total = await q.CountAsync(ct);
 
-        var rows = await q
-            .OrderByDescending(v => v.ReviewedAt)
+        var sort = query.ToSort<ReviewSortField>();
+
+        // TEAM_012: nhánh cuối là thứ tự cũ (lượt duyệt mới nhất trước).
+        var ordered = sort.Field switch
+        {
+            ReviewSortField.ReviewedAt => sort.Descending
+                ? q.OrderByDescending(v => v.ReviewedAt)
+                : q.OrderBy(v => v.ReviewedAt),
+            ReviewSortField.Decision => sort.Descending
+                ? q.OrderByDescending(v => v.Decision)
+                : q.OrderBy(v => v.Decision),
+            ReviewSortField.Status => sort.Descending
+                ? q.OrderByDescending(v => v.Recording!.Status)
+                : q.OrderBy(v => v.Recording!.Status),
+            ReviewSortField.ScriptId => sort.Descending
+                ? q.OrderByDescending(v => v.Recording!.ScriptId)
+                : q.OrderBy(v => v.Recording!.ScriptId),
+            _ => q.OrderByDescending(v => v.ReviewedAt)
+        };
+
+        var rows = await ordered
+            .ThenBy(v => v.ReviewId)
             .Skip((query.Page - 1) * query.PageSize)
             .Take(query.PageSize)
             .ToListAsync(ct);
@@ -198,8 +218,28 @@ public class ReviewerStatsService(CodeSwitchLabelDbContext db) : IReviewerStatsS
 
         var total = await q.CountAsync(ct);
 
-        var rows = await q
-            .OrderByDescending(r => r.ReviewedAt)
+        var sort = query.ToSort<ScriptReviewSortField>();
+
+        // TEAM_012: nhánh cuối là thứ tự cũ (lượt duyệt mới nhất trước).
+        var ordered = sort.Field switch
+        {
+            ScriptReviewSortField.ReviewedAt => sort.Descending
+                ? q.OrderByDescending(r => r.ReviewedAt)
+                : q.OrderBy(r => r.ReviewedAt),
+            ScriptReviewSortField.Action => sort.Descending
+                ? q.OrderByDescending(r => r.Action)
+                : q.OrderBy(r => r.Action),
+            ScriptReviewSortField.Status => sort.Descending
+                ? q.OrderByDescending(r => r.Script.Status)
+                : q.OrderBy(r => r.Script.Status),
+            ScriptReviewSortField.Domain => sort.Descending
+                ? q.OrderByDescending(r => r.Script.Domain)
+                : q.OrderBy(r => r.Script.Domain),
+            _ => q.OrderByDescending(r => r.ReviewedAt)
+        };
+
+        var rows = await ordered
+            .ThenBy(r => r.ScriptReviewId)
             .Skip((query.Page - 1) * query.PageSize)
             .Take(query.PageSize)
             .ToListAsync(ct);

@@ -1,3 +1,4 @@
+using CodeSwitchLabel.Repositories.Entities;
 using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Tests.Infrastructure;
 
@@ -82,7 +83,7 @@ public class ScriptRepositoryTests : IntegrationTestBase
             AdminUserId);
 
         // Act
-        var (items, total) = await Scripts.SearchAsync(null, null, "test", 1, 10, TestContext.Current.CancellationToken);
+        var (items, total) = await Scripts.SearchAsync(null, null, "test", 1, 10, default, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(total >= 2);
@@ -114,6 +115,94 @@ public class ScriptRepositoryTests : IntegrationTestBase
 
         // Assert
         Assert.False(exists);
+    }
+
+    // ---------------------------------------------------------------- TEAM_012: sắp xếp
+
+    /// <summary>
+    /// Ba câu của riêng test này (kèm từ khoá chỉ chúng có) và mốc thời gian cách nhau rõ.
+    /// Mốc đặt tay chứ không dựa vào thứ tự tạo: UtcNow trên Windows chỉ chính xác tới 15ms
+    /// nên hai câu tạo liền có thể trùng mốc, mà trùng mốc thì test sắp xếp không còn ý nghĩa.
+    /// </summary>
+    private async Task<(string Keyword, Script[] Scripts)> CreateThreeSortedScriptsAsync()
+    {
+        var token = Guid.NewGuid().ToString("N")[..10];
+        var baseTime = new DateTimeOffset(2026, 3, 1, 8, 0, 0, TimeSpan.Zero);
+
+        var scripts = new List<Script>();
+        for (var i = 0; i < 3; i++)
+        {
+            var script = await CreateScriptAsync(
+                $"[vi]Cau [en]xep {token} so {i}", $"[vi]Câu sắp xếp {token} số {i}",
+                ScriptDomain.ItTechnology, AdminUserId);
+
+            script.CreatedAt = baseTime.AddHours(i);
+            scripts.Add(script);
+        }
+
+        await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return (token, [.. scripts]);
+    }
+
+    [Fact]
+    public async Task SearchAsync_KhongTruyenSort_GiuNguyenThuTuMoiNhatTruoc()
+    {
+        // Regression TEAM_012: client cũ không gửi sort thì phải y hệt trước khi có tính năng này.
+        var (keyword, scripts) = await CreateThreeSortedScriptsAsync();
+
+        var (items, total) = await Scripts.SearchAsync(
+            null, null, keyword, 1, 10, default, TestContext.Current.CancellationToken);
+
+        Assert.Equal(3, total);
+        Assert.Equal(
+            [scripts[2].ScriptId, scripts[1].ScriptId, scripts[0].ScriptId],
+            items.Select(s => s.ScriptId));
+    }
+
+    [Fact]
+    public async Task SearchAsync_SapXepTheoCreatedAt_TangDanVaGiamDan()
+    {
+        var (keyword, scripts) = await CreateThreeSortedScriptsAsync();
+
+        var (asc, _) = await Scripts.SearchAsync(
+            null, null, keyword, 1, 10,
+            SortSpec<ScriptSortField>.From("createdAt", "asc"), TestContext.Current.CancellationToken);
+
+        var (desc, _) = await Scripts.SearchAsync(
+            null, null, keyword, 1, 10,
+            SortSpec<ScriptSortField>.From("createdAt", "desc"), TestContext.Current.CancellationToken);
+
+        Assert.Equal([scripts[0].ScriptId, scripts[1].ScriptId, scripts[2].ScriptId], asc.Select(s => s.ScriptId));
+        Assert.Equal([scripts[2].ScriptId, scripts[1].ScriptId, scripts[0].ScriptId], desc.Select(s => s.ScriptId));
+    }
+
+    [Fact]
+    public async Task SearchAsync_SapXepTheoScriptId_TheoChuoiSo()
+    {
+        var (keyword, scripts) = await CreateThreeSortedScriptsAsync();
+
+        var (items, _) = await Scripts.SearchAsync(
+            null, null, keyword, 1, 10,
+            SortSpec<ScriptSortField>.From("scriptId", "asc"), TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            [.. scripts.OrderBy(s => s.ScriptId).Select(s => s.ScriptId)],
+            items.Select(s => s.ScriptId));
+    }
+
+    [Fact]
+    public async Task SearchAsync_TenCotSao_RaKetQuaGiongKhongTruyenSort()
+    {
+        var (keyword, _) = await CreateThreeSortedScriptsAsync();
+
+        var (sai, _) = await Scripts.SearchAsync(
+            null, null, keyword, 1, 10,
+            SortSpec<ScriptSortField>.From("khongCoCotNay", "asc"), TestContext.Current.CancellationToken);
+
+        var (macDinh, _) = await Scripts.SearchAsync(
+            null, null, keyword, 1, 10, default, TestContext.Current.CancellationToken);
+
+        Assert.Equal(macDinh.Select(s => s.ScriptId), sai.Select(s => s.ScriptId));
     }
 
     [Fact]

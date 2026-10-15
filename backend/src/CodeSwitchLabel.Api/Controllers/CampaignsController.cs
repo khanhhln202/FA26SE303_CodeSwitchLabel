@@ -40,6 +40,9 @@ public class CampaignsController(ICampaignService campaignService) : ControllerB
     /// <remarks>
     /// Mỗi dòng kèm tiến độ: tổng chỉ tiêu đã chia cho các task, số task và số task đã xong.
     /// Task Manager chỉ xem được chiến dịch được giao cho mình (read-only).
+    ///
+    /// TEAM_012: `?sort=` nhận `campaignId`, `startDate`, `endDate`, `status`, `createdAt`;
+    /// `?dir=asc|desc` (mặc định `asc`). Bỏ trống `sort` thì ra đợt mới nhất trước.
     /// </remarks>
     [HttpGet]
     [ProducesResponseType(typeof(PagedResult<CampaignListItemDto>), StatusCodes.Status200OK)]

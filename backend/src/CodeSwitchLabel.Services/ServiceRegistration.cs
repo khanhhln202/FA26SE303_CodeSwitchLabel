@@ -22,7 +22,14 @@ public static class ServiceRegistration
         this IServiceCollection services, string connectionString)
     {
         // Một NpgsqlDataSource dùng chung: nó giữ pool kết nối và bảng ánh xạ kiểu ENUM.
-        services.AddSingleton(BuildDataSource(connectionString));
+        //
+        // TEAM_012: đăng ký bằng FACTORY chứ không phải bằng instance dựng sẵn. Container KHÔNG
+        // dispose service mà nó không tự tạo, nên instance dựng sẵn sẽ sống mãi cùng provider —
+        // và mỗi test integration dựng một provider riêng (IntegrationTestBase), tức là mỗi test
+        // để lại một pool kết nối. PostgreSQL của testcontainer chỉ chịu 100 connection, nên suite
+        // chết giữa chừng với "sorry, too many clients already". Đăng ký bằng factory thì container
+        // giữ trách nhiệm dispose, và dựng data source cũng chậm lại tới lúc thật sự cần.
+        services.AddSingleton(_ => BuildDataSource(connectionString));
 
         services.AddDbContext<CodeSwitchLabelDbContext>((sp, options) =>
             options.UseNpgsql(sp.GetRequiredService<NpgsqlDataSource>(), npgsql =>

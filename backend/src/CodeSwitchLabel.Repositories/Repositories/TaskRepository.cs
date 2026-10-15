@@ -84,9 +84,11 @@ public interface ITaskRepository
 
     Task<TaskRow?> GetRowAsync(long taskId, CancellationToken ct = default);
 
+    /// <summary>TEAM_012: <paramref name="sort"/> rỗng (Field = null) là thứ tự mặc định.</summary>
     Task<(IReadOnlyList<TaskRow> Items, int Total)> SearchAsync(
         TaskType? type, WorkTaskStatus? status, long? assigneeId, ScriptDomain? domain, bool? overdue,
-        DateTimeOffset now, int page, int pageSize, CancellationToken ct = default);
+        DateTimeOffset now, int page, int pageSize, SortSpec<TaskSortField> sort,
+        CancellationToken ct = default);
 
     Task<List<TaskRow>> GetActiveRowsForAssigneeAsync(long userId, TaskType type, CancellationToken ct = default);
 
@@ -217,7 +219,8 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
 
     public async Task<(IReadOnlyList<TaskRow> Items, int Total)> SearchAsync(
         TaskType? type, WorkTaskStatus? status, long? assigneeId, ScriptDomain? domain, bool? overdue,
-        DateTimeOffset now, int page, int pageSize, CancellationToken ct = default)
+        DateTimeOffset now, int page, int pageSize, SortSpec<TaskSortField> sort,
+        CancellationToken ct = default)
     {
         var query = db.WorkTasks.AsNoTracking();
 
@@ -245,10 +248,34 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
 
         var total = await query.CountAsync(ct);
 
+        // TEAM_012: nhánh cuối là thứ tự cũ — task có hạn trước, không có hạn ở cuối.
+        // Sắp theo deadline cũng giữ nguyên quy tắc đó ở CẢ hai chiều: Postgres mặc định
+        // NULLS FIRST khi DESC, nên lật chiều nguyên xi sẽ đẩy task không hạn lên đầu bảng.
+        var ordered = sort.Field switch
+        {
+            TaskSortField.TaskId => sort.Descending
+                ? query.OrderByDescending(t => t.TaskId)
+                : query.OrderBy(t => t.TaskId),
+            TaskSortField.Deadline => sort.Descending
+                ? query.OrderBy(t => t.Deadline == null).ThenByDescending(t => t.Deadline)
+                : query.OrderBy(t => t.Deadline == null).ThenBy(t => t.Deadline),
+            TaskSortField.Status => sort.Descending
+                ? query.OrderByDescending(t => t.Status)
+                : query.OrderBy(t => t.Status),
+            TaskSortField.TaskType => sort.Descending
+                ? query.OrderByDescending(t => t.TaskType)
+                : query.OrderBy(t => t.TaskType),
+            TaskSortField.CreatedAt => sort.Descending
+                ? query.OrderByDescending(t => t.CreatedAt)
+                : query.OrderBy(t => t.CreatedAt),
+            TaskSortField.TargetQty => sort.Descending
+                ? query.OrderByDescending(t => t.TargetQty)
+                : query.OrderBy(t => t.TargetQty),
+            _ => query.OrderBy(t => t.Deadline == null).ThenBy(t => t.Deadline)
+        };
+
         // Lọc, sắp xếp, phân trang TRƯỚC khi chiếu sang TaskRow.
-        var items = await ProjectRows(query
-                .OrderBy(t => t.Deadline == null)
-                .ThenBy(t => t.Deadline)
+        var items = await ProjectRows(ordered
                 .ThenBy(t => t.TaskId)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize))

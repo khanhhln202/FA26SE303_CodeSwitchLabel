@@ -58,7 +58,12 @@ public class RecordingsController(IRecordingService recordingService, IReviewSer
     }
 
     /// <summary>Danh sách bản ghi, có lọc và phân trang.</summary>
-    /// <remarks>Speaker chỉ thấy bản của chính mình; Reviewer, Task Manager và Admin thấy tất cả.</remarks>
+    /// <remarks>
+    /// Speaker chỉ thấy bản của chính mình; Reviewer, Task Manager và Admin thấy tất cả.
+    ///
+    /// TEAM_012: `?sort=` nhận `recordingId`, `recordedAt`, `status`, `scriptId`, `durationSec`;
+    /// `?dir=asc|desc` (mặc định `asc`). Bỏ trống `sort` thì ra bản thu mới nhất trước.
+    /// </remarks>
     [HttpGet]
     [ProducesResponseType(typeof(PagedResult<RecordingDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<PagedResult<RecordingDto>>> Search(

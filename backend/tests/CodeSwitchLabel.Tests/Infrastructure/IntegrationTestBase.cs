@@ -33,6 +33,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
     protected readonly IServiceScope Scope;
     protected readonly CodeSwitchLabelDbContext Db;
     protected readonly IServiceProvider Services;
+    private readonly ServiceProvider _rootProvider;
     private IDbContextTransaction? _transaction;
 
     // Repositories
@@ -69,8 +70,8 @@ public abstract class IntegrationTestBase : IAsyncLifetime
 
     protected IntegrationTestBase(DatabaseFixture fixture)
     {
-        var services = BuildServiceProvider(fixture.ConnectionString);
-        Scope = services.CreateScope();
+        _rootProvider = BuildServiceProvider(fixture.ConnectionString);
+        Scope = _rootProvider.CreateScope();
         Services = Scope.ServiceProvider;
 
         Db = Services.GetRequiredService<CodeSwitchLabelDbContext>();
@@ -115,7 +116,13 @@ public abstract class IntegrationTestBase : IAsyncLifetime
             _transaction.Dispose();
             _transaction = null;
         }
+
         Scope.Dispose();
+
+        // TEAM_012: phải dispose CẢ provider gốc chứ không chỉ scope. Provider gốc giữ
+        // singleton DbContext và pool kết nối của nó; bỏ quên thì mỗi test để lại một pool,
+        // và cả suite đỏ giữa chừng vì hết connection trên PostgreSQL của testcontainer.
+        await _rootProvider.DisposeAsync();
     }
 
     private async Task SeedTestDataAsync()
@@ -248,7 +255,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         CampaignId = campaign.CampaignId;
     }
 
-    private static IServiceProvider BuildServiceProvider(string connectionString)
+    private static ServiceProvider BuildServiceProvider(string connectionString)
     {
         var services = new ServiceCollection();
 

@@ -7,9 +7,10 @@ namespace CodeSwitchLabel.Repositories.Repositories;
 
 public interface IScriptRepository
 {
+    /// <summary>TEAM_012: <paramref name="sort"/> rỗng (Field = null) là thứ tự mặc định.</summary>
     Task<(IReadOnlyList<Script> Items, int Total)> SearchAsync(
         ScriptStatus? status, ScriptDomain? domain, string? keyword,
-        int page, int pageSize, CancellationToken ct = default);
+        int page, int pageSize, SortSpec<ScriptSortField> sort, CancellationToken ct = default);
 
     Task<Script?> GetAsync(string id, CancellationToken ct = default);
     Task<Script?> GetForUpdateAsync(string id, CancellationToken ct = default);
@@ -28,7 +29,7 @@ public interface IScriptRepository
     Task<ImportBatch?> GetBatchAsync(long batchId, CancellationToken ct = default);
 
     Task<(IReadOnlyList<ImportBatch> Items, int Total)> ListBatchesAsync(
-        int page, int pageSize, CancellationToken ct = default);
+        int page, int pageSize, SortSpec<ImportBatchSortField> sort, CancellationToken ct = default);
 
     Task<IReadOnlyList<string>> GetScriptIdsByBatchAsync(long batchId, CancellationToken ct = default);
 
@@ -68,7 +69,7 @@ public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
 {
     public async Task<(IReadOnlyList<Script> Items, int Total)> SearchAsync(
         ScriptStatus? status, ScriptDomain? domain, string? keyword,
-        int page, int pageSize, CancellationToken ct = default)
+        int page, int pageSize, SortSpec<ScriptSortField> sort, CancellationToken ct = default)
     {
         var query = db.Scripts.AsNoTracking();
 
@@ -88,8 +89,27 @@ public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
 
         var total = await query.CountAsync(ct);
 
-        var items = await query
-            .OrderByDescending(s => s.CreatedAt).ThenBy(s => s.ScriptId)
+        // TEAM_012: nhánh cuối là thứ tự cũ (mới nhất trước). Mọi nhánh đều nối scriptId
+        // ở ngoài switch để trang sau không lặp dòng khi cột sắp xếp bằng nhau.
+        var ordered = sort.Field switch
+        {
+            ScriptSortField.ScriptId => sort.Descending
+                ? query.OrderByDescending(s => s.ScriptId)
+                : query.OrderBy(s => s.ScriptId),
+            ScriptSortField.CreatedAt => sort.Descending
+                ? query.OrderByDescending(s => s.CreatedAt)
+                : query.OrderBy(s => s.CreatedAt),
+            ScriptSortField.Domain => sort.Descending
+                ? query.OrderByDescending(s => s.Domain)
+                : query.OrderBy(s => s.Domain),
+            ScriptSortField.Status => sort.Descending
+                ? query.OrderByDescending(s => s.Status)
+                : query.OrderBy(s => s.Status),
+            _ => query.OrderByDescending(s => s.CreatedAt)
+        };
+
+        var items = await ordered
+            .ThenBy(s => s.ScriptId)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(ct);
@@ -148,12 +168,30 @@ public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
         db.ImportBatches.AsNoTracking().FirstOrDefaultAsync(b => b.BatchId == batchId, ct);
 
     public async Task<(IReadOnlyList<ImportBatch> Items, int Total)> ListBatchesAsync(
-        int page, int pageSize, CancellationToken ct = default)
+        int page, int pageSize, SortSpec<ImportBatchSortField> sort, CancellationToken ct = default)
     {
         var query = db.ImportBatches.AsNoTracking();
         var total = await query.CountAsync(ct);
-        var items = await query
-            .OrderByDescending(b => b.BatchId)
+
+        var ordered = sort.Field switch
+        {
+            ImportBatchSortField.BatchId => sort.Descending
+                ? query.OrderByDescending(b => b.BatchId)
+                : query.OrderBy(b => b.BatchId),
+            ImportBatchSortField.CreatedAt => sort.Descending
+                ? query.OrderByDescending(b => b.CreatedAt)
+                : query.OrderBy(b => b.CreatedAt),
+            ImportBatchSortField.FileName => sort.Descending
+                ? query.OrderByDescending(b => b.FileName)
+                : query.OrderBy(b => b.FileName),
+            ImportBatchSortField.ScriptCount => sort.Descending
+                ? query.OrderByDescending(b => b.ScriptCount)
+                : query.OrderBy(b => b.ScriptCount),
+            _ => query.OrderByDescending(b => b.BatchId)
+        };
+
+        var items = await ordered
+            .ThenBy(b => b.BatchId)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(ct);
