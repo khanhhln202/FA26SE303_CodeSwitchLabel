@@ -44,8 +44,9 @@ public class SystemConfigController(ISystemConfigService configService) : Contro
     /// Bảy tham số đầu do lược đồ của nhóm tạo sẵn. Hai tham số thời lượng bản ghi là đề xuất
     /// của nhóm backend, **chưa được giảng viên duyệt**.
     ///
-    /// Lưu ý: `review.rounds_required` phải giữ bằng 3, vì trigger chốt theo đa số trong database
-    /// đang ghim cứng con số này.
+    /// Lưu ý: `review.rounds_required` đổi được, trigger `trg_review_majority` đọc cùng tham số
+    /// đó nên hai bên không lệch nhau. Lưu ý thứ hai: đổi nó là mọi chỗ đang giả định
+    /// "3 = ba người" phải rà lại.
     /// </remarks>
     [HttpGet]
     [ProducesResponseType(typeof(IEnumerable<SystemConfigDto>), StatusCodes.Status200OK)]

@@ -24,15 +24,15 @@ namespace CodeSwitchLabel.Api.Controllers;
 [Authorize(Roles = "TaskManager,Admin")]
 public class CampaignsController(ICampaignService campaignService) : ControllerBase
 {
-    /// <summary>Tạo chiến dịch mới — ở trạng thái Draft. Chỉ tiêu từ 2000 đến 5000 cặp câu. Chỉ Admin.</summary>
+    // TEAM_003: TaskManager và Admin đều tạo được đợt; TaskManager tự gán đợt cho mình
+    /// <summary>Tạo chiến dịch mới — ở trạng thái Draft. Chỉ tiêu từ 2000 đến 5000 cặp câu.</summary>
     [HttpPost]
-    [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(CampaignDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<CampaignDto>> Create(
         [FromBody] CreateCampaignRequest request, CancellationToken ct)
     {
-        var created = await campaignService.CreateAsync(request, User.GetUserId(), ct);
+        var created = await campaignService.CreateAsync(request, User.GetUserId(), User.IsInRole("Admin"), ct);
         return CreatedAtAction(nameof(Get), new { id = created.CampaignId }, created);
     }
 
@@ -40,6 +40,9 @@ public class CampaignsController(ICampaignService campaignService) : ControllerB
     /// <remarks>
     /// Mỗi dòng kèm tiến độ: tổng chỉ tiêu đã chia cho các task, số task và số task đã xong.
     /// Task Manager chỉ xem được chiến dịch được giao cho mình (read-only).
+    ///
+    /// TEAM_012: `?sort=` nhận `campaignId`, `startDate`, `endDate`, `status`, `createdAt`;
+    /// `?dir=asc|desc` (mặc định `asc`). Bỏ trống `sort` thì ra đợt mới nhất trước.
     /// </remarks>
     [HttpGet]
     [ProducesResponseType(typeof(PagedResult<CampaignListItemDto>), StatusCodes.Status200OK)]
@@ -64,23 +67,35 @@ public class CampaignsController(ICampaignService campaignService) : ControllerB
     public async Task<ActionResult<CampaignDto>> Get(long id, CancellationToken ct)
         => Ok(await campaignService.GetAsync(id, ct));
 
-    /// <summary>Sửa tên, chỉ tiêu, khoảng ngày hoặc trạng thái. Trường nào để trống thì giữ nguyên. Chỉ Admin.</summary>
+    // TEAM_003: TaskManager phụ trách đợt và Admin đều sửa được
+    /// <summary>Sửa tên, chủ đề, chỉ tiêu, khoảng ngày hoặc trạng thái. Trường nào để trống thì giữ nguyên.</summary>
     /// <remarks>
     /// Không hạ chỉ tiêu xuống dưới phần đã chia cho các task — database sẽ từ chối.
     /// </remarks>
     [HttpPatch("{id:long}")]
-    [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(CampaignDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<CampaignDto>> Update(
         long id, [FromBody] UpdateCampaignRequest request, CancellationToken ct)
-        => Ok(await campaignService.UpdateAsync(id, request, ct));
+        => Ok(await campaignService.UpdateAsync(id, request, User.GetUserId(), User.IsInRole("Admin"), ct));
 
-    /// <summary>Gỡ task khỏi chiến dịch (detach): task còn tồn tại với campaign_id NULL, giữ assignments/items. Task không bao giờ bị xoá cứng qua API; đóng task dùng POST /api/tasks/{id}/cancel.</summary>
+    // TEAM_003: Xoá đợt — các task con tự động thành task độc lập nhờ ON DELETE SET NULL
+    /// <summary>Xoá chiến dịch. Task đang gắn tự động thành task độc lập (campaign_id = null).</summary>
+    [HttpDelete("{id:long}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Delete(long id, CancellationToken ct)
+    {
+        await campaignService.DeleteAsync(id, User.GetUserId(), User.IsInRole("Admin"), ct);
+        return NoContent();
+    }
+
+    /// <summary>Gỡ task khỏi chiến dịch (detach): task còn tồn tại với campaign_id NULL, giữ assignments/items.</summary>
     /// <remarks>
-    /// Không xoá task, không xoá task_script/task_recording/assignment. Xoá campaign (SQL trực tiếp)
-    /// cũng chỉ SET NULL nhờ FK ON DELETE SET NULL — không endpoint xoá campaign.
+    /// Không xoá task, không xoá task_script/task_recording/assignment.
     /// </remarks>
     [HttpDelete("{id:long}/tasks/{taskId:long}")]
     [ProducesResponseType(typeof(TaskDetailDto), StatusCodes.Status200OK)]

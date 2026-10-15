@@ -58,6 +58,9 @@ public class ReviewsController(IReviewService reviewService, IReviewerStatsServi
     ///
     /// Mặc định trả cả task; đặt `onlyReviewable=true` để chỉ còn những bản duyệt được.
     /// Bấm vào một bản thì gọi `GET /api/reviewer/recordings/{id}` để lấy câu và link nghe.
+    ///
+    /// TEAM_012: `?sort=` nhận `recordedAt`, `status`, `reviewCount`, `scriptId`. Bỏ trống `sort`
+    /// thì ra bản gần đủ lượt duyệt trước — cùng thứ tự với `GET .../recordings/next`.
     /// </remarks>
     [HttpGet("api/reviewer/tasks/{taskId:long}/recordings")]
     [Authorize(Roles = "Reviewer")]
@@ -169,6 +172,7 @@ public class ReviewsController(IReviewService reviewService, IReviewerStatsServi
         => Ok(await statsService.GetTopRejectedSpeakersAsync(User.GetUserId(), limit, ct));
 
     /// <summary>Lịch sử duyệt bản ghi của chính mình.</summary>
+    /// <remarks>TEAM_012: `?sort=` nhận `reviewedAt`, `decision`, `status`, `scriptId`.</remarks>
     [HttpGet("api/reviewer/history/recordings")]
     [Authorize(Roles = "Reviewer")]
     [ProducesResponseType(typeof(PagedResult<ReviewerHistoryItemDto>), StatusCodes.Status200OK)]
@@ -177,6 +181,7 @@ public class ReviewsController(IReviewService reviewService, IReviewerStatsServi
         => Ok(await statsService.GetHistoryAsync(User.GetUserId(), query, ct));
 
     /// <summary>Lịch sử duyệt câu của chính mình.</summary>
+    /// <remarks>TEAM_012: `?sort=` nhận `reviewedAt`, `action`, `status`, `domain`.</remarks>
     [HttpGet("api/reviewer/history/contributions")]
     [Authorize(Roles = "Reviewer")]
     [ProducesResponseType(typeof(PagedResult<ReviewerScriptHistoryItemDto>), StatusCodes.Status200OK)]

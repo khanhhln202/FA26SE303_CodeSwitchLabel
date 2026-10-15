@@ -72,13 +72,11 @@ public sealed class PasswordHasherTests
     [Theory]
     [InlineData("")]
     [InlineData("$2a$11$ngan")]
-    public void Verify_HashCucNgan_NemLoiChuKhongTraFalse(string hash)
+    [InlineData("$2a$11$REPLACE_WITH_REAL_BCRYPT_HASH_BEFORE_FIRST_LOGIN")]
+    public void Verify_HashCucNganHoacSaiDinhDang_TraFalse(string hash)
     {
-        // Arrange + Act — chuỗi quá ngắn không qua nổi parse của BCrypt (lọt qua catch SaltParseException
-        // trong BcryptPasswordHasher): ghi nhận hành vi hiện tại, không sửa src trong đợt này.
-        void Act() => _hasher.Verify("MatKhau2026", hash);
-
-        // Assert
-        Assert.ThrowsAny<Exception>(Act);
+        // TEAM_007: chuỗi quá ngắn hoặc sai định dạng bcrypt đều được xử lý êm, trả false
+        var ok = _hasher.Verify("MatKhau2026", hash);
+        Assert.False(ok);
     }
 }

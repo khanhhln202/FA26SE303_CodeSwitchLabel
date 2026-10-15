@@ -92,6 +92,44 @@ public record SubmitReviewResult(
     RecordingStatus RecordingStatus,
     bool IsFinal);
 
+/// <summary>TEAM_010 — nút "Chỉ xóa audio": giữ câu, đẩy câu về hàng đợi ghi lại.</summary>
+public record RejectAudioRequest
+{
+    /// <summary>Bắt buộc ít nhất một mã — bỏ audio là phải nói lý do để người đọc biết sửa gì.</summary>
+    [Required(ErrorMessage = "Phải chọn ít nhất một lý do loại audio.")]
+    [MinLength(1, ErrorMessage = "Phải chọn ít nhất một lý do loại audio.")]
+    public List<string> RejectionReasonCodes { get; init; } = [];
+
+    [StringLength(1000)]
+    public string? Comment { get; init; }
+
+    public long? TaskId { get; init; }
+}
+
+/// <param name="RequeuedForSpeaker">Người sẽ thu lại — luôn là người đọc cũ (luật một cặp câu / một người đọc).</param>
+public record RejectAudioResult(
+    string RecordingId,
+    string ScriptId,
+    long RequeuedForSpeaker,
+    RecordingStatus RecordingStatus);
+
+/// <summary>TEAM_010 — nút "Xóa hoàn toàn": bỏ cả câu văn bản lẫn audio khỏi kho.</summary>
+public record DiscardPairRequest
+{
+    [Required(ErrorMessage = "Phải chọn ít nhất một lý do.")]
+    [MinLength(1, ErrorMessage = "Phải chọn ít nhất một lý do.")]
+    public List<string> RejectionReasonCodes { get; init; } = [];
+
+    [StringLength(1000)]
+    public string? Comment { get; init; }
+}
+
+public record DiscardPairResult(
+    string RecordingId,
+    string ScriptId,
+    ScriptStatus ScriptStatus,
+    int RecordingsRemoved);
+
 public record ReviewTaskProgressDto(
     long TaskId,
     string? Description,

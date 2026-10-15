@@ -23,8 +23,16 @@ public interface ITaskService
         long taskId, string itemId, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false);
 
-    /// <summary>Giao việc. Task đang có người nhận thì đây chính là điều phối lại.</summary>
+    /// <summary>
+    /// TEAM_010: giao cho NHIỀU người cùng lúc — giao thêm, không đuổi người đang nhận.
+    /// Chỉ tiêu là của cả nhóm nên không nhân theo số người.
+    /// </summary>
     Task<TaskDetailDto> AssignAsync(
+        long taskId, long[] userIds, CancellationToken ct = default,
+        long? callerId = null, bool isAdmin = false);
+
+    /// <summary>TEAM_010: gỡ một người khỏi task, giữ lịch sử lượt giao.</summary>
+    Task<TaskDetailDto> UnassignAsync(
         long taskId, long userId, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false);
 
@@ -37,9 +45,17 @@ public interface ITaskService
         long taskId, long? campaignId, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false);
 
-    /// <summary>Gỡ task khỏi chiến dịch nhưng giữ lại task (C2). Task không bao giờ bị xoá cứng qua API.</summary>
+    /// <summary>Gỡ task khỏi chiến dịch nhưng giữ lại task (C2).</summary>
     Task<TaskDetailDto> DetachAsync(
         long campaignId, long taskId, CancellationToken ct = default,
+        long? callerId = null, bool isAdmin = false);
+
+    // TEAM_003: Xoá cứng task rảnh (độc lập + chưa có việc).
+    /// <summary>
+    /// Xoá cứng một nhiệm vụ. Chỉ xoá được task rảnh (chưa gắn đợt nào và chưa có việc/lượt giao/mục nào).
+    /// </summary>
+    Task DeleteAsync(
+        long taskId, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false);
 
     Task<IReadOnlyList<AssigneeSummaryDto>> GetAssigneeSummaryAsync(CancellationToken ct = default);

@@ -37,8 +37,20 @@ winget install --id Gyan.FFmpeg -e
 docker compose up -d postgres minio
 ```
 
-Lần đầu, PostgreSQL tự chạy `docs/codeswitchlabel.sql`: 19 bảng, 18 kiểu ENUM, 8 trigger, 6 view,
-2 hàm sinh mã và dữ liệu danh mục.
+Lần đầu, PostgreSQL tự chạy `docs/codeswitchlabel.sql`: 24 bảng, 22 kiểu ENUM, 23 trigger, 7 view,
+26 hàm (trong đó có 2 hàm sinh mã) và dữ liệu danh mục. Con số này sinh ra từ chính file lược đồ —
+đếm lại sau mỗi lần sửa (bảng ra 25 vì tính cả `audit_log_default`, là partition của `audit_log`):
+
+```powershell
+Select-String -Path docs/codeswitchlabel.sql -Pattern '^CREATE (TABLE|TYPE|TRIGGER|VIEW|OR REPLACE FUNCTION)' -AllMatches |
+  ForEach-Object { $_.Matches.Value } | Group-Object | Select-Object Count, Name
+```
+
+Trên bash/Git Bash:
+
+```bash
+grep -oE '^CREATE (TABLE|TYPE|TRIGGER|VIEW|OR REPLACE FUNCTION)' docs/codeswitchlabel.sql | sort | uniq -c
+```
 
 ```bash
 dotnet run --project backend/src/CodeSwitchLabel.Api
@@ -159,14 +171,12 @@ Admin nhập input_text.json  →  script: pending_validation
 - **Đủ ba lượt thì trigger `trg_review_majority` chốt theo đa số** — ít nhất 2/3 phiếu.
 - **Từ chối bắt buộc ít nhất một lý do**; duyệt đạt thì không được kèm lý do.
 - **Lý do thuộc nhóm `content`** kéo cả cặp câu về `pending_validation`: lỗi nằm ở văn bản
-  chứ không phải ở giọng đọc. Trigger `trg_rr_content_resets_script` làm việc này.
+  chứ không phải ở giọng đọc. Trigger `trg_review_majority` làm việc này, trong hàm
+  `fn_review_majority_status` (mỗi lần chốt trạng thái bản ghi).
 
 > **Trạng thái bản ghi do DATABASE chốt, không phải code.** `ReviewService` ghi lượt duyệt rồi
 > **đọc lại** trạng thái. Lớp `ReviewRules` trong C# chỉ là bản sao của luật để tầng trên hiển thị
 > và để unit test — không bao giờ được dùng để ghi.
->
-> Trigger ghim cứng con số 3. Đổi tham số `review.rounds_required` mà không sửa trigger thì hai bên
-> lệch nhau; `ReviewService` ghi log cảnh báo khi phát hiện.
 
 ### Hai người duyệt cùng lúc
 
@@ -186,8 +196,10 @@ Draft ─ giao người ─► Open ─ việc đầu tiên ─► InProgress �
 
 - **Chỉ tiêu task thu âm đếm theo CẶP CÂU.** Một cặp chỉ tính là xong khi **cả hai** bản cs và vi
   đều được duyệt đạt. Chỉ tiêu task duyệt đếm theo số bản ghi.
-- **Mỗi task đúng một người nhận** — index duy nhất có điều kiện `uq_task_assignment_active`.
-  Giao cho người khác thì lượt cũ chuyển `reassigned`, không bị xoá.
+- **Một task giao cho NHIỀU người** (TEAM_010): `POST /api/tasks/{id}/assign` nhận
+  `{ "userIds": [6, 7] }` và giao **thêm**, không đuổi người đang nhận. Index
+  `uq_task_assignment_active_user` chặn giao trùng một người; gỡ người ra thì lượt giao chuyển
+  `reassigned`, không bị xoá. `target_qty` là của cả nhóm, không nhân theo số người nhận.
 - **Trạng thái task tự tính lại** từ số liệu thật sau mỗi việc xảy ra; chỉ Huỷ là bấm tay.
 - **Giao việc kiểm tra người nhận có làm được không**: cặp câu người khác đã thu, hay bản ghi do
   chính người đó thu, đều không tính là mục làm được.
@@ -221,7 +233,7 @@ Draft ─ giao người ─► Open ─ việc đầu tiên ─► InProgress �
 ## Thử luồng chính
 
 1. Đăng nhập `admin`, `POST /api/scripts/import`, chọn file JSON theo mẫu `docs/Requirement.txt`.
-   Kết quả trả mã mới dạng `s_211000007`, trạng thái **PendingValidation**.
+   Kết quả trả mã mới dạng `s_211000016`, trạng thái **PendingValidation**.
 2. Đăng nhập `speaker1`, `POST /api/scripts/{id}/review` với `{ "action": "Accepted" }` → **Validated**.
 3. `GET /api/speaker/scripts/next` → cặp câu kèm `remainingVariants` là cả hai biến thể.
 4. `POST /api/recordings` hai lần, `sentenceVariant` lần lượt là `CodeSwitching` và `PureVietnamese`.
@@ -283,15 +295,24 @@ Phụ thuộc đi một chiều: **Api → Services → Repositories**.
 
 ## Chỗ chưa làm
 
-`dataset` và `dataset_recording` đã có bảng nhưng chưa có endpoint.
+`dataset` và `dataset_recording` đã có đủ endpoint trong `DatasetsController` (tạo, tìm, chi tiết,
+phát hành, lưu trữ, tải ZIP). Phần còn dở: **test** — mới chỉ có kiểm tra ràng buộc ở
+`CheckConstraintTests`, chưa có test nào gọi thử các endpoint này.
+
+`docs/demo-test-api.html` là trang tĩnh, tự viết tay theo lần chạy của `03-demo-scenario` — **không
+có script nào sinh ra nó**. Nên khi kịch bản demo đổi (mã câu, mã bản ghi, mã lỗi), phần bảng bên
+trong vẫn là số của lần chạy cũ; muốn đúng thì sửa tay.
 
 Giới hạn đã biết:
 
-- **`review.rounds_required` phải giữ bằng 3**, vì trigger chốt đa số ghim cứng con số này.
+- **`review.rounds_required` đọc động từ `system_config`** và trigger `trg_review_majority` cũng
+  đọc từ đó, nên hai bên không thể lệch nhau. `ReviewRules.DefaultRoundsRequired = 3` chỉ là mặc định
+  khi chưa cấu hình; nếu đổi tham số thì mọi chỗ đang giả định "3 = ba người" phải rà lại.
 - **Ngưỡng thời lượng bản ghi (1–30 giây) là đề xuất của nhóm backend**, chưa có trong file lược đồ
   chung và chưa được giảng viên duyệt. Lược đồ có sẵn hai tham số khoảng lặng đầu/cuối nhưng
   **hệ thống chưa đo được khoảng lặng**.
-- **Reviewer chưa xem được danh sách bản ghi trong task của mình**, mới chỉ lấy lần lượt từng bản.
+- **Reviewer xem được danh sách bản ghi trong task của mình** qua
+  `GET /api/reviewer/tasks/{id}/recordings` (có phân trang, có bỏ bản đã tự duyệt).
 - **Không còn tính năng "bỏ qua" câu.** Thấy câu có vấn đề thì dùng Review Text để sửa hoặc từ chối.
   Một lượt từ chối là câu bị loại với mọi người — chưa có bước xác nhận của Admin.
 - **Bảng tổng hợp theo người nhận gom trong bộ nhớ**; nhiều task đang chạy thì nên chuyển xuống `GROUP BY`.

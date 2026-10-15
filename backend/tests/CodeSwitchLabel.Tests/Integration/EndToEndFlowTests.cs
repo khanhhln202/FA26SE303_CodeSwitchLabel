@@ -36,10 +36,11 @@ public sealed class EndToEndFlowTests : ApiTestBase
         var reviewer2 = await GetReviewer2TokenAsync();
         var reviewer3 = await GetReviewer3TokenAsync();
 
-        // 1) Admin nhập một cặp câu mới — câu vào trạng thái chờ duyệt nội dung.
+        // 1) Admin nhập một cặp câu mới — TEAM_010: câu vào HÀNG ĐỢI chung, chờ duyệt.
         var scriptId = await ImportOneScriptAsync(admin);
 
-        // 2) Duyệt nội dung: câu mới chỉ thu âm được sau lượt duyệt của người đủ chủ đề.
+        // 2) Duyệt nội dung: câu chỉ thu âm được sau lượt duyệt của người đủ chủ đề.
+        //    Trước TEAM_010 Admin nhập xong là tự validated, bỏ qua bước này.
         var reviewScript = await PostAsync($"/api/scripts/{scriptId}/review", new { action = "Accepted" }, reviewer1);
         Assert.Equal(HttpStatusCode.OK, reviewScript.StatusCode);
 
@@ -65,7 +66,7 @@ public sealed class EndToEndFlowTests : ApiTestBase
             Assert.Equal(1, items.RootElement.GetProperty("added").GetInt32());
         }
 
-        var assignTask = await PostAsync($"/api/tasks/{taskId}/assign", new { userId = speakerId }, manager);
+        var assignTask = await PostAsync($"/api/tasks/{taskId}/assign", new { userIds = new[] { speakerId } }, manager);
         Assert.Equal(HttpStatusCode.OK, assignTask.StatusCode);
 
         // 5) Speaker lấy câu trong task rồi nộp hai biến thể.
@@ -204,6 +205,7 @@ public sealed class EndToEndFlowTests : ApiTestBase
         var createCampaign = await PostAsync("/api/campaigns", new
         {
             campaignName = $"E2E unassigned {Guid.NewGuid():N}",
+            domain = "ItTechnology",
             targetQty = 2000,
             startDate = DateOnly.FromDateTime(DateTime.UtcNow),
             endDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30))
@@ -286,6 +288,7 @@ public sealed class EndToEndFlowTests : ApiTestBase
         var response = await PostAsync("/api/campaigns", new
         {
             campaignName = $"E2E {Guid.NewGuid():N}",
+            domain = "ItTechnology",
             targetQty = 2000,
             startDate = DateOnly.FromDateTime(DateTime.UtcNow),
             endDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30))

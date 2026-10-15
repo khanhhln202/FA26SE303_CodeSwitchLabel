@@ -10,20 +10,31 @@ Nền tảng web thu thập và kiểm soát chất lượng dữ liệu tiếng
 | Vai | Việc chính |
 |---|---|
 | **Speaker** | Review Text (duyệt/sửa câu trước khi thu), Record Speech (thu 2 bản cs + vi, nghe lại/thu lại), Contribute Text (đóng góp câu mới), theo dõi tiến độ/lịch sử |
-| **Reviewer** | Nhận task duyệt, nghe và duyệt/từ chối bản ghi (bắt buộc lý do khi từ chối), theo dõi target/deadline/tiến độ |
-| **Task Manager** | Tạo/giao task Speaker & Reviewer, đặt target & deadline, theo dõi tiến độ, giao lại task |
+| **Reviewer** | Nhận task duyệt, nghe và duyệt/từ chối bản ghi (bắt buộc lý do khi từ chối), duyệt câu văn bản trong lô được giao, theo dõi target/deadline/tiến độ |
+| **Task Manager** | Tạo/giao task Speaker & Reviewer (một task giao cho **nhiều người**), chia lô câu văn bản, đặt target & deadline, theo dõi tiến độ |
 | **Admin** | Import/quản lý kho câu, quản lý user & vai, quản lý recordings & dataset (xem/lọc/download), dashboard & thống kê, cấu hình hệ thống |
 
 Luồng dữ liệu cốt lõi:
 
 ```
-Admin import input_text.json → script: pending_validation
-  → Speaker/Reviewer Review Text → validated
-  → Speaker thu 2 bản cs + vi → mỗi bản chờ 3 lượt duyệt mù
-  → đa số duyệt (2/3) → approved | đa số từ chối → rejected
-  → lý do nhóm "content" kéo cặp câu về pending_validation
+Mọi câu văn bản (nhập file · đóng góp · báo lỗi) → HÀNG ĐỜI CHUNG (FIFO)
+  → Task Manager chia lô (~100 câu/người) → 1 lượt duyệt của người được giao lô
+  → validated → HÀNG ĐỢI GHI ÂM (FIFO) → Speaker thu 2 bản cs + vi
+  → mỗi bản chờ 3 lượt duyệt mù → đa số 2/3 → approved | rejected
+  → lý do nhóm "content" kéo cặp câu về hàng đợi duyệt văn bản
   → cả cs và vi đạt → cặp câu XONG
 ```
+
+### Ba nút xử lý một bản ghi
+
+| Nút | Endpoint | Tác dụng |
+|---|---|---|
+| **Chấp nhận** | `POST /api/recordings/{id}/reviews` | Thông qua cả văn bản và audio |
+| **Chỉ xóa audio** | `POST /api/recordings/{id}/reject-audio` | Bỏ audio hỏng, **giữ câu**, câu quay về hàng đợi để **cùng người đọc cũ** thu lại |
+| **Xóa hoàn toàn** | `POST /api/recordings/{id}/discard-pair` | Loại cả câu lẫn audio khỏi kho (xoá mềm: `script.status = deactivated`) |
+
+Lý do loại **không** ghi vào bảng `review`: hai nút này là quyết định dứt điểm, không
+phải phiếu bầu — ghi vào đó sẽ làm lệch bộ đếm 3 lượt. Lưu vào `recording.discard_note`.
 
 ## Kiến trúc (Architecture)
 
@@ -43,11 +54,12 @@ Phụ thuộc backend đi một chiều: **Api → Services → Repositories**.
 ```
 FA26SE303_CodeSwitchLabel/
 ├── docker-compose.yml            # dev: postgres + minio (+ api profile cho FE)
+├── docker-compose.local.yml      # bản đè image MinIO, dùng cho e2e 03 (tắt bật lại hệ thống)
 ├── backend/
 │   ├── CodeSwitchLabel.sln
 │   ├── Dockerfile                # build SDK 10 + runtime aspnet 10 + ffmpeg
 │   ├── README.md                 # tài liệu backend chi tiết (tiếng Việt)
-│   ├── src/CodeSwitchLabel.Api/          # Program.cs, Controllers/* (11), appsettings*.json
+│   ├── src/CodeSwitchLabel.Api/          # Program.cs, Controllers/*, appsettings*.json
 │   ├── src/CodeSwitchLabel.Services/     # nghiệp vụ, DTO, Audio, Reviews, WorkTasks, Seeding
 │   ├── src/CodeSwitchLabel.Repositories/ # entity, DbContext, Storage/S3
 │   └── tests/
@@ -58,14 +70,13 @@ FA26SE303_CodeSwitchLabel/
 │   └── README.md
 ├── docs/
 │   ├── codeswitchlabel.sql       # LƯỢC ĐỒ — nguồn sự thật duy nhất, không dùng EF migration
-│   ├── migrations/               # script SQL phát sinh sau khi chốt lược đồ (áp tay)
 │   ├── FE-INTEGRATION.md         # hợp đồng API cho frontend
 │   ├── Requirement.txt           # yêu cầu 4 actor + mẫu input_text.json
 │   └── demo-test-api.html
-├── migrations/                   # V2__task_independent_of_campaign.sql + V2__verify (tách task khỏi campaign)
-├── deploy/                       # prod: docker-compose.prod.yml, Caddyfile, .env.example, README.md
-├── demo/                         # input_text_demo.json (7 câu, 3 câu lỗi cố ý) + wav/m4a mẫu + test-them/
-└── .github/workflows/backend.yml # CI: build + test
+├── migrations/                   # V2..V7 + file verify (tách task khỏi campaign, hàng đợi văn bản, đa người nhận)
+├── deploy/                       # prod: docker-compose.prod.yml, Caddyfile, deploy.sh, .env.example, README.md
+├── demo/                         # input_text_demo.json + demo-live-import.json (7 câu, 3 câu lỗi cố ý) + wav/m4a mẫu + test-them/
+└── .github/workflows/            # backend.yml (CI build + test), deploy.yml (tự động lên máy chủ)
 ```
 
 Tài liệu chi tiết:
@@ -82,10 +93,10 @@ Tài liệu chi tiết:
 | Backend | .NET 10 LTS (`net10.0`), ASP.NET Core Web API, EF Core + Npgsql, JWT Bearer, Swashbuckle, BCrypt.Net-Next, AWSSDK.S3 |
 | DB / Storage | PostgreSQL 16-alpine (schema SQL thuần, không migration), MinIO (S3-compatible), ffmpeg/ffprobe (chuẩn hoá WAV 16 kHz mono + QC) |
 | Infra | Docker + Docker Compose, Caddy 2 (auto HTTPS), Azure (trial), GitHub Actions |
-| Frontend | React 19 + Vite 7/8, react-router-dom 7, TanStack Query 5, axios, TailwindCSS 4 + shadcn, lucide-react, sonner, wavesurfer.js, formik + yup, Vercel |
+| Frontend | React 19 + Vite 8, react-router-dom 7, TanStack Query 5, axios, TailwindCSS 4 + shadcn, lucide-react, sonner, wavesurfer.js, formik + yup, Vercel |
 | Test | xunit.v3 + Moq + Testcontainers.PostgreSql + coverlet, E2E Node 18+ (`fetch`/`FormData`, không cần cài gói) |
 
-Quy ước API: JSON `camelCase` (trừ `alignment` giữ `snake_case`), enum dạng string, thời gian UTC ISO8601, phân trang `?page&pageSize` (max 100), `204` = hết việc, lỗi nghiệp vụ trả `code + title + traceId`.
+Quy ước API: JSON `camelCase` (trừ `alignment` giữ `snake_case`), enum dạng string, thời gian UTC ISO8601, phân trang `?page&pageSize` (max 100) kèm sắp xếp `?sort=<cột>&dir=asc|desc` (bỏ `sort` là thứ tự mặc định của endpoint, sai tên cột cũng vậy), `204` = hết việc, lỗi nghiệp vụ trả `code + title + traceId`.
 
 ## Chạy nhanh (Quickstart)
 
@@ -128,6 +139,8 @@ Xoá sạch và dựng lại lược đồ từ `docs/codeswitchlabel.sql`:
 docker compose down -v; docker compose up -d postgres minio
 ```
 
+Database local đang có sẵn lược đề mới nhất (Postgres chạy file .sql lúc tạo volume rỗng), nên **máy dev không cần chạy migration tay**. File trong `migrations/` là để **máy deploy** nâng cấp database đang chạy; `deploy/deploy.sh` tự chạy mọi file chưa có trong sổ `schema_migration`.
+
 ### 3) Frontend
 
 ```bash
@@ -160,7 +173,7 @@ Cần 3 reviewer vì **mỗi bản ghi cần 3 lượt duyệt của 3 người 
 
 Luồng chính (7 bước):
 
-1. `admin`: `POST /api/scripts/import` file JSON theo mẫu `docs/Requirement.txt` → mã mới dạng `s_211000007`, trạng thái `PendingValidation`
+1. `admin`: `POST /api/scripts/import` file JSON theo mẫu `docs/Requirement.txt` → mã mới dạng `s_211000016`, trạng thái `PendingValidation`
 2. `speaker1`: `POST /api/scripts/{id}/review` `{ "action": "Accepted" }` → `Validated`
 3. `GET /api/speaker/scripts/next` → cặp câu kèm cả 2 biến thể
 4. `POST /api/recordings` 2 lần (`CodeSwitching` rồi `PureVietnamese`)
@@ -171,10 +184,16 @@ Luồng chính (7 bước):
 ## Khái niệm cốt lõi (Core concepts)
 
 - **Một `script` là một CẶP CÂU**: `cs_content` (giữ nhãn `[vi]/[en]`) + `vi_content` + `alignment` JSON (`scan → quét`).
+- **HÀNG ĐỢI CHUNG (`script_queue`)** — mọi câu văn bản đi qua hai chặng: `text_review` → `recording`. Hàng do **trigger** sinh chứ không phải service, nên không đường ghi nào (kể cả SQL thẳng) tạo được câu lọt qua việc duyệt. Thứ tự lấy là FIFO theo `enqueued_at`.
+  - **Giữ chỗ bằng `fn_queue_claim_next`** — đọc hàng và ghi chủ nằm trong cùng một transaction, dùng `FOR UPDATE SKIP LOCKED`. Đây là chốt chặn "hai người không được cùng nhận một câu": nếu làm bằng EF thì khoảng giữa SELECT và UPDATE là lúc trống để người khác chen vào.
+  - Claim có hạn (`queue.claim_ttl_minutes`, mặc định 30). Người mở câu rồi đóng tab không giữ câu vĩnh viễn.
+- **Duyệt văn bản chỉ MỘT lượt**, và chỉ người Task Manager giao câu đó trong lô mới được duyệt (`text_review.batch_size`, mặc định 100 câu/người).
 - **Mã câu có nghĩa** do DB sinh (`fn_generate_script_id`): `s_211000001` = số từ EN + domain + quan hệ Anh–Việt + số thứ tự. CHECK constraint chặn mã sai ý nghĩa.
-- **Mỗi cặp cần 2 bản ghi âm**: `r_cs_…` + `r_vi_…` (`_t2` khi thu lại). Trigger `trg_recording_single_speaker` bắt 1 cặp chỉ 1 người đọc (cùng giọng/buổi).
-- **Duyệt mù 3 lượt, chốt đa số 2/3** bởi trigger `trg_review_majority`. Từ chối bắt buộc ≥1 lý do; lý do nhóm `content` kéo cặp câu về `pending_validation`. **Trạng thái do DATABASE chốt, code chỉ ghi lượt rồi đọc lại.**
-- **Task**: `Draft → Open → InProgress → Completed (+Cancelled)`, tự tính lại từ số liệu thật. Task thu âm đếm theo cặp (cả cs+vi đạt mới tính), task duyệt đếm theo bản ghi. Mỗi task đúng 1 người nhận tại một thời điểm.
+- **Mỗi cặp cần 2 bản ghi âm**: `r_cs_…` + `r_vi_…` (`_t2` khi thu lại). Trigger `trg_recording_single_speaker` bắt 1 cặp chỉ 1 người đọc (cùng giọng/buổi) — **kể cả sau khi bản ghi bị loại**, nên câu quay lại hàng đợi thu lại với chính người đọc cũ.
+- **Duyệt mù 3 lượt của 3 người khác nhau, chốt đa số 2/3** bởi trigger `trg_review_majority`. Từ chối bắt buộc ≥1 lý do; lý do nhóm `content` kéo cặp câu về `pending_validation`. **Trạng thái do DATABASE chốt, code chỉ ghi lượt rồi đọc lại.** Trong vòng duyệt **không có kiểm tra tự động nào** — auto-QC chỉ chạy lúc nộp bản ghi.
+- **Task**: `Draft → Open → InProgress → Completed (+Cancelled)`, tự tính lại từ số liệu thật. Task thu âm đếm theo cặp (cả cs+vi đạt mới tính), task duyệt đếm theo bản ghi.
+- **Một task giao cho NHIỀU người.** `target_qty` là của **cả nhóm**, không nhân theo số người (nên quota đợt vẫn cộng đúng một lần). Mỗi người thấy **tiến độ của chính mình** (`myProgress`) lẫn của cả nhóm (`teamProgress`). Ràng buộc còn lại: cùng một người không được nhận trùng một task.
+- **Chỉ tiêu tụt thì task tự mở lại.** Bản ghi bị từ chối → mục câu lùi `Completed → Pending`, mục duyệt `Reviewed → Skipped`; `TaskStateMachine` tính lại và kéo task rời `Completed`. Trước đây chỉ tiêu không bao giờ tụt nên task treo ở "Hoàn thành" dù người nhận chưa làm đủ.
 - **Không dùng EF migration** — sửa lược đồ thì sửa `docs/codeswitchlabel.sql` trước, rồi sửa `DbContext` cho khớp.
 
 ## Cấu hình (Configuration)
@@ -183,7 +202,7 @@ Luồng chính (7 bước):
 |---|---|
 | `backend/src/CodeSwitchLabel.Api/appsettings.json` + `appsettings.Development.json` | connection string, JWT (480 phút dev), CORS (5173, 3000), `Seed:DefaultPassword` |
 | `FRONTEND/.env.example` → `.env.local` | `VITE_API_BASE_URL` |
-| `deploy/.env.example` → `deploy/.env` | `API_DOMAIN`, `FILES_DOMAIN`, `FE_ORIGIN`, `POSTGRES_PASSWORD`, `MINIO_*`, `JWT_KEY` (base64 48), `JWT_EXPIRY_MINUTES`, `SWAGGER_ENABLED`, `SEED_PASSWORD` |
+| `deploy/.env.example` → `deploy/.env` | `API_DOMAIN`, `FILES_DOMAIN`, `CADDYFILE`, `FE_ORIGIN`, `FE_ORIGIN_PREVIEW`, `FE_ORIGIN_LOCAL`, `POSTGRES_PASSWORD`, `MINIO_*`, `JWT_KEY` (base64 48), `JWT_EXPIRY_MINUTES`, `SWAGGER_ENABLED`, `SEED_PASSWORD` |
 
 Lưu ý `ObjectStorage:ServiceUrl` (API gọi MinIO trong mạng Docker, `http://minio:9000`) vs `PublicUrl` (trình duyệt mở, `http://localhost:9000` dev / `https://files.*` prod) — link nghe tạm 15 phút phải ký đúng địa chỉ trình duyệt dùng.
 
@@ -208,11 +227,13 @@ docker exec csl-postgres psql -U csl -d codeswitchlabel -c "select changed_at, u
 
 - Swagger là nguồn sự thật khi backend chạy: `http://localhost:5053` (dev) / `https://api.<domain>` (prod). Export: `curl -o swagger.json http://localhost:5053/swagger/v1/swagger.json`
 - `docs/FE-INTEGRATION.md`: auth, format lỗi (`401/403` rỗng, `400` validation `errors`, nghiệp vụ `code+title+traceId`), recording/review/tasks/enum
-- 11 controller: `Auth, Scripts, Recordings, Reviews, Speaker, Tasks, Campaigns, Datasets, Users, Admin, Config` — xem chi tiết trong [`backend/README.md`](backend/README.md)
+- 12 controller: `Auth, Scripts, Recordings, Reviews, ScriptQueue, Speaker, Tasks, Campaigns, Datasets, Users, Admin, Config` — xem chi tiết trong [`backend/README.md`](backend/README.md). Thêm controller thì đếm lại: `ls backend/src/CodeSwitchLabel.Api/Controllers/*.cs | wc -l`
 
 ## Deploy
 
 Xem [`deploy/README.md`](deploy/README.md): Docker prod + Caddy tự xin Let's Encrypt, chế độ 2-domain vs 1-host (Azure free domain), checklist nghiệm thu bằng E2E, backup `pg_dump` + volume MinIO định kỳ, lưu ý credit Azure trial (~3 tháng với máy B2s).
+
+Push code backend lên `main` thì workflow `.github/workflows/deploy.yml` tự chạy `deploy/deploy.sh` trên máy chủ (chỉ chạy sau khi CI build + test xanh). Lệnh dưới đây là **đường chạy tay**, dùng khi workflow hỏng hoặc deploy thử:
 
 ```bash
 docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build
@@ -221,10 +242,21 @@ docker compose -f deploy/docker-compose.prod.yml logs -f api
 
 ## Giới hạn đã biết (Known limitations)
 
-- `review.rounds_required` phải giữ bằng **3** (trigger chốt đa số ghim cứng).
-- Ngưỡng thời lượng 1–30s là đề xuất của nhóm backend, chưa được duyệt chính thức; hệ thống chưa đo khoảng lặng đầu/cuối.
-- `dataset`/`dataset_recording` đã có bảng nhưng endpoint còn dở dang (xem `backend/README.md` mục “Chỗ chưa làm”).
-- Không xoá tài khoản (chỉ khoá), không xoá cứng `rejection_reason` (chỉ tắt `is_active`), không tự đặt `recording.status` / trạng thái task ngoài `TaskStateMachine`.
+- **Ba lượt duyệt đều là của người**, chốt đa số 2/3; **không có phiếu của hệ thống**. Một thời có dự định thêm lượt kiểm tra tự động ở vòng duyệt nhưng đã bỏ: auto-QC chạy lúc nộp và bản trượt thì `qc_failed` — không bao giờ tới vòng duyệt, nên lượt đó không bao giờ có tác dụng. `review.rounds_required` giữ bằng **3**.
+- **Ngưỡng thời lượng 1–30s là đề xuất của nhóm backend**, chưa được duyệt chính thức; hệ thống chưa đo khoảng lặng đầu/cuối.
+- **Chưa có hệ thống nhắc nhở tự động** (ghi là "yêu cầu 3.3" nhưng `docs/Requirement.txt` không có mục này) — không có bảng `notification`, không có background service. Mọi số liệu để nhắc (`deadline`, `hoursRemaining`, `isOverdue`, `overdueTasks`) backend đã trả sẵn, nên khi nào thật sự cần thì làm bằng một endpoint + một con badge là đủ, không cần bảng riêng.
+- **Trạng thái task tự tính, không sửa tay** — ngoài `POST /api/tasks/{id}/cancel` và `DELETE /api/tasks/{id}` (xoá được task rỗng thôi: chưa giao, chưa có việc/mục/người nhận, chưa gắt chiến dịch; trả 409 `task_in_campaign` / `task_has_work` nếu ngược lại). Ghi là "yêu cầu 4.1" ở `README.md` cũ nhưng `Requirement.txt` cũng không có; trạng thái tự tính từ số liệu thật là thiết kế đúng, sửa tay sẽ đụng `TaskStateMachine` và phải chốt rõ ai là nguồn sự thật khi hai bên lệch nhau.
+- **Không xoá tài khoản** (chỉ khoá), không xoá cứng `rejection_reason` (chỉ tắt `is_active`), không tự đặt `recording.status` / trạng thái task ngoài `TaskStateMachine`. Xoá cặp câu dùng **xoá mềm** (`script.status = 'deactivated'`) — dữ liệu vẫn còn để truy vết.
+
+### Việc chưa làm ở frontend
+
+Backend đã đổi hợp đồng API (TEAM_010) mà frontend chưa theo kịp. Ba chỗ đang hỏng:
+
+- **Giao task hỏng và báo thành công.** `services/taskService.js` gửi `{ userId }` trong khi API đòi `{ userIds: [...] }` → 400; `TaskManagerManagement/index.jsx` nuốt lỗi bằng `.catch(console.warn)` rồi vẫn hiện "Đã phân công thành công". Sửa khoảng 5 dòng.
+- **Trang duyệt câu của Speaker trắng màn.** `HomeTemplate/ReviewText/index.jsx` đọc `selectedTask.progress`, DTO đã đổi thành `myProgress` / `teamProgress`.
+- **Danh sách task không hiện người nhận.** `TaskManagerManagement` và `TaskManagerDashboard` đọc `assigneeName` / `assigneeId`, nay là `assignees[]`.
+
+Ngoài ra cả 7 màn Reviewer vẫn đọc dữ liệu mô phỏng trong `FRONTEND/src/mocks/reviewer/*`, còn `services/reviewerApi.js` là code chết không file nào import — nên **ba nút xử lý của yêu cầu 2.4 chưa có giao diện** (API thì đã có: `/reviews`, `/reject-audio`, `/discard-pair`). Nên chọn một nguồn thật: nối API thì xoá mocks, giữ prototype thì xoá `reviewerApi.js` — đừng giữ cả hai. Chi tiết hợp đồng: [`docs/FE-INTEGRATION.md`](docs/FE-INTEGRATION.md).
 
 ## Đóng góp (Contributing)
 

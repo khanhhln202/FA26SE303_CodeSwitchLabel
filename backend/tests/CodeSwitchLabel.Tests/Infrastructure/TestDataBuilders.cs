@@ -91,6 +91,7 @@ public static class TestDataBuilders
     public sealed class CampaignBuilder
     {
         private string _name = $"Campaign {Guid.NewGuid():N}";
+        private ScriptDomain _domain = ScriptDomain.ItTechnology; // TEAM_003
         private int _targetQty = 100;
         private DateOnly _startDate = DateOnly.FromDateTime(DateTime.Today);
         private DateOnly _endDate = DateOnly.FromDateTime(DateTime.Today.AddDays(30));
@@ -98,6 +99,7 @@ public static class TestDataBuilders
         private long _createdBy = 1;
 
         public CampaignBuilder WithName(string name) { _name = name; return this; }
+        public CampaignBuilder WithDomain(ScriptDomain domain) { _domain = domain; return this; }
         public CampaignBuilder WithTargetQty(int qty) { _targetQty = qty; return this; }
         public CampaignBuilder WithDates(DateOnly start, DateOnly end) { _startDate = start; _endDate = end; return this; }
         public CampaignBuilder WithStatus(CampaignStatus status) { _status = status; return this; }
@@ -106,6 +108,7 @@ public static class TestDataBuilders
         public Campaign Build() => new()
         {
             CampaignName = _name,
+            Domain = _domain,
             TargetQty = _targetQty,
             StartDate = _startDate,
             EndDate = _endDate,
@@ -121,12 +124,14 @@ public static class TestDataBuilders
     {
         private long _campaignId = 1;
         private TaskType _type = TaskType.Recording;
+        private ScriptDomain _domain = ScriptDomain.ItTechnology; // TEAM_003
         private int _targetQty = 50;
         private DateTimeOffset? _deadline = DateTimeOffset.UtcNow.AddDays(7);
         private WorkTaskStatus _status = WorkTaskStatus.Draft;
 
         public TaskBuilder WithCampaignId(long id) { _campaignId = id; return this; }
         public TaskBuilder WithType(TaskType type) { _type = type; return this; }
+        public TaskBuilder WithDomain(ScriptDomain domain) { _domain = domain; return this; }
         public TaskBuilder WithTargetQty(int qty) { _targetQty = qty; return this; }
         public TaskBuilder WithDeadline(DateTimeOffset? date) { _deadline = date; return this; }
         public TaskBuilder WithStatus(WorkTaskStatus status) { _status = status; return this; }
@@ -135,6 +140,7 @@ public static class TestDataBuilders
         {
             CampaignId = _campaignId,
             TaskType = _type,
+            Domain = _domain,
             TargetQty = _targetQty,
             Deadline = _deadline,
             Status = _status,

@@ -79,15 +79,22 @@ public interface ICampaignService
     Task<CampaignDto> GetAsync(long campaignId, CancellationToken ct = default);
 
     Task<CampaignDto> CreateAsync(
-        CreateCampaignRequest request, long createdById, CancellationToken ct = default);
+        CreateCampaignRequest request, long createdById, bool isAdmin, CancellationToken ct = default);
 
     Task<CampaignDto> UpdateAsync(
-        long campaignId, UpdateCampaignRequest request, CancellationToken ct = default);
+        long campaignId, UpdateCampaignRequest request, long? callerId, bool isAdmin, CancellationToken ct = default);
 
     Task<CampaignDto> AssignAsync(
         long campaignId, long? assignedToUserId, CancellationToken ct = default);
 
-    /// <summary>Gỡ task khỏi chiến dịch (detach, giữ lại task). Task không bao giờ bị xoá cứng qua API.</summary>
+    /// <summary>
+    /// Xoá chiến dịch. Task đang gắn KHÔNG bị xoá: FK ON DELETE SET NULL nên chúng
+    /// tự thành task độc lập và vẫn xoá được ở trang quản lý nhiệm vụ.
+    /// </summary>
+    Task DeleteAsync(
+        long campaignId, long? callerId, bool isAdmin, CancellationToken ct = default);
+
+    /// <summary>Gỡ task khỏi chiến dịch (detach, giữ lại task).</summary>
     Task<TaskDetailDto> DetachTaskAsync(
         long campaignId, long taskId, long? callerId, bool isAdmin, CancellationToken ct = default);
 }
@@ -124,6 +131,7 @@ public record RejectionStatDto(string ReasonCode, string Category, long TimesUse
 public record CampaignProgressDto(
     long CampaignId,
     string CampaignName,
+    ScriptDomain Domain,
     int CampaignTargetQty,
     DateOnly StartDate,
     DateOnly EndDate,

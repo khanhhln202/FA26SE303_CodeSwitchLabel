@@ -2,7 +2,7 @@ import {
   LayoutDashboard, CheckSquare, Headphones,
   History, Home, PlusCircle, Mic, FileText, ClipboardCheck, FolderKanban, Users, Sliders,
   UserCheck,
-  User,
+  User, 
   ListTodo
 } from 'lucide-react';
 import {
@@ -108,12 +108,22 @@ export const SIDEBAR_CONFIG = {
     ],
     promo: null,
   },
+
+  // Task Manager: Hover & Active dùng TASK_MANAGER_ACCENT_SOFT_BG và TASK_MANAGER_ACCENT
   taskManager: {
-    background: "#1A1E28",
-    idleText: "#9EA6B8",
-    accent: TASK_MANAGER_ACCENT, // Màu xanh lá Emerald
+    background: SIDEBAR_BG_SPEAKER,
+    idleText: SIDEBAR_IDLE_TEXT_SPEAKER,
+    accent: TASK_MANAGER_ACCENT,
     accentIcon: TASK_MANAGER_ACCENT_ACTIVE_ICON,
     accentSoftBg: TASK_MANAGER_ACCENT_SOFT_BG,
+    activeText: TASK_MANAGER_ACCENT,
+    hoverBg: TASK_MANAGER_ACCENT_SOFT_BG,
+    hoverText: TASK_MANAGER_ACCENT,
+    lineColor: SIDEBAR_BORDER_SPEAKER,
+    borderColor: SIDEBAR_BORDER_SPEAKER,
+    footerActiveBg: TASK_MANAGER_ACCENT_SOFT_BG,
+    logoVariant: 'dark',
+    isThemeable: true,
     items: [
       { name: "Trang chủ", to: "/task-manager", icon: Home, end: true },
       { name: "Bảng điều khiển", to: "/task-manager/dashboard", icon: LayoutDashboard },
@@ -130,17 +140,26 @@ export const SIDEBAR_CONFIG = {
     promo: null,
   },
 
+  // Admin: Hover & Active dùng ADMIN_ACCENT_SOFT_BG và ADMIN_ACCENT
   admin: {
-    background: "#1A1E28",
-    idleText: "#9EA6B8",
-    accent: ADMIN_ACCENT, // Màu tím Indigo
+    background: SIDEBAR_BG_SPEAKER,
+    idleText: SIDEBAR_IDLE_TEXT_SPEAKER,
+    accent: ADMIN_ACCENT,
     accentIcon: ADMIN_ACCENT_ACTIVE_ICON,
     accentSoftBg: ADMIN_ACCENT_SOFT_BG,
+    activeText: ADMIN_ACCENT,
+    hoverBg: ADMIN_ACCENT_SOFT_BG,
+    hoverText: ADMIN_ACCENT,
+    lineColor: SIDEBAR_BORDER_SPEAKER,
+    borderColor: SIDEBAR_BORDER_SPEAKER,
+    footerActiveBg: ADMIN_ACCENT_SOFT_BG,
+    logoVariant: 'dark',
+    isThemeable: true,
     items: [
       { name: "Bảng điều khiển", to: "/admin", icon: LayoutDashboard, end: true },
       { name: "Quản lý người dùng", to: "/admin/users", icon: Users },
       { name: "Quản lý dữ liệu văn bản", to: "/admin/text-data", icon: FileText },
-      { name: "Quản lý bản thu & bộ dữ liệu", to: "/admin/recordings", icon: Headphones },
+      { name: "Quản lý bản thu và bộ dữ liệu", to: "/admin/recordings", icon: Headphones },
       {
         name: "Thiết lập cấu hình",
         icon: Sliders,

@@ -9,11 +9,19 @@ public interface ICampaignRepository
 {
     void Add(Campaign campaign);
 
+    /// <summary>
+    /// Xoá chiến dịch. Task gắn vào KHÔNG bị xoá: FK task.campaign_id là
+    /// ON DELETE SET NULL nên chúng tự thành task độc lập.
+    /// </summary>
+    void Remove(Campaign campaign);
+
     Task<Campaign?> GetForUpdateAsync(long campaignId, CancellationToken ct = default);
     Task<Campaign?> GetAsync(long campaignId, CancellationToken ct = default);
 
+    /// <summary>TEAM_012: <paramref name="sort"/> rỗng (Field = null) là thứ tự mặc định.</summary>
     Task<(IReadOnlyList<Campaign> Items, int Total)> SearchAsync(
-        CampaignStatus? status, long? assignedTo, int page, int pageSize, CancellationToken ct = default);
+        CampaignStatus? status, long? assignedTo, int page, int pageSize,
+        SortSpec<CampaignSortField> sort, CancellationToken ct = default);
 
     /// <summary>Tổng chỉ tiêu đã chia cho các task của một chiến dịch.</summary>
     Task<long> SumAllocatedAsync(long campaignId, CancellationToken ct = default);
@@ -32,6 +40,8 @@ public class CampaignRepository(CodeSwitchLabelDbContext db) : ICampaignReposito
 {
     public void Add(Campaign campaign) => db.Campaigns.Add(campaign);
 
+    public void Remove(Campaign campaign) => db.Campaigns.Remove(campaign);
+
     public Task<Campaign?> GetForUpdateAsync(long campaignId, CancellationToken ct = default) =>
         db.Campaigns.FirstOrDefaultAsync(c => c.CampaignId == campaignId, ct);
 
@@ -39,7 +49,8 @@ public class CampaignRepository(CodeSwitchLabelDbContext db) : ICampaignReposito
         db.Campaigns.AsNoTracking().FirstOrDefaultAsync(c => c.CampaignId == campaignId, ct);
 
     public async Task<(IReadOnlyList<Campaign> Items, int Total)> SearchAsync(
-        CampaignStatus? status, long? assignedTo, int page, int pageSize, CancellationToken ct = default)
+        CampaignStatus? status, long? assignedTo, int page, int pageSize,
+        SortSpec<CampaignSortField> sort, CancellationToken ct = default)
     {
         var query = db.Campaigns.AsNoTracking();
 
@@ -48,8 +59,29 @@ public class CampaignRepository(CodeSwitchLabelDbContext db) : ICampaignReposito
 
         var total = await query.CountAsync(ct);
 
-        var items = await query
-            .OrderByDescending(c => c.StartDate).ThenBy(c => c.CampaignId)
+        // TEAM_012: nhánh cuối là thứ tự cũ (đợt mới nhất trước).
+        var ordered = sort.Field switch
+        {
+            CampaignSortField.CampaignId => sort.Descending
+                ? query.OrderByDescending(c => c.CampaignId)
+                : query.OrderBy(c => c.CampaignId),
+            CampaignSortField.StartDate => sort.Descending
+                ? query.OrderByDescending(c => c.StartDate)
+                : query.OrderBy(c => c.StartDate),
+            CampaignSortField.EndDate => sort.Descending
+                ? query.OrderByDescending(c => c.EndDate)
+                : query.OrderBy(c => c.EndDate),
+            CampaignSortField.Status => sort.Descending
+                ? query.OrderByDescending(c => c.Status)
+                : query.OrderBy(c => c.Status),
+            CampaignSortField.CreatedAt => sort.Descending
+                ? query.OrderByDescending(c => c.CreatedAt)
+                : query.OrderBy(c => c.CreatedAt),
+            _ => query.OrderByDescending(c => c.StartDate)
+        };
+
+        var items = await ordered
+            .ThenBy(c => c.CampaignId)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(ct);

@@ -36,6 +36,27 @@ public interface IReviewService
     Task<SubmitReviewResult> SubmitAsync(
         string recordingId, long reviewerId, SubmitReviewRequest request, CancellationToken ct = default);
 
+    /// <summary>
+    /// TEAM_010 (yêu cầu 2.4) — nút CHỈ XÓA AUDIO: bản ghi bị loại nhưng CÂU VĂN BẢN
+    /// được giữ lại và quay về hàng đợi ghi âm để thu lại.
+    ///
+    /// Quay lại cho CHÍNH người đọc cũ, không phải người khác: luật của lược đồ là một
+    /// cặp câu chỉ một người đọc (trg_recording_single_speaker), và đổi người đọc giữa
+    /// hai bản sẽ phá vỡ tính nhất quán giọng của cặp.
+    /// </summary>
+    Task<RejectAudioResult> RejectAudioAsync(
+        string recordingId, long reviewerId, RejectAudioRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// TEAM_010 (yêu cầu 2.4) — nút XÓA HOÀN TOÀN: cả câu văn bản lẫn bản ghi đều bị
+    /// loại khỏi kho (xoá mềm: script.status = 'deactivated').
+    ///
+    /// Dành cho câu vô nghĩa hoặc lỗi nghiêm trọng — loại vĩnh viễn để không quay lại
+    /// hàng đợi và gây vòng lặp vô tận.
+    /// </summary>
+    Task<DiscardPairResult> DiscardPairAsync(
+        string recordingId, long reviewerId, DiscardPairRequest request, CancellationToken ct = default);
+
     Task<IReadOnlyList<ReviewDto>> GetHistoryAsync(
         string recordingId, long viewerId, ViewerRole role, CancellationToken ct = default);
 

@@ -42,6 +42,26 @@ https://fa-26-se-303-code-swit-git-d93afa-...vercel.app         (alias theo nhá
 URL riêng của từng lần deploy (dạng `...-dk27tfim6.vercel.app`) **không** nằm trong danh sách, vì nó đổi
 mỗi lần push. Cần thêm domain nào thì báo backend — sửa một dòng cấu hình, mất 30 giây.
 
+`http://localhost:5173` cũng đã được mở, nên **chạy `npm run dev` rồi trỏ thẳng vào máy chủ là được**,
+không cần dựng backend trên máy mình nữa. Trong `FRONTEND/.env.local`:
+
+```
+VITE_API_BASE_URL=https://csl-codeswitchlabel.eastasia.cloudapp.azure.com
+```
+
+Hai điều nên biết khi làm vậy:
+
+- `utils/setting.js` đặt `DOMAIN = ""` ở chế độ dev, nên `httpClient` gọi đường dẫn tương đối và đi qua
+  **proxy của Vite** — trình duyệt chỉ nói chuyện với `localhost:5173`, không đụng tới CORS. Đây là
+  đường chạy ổn nhất vì không phụ thuộc cổng nào được mở.
+- Riêng `services/taskService.js` dùng thẳng `VITE_API_BASE_URL` làm `baseURL`, kể cả ở chế độ dev, nên
+  nó **bỏ qua proxy và gọi trực tiếp máy chủ**. Chỗ này dựa vào CORS. Chạy FE ở cổng khác 5173 thì các
+  lời gọi của riêng file đó sẽ bị chặn — báo backend để thêm cổng, hoặc sửa nó theo cùng kiểu với
+  `setting.js` cho thống nhất.
+
+Dữ liệu trên máy chủ là **dùng chung**: bạn tạo task thì cả nhóm thấy, và ngược lại. Muốn nghịch thoải
+mái thì vẫn nên chạy backend trên máy mình theo mục 1.
+
 **Tài khoản mẫu** vẫn là `admin@`, `manager@`, `reviewer@`, `reviewer2@`, `reviewer3@`, `speaker1@`,
 `speaker2@` đuôi `@codeswitchlabel.local`, nhưng **mật khẩu khác bản dev**. Mật khẩu máy chủ không ghi
 vào tài liệu này — backend gửi riêng trong nhóm, vì ai có nó là vào được cả vai Admin từ Internet.
@@ -158,6 +178,38 @@ POST /api/auth/login
   ```json
   { "items": [], "page": 1, "pageSize": 20, "total": 0, "totalPages": 0, "hasNext": false }
   ```
+- **Sắp xếp** — cùng bộ tham số đó, thêm `?sort=<cột>&dir=asc|desc`:
+
+  ```
+  GET /api/scripts?page=1&sort=createdAt&dir=desc
+  ```
+
+  - Không gửi `sort` thì ra **đúng thứ tự cũ** của endpoint — client cũ không phải sửa gì.
+  - `dir` bỏ trống = `asc`. Có `sort` mà bỏ `dir` thì là tăng dần, **không** phải thứ tự mặc định.
+    Muốn "mới nhất trước" thì phải gửi cả hai: `sort=createdAt&dir=desc`.
+  - Tên cột không phân biệt hoa thường. Gõ sai tên cột **không phải lỗi** — API bỏ qua và trả thứ tự
+    mặc định, y hệt lúc không gửi `sort`. (Chỉ `sort`/`dir` quá dài mới bị 400 vì chặn độ dài.)
+  - Mỗi endpoint có bộ cột riêng, xem bảng bên dưới. Cột không nằm trong bảng thì coi như chưa gửi.
+  - Với `GET /api/tasks`, sắp theo `deadline` giữ nguyên quy tắc của mặc định ở **cả hai chiều**:
+    task không đặt hạn luôn ở cuối, không bao giờ nhảy lên đầu bảng.
+  - `GET /api/speaker/recordings/history` chỉ nhận `lastRecordedAt` và `scriptId`. Mỗi dòng là một
+    **cặp** bản ghi, cặp không có cột riêng nên trạng thái/thời lượng của cặp là thứ tính ra *sau khi
+    đã cắt trang* — không sắp xếp được trước đó.
+
+  | Endpoint | Cột `sort` nhận được | Mặc định khi bỏ `sort` |
+  |---|---|---|
+  | `GET /api/scripts` | `scriptId` `createdAt` `domain` `status` | `createdAt` giảm dần |
+  | `GET /api/scripts/import/batches` | `batchId` `createdAt` `fileName` `scriptCount` | `batchId` giảm dần |
+  | `GET /api/recordings` | `recordingId` `recordedAt` `status` `scriptId` `durationSec` | `recordedAt` giảm dần |
+  | `GET /api/tasks` | `taskId` `deadline` `status` `taskType` `createdAt` `targetQty` | hạn gần nhất trước, không hạn ở cuối |
+  | `GET /api/users` | `userId` `fullName` `email` `status` `role` `createdAt` | `fullName` tăng dần |
+  | `GET /api/campaigns` | `campaignId` `startDate` `endDate` `status` `createdAt` | `startDate` giảm dần |
+  | `GET /api/datasets` | `datasetId` `createdAt` `status` `datasetName` `recordingCount` | `createdAt` giảm dần |
+  | `GET /api/reviewer/tasks/{id}/recordings` | `recordedAt` `status` `reviewCount` `scriptId` | bản gần đủ lượt duyệt trước |
+  | `GET /api/reviewer/history/recordings` | `reviewedAt` `decision` `status` `scriptId` | `reviewedAt` giảm dần |
+  | `GET /api/reviewer/history/contributions` | `reviewedAt` `action` `status` `domain` | `reviewedAt` giảm dần |
+  | `GET /api/speaker/recordings/history` | `lastRecordedAt` `scriptId` | `lastRecordedAt` giảm dần |
+  | `GET /api/speaker/contributions/history` | `createdAt` `scriptId` `domain` `status` | `createdAt` giảm dần |
 - **`204 No Content`** ở các endpoint "lấy việc tiếp theo" nghĩa là **hết việc** — không phải lỗi.
 
 ### Câu có nhãn ngôn ngữ
@@ -240,6 +292,16 @@ Lỗi hệ thống trả 500 với `code: "internal_error"`. Gặp lỗi này th
 | `script_already_recorded` | 409 | Sửa câu đã có bản ghi | Ẩn nút sửa khi câu đã có bản ghi |
 | `target_exceeds_items` | 422 / 409 | Chỉ tiêu lớn hơn số mục người nhận làm được. **422** khi giao task hoặc sửa chỉ tiêu, **409** khi gỡ mục | Hiện `title` — trong đó có luôn danh sách mục bị vướng |
 | `assignee_role_mismatch` | 422 | Giao task thu âm cho Reviewer, hoặc ngược lại | Lọc người nhận theo loại task |
+| `assignee_required` | 422 (giao) / 403 (chia lô câu) | Giao task mà không chọn người nhận, hoặc chia lô câu cho người không giữ task | Chặn ngay ở form: bắt chọn người nhận hợp lệ |
+| `assignee_not_found` | 404 | Gỡ một người không giữ task đó | Tải lại chi tiết task |
+| `campaign_not_owned` | 403 | Chiến dịch thuộc Task Manager khác quản lý | Ẩn nút sửa/xoá chiến dịch ngoài danh sách của mình |
+| `task_in_campaign` / `task_has_work` / `task_not_owned` | 409 / 409 / 403 | Xoá task đang gắn chiến dịch, task đã có người nhận hoặc công việc, hay task không của mình | Hiện `title`; chỉ hiện nút **Xoá** cho task rỗng thuộc quyền mình |
+| `task_domain_mismatch_campaign` | 422 | Chủ đề của task khác chủ đề của chiến dịch | Khoá ô chọn chủ đề theo chủ đề chiến dịch |
+| `batch_size_invalid` | 422 | Chia lô câu với `count` < 1 | Chặn ở ô nhập số câu |
+| `not_a_review_task` / `text_review_not_assigned` | 422 / 403 | Chia lô câu cho task không phải task duyệt, hoặc duyệt câu chưa được giao cho mình | Tải lại danh sách lô được giao |
+| `text_review_already_done` | 409 | Câu đã có người duyệt nội dung rồi | Bỏ câu khỏi danh sách, tải lại |
+| `invalid_file_type` | 422 | File nhập câu không phải JSON (mở rộng lạ) | Chọn đúng file `.json` theo mẫu |
+| `email_taken` | 409 | Tự đăng ký Speaker bằng email đã có | Hiện lỗi cạnh ô email |
 | `task_cancelled` / `task_completed` | 409 | Sửa task đã huỷ, hoặc huỷ task đã xong | Ẩn nút theo `status` của task |
 | `email_already_exists` | 409 | Tạo tài khoản bằng email đã có, kể cả khi chỉ khác chữ hoa | Hiện lỗi cạnh ô email |
 | `user_has_active_tasks` | 409 | Đổi vai người còn đang nhận task chưa xong | Hiện `title` — trong đó có mã các task cần giao lại. `activeTasks` ở chi tiết tài khoản cũng có sẵn danh sách này |
@@ -279,6 +341,7 @@ Các mã còn lại: `alignment_incomplete`, `alignment_word_missing`, `already_
 | Màn hình | API |
 |---|---|
 | Đăng nhập | `POST /api/auth/login` |
+| Tự đăng ký làm Speaker | `POST /api/auth/register-speaker` `{ "fullName", "email", "password", "phone"?, "speakerProfile"? }` — **không cần token**, trả **200** luôn kèm token đăng nhập; tài khoản ra `Active` ngay kèm hồ sơ người đọc trống; trùng email trả **409 `email_taken`** (khác `email_already_exists` — mã đó dùng cho Admin tạo tài khoản) |
 | Tải lại trang, biết mình là ai | `GET /api/auth/me` |
 | Đổi mật khẩu | `PUT /api/me/password` `{ "currentPassword": "…", "newPassword": "…" }` |
 | Đọc cấu hình (mọi vai) | `GET /api/config`, `GET /api/config/{key}` — ghi vẫn chỉ Admin qua `PUT /api/admin/config/{key}` |
@@ -594,16 +657,22 @@ giao) — các dòng có `canReview: false`, nộp duyệt vẫn trả 403 `task
 
 **Task có thể độc lập (không thuộc chiến dịch nào), gắn vào chiến dịch sau, hoặc gỡ ra mà không bị xoá.**
 
-1. **Admin** tạo chiến dịch (`POST /api/campaigns`) rồi **giao** cho một Task Manager
-   (`POST /api/campaigns/{id}/assign`). Task Manager không tạo được chiến dịch — gọi sẽ nhận **403**
-   với `code: "forbidden"`.
+1. **Chiến dịch thì Admin hoặc Task Manager cùng quản lý được** (`POST/PATCH/DELETE /api/campaigns` cho
+   cả hai vai). Chỉ bước **giao chiến dịch** là của Admin: `POST /api/campaigns/{id}/assign` trả **403**
+   với `code: "forbidden"` khi gọi bằng vai Task Manager. Chiến dịch đã giao cho Task Manager khác thì
+   người đó không sửa/xoá được: **403 `campaign_not_owned`**.
 2. Task Manager tạo task **không cần `campaignId`** (bỏ trống hoặc `null` = task độc lập),
    rồi gắn sau bằng `PATCH /api/tasks/{id}/campaign`. Tạo kèm `campaignId` thì kiểm tra
    quota/hạn như cũ. Quy tắc quota (`task_target_exceeds_campaign`) và khung hạn
    (`task_deadline_outside_campaign`) **chỉ áp dụng khi task đang gắn với chiến dịch**.
 3. **Gỡ chứ không xoá:** `DELETE /api/campaigns/{id}/tasks/{taskId}` chỉ gỡ task khỏi chiến dịch
-   (task còn tồn tại với `campaignId: null`, giữ assignments/items). Task không bao giờ bị xoá cứng
-   qua API — muốn đóng task thì dùng `POST /api/tasks/{id}/cancel` (task ở lại với trạng thái `Cancelled`).
+   (task còn tồn tại với `campaignId: null`, giữ assignments/items). Muốn đóng task thì dùng
+   `POST /api/tasks/{id}/cancel` (task ở lại với trạng thái `Cancelled`).
+4. **Xoá task rỗng** là việc duy nhất API cho phép xoá cứng: `DELETE /api/tasks/{id}` → **204**.
+   Chỉ xoá được task **chưa giao ai, chưa có việc/mục/dữ liệu nộp**; đã gắn chiến dịch thì
+   **409 `task_in_campaign`**, đã hoàn thành thì **409 `task_completed`**, còn có người nhận hoặc
+   công việc thì **409 `task_has_work`**. Task không của mình thì **403 `task_not_owned`**
+   (Admin thì qua được).
 
 | Lỗi | Nghĩa |
 |---|---|
@@ -618,6 +687,7 @@ giao) — các dòng có `canReview: false`, nộp duyệt vẫn trả 403 `task
 | Tạo task | `POST /api/tasks` `{ "campaignId": 2, "taskType": "Recording", "description": "…", "targetQty": 10, "deadline": "2026-09-30T17:00:00+07:00" }` — `campaignId` để trống/`null` = task độc lập |
 | Gắn/chuyển/gỡ chiến dịch | `PATCH /api/tasks/{id}/campaign` `{ "campaignId": 2 }` — `null` = gỡ về độc lập |
 | Gỡ task khỏi chiến dịch (giữ task) | `DELETE /api/campaigns/{id}/tasks/{taskId}` |
+| Xoá task rỗng | `DELETE /api/tasks/{id}` → 204 — chỉ task chưa giao, chưa có việc, chưa gắn chiến dịch |
 | Chi tiết task | `GET /api/tasks/{id}` — tiến độ, lịch sử giao, danh sách mục (`campaignId`/`campaignName` có thể `null`) |
 | Sửa task | `PATCH /api/tasks/{id}` — chỉ gửi trường cần đổi (không đổi chiến dịch ở đây) |
 | Thêm mục chọn tay | `POST /api/tasks/{id}/items` `{ "ids": ["s_211000001", "s_131000002"] }` |
@@ -661,6 +731,7 @@ Task chưa giao cho ai thì không được cướp câu của người khác �
 | Chất lượng người đọc | `GET /api/admin/statistics/speakers` |
 | Hiệu suất người duyệt | `GET /api/admin/statistics/reviewers` |
 | Lý do từ chối phổ biến | `GET /api/admin/statistics/rejection-reasons` |
+| Tiến độ theo chiến dịch | `GET /api/admin/statistics/campaigns` |
 
 Kết quả nhập file có `imported`, `scriptIds` và `skipped` (kèm lý do từng câu bị loại). Một câu hỏng không làm hỏng cả file.
 
@@ -673,14 +744,15 @@ Kết quả nhập file có `imported`, `scriptIds` và `skipped` (kèm lý do t
 > kể cả khi tài khoản đó thật sự có chủ đề trong database. Vì vậy đừng dùng endpoint này để đoán Admin nhập
 > được file hay không.
 
-**Chiến dịch** — chỉ Admin tạo, sửa và giao
+**Chiến dịch** — Admin và Task Manager cùng tạo/sửa/xoá được; **riêng bước giao là của Admin**
 
 | Việc | API |
 |---|---|
 | Tạo | `POST /api/campaigns` `{ "campaignName": "Thu dữ liệu đợt 1", "targetQty": 2000, "startDate": "2026-10-05", "endDate": "2027-01-05" }` |
 | Danh sách, chi tiết | `GET /api/campaigns`, `GET /api/campaigns/{id}` |
 | Sửa | `PATCH /api/campaigns/{id}` — chỉ gửi trường cần đổi, kể cả `status` |
-| Giao cho Task Manager | `POST /api/campaigns/{id}/assign` `{ "assignedToUserId": 2 }` |
+| Xoá | `DELETE /api/campaigns/{id}` — 204; không phải của mình thì **403 `campaign_not_owned`** (Admin qua được). Task đang gắn vào không mất: nó thành task độc lập (`campaignId: null`). **Đăng ký của người đọc thì bị xoá hẳn** (`campaign_registration` khai `ON DELETE CASCADE`) — không có API lấy lại, nên hỏi trước khi bấm |
+| Giao cho Task Manager | `POST /api/campaigns/{id}/assign` `{ "assignedToUserId": 2 }` — **chỉ Admin** |
 
 - `targetQty` **phải từ 2000 đến 5000** cặp câu; ngoài khoảng đó là **400**. Đây là giới hạn của lược đồ database.
 - `startDate` và `endDate` là **ngày thuần** dạng `YYYY-MM-DD`, không có giờ và không có múi giờ.
@@ -788,6 +860,103 @@ không viết cứng trong frontend — Admin ẩn hay thêm lý do thì giao di
 
 ---
 
+## 7b. TEAM_010 — hàng đợi văn bản & đa người nhận task
+
+Bốn thay đổi dưới đây **phá vỡ** so với bản trước. Chọn clean break thay vì giữ tương
+thích, nên code cũ phải sửa.
+
+### 8.1 `POST /api/tasks/{id}/assign` nhận NHIỀU người
+
+```diff
+- { "userId": 6 }
++ { "userIds": [6, 7, 8] }
+```
+
+- Giao **thêm**, không đuổi người đang nhận. Trước đây giao là điều phối lại: lượt giao
+  cũ chuyển sang `reassigned`.
+- `target_qty` là của **cả nhóm** — không nhân theo số người. Mỗi người khoảng
+  `ceil(targetQty / n)`.
+- Người đã có trong `userIds` bị bỏ qua. Giao mà tất cả đã có thì trả `409 already_assigned`.
+- Vai: Task thu âm chỉ nhận Speaker, task duyệt chỉ nhận Reviewer — sai vai trả
+  `422 assignee_role_mismatch`.
+
+### 8.2 `DELETE /api/tasks/{id}/assign/{userId}` — gỡ một người (mới)
+
+Lượt giao chuyển sang `reassigned`, lịch sử giữ nguyên. Không gỡ được **người nhận cuối
+cùng** khi task đã có việc (`409 cannot_remove_last_assignee`) — làm vậy task rơi về
+nháp và không ai làm tiếp được. Muốn dừng hẳn thì dùng `POST /tasks/{id}/cancel`.
+
+### 8.3 Người nhận trả về là MẢNG
+
+Mọi DTO có `assigneeId` / `assigneeName` giờ trả `assignees`:
+
+```json
+{ "assignees": [ { "userId": 6, "fullName": "Speaker 1" } ], "assigneeCount": 1 }
+```
+
+`GET /api/tasks`, `GET /api/tasks/{id}`, `POST /api/tasks/{id}/assign` đều dùng hình
+dạng này. Trước đây `assigneeName` lấy bằng `.FirstOrDefault()` nên khi có nhiều người
+sẽ hiện một người bất kỳ — không còn chuyện đó.
+
+### 8.4 Tiến độ cá nhân — `GET /api/speaker/progress`
+
+`activeTasks[].progress` tách thành **hai** bộ số, vì task có thể có nhiều người:
+
+```json
+{
+  "taskId": 7,
+  "myProgress":   { "targetQty": 30, "done": 3,  "percent": 10 },  // của riêng tôi
+  "teamProgress": { "targetQty": 30, "done": 12, "percent": 40 },  // của cả nhóm
+  "assignees": [ { "userId": 9, "fullName": "A" } ]
+}
+```
+
+Hiển thị đồng thời cả hai. Chỉ trả một bộ thì người đó hoặc tưởng mình làm cả nhiệm vụ,
+hoặc tưởng cả nhóm không làm gì cả.
+
+### 8.5 Endpoint mới
+
+| Endpoint | Vai | Dùng để |
+|---|---|---|
+| `GET /api/reviewer/scripts/next?taskId=` | Reviewer | Lấy câu **chờ duyệt nội dung** kế tiếp (FIFO). Hết câu → `204` |
+| `GET /api/task-manager/text-queue/stats` | TM | Số câu đang tồn trong hàng đợi, để quyết định chia lô |
+| `POST /api/tasks/{id}/text-items` | TM | Chia lô câu: `{ "userId": 7, "count": 100 }`, bỏ `count` thì dùng `text_review.batch_size` |
+| `POST /api/recordings/{id}/reject-audio` | Reviewer | Nút **Chỉ xóa audio** |
+| `POST /api/recordings/{id}/discard-pair` | Reviewer | Nút **Xóa hoàn toàn** |
+
+**Hệ quả cần biết:** câu nhập từ file giờ **vào hàng đợi chờ duyệt**, không còn tự
+động `validated`. Màn hình sau khi import phải có bước "duyệt câu" thật, nếu không sẽ
+tưởng đã nhập xong là dùng được.
+
+### 8.6 Hai nút xử lý bản ghi mới
+
+```http
+POST /api/recordings/r_cs_211000001/reject-audio
+{ "rejectionReasonCodes": ["background_noise"], "comment": "Nghe rõ ở đầu, nhưng lúc đó đang có tiếng bàn." }
+
+→ 200 { "recordingId": "...", "scriptId": "s_211000001",
+        "requeuedForSpeaker": 6, "recordingStatus": "Rejected" }
+```
+
+- **Câu văn bản được giữ lại**, và câu quay về hàng đợi ghi âm cho **chính người đọc cũ**
+  (`requeuedForSpeaker`) — không phải người khác, vì luật một cặp câu chỉ một người đọc.
+- Chỉ áp dụng khi bản ghi còn `pendingReview`; đã chốt thì dùng `/reviews` như cũ.
+
+```http
+POST /api/recordings/r_cs_211000001/discard-pair
+{ "rejectionReasonCodes": ["other"], "comment": "Câu vô nghĩa." }
+
+→ 200 { "recordingId": "...", "scriptId": "s_211000001",
+        "scriptStatus": "Deactivated", "recordingsRemoved": 2 }
+```
+
+- **Xoá mềm**: câu chuyển `deactivated` nên rút khỏi mọi hàng đợi; dữ liệu vẫn còn để
+  truy vết. Mọi task chứa câu đó bị trừ chỉ tiêu và có thể tự rời trạng thái `Completed`.
+- Hai nút này **không** ghi vào bảng `review` — là quyết định dứt điểm, không phải
+  phiếu bầu, ghi vào đó sẽ làm lệch bộ đếm 3 lượt.
+
+---
+
 ## 8. Đã đổi so với API cũ
 
 Ai đã code theo bản API trước ngày 22/09/2026 thì cần sửa:
@@ -801,6 +970,13 @@ Ai đã code theo bản API trước ngày 22/09/2026 thì cần sửa:
 | `GET /api/recordings/mine` | Gộp vào `GET /api/recordings` — Speaker tự động chỉ thấy bản của mình |
 | Duyệt: vòng 1 quyết định, có rút mẫu kiểm tra | **Luôn ba lượt duyệt mù**, chốt theo đa số. Không còn trường `kind`, không còn ý kiến vòng trước |
 | Mã lý do viết hoa (`AUDIO_NOISE`) | Viết thường theo database (`background_noise`) — lấy từ API |
+| Giao task cho **một** người, giao là đuổi người cũ | TEAM_010: giao cho **nhiều** người (`userIds[]`), giao thêm không đuổi ai |
+| Không có nút gỡ người khỏi task | TEAM_010: `DELETE /api/tasks/{id}/assign/{userId}` |
+| `assigneeId` / `assigneeName` (một người) | TEAM_010: `assignees[]` — một task có nhiều người nhận |
+| Tiến độ Speaker một bộ số | TEAM_010: `myProgress` + `teamProgress` |
+| Câu nhập từ file tự `validated` | TEAM_010: **vào hàng đợi chờ duyệt** như mọi câu khác |
+| Chỉ có 2 nút duyệt bản ghi | TEAM_010: thêm `reject-audio` và `discard-pair` |
+| Không có endpoint lấy câu chờ duyệt nội dung | TEAM_010: `GET /api/reviewer/scripts/next` |
 | — | Mới: nhập file `POST /api/scripts/import`, và nhóm thống kê `/api/admin/*` |
 | — | Mới: quản lý người dùng `/api/users`, trang cá nhân `/api/me/*`, ô chọn người nhận `GET /api/tasks/assignable-users` |
 | `PUT /api/me/password` trả 204 | Trả **200 kèm token mới** — thay token đang lưu |
@@ -811,7 +987,7 @@ Ai đã code theo bản API trước ngày 22/09/2026 thì cần sửa:
 | — | Mới: chiến dịch `/api/campaigns/*`, phân chủ đề `/api/users/{id}/domains`, tự xem chủ đề `GET /api/me/domains` |
 | — | Mới: Reviewer xem danh sách bản ghi trong task `GET /api/reviewer/tasks/{taskId}/recordings` và mở một bản `GET /api/reviewer/recordings/{id}` |
 | `GET /api/speaker/stats` → `{total,approved,rejected,pending}` | → `{ recording: {total,approved,rejected,pending}, contribution: {total,validated,rejected,pending} }` |
-| `GET /api/speaker/recordings/history` → `csAudioUrl`, `viAudioUrl` (luôn null) | → `audioUrl` + `audioUrlExpiresAt` (mỗi dòng là **một** bản ghi) và thêm `sentenceVariant` |
+| `GET /api/speaker/recordings/history` → `csAudioUrl`, `viAudioUrl` (luôn null), `recordingId` là khoá dòng | → `scriptId` là khoá dòng (mỗi dòng là **một cặp**), `csAudioUrl`/`viAudioUrl` **có thật** (hết hạn sau 15 phút), thêm `csRecordingId`/`viRecordingId` (null = cặp mới ghi được một bản). Bỏ `recordingId`, `sentenceVariant`, `audioUrl`, `audioUrlExpiresAt`. `status` giờ là **trạng thái của cặp**: có bản từ chối → `Rejected`, cả hai bản đạt → `Approved`, trượt QC hết → `QcFailed`, còn lại → `PendingReview`. Phân trang theo **cặp**, `total` là số cặp. |
 | Duyệt bản ghi chỉ thấy **một câu** | Thêm `pair`: **cả hai bản** của cặp câu (cs + vi). Các trường cũ giữ nguyên, trỏ vào bản đang mở |
 | Danh sách task duyệt không thấy bản kia | Thêm `sibling` (không kèm link nghe) |
 | Thêm câu vào task bị báo `Cặp câu đang nằm trong một task khác đang chạy.` | Câu **chưa có bản ghi nào** được **chuyển** sang task mới; chỉ tiêu task cũ tự hạ |

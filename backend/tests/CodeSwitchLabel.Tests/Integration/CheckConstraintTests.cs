@@ -1,5 +1,8 @@
 using CodeSwitchLabel.Repositories.Entities;
 using CodeSwitchLabel.Repositories.Enums;
+using CodeSwitchLabel.Services.Common;
+using CodeSwitchLabel.Services.Dtos;
+using CodeSwitchLabel.Services.Reviews;
 using CodeSwitchLabel.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -194,7 +197,7 @@ public class CheckConstraintTests : IntegrationTestBase
 
             var recording = new Recording
             {
-                RecordingId = "invalid_id", // Doesn't match ^r_(cs|vi)_[0-9]{9}(_t[2-9][0-9]*)?$
+                RecordingId = "invalid_id", // Doesn't match ^r_(cs|vi)_[0-9]{9}(_t([2-9]|[1-9][0-9]+))?$
                 SentenceVariant = SentenceVariant.CodeSwitching,
                 ScriptId = script.ScriptId,
                 SpeakerId = SpeakerUserId,
@@ -355,9 +358,13 @@ public class CheckConstraintTests : IntegrationTestBase
 
     // ---------- Review constraints ----------
 
+    // TEAM_009: upper bound is review.rounds_required (service guard no_more_rounds),
+    // TEAM_009: upper bound is review.rounds_required (service guard no_more_rounds via ReviewRules),
+    // not a static DB CHECK - DB only enforces review_round >= 1 (V6 Item 9).
     [Fact]
     public async Task Review_ReviewRoundOutOfRange_Rejected()
     {
+        // Lower bound still enforced by DB CHECK (review_round >= 1).
         await AssertRejectedAsync(async () =>
         {
             var script = await CreateScriptAsync(
@@ -365,23 +372,24 @@ public class CheckConstraintTests : IntegrationTestBase
                 "[vi]Test script",
                 ScriptDomain.ItTechnology,
                 AdminUserId);
-
             var recording = await CreateRecordingAsync(script.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching);
-
-            var review = new Review
+            Db.Reviews.Add(new Review
             {
                 RecordingId = recording.RecordingId,
                 ReviewerId = ReviewerUserId,
-                ReviewRound = 4, // Must be 1-3
+                ReviewRound = 0, // Must be >= 1
                 Decision = ReviewDecision.Approved,
                 IsBlind = true,
                 ReviewedAt = DateTimeOffset.UtcNow
-            };
-
-            Db.Reviews.Add(review);
+            });
             await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
         });
+
+        // Upper bound is the configurable rounds guard: 4th review on a 3-round recording is rejected.
+        Assert.Equal(4, ReviewRules.NextRound(3));
+        Assert.True(ReviewRules.NextRound(3) > ReviewRules.DefaultRoundsRequired);
     }
+
 
     // ---------- Dataset constraints ----------
 

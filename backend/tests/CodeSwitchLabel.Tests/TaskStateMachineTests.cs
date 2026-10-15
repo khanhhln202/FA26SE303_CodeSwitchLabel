@@ -11,29 +11,59 @@ namespace CodeSwitchLabel.Tests;
 public class TaskStateMachineTests
 {
     [Theory]
-    [InlineData(false, 0, 0, 10)]
-    [InlineData(true, 3, 1, 10)]
-    [InlineData(true, 12, 10, 10)]
-    public void DaHuy_KhongBaoGioTuMoLai_KeCaKhiDatChiTieu(bool hasAssignee, int started, int done, int target)
+    [InlineData(0, 0, 0, 10)]
+    [InlineData(1, 3, 1, 10)]
+    [InlineData(3, 12, 10, 10)]
+    public void DaHuy_KhongBaoGioTuMoLai_KeCaKhiDatChiTieu(int assigneeCount, int started, int done, int target)
     {
         // Arrange + Act
-        var status = TaskStateMachine.Evaluate(WorkTaskStatus.Cancelled, hasAssignee, started, done, target);
+        var status = TaskStateMachine.Evaluate(WorkTaskStatus.Cancelled, assigneeCount, started, done, target);
 
         // Assert
         Assert.Equal(WorkTaskStatus.Cancelled, status);
     }
 
     [Theory]
-    [InlineData(WorkTaskStatus.Draft, false, 0, 0, 10, WorkTaskStatus.Draft)]
-    [InlineData(WorkTaskStatus.Draft, true, 0, 0, 10, WorkTaskStatus.Open)]
-    [InlineData(WorkTaskStatus.Open, true, 1, 0, 10, WorkTaskStatus.InProgress)]
-    [InlineData(WorkTaskStatus.InProgress, true, 10, 7, 10, WorkTaskStatus.InProgress)]
-    [InlineData(WorkTaskStatus.InProgress, true, 4, 2, 10, WorkTaskStatus.InProgress)]
+    [InlineData(WorkTaskStatus.Draft, 0, 0, 0, 10, WorkTaskStatus.Draft)]
+    [InlineData(WorkTaskStatus.Draft, 1, 0, 0, 10, WorkTaskStatus.Open)]
+    [InlineData(WorkTaskStatus.Open, 1, 1, 0, 10, WorkTaskStatus.InProgress)]
+    [InlineData(WorkTaskStatus.InProgress, 1, 10, 7, 10, WorkTaskStatus.InProgress)]
+    [InlineData(WorkTaskStatus.InProgress, 1, 4, 2, 10, WorkTaskStatus.InProgress)]
     public void ChuyenTrangThai_CoBan_TheoNguoiNhanVaTienDo(
-        WorkTaskStatus current, bool hasAssignee, int started, int done, int target, WorkTaskStatus expected)
+        WorkTaskStatus current, int assigneeCount, int started, int done, int target, WorkTaskStatus expected)
     {
         // Arrange + Act
-        var status = TaskStateMachine.Evaluate(current, hasAssignee, started, done, target);
+        var status = TaskStateMachine.Evaluate(current, assigneeCount, started, done, target);
+
+        // Assert
+        Assert.Equal(expected, status);
+    }
+
+    /// <summary>
+    /// TEAM_010: một task có thể giao cho nhiều người, nhưng luật trạng thái chỉ cần
+    /// biết "có ai đó chưa" — nhiều người không làm đổi kết quả so với một người.
+    /// Chỉ có ranh giới 0 người là đổi trạng thái.
+    /// </summary>
+    [Theory]
+    [InlineData(1, WorkTaskStatus.Open)]
+    [InlineData(2, WorkTaskStatus.Open)]
+    [InlineData(5, WorkTaskStatus.Open)]
+    public void NhieuNguoiNhan_ChuaLamGi_TrangThaiOpen(int assigneeCount, WorkTaskStatus expected)
+    {
+        // Arrange + Act — chưa làm gì (started = 0) thì dù có 5 người nhận vẫn là Open
+        var status = TaskStateMachine.Evaluate(WorkTaskStatus.Draft, assigneeCount, started: 0, done: 0, target: 10);
+
+        // Assert
+        Assert.Equal(expected, status);
+    }
+
+    [Theory]
+    [InlineData(1, WorkTaskStatus.InProgress)]
+    [InlineData(3, WorkTaskStatus.InProgress)]
+    public void NhieuNguoiNhan_DaLamGi_TrangThaiInProgress(int assigneeCount, WorkTaskStatus expected)
+    {
+        // Arrange + Act
+        var status = TaskStateMachine.Evaluate(WorkTaskStatus.Draft, assigneeCount, started: 2, done: 1, target: 10);
 
         // Assert
         Assert.Equal(expected, status);
@@ -46,7 +76,7 @@ public class TaskStateMachineTests
     public void DatHoacVuotChiTieu_HoanThanh(int done)
     {
         // Arrange + Act
-        var status = TaskStateMachine.Evaluate(WorkTaskStatus.InProgress, true, 15, done, 10);
+        var status = TaskStateMachine.Evaluate(WorkTaskStatus.InProgress, 1, 15, done, 10);
 
         // Assert
         Assert.Equal(WorkTaskStatus.Completed, status);
@@ -57,7 +87,21 @@ public class TaskStateMachineTests
     public void DaHoanThanh_NangChiTieu_TuMoLai()
     {
         // Arrange + Act
-        var status = TaskStateMachine.Evaluate(WorkTaskStatus.Completed, true, 10, 10, 20);
+        var status = TaskStateMachine.Evaluate(WorkTaskStatus.Completed, 1, 10, 10, 20);
+
+        // Assert
+        Assert.Equal(WorkTaskStatus.InProgress, status);
+    }
+
+    /// <summary>
+    /// TEAM_010 (yêu cầu 4.2): bản ghi bị từ chối làm chỉ tiêu tụt xuống dưới target —
+    /// task phải tự rời Completed để người nhận thu bù.
+    /// </summary>
+    [Fact]
+    public void ChiTieuTut_ChuyenTuCompletedVeInProgress()
+    {
+        // Arrange — trước đó 100/100, giờ còn 95/100 sau khi bản ghi bị từ chối
+        var status = TaskStateMachine.Evaluate(WorkTaskStatus.Completed, 2, started: 100, done: 95, target: 100);
 
         // Assert
         Assert.Equal(WorkTaskStatus.InProgress, status);
@@ -105,7 +149,7 @@ public class TaskStateMachineTests
         var unknown = (WorkTaskStatus)999;
 
         // Act
-        var evaluated = TaskStateMachine.Evaluate(unknown, hasActiveAssignee: true, started: 0, done: 0, target: 10);
+        var evaluated = TaskStateMachine.Evaluate(unknown, activeAssigneeCount: 1, started: 0, done: 0, target: 10);
         var accepts = TaskStateMachine.AcceptsWork(unknown);
 
         // Assert

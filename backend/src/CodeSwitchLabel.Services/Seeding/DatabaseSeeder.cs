@@ -306,6 +306,7 @@ public static partial class DatabaseSeeder
         db.Campaigns.Add(new Campaign
         {
             CampaignName = "Đợt thu thập mẫu",
+            Domain = ScriptDomain.ItTechnology, // TEAM_003
             TargetQty = 2000,
             StartDate = today,
             EndDate = today.AddDays(30),
@@ -485,6 +486,15 @@ public static partial class DatabaseSeeder
 
         if (finalStatus == ScriptStatus.PendingValidation) return scriptId;
 
+        // TEAM_008: deactivated seeds bypass review - only validated status is guarded by
+        // trg_script_validated_domain, and rejected reviews must carry error_reason_id.
+        if (finalStatus == ScriptStatus.Deactivated)
+        {
+            script.Status = finalStatus;
+            await db.SaveChangesAsync(ct);
+            return scriptId;
+        }
+
         var action = finalStatus == ScriptStatus.Validated
             ? ScriptReviewAction.Accepted
             : ScriptReviewAction.Rejected;
@@ -498,11 +508,24 @@ public static partial class DatabaseSeeder
                 "trg_script_validated_domain. Chạy SeedReviewerDomainsAsync trước.");
         }
 
+        // TEAM_008: ck_script_review_rejection_reason requires error_reason_id when action is rejected.
+        short? rejectReasonId = null;
+        if (action == ScriptReviewAction.Rejected)
+        {
+            rejectReasonId = await db.ScriptErrorReasons
+                .Where(r => r.IsActive)
+                .OrderBy(r => r.ReasonCode == "other" ? 1 : 0)
+                .ThenBy(r => r.SortOrder)
+                .Select(r => (short?)r.ReasonId)
+                .FirstOrDefaultAsync(ct)
+                ?? throw new InvalidOperationException("Seed rejected script requires an active script_error_reason row.");
+        }
         db.ScriptReviews.Add(new ScriptReview
         {
             ScriptId = scriptId,
             UserId = reviewerId,
             Action = action,
+            ErrorReasonId = rejectReasonId,
             Comment = "Dữ liệu mẫu — tự động " + (action == ScriptReviewAction.Accepted ? "chấp nhận." : "từ chối."),
             ReviewedAt = now
         });

@@ -39,17 +39,21 @@ public record RejectedRecordingDto(
     string AudioUrl,
     DateTimeOffset AudioUrlExpiresAt);
 
-/// <summary>Dòng lịch sử ghi âm của Speaker: mỗi dòng là MỘT bản ghi.</summary>
-/// <param name="AudioUrl">Link nghe tạm, hết hạn sau <c>AudioUrlExpiresAt</c>.</param>
+/// <summary>Dòng lịch sử ghi âm của Speaker: mỗi dòng là MỘT CẶP bản ghi (Việt-Anh + tiếng Việt).</summary>
+/// <param name="CsRecordingId">Null = cặp mới chỉ ghi được một bản.</param>
+/// <param name="CsAudioUrl">Link nghe tạm, hết hạn sau 15 phút.</param>
+/// <param name="DurationSec">Bản Việt-Anh, hoặc bản tiếng Việt nếu cặp chỉ có một bản.</param>
+/// <param name="Status">Trạng thái của CẶP, gộp từ hai bản.</param>
+/// <param name="RecordedAt">Mốc của bản ghi mới nhất trong cặp.</param>
 public record SpeakerRecordingHistoryDto(
-    string RecordingId,
     string ScriptId,
     string? TaskTitle,
-    SentenceVariant SentenceVariant,
     string CsText,
     string ViText,
-    string? AudioUrl,
-    DateTimeOffset? AudioUrlExpiresAt,
+    string? CsRecordingId,
+    string? ViRecordingId,
+    string? CsAudioUrl,
+    string? ViAudioUrl,
     decimal DurationSec,
     RecordingStatus Status,
     DateTimeOffset RecordedAt,

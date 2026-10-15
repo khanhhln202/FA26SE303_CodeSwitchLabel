@@ -79,9 +79,10 @@ public interface IReviewRepository
     /// Các bản ghi nằm trong một task duyệt, phân trang. Người gọi phải tự kiểm task đó có đang
     /// giao cho người này không — ở đây không kiểm quyền.
     /// </summary>
+    /// <param name="sort">TEAM_012: rỗng (Field = null) là thứ tự mặc định.</param>
     Task<(List<TaskReviewRow> Rows, int Total)> GetTaskReviewRowsAsync(
         long taskId, long reviewerId, bool onlyReviewable, int roundsRequired,
-        int page, int pageSize, CancellationToken ct = default);
+        int page, int pageSize, SortSpec<TaskReviewSortField> sort, CancellationToken ct = default);
 
     Task<List<Recording>> GetByScriptAsync(string scriptId, CancellationToken ct = default);
 
@@ -200,7 +201,7 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
 
     public async Task<(List<TaskReviewRow> Rows, int Total)> GetTaskReviewRowsAsync(
         long taskId, long reviewerId, bool onlyReviewable, int roundsRequired,
-        int page, int pageSize, CancellationToken ct = default)
+        int page, int pageSize, SortSpec<TaskReviewSortField> sort, CancellationToken ct = default)
     {
         var query = db.TaskRecordings.AsNoTracking().Where(tr => tr.TaskId == taskId);
 
@@ -216,10 +217,30 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
 
         var total = await query.CountAsync(ct);
 
-        // Cùng thứ tự với GET next: bản gần đủ lượt lên trước, rồi tới bản cũ nhất.
-        var rows = await query
-            .OrderByDescending(tr => tr.Recording.Reviews.Count)
+        // TEAM_012: nhánh cuối giữ nguyên thứ tự của GET next — bản gần đủ lượt lên trước,
+        // rồi tới bản cũ nhất, để danh sách và GET next không nói khác nhau.
+        var ordered = sort.Field switch
+        {
+            TaskReviewSortField.RecordedAt => sort.Descending
+                ? query.OrderByDescending(tr => tr.Recording.RecordedAt)
+                : query.OrderBy(tr => tr.Recording.RecordedAt),
+            TaskReviewSortField.Status => sort.Descending
+                ? query.OrderByDescending(tr => tr.Recording.Status)
+                : query.OrderBy(tr => tr.Recording.Status),
+            TaskReviewSortField.ReviewCount => sort.Descending
+                ? query.OrderByDescending(tr => tr.Recording.Reviews.Count)
+                : query.OrderBy(tr => tr.Recording.Reviews.Count),
+            TaskReviewSortField.ScriptId => sort.Descending
+                ? query.OrderByDescending(tr => tr.Recording.ScriptId)
+                : query.OrderBy(tr => tr.Recording.ScriptId),
+            _ => query.OrderByDescending(tr => tr.Recording.Reviews.Count)
+        };
+
+        var rows = await ordered
+            // TEAM_012: ThenBy thời điểm thu giữ nguyên thứ tự cũ, ThenBy mã bản ghi chốt
+            // chặn cuối — hai bản của cùng một cặp có thể trùng thời điểm thu.
             .ThenBy(tr => tr.Recording.RecordedAt)
+            .ThenBy(tr => tr.RecordingId)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(tr => new TaskReviewRow(

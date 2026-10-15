@@ -54,7 +54,16 @@ export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
         });
       }
 
-      const campaignList = campaignData?.items || campaignData?.data || [];
+      const rawCampaigns = campaignData?.items || campaignData?.data || (Array.isArray(campaignData) ? campaignData : []);
+      
+      // Sắp xếp các Đợt nhiệm vụ theo thứ tự ID số tăng dần (giống hệt TaskManagerManagement)
+      const campaignList = rawCampaigns
+        .map((c) => ({
+          ...c,
+          id: Number(c.campaignId || c.id)
+        }))
+        .sort((a, b) => a.id - b.id);
+
       const rawTasks = taskData?.items || taskData?.data || [];
 
       const mappedTasks = rawTasks.map((t) => {
@@ -68,7 +77,7 @@ export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
 
         return {
           id: t.taskId || t.id,
-          campaignId: t.campaignId,
+          campaignId: Number(t.campaignId),
           status: calculatedStatus
         };
       });
@@ -118,31 +127,21 @@ export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
+        <Loader2 className="w-8 h-8 animate-spin text-[#16A34A]" />
       </div>
     );
   }
 
   return (
-    <div className="w-full h-full flex flex-col gap-4 text-left font-sans p-1 overflow-y-auto">
-      {/* Header */}
-      <div>
-        <h2 className="text-[22px] font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-          <FolderKanban className="w-6 h-6 text-slate-900 dark:text-white shrink-0" />
-          Tổng quan chỉ tiêu & đợt nhiệm vụ
-        </h2>
-        <p className="text-[13px] font-semibold bg-clip-text text-transparent bg-gradient-to-r from-[#15803D] via-emerald-600 to-teal-700 dark:from-[#1DB954] dark:via-emerald-400 dark:to-green-300 mt-1">
-          Theo dõi chỉ tiêu từ Admin và danh sách các đợt nhiệm vụ đang triển khai
-        </p>
-      </div>
+    <div className="w-full h-full flex flex-col gap-4 text-left font-sans p-1 overflow-y-auto transition-colors">
 
       {/* Cards Chỉ tiêu từ Admin */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
         {/* Chỉ tiêu Speaker */}
-        <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1D22] p-5 shadow-xs relative overflow-hidden">
-          <div className="flex items-center gap-2.5 mb-3">
+        <div className="rounded-2xl border border-[#E5E2D8] dark:border-gray-800 bg-white dark:bg-[#1C1D22] p-5 shadow-[0_1px_3px_rgba(16,17,20,0.04)] relative overflow-hidden transition-all hover:shadow-[0_4px_12px_rgba(16,17,20,0.06)]">
+          <div className="flex items-center gap-3 mb-3">
             <div 
-              className="p-3 rounded-full shrink-0"
+              className="w-10 h-10 rounded-2xl shrink-0 flex items-center justify-center"
               style={{ 
                 backgroundColor: `${speakerColor}1F`, 
                 color: speakerColor 
@@ -151,30 +150,30 @@ export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
               <ListTodo className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-gray-900 dark:text-white">Chỉ tiêu Speaker</h3>
-              <p className="text-[11px] text-gray-500 dark:text-gray-400">Admin giao cho Task Manager</p>
+              <h3 className="type-card-title text-[#16171C] dark:text-white">Chỉ tiêu Speaker</h3>
+              <p className="type-meta text-[#6E7078] dark:text-gray-400">Admin giao cho Task Manager</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 mt-3 bg-gray-50 dark:bg-[#25272E] p-3 rounded-xl border border-gray-100 dark:border-gray-800">
+          <div className="grid grid-cols-2 gap-2 mt-3 bg-[#F7F5EF] dark:bg-[#25272E] p-3.5 rounded-xl border border-[#E5E2D8]/80 dark:border-gray-800">
             <div>
-              <span className="text-[10px] uppercase font-bold text-gray-400">Chỉ tiêu giao</span>
-              <p className="text-lg font-extrabold text-gray-900 dark:text-white">{adminTargets.speaker.target.toLocaleString()} <span className="text-xs font-normal text-gray-500">câu</span></p>
+              <span className="type-label text-[#9A9CA3] uppercase block">Chỉ tiêu giao</span>
+              <p className="type-stat text-[#16171C] dark:text-white mt-0.5">{adminTargets.speaker.target.toLocaleString()} <span className="type-label font-normal text-[#6E7078]">câu</span></p>
             </div>
             <div>
-              <span className="text-[10px] uppercase font-bold text-gray-400">Đã thu âm</span>
-              <p className="text-lg font-extrabold" style={{ color: speakerColor }}>
-                {adminTargets.speaker.completed.toLocaleString()} <span className="text-xs font-normal text-gray-500">câu</span>
+              <span className="type-label text-[#9A9CA3] uppercase block">Đã thu âm</span>
+              <p className="type-stat mt-0.5" style={{ color: speakerColor }}>
+                {adminTargets.speaker.completed.toLocaleString()} <span className="type-label font-normal text-[#6E7078]">câu</span>
               </p>
             </div>
           </div>
         </div>
 
         {/* Chỉ tiêu Reviewer */}
-        <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1D22] p-5 shadow-xs relative overflow-hidden">
-          <div className="flex items-center gap-2.5 mb-3">
+        <div className="rounded-2xl border border-[#E5E2D8] dark:border-gray-800 bg-white dark:bg-[#1C1D22] p-5 shadow-[0_1px_3px_rgba(16,17,20,0.04)] relative overflow-hidden transition-all hover:shadow-[0_4px_12px_rgba(16,17,20,0.06)]">
+          <div className="flex items-center gap-3 mb-3">
             <div 
-              className="p-3 rounded-full shrink-0"
+              className="w-10 h-10 rounded-2xl shrink-0 flex items-center justify-center"
               style={{ 
                 backgroundColor: `${reviewerColor}1F`, 
                 color: reviewerColor 
@@ -183,20 +182,20 @@ export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
               <ListTodo className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-gray-900 dark:text-white">Chỉ tiêu Reviewer</h3>
-              <p className="text-[11px] text-gray-500 dark:text-gray-400">Admin giao cho Task Manager</p>
+              <h3 className="type-card-title text-[#16171C] dark:text-white">Chỉ tiêu Reviewer</h3>
+              <p className="type-meta text-[#6E7078] dark:text-gray-400">Admin giao cho Task Manager</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 mt-3 bg-gray-50 dark:bg-[#25272E] p-3 rounded-xl border border-gray-100 dark:border-gray-800">
+          <div className="grid grid-cols-2 gap-2 mt-3 bg-[#F7F5EF] dark:bg-[#25272E] p-3.5 rounded-xl border border-[#E5E2D8]/80 dark:border-gray-800">
             <div>
-              <span className="text-[10px] uppercase font-bold text-gray-400">Chỉ tiêu duyệt</span>
-              <p className="text-lg font-extrabold text-gray-900 dark:text-white">{adminTargets.reviewer.target.toLocaleString()} <span className="text-xs font-normal text-gray-500">câu</span></p>
+              <span className="type-label text-[#9A9CA3] uppercase block">Chỉ tiêu duyệt</span>
+              <p className="type-stat text-[#16171C] dark:text-white mt-0.5">{adminTargets.reviewer.target.toLocaleString()} <span className="type-label font-normal text-[#6E7078]">câu</span></p>
             </div>
             <div>
-              <span className="text-[10px] uppercase font-bold text-gray-400">Đã kiểm duyệt</span>
-              <p className="text-lg font-extrabold" style={{ color: reviewerColor }}>
-                {adminTargets.reviewer.completed.toLocaleString()} <span className="text-xs font-normal text-gray-500">câu</span>
+              <span className="type-label text-[#9A9CA3] uppercase block">Đã kiểm duyệt</span>
+              <p className="type-stat mt-0.5" style={{ color: reviewerColor }}>
+                {adminTargets.reviewer.completed.toLocaleString()} <span className="type-label font-normal text-[#6E7078]">câu</span>
               </p>
             </div>
           </div>
@@ -204,9 +203,9 @@ export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
       </div>
 
       {/* Danh sách các Đợt nhiệm vụ */}
-      <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-[#1C1D22] shadow-xs p-4 flex-1 flex flex-col min-h-0">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+      <div className="rounded-[24px] border border-[#E5E2D8] dark:border-gray-800 bg-white dark:bg-[#1C1D22] shadow-[0_1px_3px_rgba(16,17,20,0.04)] p-5 flex-1 flex flex-col min-h-0">
+        <div className="flex items-center justify-between mb-3.5">
+          <h3 className="type-card-title text-[#16171C] dark:text-white flex items-center gap-2">
             <Layers style={{ color: TASK_MANAGER_ACCENT }} className="w-4 h-4" />
             Danh sách các đợt nhiệm vụ
           </h3>
@@ -216,34 +215,34 @@ export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
             onClick={handleNavigate}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold transition-colors cursor-pointer shrink-0"
+            className="inline-flex items-center gap-1.5 type-ui font-label transition-colors cursor-pointer shrink-0"
           >
             <span 
-              className={isHovered ? "" : "text-slate-500 dark:text-gray-300"}
+              className={isHovered ? "" : "text-[#6E7078] dark:text-gray-300"}
               style={{ color: isHovered ? TASK_MANAGER_ACCENT : undefined }}
             >
               Đi đến trang quản lý nhiệm vụ
             </span>
             <ArrowRight 
-              className={`w-3.5 h-3.5 ${isHovered ? "" : "text-slate-500 dark:text-gray-300"}`}
+              className={`w-3.5 h-3.5 ${isHovered ? "" : "text-[#6E7078] dark:text-gray-300"}`}
               style={{ color: isHovered ? TASK_MANAGER_ACCENT : undefined }}
             />
           </a>
         </div>
 
-        <div className="overflow-x-auto flex-1">
-          <table className="w-full text-left text-xs">
+        <div className="overflow-x-auto flex-1 rounded-2xl border border-[#E5E2D8] dark:border-gray-800">
+          <table className="w-full text-left type-ui">
             <thead>
-              <tr className="border-b border-gray-200 dark:border-gray-800 text-gray-400 text-[10px] uppercase font-bold bg-gray-50 dark:bg-[#25272E]">
-                <th className="py-2.5 px-3 w-[120px]">Đợt nhiệm vụ</th>
-                <th className="py-2.5 px-3 min-w-[200px]">Tên đợt</th>
-                <th className="py-2.5 px-3 text-center w-[160px]">Trạng thái</th>
+              <tr className="border-b border-[#E5E2D8] dark:border-gray-800 text-[#9A9CA3] dark:text-gray-400 type-label h-8 bg-[#F7F5EF] dark:bg-[#25272E]">
+                <th className="py-2 px-3.5 w-[120px]">Đợt nhiệm vụ</th>
+                <th className="py-2 px-3.5 min-w-[200px]">Tên đợt</th>
+                <th className="py-2 px-3.5 text-center w-[160px]">Trạng thái</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+            <tbody className="divide-y divide-[#F0EEE6] dark:divide-gray-800">
               {campaigns.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="py-8 text-center text-gray-400 font-medium">
+                  <td colSpan={3} className="py-8 text-center text-[#9A9CA3] dark:text-gray-400 type-ui">
                     Chưa có đợt nhiệm vụ nào được khởi tạo.
                   </td>
                 </tr>
@@ -275,26 +274,26 @@ export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
                       : CHIP_WARNING_TEXT;
 
                   return (
-                    <tr key={campaignId} className="hover:bg-gray-50/80 dark:hover:bg-[#25272E]/50 transition-colors">
-                      <td className="py-3 px-3 font-bold text-gray-900 dark:text-white">
-                        Đợt {campaignId || index + 1}
+                    <tr key={campaignId} className="hover:bg-[#F7F5EF]/70 dark:hover:bg-[#25272E]/50 transition-colors h-11">
+                      <td className="py-2 px-3.5 font-bold text-[#16171C] dark:text-white">
+                        Đợt {index + 1}
                       </td>
-                      <td className="py-3 px-3 font-semibold text-gray-800 dark:text-gray-200">
+                      <td className="py-2 px-3.5 font-medium text-[#16171C] dark:text-gray-200">
                         {item.campaignName || item.title || item.name}
                       </td>
-                      <td className="py-3 px-3 text-center">
+                      <td className="py-2 px-3.5 text-center">
                         <span 
                           style={{
                             backgroundColor: badgeBg,
                             borderColor: badgeBorder,
                             color: badgeText
                           }}
-                          className="inline-flex items-center gap-1 pl-2 pr-2.5 py-0.5 rounded-full text-[9.5px] font-bold border shrink-0 leading-tight"
+                          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full type-caption font-label border shrink-0 leading-tight"
                         >
                           {isCompleted ? (
-                            <CheckCircle2 className="w-2.5 h-2.5 shrink-0" style={{ color: badgeText }} />
+                            <CheckCircle2 className="w-3 h-3 shrink-0" style={{ color: badgeText }} />
                           ) : (
-                            <Clock className="w-2.5 h-2.5 shrink-0" style={{ color: badgeText }} />
+                            <Clock className="w-3 h-3 shrink-0" style={{ color: badgeText }} />
                           )}
                           <span>{isCompleted ? "Hoàn thành" : isOpenStatus ? "Đang mở" : "Đang thực hiện"}</span>
                         </span>

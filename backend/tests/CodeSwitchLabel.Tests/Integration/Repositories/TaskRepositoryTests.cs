@@ -1,5 +1,6 @@
 using CodeSwitchLabel.Repositories.Entities;
 using CodeSwitchLabel.Repositories.Enums;
+using CodeSwitchLabel.Repositories.Repositories;
 using CodeSwitchLabel.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 
@@ -53,10 +54,85 @@ public class TaskRepositoryTests : IntegrationTestBase
         await CreateTaskAsync(CampaignId, TaskType.Review, 30, ManagerUserId);
 
         // Act
-        var (items, total) = await Tasks.SearchAsync(null, null, null, null, DateTimeOffset.UtcNow, 1, 10, TestContext.Current.CancellationToken);
+        var (items, total) = await Tasks.SearchAsync(null, null, null, null, null, DateTimeOffset.UtcNow, 1, 10, default, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(total >= 2);
+    }
+
+    // ---------------------------------------------------------------- TEAM_012: sắp xếp
+
+    /// <summary>
+    /// Ba task với chỉ tiêu khác nhau; chỉ một task có hạn. Danh sách task không lọc được theo
+    /// tên nên test lấy cả trang rồi chỉ giữ lại ba cái vừa tạo để so thứ tự tương đối.
+    /// </summary>
+    private async Task<WorkTask[]> CreateThreeSortedTasksAsync()
+    {
+        // Trigger trg_task_campaign_window: hạn của task phải nằm trong cửa sổ chiến dịch,
+        // tính theo giờ Việt Nam — nên lấy hạn từ chính chiến dịch đó, không đặt mốc cứng.
+        // Npgsql chỉ nhận DateTimeOffset có offset 0, nên phải quy ra UTC.
+        var campaign = await Campaigns.GetAsync(CampaignId, TestContext.Current.CancellationToken);
+        var deadline = new DateTimeOffset(
+                campaign!.StartDate.AddDays(2).ToDateTime(TimeOnly.MinValue), TimeSpan.FromHours(7))
+            .ToUniversalTime();
+
+        return
+        [
+            await CreateTaskAsync(CampaignId, TaskType.Recording, 30, ManagerUserId, deadline),
+            await CreateTaskAsync(CampaignId, TaskType.Recording, 10, ManagerUserId),
+            await CreateTaskAsync(CampaignId, TaskType.Recording, 20, ManagerUserId)
+        ];
+    }
+
+    private static List<long> RelativeOrder(IEnumerable<TaskRow> page, IReadOnlyCollection<WorkTask> mine)
+    {
+        var ids = mine.Select(t => t.TaskId).ToHashSet();
+        return [.. page.Where(t => ids.Contains(t.TaskId)).Select(t => t.TaskId)];
+    }
+
+    [Fact]
+    public async Task SearchAsync_KhongTruyenSort_GiuNguyenThuTuCoHanTruocVaKhongHanOCuoi()
+    {
+        // Regression TEAM_012: mặc định của /api/tasks là task có hạn trước, task không hạn ở cuối.
+        var mine = await CreateThreeSortedTasksAsync();
+
+        var (items, _) = await Tasks.SearchAsync(
+            null, null, null, null, null, DateTimeOffset.UtcNow, 1, 50, default,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            [mine[0].TaskId, mine[1].TaskId, mine[2].TaskId],
+            RelativeOrder(items, mine));
+    }
+
+    [Fact]
+    public async Task SearchAsync_SapXepTheoTargetQty_TangDan()
+    {
+        var mine = await CreateThreeSortedTasksAsync();
+
+        var (items, _) = await Tasks.SearchAsync(
+            null, null, null, null, null, DateTimeOffset.UtcNow, 1, 50,
+            SortSpec<TaskSortField>.From("targetQty", "asc"), TestContext.Current.CancellationToken);
+
+        // Chỉ tiêu 10, 20, 30 — không phụ thuộc hạn.
+        Assert.Equal(
+            [mine[1].TaskId, mine[2].TaskId, mine[0].TaskId],
+            RelativeOrder(items, mine));
+    }
+
+    [Fact]
+    public async Task SearchAsync_SapXepTheoDeadline_GiamDanVanGiuTaskKhongHanOCuoi()
+    {
+        var mine = await CreateThreeSortedTasksAsync();
+
+        var (items, _) = await Tasks.SearchAsync(
+            null, null, null, null, null, DateTimeOffset.UtcNow, 1, 50,
+            SortSpec<TaskSortField>.From("deadline", "desc"), TestContext.Current.CancellationToken);
+
+        // Postgres mặc định NULLS FIRST khi DESC — task không hạn phải ở cuối, không phải đầu.
+        Assert.Equal(
+            [mine[0].TaskId, mine[1].TaskId, mine[2].TaskId],
+            RelativeOrder(items, mine));
     }
 
     [Fact]

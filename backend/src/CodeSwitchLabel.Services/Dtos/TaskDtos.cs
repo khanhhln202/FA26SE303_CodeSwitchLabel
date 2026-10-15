@@ -13,6 +13,12 @@ public record CreateTaskRequest
     [Required(ErrorMessage = "Phải chọn loại task: Recording hoặc Review.")]
     public TaskType? TaskType { get; init; }
 
+    /// <summary>
+    /// Chủ đề của nhiệm vụ. Khi gắn vào chiến dịch, phải trùng chủ đề của chiến dịch —
+    /// nếu không thì 422 task_domain_mismatch_campaign.
+    /// </summary>
+    public ScriptDomain? Domain { get; init; }
+
     [StringLength(1000)]
     public string? Description { get; init; }
 
@@ -29,6 +35,9 @@ public record CreateTaskRequest
 /// <summary>Trường nào để trống thì giữ nguyên.</summary>
 public record UpdateTaskRequest
 {
+    /// <summary>Đổi chủ đề được khi đổi cả chủ đề chiến dịch, hoặc khi task chưa gắn đợt nào.</summary>
+    public ScriptDomain? Domain { get; init; }
+
     [StringLength(1000)]
     public string? Description { get; init; }
 
@@ -59,10 +68,16 @@ public record AutoFillCriteria
     public long? SpeakerId { get; init; }
 }
 
+/// <summary>
+/// TEAM_010: giao cho NHIỀU người cùng lúc. Chỉ tiêu là của cả nhóm, không nhân theo
+/// số người — nên giao 3 người vào task chỉ tiêu 100 vẫn là 100 câu, chia đều ra.
+/// </summary>
 public record AssignTaskRequest
 {
-    [Required(ErrorMessage = "Phải chọn người nhận.")]
-    public long? UserId { get; init; }
+    /// <summary>Phải có ít nhất một người nhận. Trùng lặp trong danh sách được bỏ qua.</summary>
+    [Required(ErrorMessage = "Phải chọn ít nhất một người nhận.")]
+    [MinLength(1, ErrorMessage = "Phải chọn ít nhất một người nhận.")]
+    public List<long> UserIds { get; init; } = [];
 }
 
 /// <param name="Unit">Đơn vị của chỉ tiêu: cặp câu hay bản ghi.</param>
@@ -86,18 +101,25 @@ public record AttachTaskRequest
     public long? CampaignId { get; init; }
 }
 
+/// <summary>TEAM_010: một người đang nhận task. Trước đây chỉ có một assigneeId/assigneeName.</summary>
+public record TaskAssigneeDto(long UserId, string FullName);
+
+/// <param name="CanDelete">Task rảnh (chưa gắn đợt, chưa có ai nhận, chưa có mục) thì xoá cứng được.</param>
+/// <param name="DeleteBlockedReason">Vì sao không xoá được — tiếng Việt để frontend hiện thẳng cho người dùng.</param>
 public record TaskListItemDto(
     long TaskId,
     long? CampaignId,
     string? CampaignName,
     TaskType TaskType,
+    ScriptDomain Domain,
     string? Description,
     WorkTaskStatus Status,
-    long? AssigneeId,
-    string? AssigneeName,
+    IReadOnlyList<TaskAssigneeDto> Assignees,
     DateTimeOffset? Deadline,
     DateTimeOffset CreatedAt,
-    TaskProgressDto Progress);
+    TaskProgressDto Progress,
+    bool CanDelete,
+    string? DeleteBlockedReason);
 
 public record TaskAssignmentDto(
     long AssignmentId, long UserId, string FullName, AssignmentStatus Status, DateTimeOffset AssignedAt);
@@ -121,6 +143,9 @@ public record TaskSearchRequest : PageRequest
     public WorkTaskStatus? Status { get; init; }
     public long? AssigneeId { get; init; }
 
+    /// <summary>Lọc theo chủ đề.</summary>
+    public ScriptDomain? Domain { get; init; }
+
     /// <summary>true: chỉ task còn đang làm mà đã quá hạn.</summary>
     public bool? Overdue { get; init; }
 }
@@ -136,6 +161,9 @@ public record AssigneeSummaryDto(
     int OverdueTasks);
 
 /// <param name="TaskTitle">Tên nhiệm vụ (task.description) — cùng nghĩa với `taskTitle` ở lịch sử ghi âm.</param>
+/// <param name="MyProgress">TEAM_010: tiến độ của riêng người đang xem.</param>
+/// <param name="TeamProgress">TEAM_010: tiến độ của cả nhóm người nhận task.</param>
+/// <param name="Assignees">TEAM_010: ai cùng nhận task này.</param>
 public record SpeakerActiveTaskDto(
     long TaskId,
     string? TaskTitle,
@@ -144,7 +172,9 @@ public record SpeakerActiveTaskDto(
     TaskType TaskType,
     WorkTaskStatus Status,
     DateTimeOffset? Deadline,
-    TaskProgressDto Progress);
+    TaskProgressDto MyProgress,
+    TaskProgressDto TeamProgress,
+    IReadOnlyList<TaskAssigneeDto> Assignees);
 
 public record SpeakerProgressDto(
     int TotalSubmitted,
