@@ -3,6 +3,10 @@
 export const LOGIN_API = 'LOGIN_API'
 // Tài khoản đang đăng nhập (GET /api/auth/me)
 export const GET_ME_API = 'GET_ME_API'
+// Sửa họ tên, số điện thoại của chính mình (PATCH /api/me)
+export const UPDATE_ME_API = 'UPDATE_ME_API'
+// Đổi mật khẩu của chính mình (PUT /api/me/password)
+export const CHANGE_PASSWORD_API = 'CHANGE_PASSWORD_API'
 
 // ===== Speaker =====
 // Hồ sơ người đọc (GET /api/me/speaker-profile)

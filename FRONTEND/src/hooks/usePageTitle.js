@@ -21,6 +21,7 @@ export const PAGE_TITLES = {
   '/profile': 'Hồ sơ cá nhân',
   '/recording-history': 'Lịch sử ghi âm',
   '/contribution-history': 'Lịch sử đóng góp',
+  '/speaker/change-password': 'Đổi mật khẩu',
 
   // Reviewer
   '/reviewer': 'Tổng quan & Tiến độ',
@@ -30,6 +31,7 @@ export const PAGE_TITLES = {
   '/reviewer/history-recording': 'Lịch sử kiểm duyệt ghi âm',
   '/reviewer/history-contribution': 'Lịch sử duyệt đề xuất câu',
   '/reviewer/profile': 'Hồ sơ cá nhân',
+  '/reviewer/change-password': 'Đổi mật khẩu',
 
   // --- TASK MANAGER ---
   '/task-manager': 'Trang chủ',

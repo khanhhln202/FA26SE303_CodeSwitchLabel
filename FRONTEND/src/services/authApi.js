@@ -28,3 +28,33 @@ export const getMeApi = async () => {
     throw new Error(message, { cause: error });
   }
 };
+
+// Sửa thông tin tài khoản của chính mình: PATCH /api/me
+// values: { fullName, phone } - trường nào không gửi thì giữ nguyên, phone = "" là xoá số điện thoại
+// Trả về { userId, fullName, email, phone, role, status, ... }
+export const updateMeApi = async (values) => {
+  try {
+    const response = await httpClient.patch("/api/me", values);
+    return response.data;
+  } catch (error) {
+    const message =
+      error.response?.data?.title || "Lưu thông tin tài khoản thất bại!";
+    throw new Error(message, { cause: error });
+  }
+};
+
+// Đổi mật khẩu của chính mình: PUT /api/me/password
+// values: { currentPassword, newPassword } - trả về { accessToken, expiresAt, user } (token mới)
+export const changePasswordApi = async (values) => {
+  try {
+    // skipAuthRedirect: sai mật khẩu hiện tại thì báo lỗi tại chỗ, không bị đẩy về /login
+    const response = await httpClient.put("/api/me/password", values, {
+      skipAuthRedirect: true,
+    });
+    return response.data;
+  } catch (error) {
+    const message =
+      error.response?.data?.title || "Đổi mật khẩu thất bại, vui lòng thử lại!";
+    throw new Error(message, { cause: error });
+  }
+};
