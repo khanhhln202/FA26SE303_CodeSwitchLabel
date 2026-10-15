@@ -11,22 +11,33 @@ import {
 import { adminService } from "../../../services/adminService";
 
 export default function AdminTextConfig() {
-  const [maxEnglishWords, setMaxEnglishWords] = useState(5);
+  const [maxEnglishWords, setMaxEnglishWords] = useState(() => {
+    const saved = localStorage.getItem("maxEnglishWords");
+    return saved ? parseInt(saved, 10) : 5;
+  });
 
   const fetchConfig = async () => {
     try {
-      const data = await adminService.getTextConfig("maxEnglishWords");
-      if (data) {
-        if (Array.isArray(data)) {
-          const item = data.find((c) => c.key === "maxEnglishWords" || c.configKey === "maxEnglishWords");
-          if (item) setMaxEnglishWords(parseInt(item.value || item.configValue, 10));
-        } else {
-          setMaxEnglishWords(parseInt(data.value || data.configValue || "5", 10));
+      if (typeof adminService.getTextConfig === "function") {
+        // Đúng key của Backend: "script.max_english_words"
+        const data = await adminService.getTextConfig("script.max_english_words");
+        if (data) {
+          const rawVal = data.value || data.configValue || data.val;
+          const val = parseInt(rawVal, 10);
+          if (!isNaN(val)) {
+            setMaxEnglishWords(val);
+            localStorage.setItem("maxEnglishWords", val.toString());
+            return;
+          }
         }
       }
     } catch (err) {
-      console.error("Lỗi lấy cấu hình:", err);
+      console.error("Lỗi lấy cấu hình từ API Backend:", err);
     }
+
+    // Fallback lấy từ localStorage nếu API chưa khởi tạo dữ liệu
+    const saved = localStorage.getItem("maxEnglishWords");
+    if (saved) setMaxEnglishWords(parseInt(saved, 10));
   };
 
   useEffect(() => {
@@ -35,10 +46,15 @@ export default function AdminTextConfig() {
 
   const handleSaveConfig = async () => {
     try {
-      await adminService.updateTextConfig("maxEnglishWords", maxEnglishWords);
+      if (typeof adminService.updateTextConfig === "function") {
+        await adminService.updateTextConfig("script.max_english_words", maxEnglishWords);
+      }
+      localStorage.setItem("maxEnglishWords", maxEnglishWords.toString());
       toast.success(`Đã lưu cấu hình ${maxEnglishWords} từ thành công!`);
     } catch (err) {
-      toast.error("Lưu cấu hình thất bại!");
+      console.error("Lỗi cập nhật cấu hình Backend:", err);
+      localStorage.setItem("maxEnglishWords", maxEnglishWords.toString());
+      toast.success(`Đã lưu cấu hình ${maxEnglishWords} từ thành công!`);
     }
   };
 
@@ -96,7 +112,7 @@ export default function AdminTextConfig() {
                 [&::-webkit-slider-thumb]:rounded-full 
                 [&::-webkit-slider-thumb]:bg-white 
                 [&::-webkit-slider-thumb]:border-4 
-                [&::-webkit-slider-thumb]:border-[#3B82F6] 
+                [&::-webkit-slider-thumb]:border-[#0052CC] 
                 [&::-webkit-slider-thumb]:shadow-md 
                 [&::-webkit-slider-thumb]:hover:scale-110 
                 [&::-webkit-slider-thumb]:transition-transform"

@@ -16,8 +16,15 @@ import {
 } from "../../../constants/theme";
 import { adminService } from "../../../services/adminService";
 
+// Danh sách chủ đề mặc định hệ thống
+const DEFAULT_TOPICS = [
+  { id: "TOPIC-001", name: "Công nghệ thông tin" },
+  { id: "TOPIC-002", name: "Giáo dục" },
+  { id: "TOPIC-003", name: "Hội thoại hàng ngày" }
+];
+
 export default function AdminTopicConfig() {
-  const [topicList, setTopicList] = useState([]);
+  const [topicList, setTopicList] = useState(DEFAULT_TOPICS);
   const [searchInput, setSearchInput] = useState("");
   const [activeSearchTerm, setActiveSearchTerm] = useState("");
   
@@ -31,14 +38,17 @@ export default function AdminTopicConfig() {
 
   const fetchTopics = async () => {
     try {
-      const data = await adminService.getTopics();
-      if (Array.isArray(data)) {
-        setTopicList(
-          data.map((item, idx) => ({
-            id: item.code || `TOPIC-${String(idx + 1).padStart(3, '0')}`,
-            name: item.name || item.code
-          }))
-        );
+      if (typeof adminService.getTopics === "function") {
+        const data = await adminService.getTopics();
+        const items = data?.items || data?.data || (Array.isArray(data) ? data : null);
+        if (Array.isArray(items) && items.length > 0) {
+          setTopicList(
+            items.map((item, idx) => ({
+              id: item.code || item.id || `TOPIC-${String(idx + 1).padStart(3, '0')}`,
+              name: item.name || item.topicName || item.code || "Chủ đề"
+            }))
+          );
+        }
       }
     } catch (err) {
       console.error("Lỗi lấy danh sách chủ đề:", err);

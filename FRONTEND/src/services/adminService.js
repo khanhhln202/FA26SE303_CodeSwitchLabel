@@ -14,7 +14,7 @@ export const adminService = {
   // 2. Quản lý Users
   getUsers: async (params) => {
     const res = await httpClient.get("/api/users", { params });
-    return res.data; // Trả về PagedResult { items, total, page, pageSize }
+    return res.data;
   },
   createUser: async (data) => {
     const res = await httpClient.post("/api/users", data);
@@ -29,7 +29,25 @@ export const adminService = {
     return res.data;
   },
 
-  // 3. Quản lý Scripts (Văn bản)
+  // 3. Cấu hình Hệ thống (System Config)
+  getTextConfig: async (key) => {
+    const res = await httpClient.get(`/api/config/${key}`);
+    return res.data; // SystemConfigDto { key, value }
+  },
+  updateTextConfig: async (key, value) => {
+    const res = await httpClient.put(`/api/admin/config/${key}`, {
+      value: String(value)
+    });
+    return res.data;
+  },
+
+  // 4. Quản lý Chủ đề (Topics)
+  getTopics: async () => {
+    const res = await httpClient.get("/api/config/topics");
+    return res.data;
+  },
+
+  // 5. Quản lý Scripts (Văn bản)
   getTexts: async (params) => {
     const res = await httpClient.get("/api/scripts", { params });
     return res.data;
@@ -43,14 +61,14 @@ export const adminService = {
     return res.data;
   },
 
-  // 4. Quản lý Recordings (Bản thu)
+  // 6. Quản lý Recordings (Bản thu)
   getRecordings: async (params) => {
     const res = await httpClient.get("/api/recordings", { params });
     return res.data;
   },
   getAudioUrl: async (id) => {
     const res = await httpClient.get(`/api/recordings/${id}/audio-url`);
-    return res.data; // { url: "..." }
+    return res.data;
   },
   getRecordingReviews: async (id) => {
     const res = await httpClient.get(`/api/recordings/${id}/reviews`);

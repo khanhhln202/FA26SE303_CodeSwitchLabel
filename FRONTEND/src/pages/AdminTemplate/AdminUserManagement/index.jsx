@@ -8,6 +8,7 @@ import {
   SPEAKER_ACCENT, 
   REVIEWER_ACCENT, 
   TASK_MANAGER_ACCENT,
+  SUCCESS,
   DANGER,
   CHIP_SUCCESS_BG,
   CHIP_SUCCESS_BORDER,
@@ -40,15 +41,28 @@ export default function AdminUserManagement() {
       });
       const items = res.items || res || [];
       setUsers(
-        items.map((u) => ({
-          id: u.userId ? `USR-${String(u.userId).padStart(3, '0')}` : u.id,
-          rawId: u.userId || u.id,
-          name: u.fullName || u.name || "",
-          email: u.email || "",
-          role: u.role || "Speaker",
-          status: u.status === "Locked" || u.status === "Disabled" ? "Disabled" : "Active",
-          createdAt: u.createdAt ? new Date(u.createdAt).toLocaleDateString("vi-VN") : ""
-        }))
+        items.map((u) => {
+          // Kiểm tra trạng thái vô hiệu hóa từ nhiều kiểu định dạng BE khác nhau
+          const rawStatus = String(u.status || "").toLowerCase();
+          const isDisabled = 
+            u.isLocked === true || 
+            u.isActive === false || 
+            u.isLock === true || 
+            rawStatus === "locked" || 
+            rawStatus === "disabled" || 
+            rawStatus === "inactive" || 
+            rawStatus === "0";
+
+          return {
+            id: u.userId ? `USR-${String(u.userId).padStart(3, '0')}` : u.id,
+            rawId: u.userId || u.id,
+            name: u.fullName || u.name || "",
+            email: u.email || "",
+            role: u.role || "Speaker",
+            status: isDisabled ? "Disabled" : "Active",
+            createdAt: u.createdAt ? new Date(u.createdAt).toLocaleDateString("vi-VN") : ""
+          };
+        })
       );
     } catch (err) {
       console.error("Lỗi lấy danh sách người dùng:", err);
@@ -432,13 +446,13 @@ export default function AdminUserManagement() {
       {userToToggleStatus && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#16171C]/55 backdrop-blur-xs" onClick={() => setUserToToggleStatus(null)}>
           <div className="bg-white dark:bg-[#1C1D22] rounded-[24px] w-full max-w-sm shadow-[0_20px_50px_rgba(16,17,20,0.25)] overflow-hidden border border-[#E5E2D8] dark:border-gray-800 animate-in fade-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
-            <div className="h-1.5 w-full shrink-0" style={{ backgroundColor: userToToggleStatus.status === "Active" ? DANGER : CHIP_SUCCESS_BORDER }} />
+            <div className="h-1.5 w-full shrink-0" style={{ backgroundColor: userToToggleStatus.status === "Active" ? DANGER : SUCCESS }} />
             <div className="p-6 text-center space-y-3.5">
               <div 
                 className="w-11 h-11 rounded-full flex items-center justify-center mx-auto" 
                 style={{ 
-                  backgroundColor: `${userToToggleStatus.status === "Active" ? DANGER : CHIP_SUCCESS_BORDER}1A`, 
-                  color: userToToggleStatus.status === "Active" ? DANGER : CHIP_SUCCESS_BORDER 
+                  backgroundColor: `${userToToggleStatus.status === "Active" ? DANGER : SUCCESS}1A`, 
+                  color: userToToggleStatus.status === "Active" ? DANGER : SUCCESS 
                 }}
               >
                 {userToToggleStatus.status === "Active" ? (
@@ -466,8 +480,8 @@ export default function AdminUserManagement() {
                   onClick={ConfirmToggleStatusUser}
                   className="flex-1 py-2.5 text-white rounded-xl type-button transition-colors cursor-pointer hover:opacity-90 active:scale-[0.99]"
                   style={{ 
-                    backgroundColor: userToToggleStatus.status === "Active" ? DANGER : CHIP_SUCCESS_BORDER,
-                    boxShadow: `0 10px 24px ${userToToggleStatus.status === "Active" ? DANGER : CHIP_SUCCESS_BORDER}40`
+                    backgroundColor: userToToggleStatus.status === "Active" ? DANGER : SUCCESS,
+                    boxShadow: `0 10px 24px ${userToToggleStatus.status === "Active" ? DANGER : SUCCESS}40`
                   }}
                 >
                   {userToToggleStatus.status === "Active" ? "Vô hiệu hóa" : "Kích hoạt"}
