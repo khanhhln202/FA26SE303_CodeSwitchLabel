@@ -1,6 +1,8 @@
 // ===== Auth =====
 // Đăng nhập (POST /api/auth/login)
 export const LOGIN_API = 'LOGIN_API'
+// Tự đăng ký làm Speaker (POST /api/auth/register-speaker)
+export const REGISTER_SPEAKER_API = 'REGISTER_SPEAKER_API'
 // Tài khoản đang đăng nhập (GET /api/auth/me)
 export const GET_ME_API = 'GET_ME_API'
 // Sửa họ tên, số điện thoại của chính mình (PATCH /api/me)
