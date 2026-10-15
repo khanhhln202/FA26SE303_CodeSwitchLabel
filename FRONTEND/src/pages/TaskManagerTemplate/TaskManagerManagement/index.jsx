@@ -259,6 +259,15 @@ export default function TaskManagerManagement() {
         const rawType = String(t.taskType || t.type || t.role || "").toLowerCase();
         const isSpeaker = rawType === "recording" || rawType === "speaker" || rawType === "0";
 
+        let usersList = [];
+        if (Array.isArray(t.assignedUsers) && t.assignedUsers.length > 0) {
+          usersList = t.assignedUsers.map(u => typeof u === "string" ? u : u.name || u.fullName || u.userName);
+        } else if (Array.isArray(t.assignees) && t.assignees.length > 0) {
+          usersList = t.assignees.map(u => typeof u === "string" ? u : u.name || u.fullName || u.userName);
+        } else if (t.assigneeName) {
+          usersList = [t.assigneeName];
+        }
+
         return {
           id: t.taskId || t.id,
           taskId: t.taskId || t.id,
@@ -266,7 +275,7 @@ export default function TaskManagerManagement() {
           role: isSpeaker ? "Speaker" : "Reviewer",
           campaignId: Number(t.campaignId),
           topic: mapDomainToTopicVN(t.domain || t.topic || t.categoryName),
-          assignedUsers: t.assigneeName ? [t.assigneeName] : [],
+          assignedUsers: usersList,
           assignedToUserId: t.assignedToUserId || t.assigneeId,
           status: calculatedStatus
         };
@@ -348,7 +357,7 @@ export default function TaskManagerManagement() {
   ], [speakerTasksList, reviewerTasksList]);
 
   const assignModalSelectedBatch = useMemo(() => {
-    return batches.find(b => b.id === assignFormData.selectedBatchId) || batches[0] || null;
+    return batches.find(b => Number(b.id) === Number(assignFormData.selectedBatchId)) || batches[0] || null;
   }, [batches, assignFormData.selectedBatchId]);
 
   const filteredTasksForAssignModal = useMemo(() => {
@@ -378,7 +387,7 @@ export default function TaskManagerManagement() {
     }
 
     setEditingAssignment(null);
-    const initialBatch = batches.find(b => b.id === selectedBatchId) || batches[0] || null;
+    const initialBatch = batches.find(b => Number(b.id) === Number(selectedBatchId)) || batches[0] || null;
     const initialBatchTopic = initialBatch?.topic;
     const availableTasks = initialBatchTopic 
       ? allTasksOptions.filter(t => !t.topic || t.topic === initialBatchTopic) 
@@ -395,7 +404,7 @@ export default function TaskManagerManagement() {
   };
 
   const handleBatchChangeInAssignModal = (newBatchId) => {
-    const nextBatch = batches.find(b => b.id === newBatchId);
+    const nextBatch = batches.find(b => Number(b.id) === Number(newBatchId));
     const nextAvailableTasks = nextBatch 
       ? allTasksOptions.filter(t => !t.topic || t.topic === nextBatch.topic)
       : allTasksOptions;
@@ -451,11 +460,13 @@ export default function TaskManagerManagement() {
       await taskService.attachTaskToCampaign(taskId, targetBatchId);
 
       if (assignFormData.assignedUsers.length > 0) {
-        const selectedUserObj = targetUserList.find(u => assignFormData.assignedUsers.includes(u.name));
-        if (selectedUserObj?.id) {
-          await taskService.assignTask(taskId, selectedUserObj.id).catch(err => {
-            console.warn("Lỗi ngầm assignTask:", err);
-          });
+        const selectedUsers = targetUserList.filter(u => assignFormData.assignedUsers.includes(u.name));
+        for (const userObj of selectedUsers) {
+          if (userObj?.id) {
+            await taskService.assignTask(taskId, userObj.id).catch(err => {
+              console.warn("Lỗi ngầm assignTask:", err);
+            });
+          }
         }
       }
 
@@ -622,7 +633,7 @@ export default function TaskManagerManagement() {
   };
 
   const handleToggleUserInEditTask = (userName) => {
-    const editBatch = batches.find(b => b.id === selectedBatchId);
+    const editBatch = batches.find(b => Number(b.id) === Number(selectedBatchId));
     const maxUsers = editTaskFormData.role === "Speaker" 
       ? Number(editBatch?.speakerCount || 999) 
       : Number(editBatch?.reviewerCount || 999);
@@ -650,14 +661,23 @@ export default function TaskManagerManagement() {
     }
 
     try {
-      await taskService.updateTask(editingTask.id, {
-        description: editTaskFormData.title
-      });
+      if (typeof taskService.updateTask === "function") {
+        await taskService.updateTask(editingTask.id, {
+          title: editTaskFormData.title,
+          description: editTaskFormData.title
+        }).catch(() => null);
+      }
 
       if (editTaskFormData.assignedUsers.length > 0) {
-        const userObj = activeSpeakers.concat(activeReviewers).find(u => editTaskFormData.assignedUsers.includes(u.name));
-        if (userObj?.id) {
-          await taskService.assignTask(editingTask.id, userObj.id);
+        const userList = editTaskFormData.role === "Speaker" ? activeSpeakers : activeReviewers;
+        const selectedUsers = userList.filter(u => editTaskFormData.assignedUsers.includes(u.name));
+        
+        for (const userObj of selectedUsers) {
+          if (userObj?.id) {
+            await taskService.assignTask(editingTask.id, userObj.id).catch(err => {
+              console.warn("Lỗi ngầm assignTask khi sửa:", err);
+            });
+          }
         }
       }
 
@@ -720,8 +740,8 @@ export default function TaskManagerManagement() {
     });
   }, [currentTasks, searchQuery, statusFilter]);
 
-  const selectedBatchObj = batches.find((b) => b.id === selectedBatchId) || null;
-  const targetModalBatchObj = batches.find((b) => b.id === modalTargetBatchId) || selectedBatchObj;
+  const selectedBatchObj = batches.find((b) => Number(b.id) === Number(selectedBatchId)) || null;
+  const targetModalBatchObj = batches.find((b) => Number(b.id) === Number(modalTargetBatchId)) || selectedBatchObj;
 
   return (
     <div className="w-full h-full flex flex-col gap-3.5 text-left font-sans p-1 overflow-y-auto relative transition-colors">
@@ -1219,7 +1239,7 @@ export default function TaskManagerManagement() {
 
               <div>
                 {(() => {
-                  const editBatch = batches.find(b => b.id === selectedBatchId);
+                  const editBatch = batches.find(b => Number(b.id) === Number(selectedBatchId));
                   const maxUsers = editTaskFormData.role === "Speaker" 
                     ? Number(editBatch?.speakerCount || 999) 
                     : Number(editBatch?.reviewerCount || 999);
@@ -1481,10 +1501,10 @@ export default function TaskManagerManagement() {
               </div>
             ) : (
               batches.map((batch, index) => {
-                const active = batch.id === selectedBatchId;
+                const active = Number(batch.id) === Number(selectedBatchId);
                 
                 const mappedIds = batchMapping[batch.id] || [];
-                const batchTasks = assignTasks.filter((t) => t.campaignId === batch.id || mappedIds.includes(t.id));
+                const batchTasks = assignTasks.filter((t) => Number(t.campaignId) === Number(batch.id) || mappedIds.includes(t.id));
 
                 const isBatchCompleted = batchTasks.length > 0 && batchTasks.every((t) => t.status === "Hoàn thành");
                 const isOpenStatus = batchTasks.length === 0 || batch.status === "Open";
