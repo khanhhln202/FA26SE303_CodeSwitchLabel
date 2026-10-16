@@ -10,7 +10,8 @@ import {
   X, 
   AlertTriangle,
   Loader2,
-  Calendar
+  Calendar,
+  Target
 } from "lucide-react";
 import Pagination from "../../../components/Pagination/Pagination";
 import {
@@ -72,6 +73,7 @@ export default function TaskManagerSpeakerTasks() {
   const [formData, setFormData] = useState({
     title: "",
     topic: "Công nghệ thông tin",
+    targetQty: 10,
     createdAt: todayStr,
     deadline: ""
   });
@@ -106,10 +108,14 @@ export default function TaskManagerSpeakerTasks() {
           topicName = "Công nghệ thông tin";
         }
 
+        // Lấy đúng trường chỉ tiêu từ API Backend
+        const actualTarget = t.targetQty ?? t.target ?? t.targetQuantity ?? t.targetCount ?? t.totalItems ?? 10;
+
         return {
           id: t.taskId || t.id,
           title: t.description || t.title || "Nhiệm vụ thu âm",
           topic: topicName,
+          targetQty: Number(actualTarget),
           rawDomain: t.domain,
           createdAt: t.createdAt || t.createdDate,
           deadline: t.deadline || t.dueDate || t.endDate
@@ -145,6 +151,7 @@ export default function TaskManagerSpeakerTasks() {
     setFormData({ 
       title: "", 
       topic: "Công nghệ thông tin",
+      targetQty: 10,
       createdAt: todayStr,
       deadline: defaultDate.toISOString().split('T')[0]
     });
@@ -156,6 +163,7 @@ export default function TaskManagerSpeakerTasks() {
     setFormData({ 
       title: task.title, 
       topic: task.topic,
+      targetQty: task.targetQty || 10,
       createdAt: toInputDateFormat(task.createdAt) || todayStr,
       deadline: toInputDateFormat(task.deadline)
     });
@@ -178,13 +186,14 @@ export default function TaskManagerSpeakerTasks() {
       };
 
       const selectedDomainCode = domainMap[formData.topic] || "ItTechnology";
+      const numTargetQty = Number(formData.targetQty) || 10;
 
       if (editingTask) {
         await taskService.updateTask(editingTask.id, {
           taskId: Number(editingTask.id),
           title: formData.title,
           description: formData.title,
-          targetQty: 10,
+          targetQty: numTargetQty,
           deadline: isoDeadline
         });
         toast.success(`Đã cập nhật nhiệm vụ "${formData.title}"!`);
@@ -197,7 +206,7 @@ export default function TaskManagerSpeakerTasks() {
           domain: selectedDomainCode,
           topic: formData.topic,
           campaignId: null,
-          targetQty: 10,
+          targetQty: numTargetQty,
           deadline: isoDeadline
         });
 
@@ -207,7 +216,7 @@ export default function TaskManagerSpeakerTasks() {
         if (createdTaskId) {
           await taskService.addTaskItems?.(createdTaskId, {
             autoFill: {
-              count: 10,
+              count: numTargetQty,
               domain: selectedDomainCode
             }
           }).catch(err => console.warn("Lỗi autoFill domain:", err));
@@ -238,29 +247,20 @@ export default function TaskManagerSpeakerTasks() {
     const targetId = Number(taskToDelete.id || taskToDelete.taskId);
 
     try {
-      // 1. Thử gọi API xóa cứng trước (dành cho task rảnh)
       await taskService.deleteTask(targetId);
-      
-      // Nếu BE xóa thành công trong DB -> mới cập nhật lại UI
       setTasks((prev) => prev.filter((t) => t.id !== targetId));
       toast.success(`Đã xóa thành công nhiệm vụ "${taskToDelete.title}"!`);
       setTaskToDelete(null);
     } catch (deleteError) {
-      // 2. Nếu không xóa cứng được (do task đã có dữ liệu/phân công), chuyển sang gọi API Hủy (cancelTask)
       try {
         await taskService.cancelTask(targetId);
-        
-        // Hủy thành công -> tải lại danh sách từ BE để lấy trạng thái mới nhất
         toast.success(`Đã hủy thành công nhiệm vụ "${taskToDelete.title}"!`);
         setTaskToDelete(null);
         await loadTasksFromApi();
       } catch (cancelError) {
-        // 3. Nếu cả 2 API đều thất bại -> Báo lỗi chính xác từ BE và KHÔNG xóa khỏi UI
         console.error("Lỗi xóa/hủy task từ BE:", cancelError?.response?.data || cancelError);
-        
         const responseData = cancelError?.response?.data || deleteError?.response?.data;
         const errorMsg = responseData?.title || responseData?.message || "Không thể xóa/hủy nhiệm vụ này do ràng buộc dữ liệu!";
-        
         toast.error(errorMsg);
         setTaskToDelete(null);
       }
@@ -361,11 +361,12 @@ export default function TaskManagerSpeakerTasks() {
       {/* Khung chứa bảng */}
       <div className="bg-white dark:bg-[#1C1D22] rounded-2xl border border-[#E5E2D8] dark:border-gray-800 shadow-[0_1px_3px_rgba(16,17,20,0.04)] overflow-hidden transition-colors flex-1 flex flex-col justify-between my-1.5 min-h-0">
         <div className="flex-1 flex flex-col min-h-0 overflow-auto">
-          <div className="min-w-[850px] h-full flex flex-col">
+          <div className="min-w-[950px] h-full flex flex-col">
             <div className="bg-[#F7F5EF] dark:bg-[#25272E] type-label text-[#9A9CA3] dark:text-gray-400 border-b border-[#E5E2D8] dark:border-gray-800 flex items-center shrink-0 h-8">
               <div className="px-3 text-center whitespace-nowrap w-[50px]">STT</div>
               <div className="px-4 text-left flex-1">Nhiệm vụ</div>
-              <div className="px-3 text-left w-[170px] whitespace-nowrap">Chủ đề</div>
+              <div className="px-3 text-left w-[160px] whitespace-nowrap">Chủ đề</div>
+              <div className="px-3 text-center w-[120px] whitespace-nowrap">Mục tiêu</div>
               <div className="px-3 text-center w-[120px] whitespace-nowrap">Ngày tạo</div>
               <div className="px-3 text-center w-[120px] whitespace-nowrap">Hạn chót</div>
               <div className="px-4 text-center w-[90px] whitespace-nowrap">Thao tác</div>
@@ -394,7 +395,7 @@ export default function TaskManagerSpeakerTasks() {
                         {task.title}
                       </div>
 
-                      <div className="px-3 w-[170px] whitespace-nowrap flex items-center">
+                      <div className="px-3 w-[160px] whitespace-nowrap flex items-center">
                         <span
                           className="px-2.5 py-0.5 rounded-md type-caption font-label border inline-block whitespace-nowrap"
                           style={{
@@ -405,6 +406,10 @@ export default function TaskManagerSpeakerTasks() {
                         >
                           {task.topic}
                         </span>
+                      </div>
+
+                      <div className="px-3 w-[120px] text-center font-bold text-[#16171C] dark:text-white whitespace-nowrap font-sans">
+                        {task.targetQty} câu
                       </div>
 
                       <div className="px-3 w-[120px] text-center font-semibold text-[#16171C] dark:text-white whitespace-nowrap font-sans">
@@ -498,35 +503,60 @@ export default function TaskManagerSpeakerTasks() {
                 />
               </div>
 
-              {/* Ô CHỌN CHỦ ĐỀ: Khóa khi sửa nhiệm vụ */}
-              <div>
-                <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
-                  Chủ đề (Topic)
-                </label>
-                <select
-                  disabled={!!editingTask}
-                  value={formData.topic}
-                  onChange={(e) => setFormData({ ...formData, topic: e.target.value })}
-                  className={`w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 text-[#16171C] dark:text-white rounded-xl outline-none font-bold transition-all font-sans ${
-                    editingTask
-                      ? "bg-[#F7F5EF] dark:bg-[#18191D] cursor-not-allowed opacity-80 appearance-none"
-                      : "bg-white dark:bg-[#25272E] cursor-pointer"
-                  }`}
-                  onFocus={(e) => {
-                    if (!editingTask) {
+              <div className="grid grid-cols-2 gap-3.5">
+                {/* Ô CHỌN CHỦ ĐỀ */}
+                <div>
+                  <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
+                    Chủ đề (Topic)
+                  </label>
+                  <select
+                    disabled={!!editingTask}
+                    value={formData.topic}
+                    onChange={(e) => setFormData({ ...formData, topic: e.target.value })}
+                    className={`w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 text-[#16171C] dark:text-white rounded-xl outline-none font-bold transition-all font-sans ${
+                      editingTask
+                        ? "bg-[#F7F5EF] dark:bg-[#18191D] cursor-not-allowed opacity-80 appearance-none"
+                        : "bg-white dark:bg-[#25272E] cursor-pointer"
+                    }`}
+                    onFocus={(e) => {
+                      if (!editingTask) {
+                        e.target.style.borderColor = TASK_MANAGER_ACCENT;
+                        e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
+                      }
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = '';
+                      e.target.style.boxShadow = 'none';
+                    }}
+                  >
+                    <option value="Công nghệ thông tin" className="dark:bg-[#1C1D22]">Công nghệ thông tin</option>
+                    <option value="Giáo dục" className="dark:bg-[#1C1D22]">Giáo dục</option>
+                    <option value="Hội thoại hàng ngày" className="dark:bg-[#1C1D22]">Hội thoại hàng ngày</option>
+                  </select>
+                </div>
+
+                {/* Ô CHỌN MỤC TIÊU SỐ CÂU */}
+                <div>
+                  <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
+                    Mục tiêu (Số câu)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={formData.targetQty}
+                    onChange={(e) => setFormData({ ...formData, targetQty: e.target.value })}
+                    className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none font-bold transition-all font-sans"
+                    onFocus={(e) => {
                       e.target.style.borderColor = TASK_MANAGER_ACCENT;
                       e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
-                    }
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = '';
-                    e.target.style.boxShadow = 'none';
-                  }}
-                >
-                  <option value="Công nghệ thông tin" className="dark:bg-[#1C1D22]">Công nghệ thông tin</option>
-                  <option value="Giáo dục" className="dark:bg-[#1C1D22]">Giáo dục</option>
-                  <option value="Hội thoại hàng ngày" className="dark:bg-[#1C1D22]">Hội thoại hàng ngày</option>
-                </select>
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = '';
+                      e.target.style.boxShadow = 'none';
+                    }}
+                  />
+                </div>
               </div>
 
               {/* Hàng chứa 2 ô chọn ngày tạo và ngày hạn chót */}

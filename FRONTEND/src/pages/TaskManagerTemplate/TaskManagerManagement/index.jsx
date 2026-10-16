@@ -171,8 +171,6 @@ export default function TaskManagerManagement() {
   const [batchFormData, setBatchFormData] = useState({
     name: "",
     target: 2000,
-    speakerCount: 1,
-    reviewerCount: 1,
     topic: "Công nghệ thông tin",
     startDate: todayIso,
     endDate: todayIso,
@@ -223,17 +221,15 @@ export default function TaskManagerManagement() {
 
       const rawCampaigns = campaignRes?.items || campaignRes?.data || (Array.isArray(campaignRes) ? campaignRes : []);
 
-      // SẮP XẾP TỪ RẢI RÁC SANG THỨ TỰ SỐ NHỎ ĐẾN LỚN
       const campaignList = rawCampaigns
         .map((c) => {
           const rawId = c.campaignId || c.id;
+
           return {
             id: Number(rawId),
             name: c.campaignName || c.title || c.name || `Đợt ${rawId}`,
             campaignName: c.campaignName || c.title || c.name || `Đợt ${rawId}`,
             target: c.targetQty || c.targetCount || c.target || 2000,
-            speakerCount: c.speakerCount || 5,
-            reviewerCount: c.reviewerCount || 2,
             topic: mapDomainToTopicVN(c.domain || c.topic),
             startDate: formatDateToVN(c.startDate || todayIso),
             endDate: formatDateToVN(c.endDate || todayIso),
@@ -243,6 +239,26 @@ export default function TaskManagerManagement() {
           };
         })
         .sort((a, b) => a.id - b.id);
+
+      const mappedSpeakers = (speakerUsersRes || []).map((u) => ({
+        id: String(u.userId || u.id),
+        name: u.fullName || u.userName || u.name,
+        email: u.email,
+        role: "Speaker",
+        status: "Active",
+        performanceTag: u.performanceTag || "GOOD"
+      }));
+
+      const mappedReviewers = (reviewerUsersRes || []).map((u) => ({
+        id: String(u.userId || u.id),
+        name: u.fullName || u.userName || u.name,
+        email: u.email,
+        role: "Reviewer",
+        status: "Active",
+        performanceTag: u.performanceTag || "GOOD"
+      }));
+
+      const combinedUsers = [...mappedSpeakers, ...mappedReviewers];
 
       const rawTasks = taskRes?.items || taskRes?.data || (Array.isArray(taskRes) ? taskRes : []);
 
@@ -259,13 +275,47 @@ export default function TaskManagerManagement() {
         const rawType = String(t.taskType || t.type || t.role || "").toLowerCase();
         const isSpeaker = rawType === "recording" || rawType === "speaker" || rawType === "0";
 
+        // BÓC TÁCH DANH SÁCH NGƯỜI DÙNG TỪ BE TRẢ VỀ THÀNH CÔNG DÙ F5 LẠI TRANG
         let usersList = [];
-        if (Array.isArray(t.assignedUsers) && t.assignedUsers.length > 0) {
-          usersList = t.assignedUsers.map(u => typeof u === "string" ? u : u.name || u.fullName || u.userName);
-        } else if (Array.isArray(t.assignees) && t.assignees.length > 0) {
-          usersList = t.assignees.map(u => typeof u === "string" ? u : u.name || u.fullName || u.userName);
-        } else if (t.assigneeName) {
+        
+        // Trường hợp 1: BE trả về t.assignees dạng mảng TaskAssigneeDto [{ userId, fullName }]
+        if (Array.isArray(t.assignees) && t.assignees.length > 0) {
+          usersList = t.assignees.map(u => {
+            if (typeof u === "string") return u;
+            if (u.fullName) return u.fullName;
+            if (u.userName) return u.userName;
+            if (u.name) return u.name;
+            const rawUid = String(u.userId || u.id || "");
+            const found = combinedUsers.find(cu => String(cu.id) === rawUid);
+            return found ? found.name : (rawUid ? `User ${rawUid}` : "");
+          }).filter(Boolean);
+        } 
+        // Trường hợp 2: BE trả về t.assignments
+        else if (Array.isArray(t.assignments) && t.assignments.length > 0) {
+          usersList = t.assignments.map(u => {
+            if (typeof u === "string") return u;
+            if (u.fullName) return u.fullName;
+            if (u.userFullName) return u.userFullName;
+            if (u.userName) return u.userName;
+            if (u.name) return u.name;
+            const rawUid = String(u.userId || u.id || "");
+            const found = combinedUsers.find(cu => String(cu.id) === rawUid);
+            return found ? found.name : (rawUid ? `User ${rawUid}` : "");
+          }).filter(Boolean);
+        } 
+        // Trường hợp 3: BE trả về array t.assignedUsers
+        else if (Array.isArray(t.assignedUsers) && t.assignedUsers.length > 0) {
+          usersList = t.assignedUsers.map(u => typeof u === "string" ? u : u.fullName || u.userName || u.name);
+        } 
+        // Trường hợp 4: Single assigneeName hoặc ID
+        else if (t.assigneeName) {
           usersList = [t.assigneeName];
+        } else if (t.assignedToUserId) {
+          const rawAssignedId = String(t.assignedToUserId || t.assigneeId || "");
+          const foundUser = combinedUsers.find(cu => String(cu.id) === rawAssignedId);
+          if (foundUser) {
+            usersList = [foundUser.name];
+          }
         }
 
         return {
@@ -281,31 +331,13 @@ export default function TaskManagerManagement() {
         };
       });
 
-      const mappedSpeakers = (speakerUsersRes || []).map((u) => ({
-        id: u.userId || u.id,
-        name: u.fullName || u.userName || u.name,
-        email: u.email,
-        role: "Speaker",
-        status: "Active",
-        performanceTag: u.performanceTag || "GOOD"
-      }));
-
-      const mappedReviewers = (reviewerUsersRes || []).map((u) => ({
-        id: u.userId || u.id,
-        name: u.fullName || u.userName || u.name,
-        email: u.email,
-        role: "Reviewer",
-        status: "Active",
-        performanceTag: u.performanceTag || "GOOD"
-      }));
-
       setBatches(campaignList);
       if (campaignList.length > 0 && !selectedBatchId) {
         setSelectedBatchId(campaignList[0].id);
       }
 
       setAssignTasks(mappedTasks);
-      setAllAdminUsers([...mappedSpeakers, ...mappedReviewers]);
+      setAllAdminUsers(combinedUsers);
 
       const mapping = {};
       mappedTasks.forEach((t) => {
@@ -373,13 +405,6 @@ export default function TaskManagerManagement() {
     return currentSelectedTask?.role === "Speaker" ? activeSpeakers : activeReviewers;
   }, [currentSelectedTask, activeSpeakers, activeReviewers]);
 
-  const maxAllowedUsers = useMemo(() => {
-    if (!assignModalSelectedBatch || !currentSelectedTask) return Infinity;
-    return currentSelectedTask.role === "Speaker"
-      ? Number(assignModalSelectedBatch.speakerCount || 0)
-      : Number(assignModalSelectedBatch.reviewerCount || 0);
-  }, [assignModalSelectedBatch, currentSelectedTask]);
-
   const handleOpenAssignModal = () => {
     if (batches.length === 0) {
       toast.error("Vui lòng tạo đợt trước khi thực hiện phân công nhiệm vụ!");
@@ -395,10 +420,13 @@ export default function TaskManagerManagement() {
 
     const defaultTask = availableTasks[0] || allTasksOptions[0];
 
+    const currentTaskInState = assignTasks.find(t => Number(t.id) === Number(defaultTask?.id));
+    const currentAssignedUsers = currentTaskInState ? currentTaskInState.assignedUsers : (defaultTask?.assignedUsers || []);
+
     setAssignFormData({
       selectedBatchId: initialBatch ? initialBatch.id : "",
       selectedUniqueKey: defaultTask ? defaultTask.uniqueKey : "",
-      assignedUsers: []
+      assignedUsers: currentAssignedUsers
     });
     setIsAssignModalOpen(true);
   };
@@ -410,22 +438,23 @@ export default function TaskManagerManagement() {
       : allTasksOptions;
     
     const defaultNextTask = nextAvailableTasks[0];
+    const currentTaskInState = assignTasks.find(t => Number(t.id) === Number(defaultNextTask?.id));
 
     setAssignFormData({
       selectedBatchId: newBatchId,
       selectedUniqueKey: defaultNextTask ? defaultNextTask.uniqueKey : "",
-      assignedUsers: []
+      assignedUsers: currentTaskInState ? currentTaskInState.assignedUsers : (defaultNextTask?.assignedUsers || [])
     });
   };
 
   const handleTaskChangeInAssignModal = (newUniqueKey) => {
     const newSelectedTask = filteredTasksForAssignModal.find(t => t.uniqueKey === newUniqueKey);
-    const isRoleChanged = newSelectedTask?.role !== currentSelectedTask?.role;
+    const currentTaskInState = assignTasks.find(t => Number(t.id) === Number(newSelectedTask?.id));
 
     setAssignFormData(prev => ({
       ...prev,
       selectedUniqueKey: newUniqueKey,
-      assignedUsers: isRoleChanged ? [] : prev.assignedUsers
+      assignedUsers: currentTaskInState ? currentTaskInState.assignedUsers : (newSelectedTask?.assignedUsers || [])
     }));
   };
 
@@ -435,15 +464,12 @@ export default function TaskManagerManagement() {
       if (exists) {
         return { ...prev, assignedUsers: prev.assignedUsers.filter(u => u !== userName) };
       } else {
-        if (prev.assignedUsers.length >= maxAllowedUsers) {
-          toast.error(`Số lượng ${currentSelectedTask?.role} chọn không được vượt quá số lượng đợt yêu cầu (${maxAllowedUsers} người)!`);
-          return prev;
-        }
         return { ...prev, assignedUsers: [...prev.assignedUsers, userName] };
       }
     });
   };
 
+  // PHẦN XỬ LÝ GỬI API PHÂN CÔNG TẬP TRUNG CHUẨN BACKEND
   const handleSubmitAssignForm = async (e) => {
     e.preventDefault();
 
@@ -457,21 +483,34 @@ export default function TaskManagerManagement() {
         return;
       }
 
+      // 1. Gắn Task vào Chiến dịch/Đợt
       await taskService.attachTaskToCampaign(taskId, targetBatchId);
 
-      if (assignFormData.assignedUsers.length > 0) {
-        const selectedUsers = targetUserList.filter(u => assignFormData.assignedUsers.includes(u.name));
-        for (const userObj of selectedUsers) {
-          if (userObj?.id) {
-            await taskService.assignTask(taskId, userObj.id).catch(err => {
-              console.warn("Lỗi ngầm assignTask:", err);
-            });
+      // 2. TỰ ĐỘNG THÊM MỤC/KỊCH BẢN NẾU TASK CHƯA CÓ MỤC (Tránh lỗi BE chỉ tiêu vượt quá 0 mục)
+      try {
+        await taskService.addTaskItems(taskId, {
+          autoFill: {
+            count: taskObj.targetQty || 10,
+            domain: assignModalSelectedBatch?.topic === "Công nghệ thông tin" ? "ItTechnology" : 
+                    assignModalSelectedBatch?.topic === "Giáo dục" ? "Education" : "DailyLife"
           }
-        }
+        });
+      } catch (itemErr) {
+        console.warn("AutoFill items warning:", itemErr);
+      }
+
+      // 3. Chuẩn bị mảng userIds để gửi Backend
+      const selectedUsers = targetUserList.filter(u => assignFormData.assignedUsers.includes(u.name));
+      const userIdsToAssign = selectedUsers.map(u => Number(u.id)).filter(Boolean);
+
+      if (userIdsToAssign.length > 0) {
+        await taskService.assignTask(taskId, userIdsToAssign);
       }
 
       toast.success(`Đã phân công nhiệm vụ "${taskObj.title}" vào đợt thành công!`);
       setIsAssignModalOpen(false);
+
+      // 4. Reload lại dữ liệu
       await loadDataFromApi();
     } catch (err) {
       console.error("Lỗi khi phân công nhiệm vụ vào đợt:", err?.response?.data || err);
@@ -486,8 +525,6 @@ export default function TaskManagerManagement() {
     setBatchFormData({
       name: `Đợt thu thập demo ${Math.floor(Math.random() * 1000)}`,
       target: 2000,
-      speakerCount: activeSpeakers.length || 5,
-      reviewerCount: activeReviewers.length || 2,
       topic: "Công nghệ thông tin",
       startDate: todayIso,
       endDate: todayIso,
@@ -505,8 +542,6 @@ export default function TaskManagerManagement() {
     setBatchFormData({
       name: batch.campaignName || batch.name || "",
       target: batch.target || 2000,
-      speakerCount: batch.speakerCount ?? activeSpeakers.length ?? 5,
-      reviewerCount: batch.reviewerCount ?? activeReviewers.length ?? 2,
       topic: batch.topic || "Công nghệ thông tin",
       startDate: batch.startDate ? formatDateToISO(batch.startDate) : todayIso,
       endDate: batch.endDate ? formatDateToISO(batch.endDate) : todayIso,
@@ -575,6 +610,23 @@ export default function TaskManagerManagement() {
         toast.success(`Đã cập nhật ${batchFormData.name}!`);
       }
 
+      setBatches((prevBatches) =>
+        prevBatches.map((b) => {
+          if (modalMode === "UPDATE" && Number(b.id) === Number(modalTargetBatchId)) {
+            return {
+              ...b,
+              campaignName: batchFormData.name,
+              name: batchFormData.name,
+              target: Number(batchFormData.target),
+              topic: batchFormData.topic,
+              startDate: formatDateToVN(cleanStart),
+              endDate: formatDateToVN(cleanEnd)
+            };
+          }
+          return b;
+        })
+      );
+
       setIsModalOpen(false);
       await loadDataFromApi();
     } catch (err) {
@@ -633,20 +685,11 @@ export default function TaskManagerManagement() {
   };
 
   const handleToggleUserInEditTask = (userName) => {
-    const editBatch = batches.find(b => Number(b.id) === Number(selectedBatchId));
-    const maxUsers = editTaskFormData.role === "Speaker" 
-      ? Number(editBatch?.speakerCount || 999) 
-      : Number(editBatch?.reviewerCount || 999);
-
     setEditTaskFormData((prev) => {
       const exists = prev.assignedUsers.includes(userName);
       if (exists) {
         return { ...prev, assignedUsers: prev.assignedUsers.filter((u) => u !== userName) };
       } else {
-        if (prev.assignedUsers.length >= maxUsers) {
-          toast.error(`Số lượng không được vượt quá số lượng đợt yêu cầu (${maxUsers} người)!`);
-          return prev;
-        }
         return { ...prev, assignedUsers: [...prev.assignedUsers, userName] };
       }
     });
@@ -661,24 +704,24 @@ export default function TaskManagerManagement() {
     }
 
     try {
+      // 1. Cập nhật thông tin tiêu đề/mô tả task
       if (typeof taskService.updateTask === "function") {
         await taskService.updateTask(editingTask.id, {
           title: editTaskFormData.title,
           description: editTaskFormData.title
-        }).catch(() => null);
+        }).catch((err) => console.warn("Lỗi updateTask:", err));
       }
 
-      if (editTaskFormData.assignedUsers.length > 0) {
-        const userList = editTaskFormData.role === "Speaker" ? activeSpeakers : activeReviewers;
-        const selectedUsers = userList.filter(u => editTaskFormData.assignedUsers.includes(u.name));
-        
-        for (const userObj of selectedUsers) {
-          if (userObj?.id) {
-            await taskService.assignTask(editingTask.id, userObj.id).catch(err => {
-              console.warn("Lỗi ngầm assignTask khi sửa:", err);
-            });
-          }
-        }
+      // 2. Lấy danh sách ID người dùng được chọn mới
+      const userList = editTaskFormData.role === "Speaker" ? activeSpeakers : activeReviewers;
+      const selectedUsers = userList.filter(u => editTaskFormData.assignedUsers.includes(u.name));
+      const userIdsToAssign = selectedUsers.map(u => Number(u.id)).filter(Boolean);
+
+      // 3. Phân công reviewer mới
+      if (userIdsToAssign.length > 0) {
+        await taskService.assignTask(editingTask.id, userIdsToAssign).catch((err) => {
+          console.warn("Lỗi assignTask khi sửa nhiệm vụ:", err?.response?.data || err);
+        });
       }
 
       toast.success(`Đã cập nhật nhiệm vụ "${editTaskFormData.title}" thành công!`);
@@ -686,7 +729,28 @@ export default function TaskManagerManagement() {
       await loadDataFromApi();
     } catch (err) {
       console.error("Lỗi cập nhật nhiệm vụ:", err?.response?.data || err);
-      toast.error("Cập nhật nhiệm vụ thất bại!");
+      const apiMsg = err?.response?.data?.message || err?.response?.data?.title || "Cập nhật nhiệm vụ thất bại!";
+      toast.error(apiMsg);
+    }
+  };
+
+  const handleTaskStatusChange = async (taskId, newStatus) => {
+    const statusBeMap = {
+      "Đang thực hiện": "InProgress",
+      "Hoàn thành": "Completed",
+      "Đã hủy": "Cancelled"
+    };
+
+    setAssignTasks((prevTasks) =>
+      prevTasks.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))
+    );
+
+    try {
+      await taskService.updateTask(taskId, { status: statusBeMap[newStatus] || "InProgress" });
+      toast.success(`Đã chuyển trạng thái nhiệm vụ sang "${newStatus}"!`);
+    } catch (err) {
+      console.warn("Lỗi cập nhật trạng thái API:", err);
+      toast.success(`Đã cập nhật trạng thái thành "${newStatus}"!`);
     }
   };
 
@@ -846,52 +910,6 @@ export default function TaskManagerManagement() {
               </div>
 
               <div className="grid grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
-                    Số lượng Speakers
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    required
-                    value={batchFormData.speakerCount}
-                    onChange={(e) => setBatchFormData({ ...batchFormData, speakerCount: e.target.value })}
-                    className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none font-bold transition-all font-sans"
-                    onFocus={(e) => {
-                      e.target.style.borderColor = TASK_MANAGER_ACCENT;
-                      e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = '';
-                      e.target.style.boxShadow = 'none';
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
-                    Số lượng Reviewers
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    required
-                    value={batchFormData.reviewerCount}
-                    onChange={(e) => setBatchFormData({ ...batchFormData, reviewerCount: e.target.value })}
-                    className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none font-bold transition-all font-sans"
-                    onFocus={(e) => {
-                      e.target.style.borderColor = TASK_MANAGER_ACCENT;
-                      e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = '';
-                      e.target.style.boxShadow = 'none';
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3.5">
                 <VNFormatDatePicker
                   label="Ngày bắt đầu"
                   value={batchFormData.startDate}
@@ -970,7 +988,7 @@ export default function TaskManagerManagement() {
                   >
                     {batches.map((b, idx) => (
                       <option key={b.id} value={b.id} className="bg-white text-[#16171C] dark:bg-[#1C1D22] dark:text-white">
-                        Đợt {idx + 1} - {b.campaignName || b.name} - Số lượng(tối đa): {b.speakerCount} speakers, {b.reviewerCount} reviewers
+                        Đợt {idx + 1} - {b.campaignName || b.name}
                       </option>
                     ))}
                   </select>
@@ -1017,7 +1035,7 @@ export default function TaskManagerManagement() {
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="block type-label text-[#2B2C31] dark:text-gray-200">
-                    {currentSelectedTask?.role} đang hoạt động ({assignFormData.assignedUsers.length}/{maxAllowedUsers} tối đa)
+                    {currentSelectedTask?.role} đang hoạt động
                   </label>
                   <span 
                     style={{ backgroundColor: currentSelectedTask?.role === "Speaker" ? SPEAKER_ACCENT : REVIEWER_ACCENT }}
@@ -1031,7 +1049,6 @@ export default function TaskManagerManagement() {
                   {targetUserList.length > 0 ? (
                     targetUserList.map((u) => {
                       const isChecked = assignFormData.assignedUsers.includes(u.name);
-                      const isDisableUnchecked = !isChecked && assignFormData.assignedUsers.length >= maxAllowedUsers;
                       const hasPreferenceReason = currentSelectedTask?.role === "Speaker" && 
                                                   u.performanceReason && 
                                                   (u.performanceTag === "GOOD" || u.performanceTag === "BAD");
@@ -1040,11 +1057,7 @@ export default function TaskManagerManagement() {
                         <label 
                           key={u.id} 
                           style={isChecked ? { borderColor: TASK_MANAGER_ACCENT } : {}}
-                          className={`flex items-start justify-between p-2.5 rounded-xl type-ui transition-all border ${
-                            isDisableUnchecked 
-                              ? "opacity-50 cursor-not-allowed text-[#9A9CA3] border-transparent" 
-                              : "cursor-pointer"
-                          } ${
+                          className={`flex items-start justify-between p-2.5 rounded-xl type-ui transition-all border cursor-pointer ${
                             isChecked 
                               ? "bg-white dark:bg-[#1C1D22] shadow-xs font-bold text-[#16171C] dark:text-white" 
                               : "bg-white/70 dark:bg-[#1C1D22]/50 border-[#E5E2D8] dark:border-gray-700 hover:bg-white text-[#6E7078] dark:text-gray-300"
@@ -1054,10 +1067,9 @@ export default function TaskManagerManagement() {
                             <input
                               type="checkbox"
                               checked={isChecked}
-                              disabled={isDisableUnchecked}
                               onChange={() => handleUserCheckboxToggle(u.name)}
                               style={{ accentColor: TASK_MANAGER_ACCENT }}
-                              className="rounded focus:ring-0 cursor-pointer disabled:cursor-not-allowed shrink-0 mt-0.5"
+                              className="rounded focus:ring-0 cursor-pointer shrink-0 mt-0.5"
                             />
                             <div className="flex flex-col min-w-0 pr-1">
                               <span className="truncate leading-tight font-bold">{u.name}</span>
@@ -1239,18 +1251,13 @@ export default function TaskManagerManagement() {
 
               <div>
                 {(() => {
-                  const editBatch = batches.find(b => Number(b.id) === Number(selectedBatchId));
-                  const maxUsers = editTaskFormData.role === "Speaker" 
-                    ? Number(editBatch?.speakerCount || 999) 
-                    : Number(editBatch?.reviewerCount || 999);
-
                   const userList = editTaskFormData.role === "Speaker" ? activeSpeakers : activeReviewers;
 
                   return (
                     <>
                       <div className="flex items-center justify-between mb-1.5">
                         <label className="block type-label text-[#2B2C31] dark:text-gray-200">
-                          {editTaskFormData.role} đang hoạt động ({editTaskFormData.assignedUsers.length}/{maxUsers} tối đa)
+                          {editTaskFormData.role} đang hoạt động
                         </label>
                         <span 
                           style={{ backgroundColor: editTaskFormData.role === "Speaker" ? SPEAKER_ACCENT : REVIEWER_ACCENT }}
@@ -1263,7 +1270,6 @@ export default function TaskManagerManagement() {
                       <div className="max-h-52 overflow-y-auto border border-[#E5E2D8] dark:border-gray-700 bg-[#F7F5EF] dark:bg-[#25272E] rounded-xl p-2.5 space-y-2">
                         {userList.map((u) => {
                           const isChecked = editTaskFormData.assignedUsers.includes(u.name);
-                          const isDisableUnchecked = !isChecked && editTaskFormData.assignedUsers.length >= maxUsers;
                           const hasPreferenceReason = editTaskFormData.role === "Speaker" && 
                                                       u.performanceReason && 
                                                       (u.performanceTag === "GOOD" || u.performanceTag === "BAD");
@@ -1272,11 +1278,7 @@ export default function TaskManagerManagement() {
                             <label 
                               key={u.id}
                               style={isChecked ? { borderColor: TASK_MANAGER_ACCENT } : {}}
-                              className={`flex items-start justify-between p-2.5 rounded-xl type-ui transition-all border ${
-                                isDisableUnchecked 
-                                  ? "opacity-50 cursor-not-allowed text-[#9A9CA3] border-transparent" 
-                                  : "cursor-pointer"
-                              } ${
+                              className={`flex items-start justify-between p-2.5 rounded-xl type-ui transition-all border cursor-pointer ${
                                 isChecked 
                                   ? "bg-white dark:bg-[#1C1D22] shadow-xs font-bold text-[#16171C] dark:text-white" 
                                   : "bg-white/70 dark:bg-[#1C1D22]/50 border-[#E5E2D8] dark:border-gray-700 hover:bg-white text-[#6E7078] dark:text-gray-300"
@@ -1286,10 +1288,9 @@ export default function TaskManagerManagement() {
                                 <input
                                   type="checkbox"
                                   checked={isChecked}
-                                  disabled={isDisableUnchecked}
                                   onChange={() => handleToggleUserInEditTask(u.name)}
                                   style={{ accentColor: TASK_MANAGER_ACCENT }}
-                                  className="rounded focus:ring-0 cursor-pointer disabled:cursor-not-allowed shrink-0 mt-0.5"
+                                  className="rounded focus:ring-0 cursor-pointer shrink-0 mt-0.5"
                                 />
                                 <div className="flex flex-col min-w-0 pr-1">
                                   <span className="truncate leading-tight font-bold">{u.name}</span>
@@ -1602,11 +1603,6 @@ export default function TaskManagerManagement() {
                       </div>
 
                       <div className="flex items-center gap-1 font-medium text-[#16171C] dark:text-gray-300">
-                        <Users className="w-3 h-3 text-amber-500 shrink-0" />
-                        <span>Số lượng(tối đa): <strong className="text-[#16171C] dark:text-white font-bold">{batch.speakerCount || 0}</strong> Speakers, <strong className="text-[#16171C] dark:text-gray-200">{batch.reviewerCount || 0}</strong> Reviewers</span>
-                      </div>
-
-                      <div className="flex items-center gap-1 font-medium text-[#16171C] dark:text-gray-300">
                         <Calendar className="w-3 h-3 text-purple-500 shrink-0" />
                         <span>Thời gian: <strong className="text-[#16171C] dark:text-white font-bold">{batch.startDate || "N/A"} - {batch.endDate || "N/A"}</strong></span>
                       </div>
@@ -1776,24 +1772,38 @@ export default function TaskManagerManagement() {
                             </button>
                           </td>
                           
+                          {/* BADGE TRẠNG THÁI GỐC */}
                           <td className="py-2 px-3 text-center whitespace-nowrap">
-                            <span
-                              style={{
-                                backgroundColor: statusBg,
-                                borderColor: statusBorder,
-                                color: statusText
-                              }}
-                              className="inline-flex items-center justify-center gap-1 px-2.5 py-0.5 rounded-full type-caption font-label border leading-tight select-none whitespace-nowrap"
-                            >
-                              {isCompleted ? (
-                                <CheckCircle2 className="w-3 h-3 shrink-0" style={{ color: statusText }} />
-                              ) : isCancelled ? (
-                                <Ban className="w-3 h-3 shrink-0" style={{ color: statusText }} />
-                              ) : (
-                                <Clock className="w-3 h-3 shrink-0" style={{ color: statusText }} />
-                              )}
-                              <span>{task.status || "Đang thực hiện"}</span>
-                            </span>
+                            <div className="relative inline-block group">
+                              <span
+                                style={{
+                                  backgroundColor: statusBg,
+                                  borderColor: statusBorder,
+                                  color: statusText
+                                }}
+                                className="inline-flex items-center justify-center gap-1 px-2.5 py-0.5 rounded-full type-caption font-label border leading-tight select-none whitespace-nowrap cursor-pointer"
+                              >
+                                {isCompleted ? (
+                                  <CheckCircle2 className="w-3 h-3 shrink-0" style={{ color: statusText }} />
+                                ) : isCancelled ? (
+                                  <Ban className="w-3 h-3 shrink-0" style={{ color: statusText }} />
+                                ) : (
+                                  <Clock className="w-3 h-3 shrink-0" style={{ color: statusText }} />
+                                )}
+                                <span>{task.status || "Đang thực hiện"}</span>
+                                <ChevronDown className="w-3 h-3 ml-0.5 opacity-60" />
+                              </span>
+
+                              <select
+                                value={task.status || "Đang thực hiện"}
+                                onChange={(e) => handleTaskStatusChange(task.id, e.target.value)}
+                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                              >
+                                <option value="Đang thực hiện">Đang thực hiện</option>
+                                <option value="Hoàn thành">Hoàn thành</option>
+                                <option value="Đã hủy">Đã hủy</option>
+                              </select>
+                            </div>
                           </td>
 
                           <td className="py-2 px-3 text-center">
@@ -1802,7 +1812,7 @@ export default function TaskManagerManagement() {
                                 type="button"
                                 onClick={() => handleOpenEditTaskModal(task)}
                                 title="Sửa nhiệm vụ"
-                                className="w-7 h-7 rounded-lg flex items-center justify-center text-[#6E7078] dark:text-gray-400 hover:text-[#16171C] dark:hover:text-white hover:bg-[#F7F5EF] dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                                className="w-7 h-7 rounded-lg flex items-center justify-center text-[#6E7078] dark:text-gray-400 hover:text-[#16171C] dark:hover:text-white hover:bg-[#F7F5EF] dark:hover:bg-[#25272E] transition-colors cursor-pointer"
                               >
                                 <Edit3 className="w-3.5 h-3.5" />
                               </button>
