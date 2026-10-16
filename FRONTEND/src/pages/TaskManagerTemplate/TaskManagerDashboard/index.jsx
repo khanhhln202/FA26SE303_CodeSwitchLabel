@@ -36,16 +36,16 @@ export default function TaskManagerDashboard() {
   const loadDataFromApi = async () => {
     try {
       setLoading(true);
-      // Gọi API lấy toàn bộ danh sách Task & Campaigns
+      // Gọi API lấy toàn bộ danh sách Task & Campaigns với pageSize lớn để tránh bị mất dữ liệu phân trang
       const [allTasksRes, campaignsRes] = await Promise.all([
-        taskService.getTasks().catch(() => ({ items: [] })),
-        taskService.getCampaigns().catch(() => ({ items: [] }))
+        taskService.getTasks({ pageSize: 1000 }).catch(() => ({ items: [] })),
+        taskService.getCampaigns({ pageSize: 1000 }).catch(() => ({ items: [] }))
       ]);
 
-      const rawTasks = allTasksRes?.items || allTasksRes?.data || [];
-      const campaigns = campaignsRes?.items || campaignsRes?.data || [];
+      const rawTasks = allTasksRes?.items || allTasksRes?.data || (Array.isArray(allTasksRes) ? allTasksRes : []);
+      const campaigns = campaignsRes?.items || campaignsRes?.data || (Array.isArray(campaignsRes) ? campaignsRes : []);
 
-      // Map danh sách topic/domain từ Campaign để làm fallback cho Task
+      // Map danh sách topic/domain từ Campaign làm fallback cho Task
       const campaignTopicMap = {};
       campaigns.forEach(c => {
         const cId = c.campaignId || c.id;
@@ -54,23 +54,29 @@ export default function TaskManagerDashboard() {
         }
       });
 
-      // Tách nhiệm vụ Speaker (Recording) và Reviewer (Review/Editing)
-      const speakerItems = rawTasks.filter(t => 
-        t.taskType === "Recording" || t.role === "Speaker" || String(t.taskType).toLowerCase().includes("record")
-      );
+      // Kiểm tra xem task đã được phân công hay chưa
+      const isTaskAssigned = (t) => {
+        if (t.assignedToUserId || t.assigneeName || t.assigneeId) return true;
+        if (Array.isArray(t.assignedUsers) && t.assignedUsers.length > 0) return true;
+        if (Array.isArray(t.assignees) && t.assignees.length > 0) return true;
+        if (Array.isArray(t.assignments) && t.assignments.length > 0) return true;
+        return false;
+      };
 
-      const reviewerItems = rawTasks.filter(t => 
-        t.taskType === "Review" || t.taskType === "Editing" || t.role === "Reviewer" || String(t.taskType).toLowerCase().includes("review")
-      );
+      // Phân loại task thành Speaker (Recording) và Reviewer (Review/Editing)
+      const speakerItems = rawTasks.filter(t => {
+        const rawType = String(t.taskType || t.type || t.role || "").toLowerCase();
+        return rawType === "recording" || rawType === "speaker" || rawType === "0" || rawType.includes("record");
+      });
+
+      const reviewerItems = rawTasks.filter(t => {
+        const rawType = String(t.taskType || t.type || t.role || "").toLowerCase();
+        return rawType === "review" || rawType === "reviewer" || rawType === "editing" || rawType === "1" || rawType.includes("review");
+      });
 
       // Đếm số lượng nhiệm vụ đã phân công
-      const assignedSpeakers = speakerItems.filter(t => 
-        t.assignedToUserId || t.assigneeName || t.assigneeId || t.campaignId
-      ).length;
-
-      const assignedReviewers = reviewerItems.filter(t => 
-        t.assignedToUserId || t.assigneeName || t.assigneeId || t.campaignId
-      ).length;
+      const assignedSpeakers = speakerItems.filter(isTaskAssigned).length;
+      const assignedReviewers = reviewerItems.filter(isTaskAssigned).length;
 
       // Đếm số lượng nhiệm vụ theo Chủ đề chính xác
       let tech = 0;
@@ -79,31 +85,31 @@ export default function TaskManagerDashboard() {
 
       rawTasks.forEach(t => {
         const campaignTopic = campaignTopicMap[t.campaignId] || "";
-        const combinedText = `${t.domain || ""} ${t.topic || ""} ${t.title || ""} ${t.description || ""} ${campaignTopic}`.toLowerCase();
+        const domainStr = String(t.domain || t.topic || t.categoryName || campaignTopic || "").toLowerCase();
 
         if (
-          combinedText.includes("công nghệ") || 
-          combinedText.includes("thông tin") || 
-          combinedText.includes("ittechnology") || 
-          combinedText.includes("tech") ||
-          combinedText.includes("it")
+          domainStr.includes("ittechnology") || 
+          domainStr.includes("công nghệ") || 
+          domainStr.includes("thông tin") || 
+          domainStr.includes("tech") ||
+          domainStr.includes("it")
         ) {
           tech++;
         } else if (
-          combinedText.includes("giáo dục") || 
-          combinedText.includes("education") || 
-          combinedText.includes("edu")
+          domainStr.includes("education") || 
+          domainStr.includes("giáo dục") || 
+          domainStr.includes("edu")
         ) {
           edu++;
         } else if (
-          combinedText.includes("hội thoại") || 
-          combinedText.includes("hàng ngày") || 
-          combinedText.includes("dailylife") || 
-          combinedText.includes("life")
+          domainStr.includes("dailylife") || 
+          domainStr.includes("hội thoại") || 
+          domainStr.includes("hàng ngày") || 
+          domainStr.includes("life")
         ) {
           life++;
         } else {
-          // Mặc định tính vào Công nghệ thông tin nếu các nhiệm vụ hiện tại thuộc nhóm đợt CNTT
+          // Mặc định tính vào Công nghệ thông tin nếu không xác định được
           tech++;
         }
       });
