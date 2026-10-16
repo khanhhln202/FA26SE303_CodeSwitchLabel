@@ -9,7 +9,9 @@ import {
   Clock, 
   X,
   AlertTriangle,
-  Upload
+  Upload,
+  FileJson,
+  Loader2
 } from "lucide-react";
 import { toast } from "sonner";
 import Pagination from "../../../components/Pagination/Pagination";
@@ -82,6 +84,7 @@ const cleanLanguageTags = (str) => {
     .trim();
 };
 
+
 const countWords = (text) => {
   if (!text || !text.trim()) return 0;
   const clean = cleanLanguageTags(text);
@@ -152,6 +155,9 @@ export default function AdminTextData() {
   
   const [selectedJsonFile, setSelectedJsonFile] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [fileLoading, setFileLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
 
   const fetchTexts = async () => {
     try {
@@ -191,10 +197,37 @@ export default function AdminTextData() {
     }
   };
 
+  const handleFileSelected = (file) => {
+    if (!file) return;
+    if (!file.name.endsWith(".json")) {
+      toast.error("Vui lòng chọn đúng file định dạng .json!");
+      return;
+    }
+
+    setFileLoading(true);
+    setUploadProgress(0);
+    setSelectedJsonFile(null);
+
+    let current = 0;
+    const interval = setInterval(() => {
+      current += 25;
+      setUploadProgress(current);
+      if (current >= 100) {
+        clearInterval(interval);
+        setTimeout(() => {
+          setSelectedJsonFile(file);
+          setFileLoading(false);
+        }, 150);
+      }
+    }, 60);
+  };
+
   const handleOpenAddModal = () => {
     setEditingItem(null);
     setFormData({ content: "", topic: "Công nghệ thông tin", status: "active" });
     setSelectedJsonFile(null);
+    setFileLoading(false);
+    setUploadProgress(0);
     setShowModal(true);
   };
 
@@ -202,6 +235,8 @@ export default function AdminTextData() {
     setEditingItem(item);
     setFormData({ content: item.content, topic: item.topic, status: item.status });
     setSelectedJsonFile(null);
+    setFileLoading(false);
+    setUploadProgress(0);
     setShowModal(true);
   };
 
@@ -209,52 +244,57 @@ export default function AdminTextData() {
     e.preventDefault();
 
     try {
+      if (!selectedJsonFile) {
+        toast.error("Vui lòng chọn hoặc kéo thả file JSON!");
+        return;
+      }
+
+      setIsSubmitting(true);
+
+      const fileContent = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (event) => resolve(event.target.result);
+        reader.onerror = (error) => reject(error);
+        reader.readAsText(selectedJsonFile, "UTF-8");
+      });
+
+      let parsedData;
+      try {
+        parsedData = JSON.parse(fileContent);
+      } catch (jsonErr) {
+        console.error("Lỗi cú pháp file JSON:", jsonErr);
+        toast.error("File không đúng chuẩn JSON! Vui lòng kiểm tra lại cú pháp.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      const itemsToUpload = Array.isArray(parsedData) ? parsedData : [parsedData];
+
+      if (itemsToUpload.length === 0) {
+        toast.error("File JSON rỗng!");
+        setIsSubmitting(false);
+        return;
+      }
+
+      let successCount = 0;
+      let lastErrorMsg = "";
+
       if (editingItem) {
-        if (!formData.content.trim()) return;
+        // Cập nhật câu văn bản thông qua file JSON đã tải lên
+        const item = itemsToUpload[0];
+        const csContent = item.cs_transcript || item.csContent || item.content || formData.content;
+        const viContent = item.vi_equivalent || item.viContent || csContent;
+
         await adminService.reviewScript(editingItem.id, {
           action: "Edited",
-          editedCsContent: formData.content,
-          editedViContent: formData.content
+          editedCsContent: csContent,
+          editedViContent: viContent
         });
-        toast.success(`Đã cập nhật thành công câu văn bản!`);
+        toast.success(`Đã cập nhật thành công câu văn bản từ file JSON!`);
         setShowModal(false);
         fetchTexts();
       } else {
-        if (!selectedJsonFile) {
-          toast.error("Vui lòng chọn file JSON để thêm mới!");
-          return;
-        }
-
-        setIsSubmitting(true);
-
-        const fileContent = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = (event) => resolve(event.target.result);
-          reader.onerror = (error) => reject(error);
-          reader.readAsText(selectedJsonFile, "UTF-8");
-        });
-
-        let parsedData;
-        try {
-          parsedData = JSON.parse(fileContent);
-        } catch (jsonErr) {
-          console.error("Lỗi cú pháp file JSON:", jsonErr);
-          toast.error("File không đúng chuẩn JSON! Vui lòng kiểm tra lại cú pháp.");
-          setIsSubmitting(false);
-          return;
-        }
-
-        const itemsToUpload = Array.isArray(parsedData) ? parsedData : [parsedData];
-
-        if (itemsToUpload.length === 0) {
-          toast.error("File JSON rỗng!");
-          setIsSubmitting(false);
-          return;
-        }
-
-        let successCount = 0;
-        let lastErrorMsg = "";
-
+        // Thêm mới từ danh sách trong file JSON
         for (const item of itemsToUpload) {
           const csContent = item.cs_transcript || item.csContent || item.content || "";
           const viContent = item.vi_equivalent || item.viContent || csContent;
@@ -287,7 +327,7 @@ export default function AdminTextData() {
       }
     } catch (err) {
       console.error("Lỗi xử lý form:", err);
-      const errorMsg = err.response?.data?.title || "Thao tác cập nhật văn bản thất bại!";
+      const errorMsg = err.response?.data?.title || "Thao tác xử lý file thất bại!";
       toast.error(errorMsg);
     } finally {
       setIsSubmitting(false);
@@ -539,7 +579,7 @@ export default function AdminTextData() {
         </div>
       </div>
 
-      {/* Modal Thêm & Chỉnh Sửa */}
+      {/* Modal Thêm & Chỉnh Sửa Dùng Chung Kéo Thả File JSON */}
       {showModal && (
         <div className="fixed inset-0 bg-[#16171C]/55 backdrop-blur-xs flex items-center justify-center p-4 z-50" onClick={() => setShowModal(false)}>
           <div className="bg-white dark:bg-[#1C1D22] rounded-[24px] w-full max-w-md shadow-[0_20px_50px_rgba(16,17,20,0.25)] overflow-hidden border border-[#E5E2D8] dark:border-gray-800 animate-in fade-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
@@ -558,118 +598,105 @@ export default function AdminTextData() {
                 </button>
               </div>
 
-              {editingItem ? (
-                <>
-                  <div>
-                    <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
-                      Chủ đề
-                    </label>
-                    <input
-                      type="text"
-                      disabled
-                      value={formData.topic}
-                      className="w-full h-11 px-3.5 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-[#F7F5EF] dark:bg-[#25272E]/50 type-body text-[#6E7078] dark:text-gray-400 cursor-not-allowed outline-none select-none font-sans"
-                    />
-                  </div>
+              <div className="space-y-3">
+                <label className="block type-label text-[#2B2C31] dark:text-gray-200">
+                  Kéo thả hoặc chọn file dữ liệu (.json)
+                </label>
+                
+                <div 
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                      handleFileSelected(e.dataTransfer.files[0]);
+                    }
+                  }}
+                  style={{
+                    borderColor: isDragging ? ADMIN_ACCENT : undefined,
+                    backgroundColor: isDragging ? `${ADMIN_ACCENT}0D` : undefined
+                  }}
+                  className="border-2 border-dashed rounded-2xl p-6 text-center transition-all bg-[#F7F5EF]/50 dark:bg-[#25272E]/50 border-[#E5E2D8] dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500"
+                >
+                  <input
+                    type="file"
+                    accept=".json"
+                    id="json-file-input"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        handleFileSelected(e.target.files[0]);
+                      }
+                    }}
+                  />
 
-                  <div>
-                    <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
-                      Nội dung câu mẫu
-                    </label>
-                    <textarea
-                      rows="4"
-                      required
-                      placeholder="Nhập câu mẫu..."
-                      value={formData.content}
-                      onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                      className="w-full p-3.5 bg-white dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-body text-[#16171C] dark:text-white outline-none transition-all resize-none"
-                      onFocus={(e) => {
-                        e.target.style.borderColor = ADMIN_ACCENT;
-                        e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
-                      }}
-                      onBlur={(e) => {
-                        e.target.style.borderColor = '';
-                        e.target.style.boxShadow = 'none';
-                      }}
-                    ></textarea>
-                    <div className="flex justify-between items-center mt-1 type-meta text-[#6E7078] dark:text-gray-400">
-                      <span>Không giới hạn độ dài câu</span>
-                      <span className="font-bold text-[#16171C] dark:text-gray-200">
-                        Số từ: {countWords(formData.content)} từ
+                  {/* Trạng thái 1: Đang nạp/load file */}
+                  {fileLoading ? (
+                    <div className="flex flex-col items-center justify-center space-y-3 py-2">
+                      <Loader2 className="w-8 h-8 animate-spin" style={{ color: ADMIN_ACCENT }} />
+                      <div className="w-full bg-[#E5E2D8] dark:bg-gray-700 h-2 rounded-full overflow-hidden max-w-[200px]">
+                        <div 
+                          className="h-full transition-all duration-100 ease-out"
+                          style={{ width: `${uploadProgress}%`, backgroundColor: ADMIN_ACCENT }}
+                        />
+                      </div>
+                      <span className="type-meta font-medium text-[#6E7078] dark:text-gray-300">
+                        Đang đọc dữ liệu JSON ({uploadProgress}%)...
                       </span>
                     </div>
-                  </div>
-
-                  <div>
-                    <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
-                      Trạng thái
+                  ) : selectedJsonFile ? (
+                    /* Trạng thái 2: Đã nạp xong -> Hiện icon file + Tên file bên dưới */
+                    <label htmlFor="json-file-input" className="cursor-pointer flex flex-col items-center justify-center space-y-2 py-1">
+                      <div 
+                        className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-xs"
+                        style={{ backgroundColor: `${ADMIN_ACCENT}1A`, color: ADMIN_ACCENT }}
+                      >
+                        <FileJson className="w-7 h-7" style={{ color: ADMIN_ACCENT }} />
+                      </div>
+                      <span className="type-body font-bold text-[#16171C] dark:text-gray-100 max-w-[260px] truncate">
+                        {selectedJsonFile.name}
+                      </span>
+                      <span className="type-caption font-medium hover:underline" style={{ color: ADMIN_ACCENT }}>
+                        Bấm để chọn file .json khác
+                      </span>
                     </label>
-                    <select
-                      value={formData.status}
-                      onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                      className="w-full h-11 px-3.5 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] type-body text-[#16171C] dark:text-white outline-none cursor-pointer transition-all font-sans"
-                      onFocus={(e) => {
-                        e.target.style.borderColor = ADMIN_ACCENT;
-                        e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
-                      }}
-                      onBlur={(e) => {
-                        e.target.style.borderColor = '';
-                        e.target.style.boxShadow = 'none';
-                      }}
-                    >
-                      <option value="active" className="bg-white dark:bg-[#25272E]">Sẵn sàng</option>
-                      <option value="pending" className="bg-white dark:bg-[#25272E]">Chờ duyệt</option>
-                    </select>
-                  </div>
-                </>
-              ) : (
-                <div className="space-y-3">
-                  <label className="block type-label text-[#2B2C31] dark:text-gray-200">
-                    Tải lên file dữ liệu (.json)
-                  </label>
-                  <div className="border-2 border-dashed border-[#E5E2D8] dark:border-gray-700 rounded-2xl p-6 text-center hover:border-gray-400 dark:hover:border-gray-500 transition-colors bg-[#F7F5EF]/50 dark:bg-[#25272E]/50">
-                    <input
-                      type="file"
-                      accept=".json"
-                      id="json-file-input"
-                      className="hidden"
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files[0]) {
-                          setSelectedJsonFile(e.target.files[0]);
-                        }
-                      }}
-                    />
+                  ) : (
+                    /* Trạng thái 3: Chưa chọn file -> Mặc định */
                     <label htmlFor="json-file-input" className="cursor-pointer flex flex-col items-center justify-center space-y-2">
                       <div className="w-12 h-12 rounded-full bg-white dark:bg-[#1C1D22] flex items-center justify-center shadow-xs">
                         <Upload className="w-6 h-6 text-[#6E7078] dark:text-gray-300" />
                       </div>
                       <span className="type-body font-medium text-[#16171C] dark:text-gray-200">
-                        {selectedJsonFile ? selectedJsonFile.name : "Nhấp để chọn file JSON"}
-                      </span>
-                      <span className="type-meta text-[#6E7078] dark:text-gray-400">
-                        Chấp nhận file JSON dạng 1 đối tượng hoặc mảng các câu văn bản
+                        Kéo thả file vào đây hoặc nhấp để tải lên
                       </span>
                     </label>
-                  </div>
+                  )}
                 </div>
-              )}
+              </div>
 
               <div className="flex gap-2.5 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || fileLoading}
                   className="flex-1 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 type-button text-[#6E7078] dark:text-gray-300 hover:bg-[#F7F5EF] dark:hover:bg-[#25272E] cursor-pointer transition-colors disabled:opacity-50"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || fileLoading || !selectedJsonFile}
                   style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 10px 24px ${ADMIN_ACCENT}40` }}
                   className="flex-1 py-2.5 text-white rounded-xl type-button hover:opacity-90 active:scale-[0.99] cursor-pointer transition-all disabled:opacity-50"
                 >
-                  {isSubmitting ? "Đang xử lý..." : editingItem ? "Lưu thay đổi" : "Lưu Văn Bản"}
+                  {isSubmitting ? "Đang xử lý..." : editingItem ? "Lưu cập nhật" : "Lưu văn bản"}
                 </button>
               </div>
             </form>
