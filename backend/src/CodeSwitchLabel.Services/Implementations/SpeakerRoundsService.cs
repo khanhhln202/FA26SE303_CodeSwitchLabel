@@ -16,12 +16,15 @@ public class SpeakerRoundsService(
 {
     public async Task<SpeakerRoundDto?> GetCurrentAsync(long speakerId, CancellationToken ct = default)
     {
-        // Đợt đang làm = chiến dịch của task thu âm đang giao cho mình, hạn gần nhất trước.
+        // Đợt đang làm = chiến dịch của task thu âm còn nhận việc, hạn gần nhất trước.
+        // TEAM_016: task đã đủ chỉ tiêu vẫn còn nhận việc nên vẫn nằm trong danh sách,
+        // nhưng xếp SAU các task còn dở để hero không nhảy sang đợt đã xong khi còn việc khác.
         var task = await db.TaskAssignments.AsNoTracking()
             .Where(a => a.UserId == speakerId && a.AssignmentStatus == AssignmentStatus.Active)
             .Where(a => a.Task.TaskType == TaskType.Recording)
-            .Where(a => a.Task.Status == WorkTaskStatus.InProgress)
-            .OrderBy(a => a.Task.Deadline)
+            .Where(a => a.Task.Status != WorkTaskStatus.Cancelled)
+            .OrderBy(a => a.Task.Status == WorkTaskStatus.Completed)
+            .ThenBy(a => a.Task.Deadline)
             .Select(a => a.Task)
             .FirstOrDefaultAsync(ct);
 
@@ -73,17 +76,19 @@ public class SpeakerRoundsService(
             throw new NotFoundException("campaign_not_found", $"Không tìm thấy chiến dịch #{campaignId}.");
         }
 
+        // TEAM_016: xếp hạng theo CÂU ĐÃ NỘP — đếm mọi bản ghi đã qua kiểm tra tự động
+        // (chờ duyệt / đạt / bị từ chối), không chỉ bản được duyệt. Bản trượt QC không tính.
         var rows = await db.Recordings.AsNoTracking()
-            .Where(r => r.Status == RecordingStatus.Approved)
+            .Where(r => r.Status != RecordingStatus.QcFailed)
             .Where(r => r.Task != null && r.Task.CampaignId == campaignId)
             .GroupBy(r => new { r.SpeakerId, r.Speaker.FullName })
-            .Select(g => new { g.Key.SpeakerId, g.Key.FullName, Approved = g.Count() })
-            .OrderByDescending(x => x.Approved)
+            .Select(g => new { g.Key.SpeakerId, g.Key.FullName, Submitted = g.Count() })
+            .OrderByDescending(x => x.Submitted)
             .Take(Math.Clamp(top, 1, 50))
             .ToListAsync(ct);
 
         return [.. rows.Select((x, i) => new LeaderboardEntryDto(
-            i + 1, x.SpeakerId, x.FullName, x.Approved, x.SpeakerId == speakerId))];
+            i + 1, x.SpeakerId, x.FullName, x.Submitted, x.SpeakerId == speakerId))];
     }
 
     public async Task<SpeakerRoundDto> RegisterAsync(

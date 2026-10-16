@@ -14,6 +14,7 @@ namespace CodeSwitchLabel.Api.Controllers;
 public class SpeakerController(
     IScriptAssignmentService assignmentService,
     IScriptService scriptService,
+    IScriptProposalService proposalService,
     ITaskService taskService,
     ISpeakerRoundsService roundsService) : ControllerBase
 {
@@ -61,6 +62,29 @@ public class SpeakerController(
             new { id = created.ScriptId }, created);
     }
 
+    /// <summary>Gửi đề xuất cho một câu đã duyệt: báo lỗi (Report) hoặc kèm bản sửa (Edit).</summary>
+    /// <remarks>
+    /// TEAM_015: đề xuất rơi thẳng vào hàng chờ của Reviewer, **không** đi qua hàng đợi
+    /// `script_queue`. Trong lúc chờ, câu tạm bị rút khỏi hàng đợi ghi âm; Reviewer xử lý
+    /// xong (duyệt hoặc từ chối) thì câu tự quay lại hàng đợi ghi âm.
+    ///
+    /// Chỉ áp dụng cho câu **đã duyệt nội dung** và **chưa có bản ghi âm nào** — sửa nội
+    /// dung của câu đã thu sẽ làm transcript của bản ghi cũ không khớp với âm thanh.
+    /// Mỗi câu tối đa **một đề xuất chờ**.
+    ///
+    /// - `Report`: bắt buộc gửi `errorReasonCode` (lấy từ `GET /api/script-error-reasons`).
+    /// - `Edit`: bắt buộc gửi đủ `proposedCsContent` + `proposedViContent` (sửa là sửa cả
+    ///   cặp); số từ tiếng Anh và quan hệ Anh–Việt phải giữ nguyên như câu gốc.
+    /// </remarks>
+    [HttpPost("scripts/{scriptId}/proposals")]
+    [ProducesResponseType(typeof(ProposalCreatedDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ActionResult<ProposalCreatedDto>> CreateProposal(
+        string scriptId, [FromBody] CreateProposalRequest request, CancellationToken ct)
+        => Ok(await proposalService.CreateAsync(scriptId, User.GetUserId(), request, ct));
+
     /// <summary>Tiến độ thu âm của chính mình.</summary>
     /// <remarks>
     /// Tổng số bản đã nộp, số bản được duyệt đạt, và từng task thu âm đang giao. Mỗi task có
@@ -90,7 +114,7 @@ public class SpeakerController(
     public async Task<ActionResult<IEnumerable<UpcomingRoundDto>>> UpcomingRounds(CancellationToken ct)
         => Ok(await roundsService.GetUpcomingAsync(User.GetUserId(), ct));
 
-    /// <summary>Bảng xếp hạng của một đợt, xếp theo số bản được duyệt.</summary>
+    /// <summary>Bảng xếp hạng của một đợt, xếp theo số bản đã nộp (không tính bản trượt kiểm tra tự động).</summary>
     [HttpGet("rounds/{campaignId:long}/leaderboard")]
     [ProducesResponseType(typeof(IEnumerable<LeaderboardEntryDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]

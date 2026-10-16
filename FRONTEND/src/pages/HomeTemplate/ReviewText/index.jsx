@@ -137,7 +137,7 @@ export default function ReviewText() {
 
   const openEditModal = async () => {
     setEditCs(sentence.csContent);
-    setEditVi(sentence.veContent);
+    setEditVi(sentence.viContent);
     setEditPairs([]);
     setShowEditModal(true);
     // Nghĩa của từ tiếng Anh (alignment) không có trong câu tiếp theo -> lấy từ chi tiết cặp câu
@@ -158,7 +158,7 @@ export default function ReviewText() {
         scriptId: sentence.scriptId,
         action: "Edited",
         editedCsContent: editCs.trim(),
-        editedVeContent: editVi.trim(),
+        editedViContent: editVi.trim(),
         editedAlignment: editPairs.map(({ source, target }) => ({
           source: source.trim(),
           source_lang: "en",
@@ -385,7 +385,7 @@ export default function ReviewText() {
                 className="text-headline font-label sm:type-reading max-w-[600px] mx-auto min-h-14 sm:min-h-20 flex items-center justify-center"
                 style={{ color: TEXT_HEADING, textWrap: "pretty" }}
               >
-                {sentence.vePlain}
+                {sentence.viPlain}
               </p>
             </div>
           </div>

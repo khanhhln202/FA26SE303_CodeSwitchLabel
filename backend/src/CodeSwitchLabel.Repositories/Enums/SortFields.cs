@@ -67,6 +67,9 @@ public enum CampaignSortField { CampaignId, StartDate, EndDate, Status, CreatedA
 /// <summary>Bộ dữ liệu: GET /api/datasets.</summary>
 public enum DatasetSortField { DatasetId, CreatedAt, Status, DatasetName, RecordingCount }
 
+/// <summary>TEAM_015 — hàng chờ đề xuất: GET /api/reviewer/proposals.</summary>
+public enum ProposalSortField { ProposalId, CreatedAt, Kind, ScriptId }
+
 /// <summary>Lô nhập: GET /api/scripts/import/batches.</summary>
 public enum ImportBatchSortField { BatchId, CreatedAt, FileName, ScriptCount }
 

@@ -20,6 +20,9 @@ namespace CodeSwitchLabel.Services.WorkTasks;
 /// Nhánh "chưa đạt chỉ tiêu" cũng tự mở lại được: bản ghi bị từ chối làm chỉ tiêu tụt,
 /// task rơi về InProgress và người nhận phải thu bù (yêu cầu 4.2).
 ///
+/// TEAM_016: Completed KHÔNG khoá công việc — người nhận còn lượt giao Active thì thu/duyệt
+/// tiếp được và số vượt chỉ tiêu vẫn ghi nhận; chỉ Cancelled mới chặn. KPI để đo, không để khoá.
+///
 /// Lưu ý: trạng thái Task Manager bấm tay KHÔNG bị nhánh này ghi đè ngay lập tức —
 /// nó được giữ tới khi có việc thật xảy ra. Xem `TaskService.UpdateAsync`.
 /// </summary>
@@ -33,7 +36,11 @@ public static class TaskStateMachine
         return WorkTaskStatus.InProgress;
     }
 
-    /// <summary>Chỉ trạng thái này mới nhận bản ghi hay lượt duyệt tính vào task.</summary>
+    /// <summary>
+    /// Dùng cho cờ "quá hạn": chỉ task CHƯA đạt chỉ tiêu mới bị coi là đang làm dở quá hạn.
+    /// Việc nhận thêm bản ghi/lượt duyệt thì rộng hơn — task Completed vẫn nhận, chỉ
+    /// Cancelled mới chặn (các truy vấn trong repository, TEAM_016).
+    /// </summary>
     public static bool AcceptsWork(WorkTaskStatus status) => status == WorkTaskStatus.InProgress;
 
     /// <summary>

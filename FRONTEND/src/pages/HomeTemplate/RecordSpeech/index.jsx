@@ -322,7 +322,7 @@ export default function RecordSpeech() {
       <SentenceCard
         id="vi"
         label="Câu tiếng Việt"
-        contentNode={sentence.vePlain}
+        contentNode={sentence.viPlain}
         recordingCardId={recordingCardId}
         setRecordingCardId={setRecordingCardId}
         onRecordedChange={onRecordedChange}
@@ -356,7 +356,7 @@ export default function RecordSpeech() {
               state: {
                 scriptId: sentence.scriptId,
                 csContent: sentence.csContent,
-                vePlain: sentence.vePlain,
+                viPlain: sentence.viPlain,
                 remainingVariants: sentence.remainingVariants, // bản backend còn thiếu - chỉ nộp những bản này
                 recordings, // { cs: { url, blob }, vi: { url, blob } } - Blob giữ được qua state của router
               },

@@ -20,10 +20,10 @@ internal static class ScriptMapper
     public static ScriptDetailDto ToDetail(this Script s) =>
         new(s.ScriptId,
             s.CsContent,
-            SafeStrip(s.CsContent),
+            ScriptPairRules.SafeStrip(s.CsContent),
             s.ViContent,
-            SafeStrip(s.ViContent),
-            ScriptService.ToAlignment(s.Words),
+            ScriptPairRules.SafeStrip(s.ViContent),
+            ScriptPairRules.ToAlignment(s.Words),
             s.Status,
             s.Domain,
             s.WordCount,
@@ -35,13 +35,6 @@ internal static class ScriptMapper
             [.. s.Reviews.Select(r => new ScriptReviewDto(
                 r.ScriptReviewId, r.UserId, r.Action, r.ErrorReason?.ReasonCode,
                 r.EditedCsContent, r.EditedViContent, r.Comment, r.ReviewedAt))]);
-
-    /// <summary>Dữ liệu cũ hoặc dữ liệu ghi thẳng bằng SQL có thể thiếu nhãn — không vì thế mà vỡ API.</summary>
-    private static string SafeStrip(string content)
-    {
-        try { return CodeSwitchText.Strip(content); }
-        catch (FormatException) { return content; }
-    }
 }
 
 public class ScriptService(
@@ -174,9 +167,9 @@ public class ScriptService(
                 }
 
                 var domain = ParseDomain(item.Domain);
-                var (wordCount, enWordCount) = ValidatePair(cs, ve);
-                var words = BuildWords(item.Alignment ?? [], enWordCount);
-                var relation = RelationOf(words);
+                var (wordCount, enWordCount) = ScriptPairRules.ValidatePair(cs, ve);
+                var words = ScriptPairRules.BuildWords(item.Alignment ?? [], enWordCount);
+                var relation = ScriptPairRules.RelationOf(words);
                 var scriptId = await repository.GenerateIdAsync(enWordCount, domain, relation, ct);
                 var now = clock.GetUtcNow();
 
@@ -388,11 +381,13 @@ public class ScriptService(
                 (editedCs, editedVe) = RequireEditedPair(request);
                 review.EditedCsContent = editedCs;
                 review.EditedViContent = editedVe;
-                edit = await ValidateEditAsync(script, request, editedCs, editedVe, ct);
+                edit = await ScriptPairRules.ValidateEditContentAsync(
+                    repository, script, editedCs, editedVe, request.EditedAlignment, ct);
                 break;
 
             case ScriptReviewAction.Rejected:
-                review.ErrorReasonId = await ResolveErrorReasonIdAsync(request.ErrorReasonCode, ct);
+                review.ErrorReasonId = await reasonRepository.ResolveActiveReasonIdAsync(
+                    request.ErrorReasonCode, "Từ chối cặp câu thì bắt buộc nêu lý do.", ct);
                 script.Status = ScriptStatus.Rejected;
                 break;
         }
@@ -403,7 +398,7 @@ public class ScriptService(
         // khi EnsureDomainQualified ném lỗi.
         if (action is ScriptReviewAction.Accepted or ScriptReviewAction.Edited)
         {
-            await EnsureDomainQualifiedAsync(userId, script.Domain, ct);
+            await domainRepository.EnsureDomainQualifiedAsync(userId, script.Domain, ct);
         }
 
         // LƯU LẦN 1 — chỉ có lệnh INSERT của script_review, KHÔNG đụng vào bảng script.
@@ -421,7 +416,7 @@ public class ScriptService(
         // LƯU LẦN 2 — sửa câu và chốt trạng thái, lúc này lượt duyệt đã nằm trong database.
         if (edit is not null)
         {
-            ApplyEdit(script, editedCs!, editedVe!, edit);
+            ScriptPairRules.ApplyEdit(repository, script, editedCs!, editedVe!, edit);
         }
 
         if (action is ScriptReviewAction.Accepted or ScriptReviewAction.Edited)
@@ -465,9 +460,9 @@ public class ScriptService(
         CreateScriptRequest request, long userId, ScriptStatus status, long? batchId, CancellationToken ct)
     {
         var cs = request.CsContent.Trim();
-        var ve = request.VeContent.Trim();
+        var ve = request.ViContent.Trim();
 
-        var (wordCount, enWordCount) = ValidatePair(cs, ve);
+        var (wordCount, enWordCount) = ScriptPairRules.ValidatePair(cs, ve);
 
         if (await repository.ContentExistsAsync(cs, ct))
         {
@@ -478,11 +473,11 @@ public class ScriptService(
 
         // Mỗi từ tiếng Anh phải có ĐÚNG một dòng script_word, nếu không trigger defer
         // trg_script_word_consistency sẽ chặn lúc COMMIT — nên alignment phải phủ đủ số từ.
-        var words = BuildWords(request.Alignment, enWordCount);
+        var words = ScriptPairRules.BuildWords(request.Alignment, enWordCount);
 
         // Chữ số thứ ba của mã lấy từ chính các dòng script_word, không tin giá trị client gửi:
         // mã và bảng script_word phải luôn khớp nhau.
-        var relation = RelationOf(words);
+        var relation = ScriptPairRules.RelationOf(words);
 
         // Mã do database sinh: số thứ tự nằm trong sequence, và ba chữ số đầu phải khớp
         // với en_word_count, chủ đề và quan hệ, nếu không ràng buộc sẽ từ chối.
@@ -512,7 +507,7 @@ public class ScriptService(
 
         if (autoValidate)
         {
-            await EnsureDomainQualifiedAsync(userId, domain, ct);
+            await domainRepository.EnsureDomainQualifiedAsync(userId, domain, ct);
         }
 
         repository.Add(script);
@@ -538,47 +533,10 @@ public class ScriptService(
         return (await repository.GetWithReviewsAsync(scriptId, ct))!.ToDetail();
     }
 
-    /// <summary>
-    /// Kiểm tra một cặp câu. Trả về tổng số từ của câu chen tiếng Anh và số từ tiếng Anh trong đó.
-    /// </summary>
-    private static (int WordCount, int EnWordCount) ValidatePair(string cs, string ve)
-    {
-        int wordCount, enWordCount, veEnglish;
-
-        try
-        {
-            wordCount = CodeSwitchText.CountWords(cs);
-            enWordCount = CodeSwitchText.CountEnglishWords(cs);
-            veEnglish = CodeSwitchText.CountEnglishWords(ve);
-        }
-        catch (FormatException ex)
-        {
-            throw new UnprocessableException("invalid_language_tags", $"Nhãn ngôn ngữ sai: {ex.Message}");
-        }
-
-        // Chữ số đầu của script_id chính là số từ tiếng Anh, nên chỉ chứa được một chữ số.
-        if (enWordCount is < 1 or > 9)
-        {
-            throw new UnprocessableException(
-                "en_word_count_out_of_range",
-                $"Câu phải có từ 1 đến 9 từ tiếng Anh, hiện có {enWordCount}. " +
-                "Con số này nằm trong mã script nên không thể lớn hơn một chữ số.");
-        }
-
-        if (veEnglish > 0)
-        {
-            throw new UnprocessableException(
-                "ve_not_pure_vietnamese",
-                $"Câu tương đương phải thuần Việt, nhưng đang có {veEnglish} từ gắn nhãn [en].");
-        }
-
-        return (wordCount, enWordCount);
-    }
-
     private static (string Cs, string Ve) RequireEditedPair(ReviewScriptRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.EditedCsContent) ||
-            string.IsNullOrWhiteSpace(request.EditedVeContent))
+            string.IsNullOrWhiteSpace(request.EditedViContent))
         {
             throw new UnprocessableException(
                 "edited_pair_required",
@@ -586,91 +544,7 @@ public class ScriptService(
                 "lược đồ chỉ chấp nhận sửa theo cặp.");
         }
 
-        return (request.EditedCsContent.Trim(), request.EditedVeContent.Trim());
-    }
-
-    /// <summary>
-    /// Kiểm tra bản sửa trước khi lượt duyệt được ghi, và tính sẵn những thứ
-    /// <see cref="ApplyEdit"/> cần để không phải đếm lại lần nữa.
-    /// Tách khỏi ApplyEdit vì ReviewCoreAsync phải chạy hết kiểm tra này TRƯỚC lần lưu
-    /// đầu tiên — nếu không, một bản sửa sai sẽ để lại lượt duyệt mồ côi rồi mới ném lỗi.
-    /// </summary>
-    private async Task<EditPlan> ValidateEditAsync(
-        Script script, ReviewScriptRequest request, string cs, string ve, CancellationToken ct)
-    {
-        if (await repository.HasRecordingsAsync(script.ScriptId, ct))
-        {
-            throw new ConflictException(
-                "script_already_recorded",
-                $"Cặp câu {script.ScriptId} đã có bản ghi âm nên không sửa nội dung được. " +
-                "Sửa sẽ làm transcript của bản ghi cũ không còn khớp với âm thanh.");
-        }
-
-        var (wordCount, enWordCount) = ValidatePair(cs, ve);
-
-        if (enWordCount != script.EnWordCount)
-        {
-            throw new UnprocessableException(
-                "en_word_count_locked",
-                $"Bản sửa có {enWordCount} từ tiếng Anh, khác {script.EnWordCount} từ ghi trong mã {script.ScriptId}. " +
-                "Muốn đổi số từ tiếng Anh thì phải tạo cặp câu mới.");
-        }
-
-        // Sửa cả alignment thì thay cả bộ dòng script_word của câu. Số từ tiếng Anh phải giữ nguyên,
-        // và quan hệ Anh–Việt cũng không đổi được vì nó là chữ số trong mã câu.
-        List<ScriptWord>? words = null;
-
-        if (request.EditedAlignment is { Count: > 0 } edited)
-        {
-            words = BuildWords(edited, enWordCount);
-
-            if (RelationOf(words) != RelationDigitOf(script.ScriptId))
-            {
-                throw new UnprocessableException(
-                    "relation_locked",
-                    $"Bản sửa đổi quan hệ Anh–Việt, nhưng quan hệ đã nằm trong mã {script.ScriptId} nên không đổi được.");
-            }
-        }
-
-        return new EditPlan(wordCount, words);
-    }
-
-    /// <summary>
-    /// Ghi nội dung mới đè lên cặp câu. Lược đồ không lưu phiên bản cũ, nên chỉ cho sửa khi
-    /// chưa có bản ghi âm nào. Số từ tiếng Anh cũng không được đổi: nó nằm trong mã script.
-    /// </summary>
-    private void ApplyEdit(Script script, string cs, string ve, EditPlan plan)
-    {
-        if (plan.Words is not null)
-        {
-            repository.RemoveWords(script.Words);
-            foreach (var word in plan.Words) word.ScriptId = script.ScriptId;
-            repository.AddWords(plan.Words);
-        }
-
-        script.CsContent = cs;
-        script.ViContent = ve;
-        script.WordCount = plan.WordCount;
-    }
-
-    private async Task<short> ResolveErrorReasonIdAsync(string? code, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(code))
-        {
-            throw new UnprocessableException("error_reason_required", "Từ chối cặp câu thì bắt buộc nêu lý do.");
-        }
-
-        var reason = await reasonRepository.GetScriptErrorReasonByCodeAsync(code, ct)
-                     ?? throw new UnprocessableException(
-                         "error_reason_unknown", $"Không có lý do nào mang mã \"{code}\".");
-
-        if (!reason.IsActive)
-        {
-            throw new UnprocessableException(
-                "error_reason_inactive", $"Lý do \"{code}\" đã bị ẩn, không dùng được nữa.");
-        }
-
-        return reason.ReasonId;
+        return (request.EditedCsContent.Trim(), request.EditedViContent.Trim());
     }
 
     private static async Task<List<ImportScriptItem>> ReadItemsAsync(Stream file, int cap, CancellationToken ct)
@@ -759,96 +633,4 @@ public class ScriptService(
                 $"Chủ đề \"{value}\" không thuộc ba chủ đề của hệ thống: IT/Technology, Education, Daily Life.")
         };
     }
-
-    /// <summary>Có một từ là danh từ riêng thì cả câu mang mã quan hệ 2 (ProperNoun).</summary>
-    private static ScriptRelation RelationOf(List<ScriptWord> words) =>
-        words.Any(w => w.Relation == ScriptWordRelation.ProperNoun)
-            ? ScriptRelation.ProperNoun
-            : ScriptRelation.DirectTranslation;
-
-    /// <summary>
-    /// Quan hệ ghi trong mã câu: chữ số thứ ba (vị trí 5) là 2 khi câu có danh từ riêng.
-    /// </summary>
-    private static ScriptRelation RelationDigitOf(string scriptId) =>
-        scriptId.Length >= 5 && scriptId[4] == '2'
-            ? ScriptRelation.ProperNoun
-            : ScriptRelation.DirectTranslation;
-
-    /// <summary>
-    /// Đổi alignment thành các dòng script_word — đúng một dòng cho mỗi từ tiếng Anh.
-    /// Thiếu hay thừa dòng đều bị từ chối vì trigger defer của database buộc số dòng khớp en_word_count.
-    /// </summary>
-    private static List<ScriptWord> BuildWords(List<AlignmentItem> alignment, int enWordCount)
-    {
-        if (alignment.Count != enWordCount)
-        {
-            throw new UnprocessableException(
-                "alignment_incomplete",
-                $"Câu có {enWordCount} từ tiếng Anh nhưng alignment có {alignment.Count} mục. " +
-                "Mỗi từ tiếng Anh phải có đúng một mục alignment từ [en] sang nghĩa tiếng Việt.");
-        }
-
-        var words = new List<ScriptWord>(alignment.Count);
-
-        for (var i = 0; i < alignment.Count; i++)
-        {
-            var item = alignment[i];
-            var en = (item.Source ?? string.Empty).Trim();
-
-            if (en.Length == 0)
-            {
-                throw new UnprocessableException(
-                    "alignment_word_missing", $"Mục alignment thứ {i + 1} thiếu từ tiếng Anh.");
-            }
-
-            var isProper = (item.Relation ?? string.Empty).Contains("proper", StringComparison.OrdinalIgnoreCase);
-
-            // Danh từ riêng giữ nguyên, không dịch: lược đồ bắt buộc vi_word = en_word.
-            var vi = isProper ? en : (item.Target ?? string.Empty).Trim();
-
-            if (vi.Length == 0)
-            {
-                throw new UnprocessableException(
-                    "alignment_word_missing", $"Mục alignment thứ {i + 1} thiếu nghĩa tiếng Việt.");
-            }
-
-            words.Add(new ScriptWord
-            {
-                WordPosition = (short)(i + 1),
-                EnWord = en,
-                ViWord = vi,
-                Relation = isProper ? ScriptWordRelation.ProperNoun : ScriptWordRelation.SemanticEquivalent
-            });
-        }
-
-        return words;
-    }
-
-    /// <summary>Đổi các dòng script_word thành alignment trả cho client, đúng thứ tự vị trí.</summary>
-    internal static IReadOnlyList<AlignmentItem> ToAlignment(IEnumerable<ScriptWord> words) =>
-        [.. words
-            .OrderBy(w => w.WordPosition)
-            .Select(w => new AlignmentItem
-            {
-                Source = w.EnWord,
-                Target = w.ViWord,
-                Relation = SnakeCaseNaming.ToSnakeCase(w.Relation.ToString())
-            })];
-
-    /// <summary>
-    /// Cặp câu chỉ được chuyển sang đã duyệt khi người duyệt có đúng chủ đề. Kiểm ở đây để trả
-    /// thông báo rõ ràng, thay vì để trigger trg_script_validated_domain ném lỗi thô từ database.
-    /// </summary>
-    private async Task EnsureDomainQualifiedAsync(long userId, ScriptDomain domain, CancellationToken ct)
-    {
-        if (await domainRepository.IsQualifiedAsync(userId, domain, ct)) return;
-
-        throw new UnprocessableException(
-            "reviewer_domain_required",
-            $"Chỉ người được phân đúng chủ đề {domain} mới duyệt được cặp câu này sang trạng thái đã duyệt. " +
-            "Nhờ Admin phân chủ đề cho Reviewer trước (PUT /api/users/{id}/domains).");
-    }
 }
-
-/// <summary>Kết quả kiểm tra bản sửa, tính một lần rồi đưa sang <c>ApplyEdit</c> dùng lại.</summary>
-internal record EditPlan(int WordCount, List<ScriptWord>? Words);

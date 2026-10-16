@@ -85,7 +85,7 @@ export default function AdminRecordings() {
           rawId: r.recordingId || r.id || "",
           textId: r.scriptId || r.textId || "N/A",
           content: r.csContent || r.scriptText || r.content || "",
-          contentVietnamese: r.veContent || r.contentVietnamese || "",
+          contentVietnamese: r.viContent || r.contentVietnamese || "",
           topic: r.domain || r.topic || "Công nghệ thông tin",
           speaker: userMap[r.speakerId] || (r.speakerId ? `User #${r.speakerId}` : "Chưa xác định"),
           reviewers: Array.isArray(r.reviewers) ? r.reviewers : [],
@@ -117,7 +117,7 @@ export default function AdminRecordings() {
       setSelectedTextContent({
         ...recording,
         content: detail.csContent || recording.content,
-        contentVietnamese: detail.veContent || recording.contentVietnamese
+        contentVietnamese: detail.viContent || recording.contentVietnamese
       });
     } catch (err) {
       console.error("Lỗi lấy chi tiết câu:", err);

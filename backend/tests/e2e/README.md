@@ -1,6 +1,6 @@
 # Kiểm thử đầu–cuối bằng API thật
 
-Bốn kịch bản gọi thẳng API đang chạy, không giả lập gì cả: mỗi bước gửi một request thật, so mã HTTP và
+Năm kịch bản gọi thẳng API đang chạy, không giả lập gì cả: mỗi bước gửi một request thật, so mã HTTP và
 các trường trong kết quả với kỳ vọng, rồi in PASS/FAIL. Dùng để kiểm tra nhanh sau khi sửa code, và làm
 bằng chứng kiểm thử khi viết báo cáo.
 
@@ -13,6 +13,7 @@ kịch bản này cần cả hệ thống đang chạy.
 | `02-users.e2e.mjs` | Quản lý người dùng: mật khẩu tạm, đổi mật khẩu, khoá và đổi vai có hiệu lực ngay | 47 |
 | `03-demo-scenario.e2e.mjs` | Đúng kịch bản trong `docs/demo-test-api.html`, kèm câu truy vấn kiểm tra dữ liệu đã lưu và các trường hợp file lỗi | 53 |
 | `04-import-task-record.e2e.mjs` | Kịch bản trình bày: nhập câu → duyệt → phân task → ghi âm. Tự tạo dữ liệu riêng nên **chạy lại bao nhiêu lần cũng được** | 12 |
+| `05-proposals.e2e.mjs` | Đề xuất câu: Speaker báo lỗi / đề xuất sửa → hàng chờ Reviewer → chốt xong câu quay lại hàng đợi ghi âm. Cũng tự tạo dữ liệu riêng | 15 |
 
 Số bước là con số **in ra ở lần chạy gần nhất**, nên lệch khi kịch bản được thêm bước mới — lấy lại từ
 dòng cuối mà script in (`83/83 bước đúng kỳ vọng`) hoặc từ `last-run.json`. Không phải hợp đồng: script
@@ -36,7 +37,7 @@ tự đếm, chạy xong thấy `KẾT QUẢ: x/y bước đúng` là biết.
   docker compose --profile api down -v && docker compose --profile api up -d
   ```
 
-  Riêng `04-import-task-record.e2e.mjs` không cần xoá: nó tự sinh câu, chiến dịch và task riêng.
+  Riêng `04-import-task-record.e2e.mjs` và `05-proposals.e2e.mjs` không cần xoá: chúng tự sinh câu, chiến dịch và task riêng.
 
 - Riêng `03-demo-scenario.e2e.mjs` còn cần **ffmpeg** trên máy (để `ffprobe` kiểm tra file đã chuyển
   sang WAV 16 kHz mono) và quyền chạy `docker` (để thử tắt bật lại hệ thống ở phần cuối).
@@ -74,6 +75,7 @@ Nằm trong thư mục `demo/` ở gốc repo, script tự tìm theo đường d
 
 - `input_text_demo.json` — 7 câu theo định dạng `input_text.json`, trong đó 3 câu cố ý sai (kịch bản 03).
 - `demo-live-import.json` — file câu riêng cho kịch bản 04, không chứa lỗi cố ý.
+- `demo-proposals-import.json` — file câu riêng cho kịch bản 05, sinh lại mỗi lần chạy.
 - `giong-4s.m4a`, `giong-3s.wav`, `qua-ngan.wav` — file âm thanh đạt và không đạt kiểm tra thời lượng.
 - `test-them/` — các trường hợp lỗi: JSON sai cú pháp, mảng rỗng, file văn bản, file âm thanh rỗng,
   file giả đặt đuôi `.m4a`, bản ghi dài 35 giây.

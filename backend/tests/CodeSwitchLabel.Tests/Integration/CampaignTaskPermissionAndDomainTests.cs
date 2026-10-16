@@ -275,7 +275,7 @@ public sealed class CampaignTaskPermissionAndDomainTests(DatabaseFixture fixture
         var scriptRes = await PostAsync("/api/scripts", new
         {
             csContent = "[vi]Tôi cần [en]meeting [vi]gấp nha",
-            veContent = "[vi]Tôi cần cuộc họp gấp nha",
+            viContent = "[vi]Tôi cần cuộc họp gấp nha",
             domain = "ItTechnology",
             alignment = new[]
             {

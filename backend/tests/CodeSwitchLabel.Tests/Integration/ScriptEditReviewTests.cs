@@ -40,7 +40,7 @@ public sealed class ScriptEditReviewTests : IntegrationTestBase
         {
             Action = ScriptReviewAction.Edited,
             EditedCsContent = "[vi]Em nên [en]scan [vi]tài liệu mới rồi gửi qua [en]email [vi]cho tôi.",
-            EditedVeContent = "[vi]Em nên quét tài liệu mới rồi gửi qua thư điện tử cho tôi.",
+            EditedViContent = "[vi]Em nên quét tài liệu mới rồi gửi qua thư điện tử cho tôi.",
             Comment = "Thêm 'mới' cho rõ"
         }, TestContext.Current.CancellationToken);
 
@@ -76,7 +76,7 @@ public sealed class ScriptEditReviewTests : IntegrationTestBase
             {
                 Action = ScriptReviewAction.Edited,
                 EditedCsContent = "[vi]Em nên [en]scan [vi]tài liệu này nhé.",
-                EditedVeContent = "[vi]Em nên quét tài liệu này nhé.",
+                EditedViContent = "[vi]Em nên quét tài liệu này nhé.",
                 Comment = "Cố tình sai số từ tiếng Anh"
             }, TestContext.Current.CancellationToken));
 

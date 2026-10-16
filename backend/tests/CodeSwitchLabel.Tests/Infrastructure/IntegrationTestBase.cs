@@ -52,6 +52,10 @@ public abstract class IntegrationTestBase : IAsyncLifetime
     protected readonly IAuthService Auth;
     protected readonly IUserService UserService;
     protected readonly IScriptService ScriptService;
+
+    /// <summary>TEAM_015: hàng chờ đề xuất câu của Reviewer.</summary>
+    protected readonly IScriptProposalService ProposalService;
+
     protected readonly IScriptAssignmentService ScriptAssignmentService;
     protected readonly IRecordingService RecordingService;
     protected readonly IReviewService ReviewService;
@@ -89,6 +93,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         Auth = Services.GetRequiredService<IAuthService>();
         UserService = Services.GetRequiredService<IUserService>();
         ScriptService = Services.GetRequiredService<IScriptService>();
+        ProposalService = Services.GetRequiredService<IScriptProposalService>();
         ScriptAssignmentService = Services.GetRequiredService<IScriptAssignmentService>();
         RecordingService = Services.GetRequiredService<IRecordingService>();
         ReviewService = Services.GetRequiredService<IReviewService>();

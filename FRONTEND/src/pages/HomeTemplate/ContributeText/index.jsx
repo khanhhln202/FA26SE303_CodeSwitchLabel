@@ -156,7 +156,7 @@ export default function ContributeText() {
     if (!allValid || isSubmitting) return;
     contributeScript({
       csContent: csTranscript.trim(),
-      veContent: viEquivalent.trim(),
+      viContent: viEquivalent.trim(),
       domain: category,
       relation: 'DirectTranslation',
       alignment: activePairs.map((p) => ({

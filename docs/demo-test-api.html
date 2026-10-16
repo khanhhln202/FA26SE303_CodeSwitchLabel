@@ -329,11 +329,11 @@ body.short .act.extra{display:none}
  s_131000010 | pending_validation | daily_life    |             1 |               1
  s_211000007 | pending_validation | it_technology |             2 |               1
 (4 rows)`, n: 'Đúng 4 câu, đều thuộc lô 1. Ba câu sai trong file không có dòng nào.' },
-      { k: 'SQL', c: "select script_id, cs_content, ve_content, alignment from script where script_id = 's_211000007' \\gx", o:
+      { k: 'SQL', c: "select script_id, cs_content, vi_content, alignment from script where script_id = 's_211000007' \\gx", o:
 `-[ RECORD 1 ]---------------------------------------------------------
 script_id  | s_211000007
 cs_content | [vi]Em nên [en]scan [vi]tài liệu này rồi gửi qua [en]email [vi]cho tôi.
-ve_content | [vi]Em nên quét tài liệu này rồi gửi qua thư điện tử cho tôi.
+vi_content | [vi]Em nên quét tài liệu này rồi gửi qua thư điện tử cho tôi.
 alignment  | [{"source": "scan", "target": "quét", "relation": "semantic_equivalent", …}, {"source": "email", "target": "thư điện tử", …}]`, n: 'Kết thúc bằng <code>\\gx</code> thay cho dấu chấm phẩy để xem dạng dọc. Nhãn <code>[vi]</code>/<code>[en]</code> và alignment được lưu nguyên như trong file của cô.' }
     ],
     scriptReview: [
@@ -511,9 +511,9 @@ released_datasets     | 0`, n: 'Số trên API lấy thẳng từ view này, nê
       ['3.2', 0, 'speaker1', 'POST', '/api/scripts/s_131000010/review', { action: 'Rejected' }, 422, '<code>error_reason_required</code>: từ chối câu thì phải nêu lý do.'],
       ['3.3', 1, 'speaker1', 'POST', '/api/scripts/s_131000010/review', { action: 'Rejected', errorReasonCode: 'unnatural', comment: 'Người Việt không chêm "very" vào giữa câu như vậy' }, 200, '<code>status = "Rejected"</code>: câu “Tôi very thích ăn phở” chêm tiếng Anh không tự nhiên, bị loại khỏi kho.'],
       ['3.3b', 1, 'speaker1', 'POST', '/api/scripts/s_211000007/review', { action: 'Accepted', comment: 'Câu này ổn' }, 422, '<code>reviewer_domain_required</code>: người đọc góp ý được, nhưng <b>đưa câu sang trạng thái đã duyệt thì phải là người duyệt được phân đúng chủ đề</b>. Admin phân chủ đề bằng <code>PUT /api/users/{id}/domains</code>; dữ liệu mẫu đã phân sẵn cả ba chủ đề cho ba tài khoản Reviewer.'],
-      ['3.4', 1, 'reviewer', 'POST', '/api/scripts/s_121000008/review', { action: 'Edited', editedCsContent: '[vi]Cô vừa đăng [en]quiz [vi]mới lên hệ thống, cả lớp làm trước tối nay nhé.', editedVeContent: '[vi]Cô vừa đăng bài kiểm tra ngắn mới lên hệ thống, cả lớp làm trước tối nay nhé.', comment: 'Thêm "lên hệ thống" cho rõ nghĩa' }, 200, '<code>Validated</code>. Sửa là sửa cả cặp; số từ tiếng Anh phải giữ nguyên vì con số đó nằm trong mã câu.'],
+      ['3.4', 1, 'reviewer', 'POST', '/api/scripts/s_121000008/review', { action: 'Edited', editedCsContent: '[vi]Cô vừa đăng [en]quiz [vi]mới lên hệ thống, cả lớp làm trước tối nay nhé.', editedViContent: '[vi]Cô vừa đăng bài kiểm tra ngắn mới lên hệ thống, cả lớp làm trước tối nay nhé.', comment: 'Thêm "lên hệ thống" cho rõ nghĩa' }, 200, '<code>Validated</code>. Sửa là sửa cả cặp; số từ tiếng Anh phải giữ nguyên vì con số đó nằm trong mã câu.'],
       ['3.5', 1, 'reviewer', 'POST', '/api/scripts/s_211000007/review', { action: 'Accepted', comment: 'Câu tự nhiên, đúng kiểu nói hằng ngày' }, 200, '<code>Validated</code>, sẵn sàng để thu.'],
-      ['3.6', 0, 'speaker1', 'POST', '/api/speaker/scripts/contribute', { csContent: '[vi]Tối nay mình phải [en]fix bug [vi]gấp cho khách.', veContent: '[vi]Tối nay mình phải sửa lỗi gấp cho khách.', domain: 'ItTechnology', alignment: [{ source: 'fix', source_lang: 'en', target: 'sửa', target_lang: 'vi', relation: 'semantic_equivalent' }, { source: 'bug', source_lang: 'en', target: 'lỗi', target_lang: 'vi', relation: 'semantic_equivalent' }] }, 201, 'Contribute Text: câu mới <code>s_211000011</code>, “fix bug” tính là 2 từ tiếng Anh, trạng thái <code>PendingValidation</code>.', V.scriptReview]
+      ['3.6', 0, 'speaker1', 'POST', '/api/speaker/scripts/contribute', { csContent: '[vi]Tối nay mình phải [en]fix bug [vi]gấp cho khách.', viContent: '[vi]Tối nay mình phải sửa lỗi gấp cho khách.', domain: 'ItTechnology', alignment: [{ source: 'fix', source_lang: 'en', target: 'sửa', target_lang: 'vi', relation: 'semantic_equivalent' }, { source: 'bug', source_lang: 'en', target: 'lỗi', target_lang: 'vi', relation: 'semantic_equivalent' }] }, 201, 'Contribute Text: câu mới <code>s_211000011</code>, “fix bug” tính là 2 từ tiếng Anh, trạng thái <code>PendingValidation</code>.', V.scriptReview]
     ]},
     { t: 'Màn 4 · Chiến dịch và giao việc', g: 'Campaigns · Tasks · Users', time: '4 phút', steps: [
       ['4.0a', 1, 'admin', 'POST', '/api/campaigns', { campaignName: 'Đợt thu thập demo', targetQty: 2000, domain: 'ItTechnology', startDate: HOM_QUA, endDate: BA_MUOI_NGAY }, 201, 'Chiến dịch #2, trạng thái <code>Draft</code>. <b>Mọi task phải thuộc một chiến dịch</b> — đây là đơn vị kế hoạch của cả đợt thu thập. Chỉ tiêu nằm trong khoảng 2000–5000 cặp câu theo lược đồ của nhóm.'],
@@ -535,7 +535,7 @@ released_datasets     | 0`, n: 'Số trên API lấy thẳng từ view này, nê
       ['5.6', 1, 'speaker1', 'POST', '/api/recordings', 'Audio = demo/giong-3s.wav · ScriptId = s_111000003 · SentenceVariant = PureVietnamese · TaskId = 1', 201, 'Thu lại: <code>r_vi_111000003_t2</code>, <code>take = 2</code>, <code>qcPassed = true</code>.', V.recording],
       ['5.7', 0, 'speaker1', 'GET', '/api/recordings/r_cs_111000003/audio-url', null, 200, 'Mở <code>url</code> ở tab mới để nghe bản WAV đã chuyển. Link hết hạn sau 15 phút.'],
       ['5.8', 0, 'speaker2', 'POST', '/api/recordings', 'Audio = demo/giong-3s.wav · ScriptId = s_111000003 · SentenceVariant = CodeSwitching', 409, '<code>script_owned_by_other_speaker</code>: mỗi cặp câu chỉ một người đọc.'],
-      ['5.9', 0, 'speaker1', 'POST', '/api/scripts/s_111000003/review', { action: 'Edited', editedCsContent: '[vi]Mình cần [en]review [vi]lại phần mã nguồn này', editedVeContent: '[vi]Mình cần xem lại phần mã nguồn này nhé' }, 409, '<code>script_already_recorded</code>: câu đã có bản ghi thì không sửa được, nếu không transcript sẽ lệch với âm thanh.'],
+      ['5.9', 0, 'speaker1', 'POST', '/api/scripts/s_111000003/review', { action: 'Edited', editedCsContent: '[vi]Mình cần [en]review [vi]lại phần mã nguồn này', editedViContent: '[vi]Mình cần xem lại phần mã nguồn này nhé' }, 409, '<code>script_already_recorded</code>: câu đã có bản ghi thì không sửa được, nếu không transcript sẽ lệch với âm thanh.'],
       ['5.10', 0, 'speaker1', 'GET', '/api/recordings', null, 200, 'Ba bản của chính mình, kể cả bản trượt kiểm tra. Speaker không thấy bản của người khác.']
     ]},
     { t: 'Màn 6 · Duyệt ba lượt mù', g: 'Reviews · Rejection Reasons', time: '6 phút', steps: [
