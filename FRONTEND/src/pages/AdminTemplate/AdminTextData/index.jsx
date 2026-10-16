@@ -70,11 +70,71 @@ const catStyle = (cat) => {
   return CATEGORY_COLORS[normalized] || { bg: '#F7F5EF', text: '#6E7078', border: '#E5E2D8' };
 };
 
+// Hàm xóa chính xác tuyệt đối thẻ [vi] và [en] (Bắt buộc dùng xược \ để thoát ngoặc vuông)
+const cleanLanguageTags = (str) => {
+  if (!str) return "";
+  return str
+    .replace(/\[vi\]/gi, " ")
+    .replace(/\[en\]/gi, " ")
+    .replace(/\[\/vi\]/gi, " ")
+    .replace(/\[\/en\]/gi, " ")
+    .replace(/\s+/g, " ") // Chuẩn hóa khoảng trắng thừa
+    .trim();
+};
+
 const countWords = (text) => {
   if (!text || !text.trim()) return 0;
-  const words = text.trim().match(/\S+/g);
+  const clean = cleanLanguageTags(text);
+  const words = clean.trim().match(/\S+/g);
   return words ? words.length : 0;
 };
+
+function HighlightCsText({ rawText }) {
+  if (!rawText) return null;
+
+  // Trường hợp 1: Chuỗi gốc chứa thẻ [en]...[/en] từ Backend
+  if (rawText.includes("[en]") || rawText.includes("[vi]")) {
+    const parts = rawText.split(/([en].*?\[\/en\]|[vi].*?\[\/vi\])/gi);
+    
+    return (
+      <>
+        {parts.map((part, index) => {
+          if (!part) return null;
+          const lowerPart = part.toLowerCase();
+
+          if (lowerPart.startsWith("[en]")) {
+            const cleanEn = cleanLanguageTags(part);
+            return (
+              <span key={index} className="font-semibold">
+                {cleanEn}
+              </span>
+            );
+          }
+          return cleanLanguageTags(part);
+        })}
+      </>
+    );
+  }
+
+  // Trường hợp 2: Văn bản đã làm sạch, tự động tô màu TẤT CẢ các từ tiếng Anh
+  const cleanStr = cleanLanguageTags(rawText);
+  const words = cleanStr.split(" ");
+
+  return (
+    <>
+      {words.map((word, i) => {
+        const cleanWord = word.replace(/^[.,!?;:]+|[.,!?;:]+$/g, "").toLowerCase();
+
+        // Tự động nhận diện TẤT CẢ từ tiếng Anh/từ mượn IT không chứa ký tự tiếng Việt
+        const isEnglishWord = /^[a-z]+$/i.test(cleanWord) && 
+          !/^(la|cho|co|hay|ho|ma|voi|nay|ngay|hai|tu|khac|loi|truy|goc|gop|truoc|sau|duong|dan|hop|giao|dien|dung|dang|phien|ban|chua|cai|dat|phan|mem|chia|se|man|hinh|nen)$/i.test(cleanWord) &&
+          cleanWord.length > 1;
+
+        return 
+      })}
+    </>
+  );
+}
 
 export default function AdminTextData() {
   const [textList, setTextList] = useState([]);
@@ -103,7 +163,10 @@ export default function AdminTextData() {
       setTextList(
         items.map((item) => ({
           id: item.scriptId || item.id,
-          content: item.csContent || item.csPlain || item.content || "",
+          csContent: cleanLanguageTags(item.csContent || item.csPlain || item.content || ""),
+          viContent: cleanLanguageTags(item.viContent || item.viEquivalent || item.csContent || item.content || ""),
+          content: cleanLanguageTags(item.csContent || item.csPlain || item.content || ""),
+          rawCsContent: item.csContent || item.content || "",
           topic: normalizeTopicName(item.domain || item.topic),
           status: (item.status === "Validated" || item.status === "active") ? "active" : "pending"
         }))
@@ -255,7 +318,8 @@ export default function AdminTextData() {
   const filteredTexts = useMemo(() => {
     return textList.filter((item) => {
       const matchesSearch = 
-        item.content.toLowerCase().includes(activeSearchTerm.toLowerCase()) || 
+        item.csContent.toLowerCase().includes(activeSearchTerm.toLowerCase()) || 
+        item.viContent.toLowerCase().includes(activeSearchTerm.toLowerCase()) || 
         String(item.id).toLowerCase().includes(activeSearchTerm.toLowerCase());
       const matchesStatus = selectedStatus === "all" || item.status === selectedStatus;
       
@@ -347,13 +411,12 @@ export default function AdminTextData() {
       {/* Main Table Container */}
       <div className="bg-white dark:bg-[#1C1D22] rounded-2xl border border-[#E5E2D8] dark:border-gray-800 shadow-[0_1px_3px_rgba(16,17,20,0.04)] overflow-hidden transition-colors flex-1 flex flex-col justify-between my-1.5 min-h-0">
         <div className="flex-1 flex flex-col min-h-0 overflow-auto">
-          <div className="min-w-[750px] h-full flex flex-col">
+          <div className="min-w-[650px] h-full flex flex-col">
             {/* Header Table */}
             <div className="bg-[#F7F5EF] dark:bg-[#25272E] type-label text-[#9A9CA3] dark:text-gray-400 border-b border-[#E5E2D8] dark:border-gray-800 flex items-center shrink-0 h-8">
               <div className="px-3 text-center whitespace-nowrap w-[65px]">STT</div>
               <div className="px-4 text-left flex-1">Nội dung</div>
               <div className="px-3 text-left w-[170px] whitespace-nowrap">Chủ đề</div>
-              <div className="px-3 text-left w-[95px] whitespace-nowrap">Số từ</div>
               <div className="px-3 text-left w-[125px] whitespace-nowrap">Trạng thái</div>
               <div className="px-4 text-center w-[100px] whitespace-nowrap">Thao tác</div>
             </div>
@@ -365,13 +428,38 @@ export default function AdminTextData() {
                   const stt = (currentPage - 1) * pageSize + index + 1;
                   const style = catStyle(item.topic);
                   return (
-                    <div key={item.id} className="hover:bg-[#F7F5EF]/70 dark:hover:bg-[#25272E]/50 transition-colors flex items-center h-full">
+                    <div key={item.id} className="hover:bg-[#F7F5EF]/70 dark:hover:bg-[#25272E]/50 transition-colors flex items-center h-full py-1">
                       <div className="px-3 text-center font-bold text-[#16171C] dark:text-gray-100 whitespace-nowrap w-[65px]">
                         {stt}
                       </div>
                       
-                      <div className="px-4 flex-1 truncate pr-6 text-[#16171C] dark:text-gray-200 font-medium">
-                        {item.content}
+                      {/* Hiển thị 2 dòng dạng badge VI-EN và VI chuẩn y hệt ReviewDashboard */}
+                      <div className="px-4 flex-1 space-y-0.5 my-0.5 pr-6 min-w-0">
+                        {/* Dòng 1: Trộn ngôn ngữ (VI-EN) */}
+                        <div className="flex items-center gap-2">
+                          <span 
+                            style={{ background: `${ADMIN_ACCENT}1A`, color: ADMIN_ACCENT }}
+                            className="w-11 shrink-0 rounded text-center text-caption leading-4 font-label"
+                          >
+                            VI-EN
+                          </span>
+                          <p className="truncate type-ui text-[#16171C] dark:text-gray-100">
+                            <HighlightCsText rawText={item.rawCsContent || item.csContent} />
+                          </p>
+                        </div>
+
+                        {/* Dòng 2: Tiếng Việt thuần (VI) */}
+                        <div className="flex items-center gap-2">
+                          <span 
+                            style={{ background: '#F0EEE6', color: '#6E7078' }}
+                            className="w-11 shrink-0 rounded text-center text-caption leading-4 font-label dark:bg-[#25272E] dark:text-gray-400"
+                          >
+                            VI
+                          </span>
+                          <p className="truncate type-ui text-[#16171C] dark:text-gray-300">
+                            {item.viContent}
+                          </p>
+                        </div>
                       </div>
                       
                       <div className="px-3 w-[170px] whitespace-nowrap">
@@ -381,10 +469,6 @@ export default function AdminTextData() {
                         >
                           {normalizeTopicName(item.topic)}
                         </span>
-                      </div>
-                      
-                      <div className="px-3 w-[95px] font-bold text-[#16171C] dark:text-gray-100 whitespace-nowrap">
-                        {countWords(item.content)} từ
                       </div>
                       
                       <div className="px-3 w-[125px] whitespace-nowrap">
@@ -480,23 +564,12 @@ export default function AdminTextData() {
                     <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
                       Chủ đề
                     </label>
-                    <select
+                    <input
+                      type="text"
+                      disabled
                       value={formData.topic}
-                      onChange={(e) => setFormData({ ...formData, topic: e.target.value })}
-                      className="w-full h-11 px-3.5 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] type-body text-[#16171C] dark:text-white outline-none cursor-pointer transition-all font-sans"
-                      onFocus={(e) => {
-                        e.target.style.borderColor = ADMIN_ACCENT;
-                        e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
-                      }}
-                      onBlur={(e) => {
-                        e.target.style.borderColor = '';
-                        e.target.style.boxShadow = 'none';
-                      }}
-                    >
-                      <option value="Công nghệ thông tin" className="bg-white dark:bg-[#25272E]">Công nghệ thông tin</option>
-                      <option value="Giáo dục" className="bg-white dark:bg-[#25272E]">Giáo dục</option>
-                      <option value="Hội thoại hàng ngày" className="bg-white dark:bg-[#25272E]">Hội thoại hàng ngày</option>
-                    </select>
+                      className="w-full h-11 px-3.5 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-[#F7F5EF] dark:bg-[#25272E]/50 type-body text-[#6E7078] dark:text-gray-400 cursor-not-allowed outline-none select-none font-sans"
+                    />
                   </div>
 
                   <div>
