@@ -276,10 +276,12 @@ public class TaskService(
     }
 
     /// <summary>Gỡ task khỏi chiến dịch nhưng giữ lại task (C2). Không xoá assignments/items.</summary>
+    /// <remarks>TEAM_017: cho phép detach cả task đã Cancelled (không qua LoadEditableAsync).</remarks>
     public async Task<TaskDetailDto> DetachAsync(
         long campaignId, long taskId, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false)
     {
+        await using var transaction = await BeginTransactionIfNeededAsync(ct);
         var task = await tasks.GetForUpdateAsync(taskId, ct) ?? throw NotFound(taskId);
 
         if (task.CampaignId != campaignId)
@@ -288,7 +290,18 @@ public class TaskService(
                 "task_not_found", $"Task #{taskId} không thuộc chiến dịch #{campaignId}.");
         }
 
-        return await AttachAsync(taskId, null, ct, callerId, isAdmin);
+        // TEAM_017: detach không yêu cầu task ở trạng thái chỉnh sửa được;
+        // chỉ cần người gọi có quyền trên chiến dịch cũ.
+        await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
+
+        var previousCampaignId = task.CampaignId;
+        task.CampaignId = null;
+        await SaveTasksAsync(ct);
+
+        if (previousCampaignId.HasValue) await campaigns.RefreshStatusAsync(previousCampaignId.Value, ct);
+
+        if (transaction is not null) await transaction.CommitAsync(ct);
+        return await LoadDetailAsync(taskId, ct);
     }
 
     public async Task<PagedResult<TaskListItemDto>> SearchAsync(
@@ -619,9 +632,10 @@ public class TaskService(
 
         if (toAdd.Length == 0)
         {
-            throw new ConflictException(
-                "already_assigned",
-                $"Những người đã chọn đều đang nhận task #{taskId}. Không có ai để giao thêm.");
+            // TEAM_017: không có người mới để thêm → coi như thành công (no-op),
+            // tránh ném ConflictException khi frontend gửi lại danh sách không đổi.
+            await tracker.RefreshStatusAsync(taskId, ct);
+            return await LoadDetailAsync(taskId, ct);
         }
 
         var requiredRole = task.TaskType == TaskType.Recording ? RoleName.Speaker : RoleName.Reviewer;
