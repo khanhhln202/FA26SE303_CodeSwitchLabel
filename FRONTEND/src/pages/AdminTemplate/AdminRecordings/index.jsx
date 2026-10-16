@@ -49,6 +49,68 @@ const getInitials = (name) => {
   return (parts[parts.length - 2].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 };
 
+// Hàm xóa chính xác tuyệt đối thẻ [vi] và [en] (Bắt buộc phải thoát ngoặc vuông [ ])
+const cleanLanguageTags = (str) => {
+  if (!str) return "";
+  return str
+    .replace(/\[vi\]/gi, " ")
+    .replace(/\[en\]/gi, " ")
+    .replace(/\[\/vi\]/gi, " ")
+    .replace(/\[\/en\]/gi, " ")
+    .replace(/\s+/g, " ") // Chuẩn hóa khoảng trắng thừa
+    .trim();
+};
+
+
+// Component Highlight từ tiếng Anh chuẩn giống y hệt AdminTextData
+function HighlightCsText({ rawText }) {
+  if (!rawText) return null;
+
+  if (rawText.includes("[en]") || rawText.includes("[vi]")) {
+    const parts = rawText.split(/([en].*?\[\/en\]|[vi].*?\[\/vi\])/gi);
+    
+    return (
+      <>
+        {parts.map((part, index) => {
+          if (!part) return null;
+          const lowerPart = part.toLowerCase();
+
+          if (lowerPart.startsWith("[en]")) {
+            const cleanEn = cleanLanguageTags(part);
+            return (
+              <span key={index} className="font-semibold">
+                {cleanEn}{" "}
+              </span>
+            );
+          }
+          return cleanLanguageTags(part) + " ";
+        })}
+      </>
+    );
+  }
+
+  const cleanStr = cleanLanguageTags(rawText);
+  const words = cleanStr.split(" ");
+
+  return (
+    <>
+      {words.map((word, i) => {
+        const cleanWord = word.replace(/^[.,!?;:]+|[.,!?;:]+$/g, "").toLowerCase();
+
+        const isEnglishWord = /^[a-z]+$/i.test(cleanWord) && 
+          !/^(la|cho|co|hay|ho|ma|voi|nay|ngay|hai|tu|khac|loi|truy|goc|gop|truoc|sau|duong|dan|hop|giao|dien|dung|dang|phien|ban|chua|cai|dat|phan|mem|chia|se|man|hinh|nen)$/i.test(cleanWord) &&
+          cleanWord.length > 1;
+
+        return (
+          <span key={i} className={isEnglishWord ? "font-semibold" : ""}>
+            {word}{" "}
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
 export default function AdminRecordings() {
   const [recordings, setRecordings] = useState([]);
   const [searchInput, setSearchInput] = useState("");
@@ -57,8 +119,6 @@ export default function AdminRecordings() {
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
 
-  const [selectedTextContent, setSelectedTextContent] = useState(null);
-  const [isLoadingText, setIsLoadingText] = useState(false);
   const [selectedReviewersList, setSelectedReviewersList] = useState(null);
   
   const [playingRecording, setPlayingRecording] = useState(null);
@@ -79,19 +139,44 @@ export default function AdminRecordings() {
         userMap[u.userId || u.id] = u.fullName || u.name;
       });
 
+      // Lấy danh sách ID các câu văn bản độc nhất để fetch thông tin nội dung
+      const scriptIds = [...new Set(items.map(r => r.scriptId || r.textId).filter(Boolean))];
+      const scriptMap = {};
+
+      await Promise.all(
+        scriptIds.map(async (sId) => {
+          try {
+            const detail = await getScriptDetailApi(sId);
+            if (detail) {
+              scriptMap[sId] = {
+                csContent: detail.csContent || "",
+                viContent: detail.viContent || ""
+              };
+            }
+          } catch (e) {
+            console.error("Lỗi lấy chi tiết câu:", sId, e);
+          }
+        })
+      );
+
       setRecordings(
-        items.map((r) => ({
-          id: r.recordingId || r.id || "",
-          rawId: r.recordingId || r.id || "",
-          textId: r.scriptId || r.textId || "N/A",
-          content: r.csContent || r.scriptText || r.content || "",
-          contentVietnamese: r.viContent || r.contentVietnamese || "",
-          topic: r.domain || r.topic || "Công nghệ thông tin",
-          speaker: userMap[r.speakerId] || (r.speakerId ? `User #${r.speakerId}` : "Chưa xác định"),
-          reviewers: Array.isArray(r.reviewers) ? r.reviewers : [],
-          durationSec: r.durationSec || 0,
-          createdAt: r.recordedAt ? new Date(r.recordedAt).toLocaleDateString("vi-VN") : ""
-        }))
+        items.map((r) => {
+          const sId = r.scriptId || r.textId;
+          const scriptInfo = scriptMap[sId] || {};
+          
+          return {
+            id: r.recordingId || r.id || "",
+            rawId: r.recordingId || r.id || "",
+            textId: sId || "N/A",
+            content: r.csContent || r.scriptText || scriptInfo.csContent || r.content || "",
+            contentVietnamese: r.viContent || r.contentVietnamese || scriptInfo.viContent || "",
+            topic: r.domain || r.topic || "Công nghệ thông tin",
+            speaker: userMap[r.speakerId] || (r.speakerId ? `User #${r.speakerId}` : "Chưa xác định"),
+            reviewers: Array.isArray(r.reviewers) ? r.reviewers : [],
+            durationSec: r.durationSec || 0,
+            createdAt: r.recordedAt ? new Date(r.recordedAt).toLocaleDateString("vi-VN") : ""
+          };
+        })
       );
     } catch (err) {
       console.error("Lỗi lấy danh sách bản thu âm:", err);
@@ -101,30 +186,6 @@ export default function AdminRecordings() {
   useEffect(() => {
     fetchRecordings();
   }, [currentPage]);
-
-  const handleOpenTextDetail = async (recording) => {
-    if (!recording.textId || recording.textId === "N/A") return;
-    
-    setSelectedTextContent({
-      ...recording,
-      content: recording.content || "Đang tải dữ liệu...",
-      contentVietnamese: recording.contentVietnamese || "Đang tải dữ liệu..."
-    });
-    setIsLoadingText(true);
-
-    try {
-      const detail = await getScriptDetailApi(recording.textId);
-      setSelectedTextContent({
-        ...recording,
-        content: detail.csContent || recording.content,
-        contentVietnamese: detail.viContent || recording.contentVietnamese
-      });
-    } catch (err) {
-      console.error("Lỗi lấy chi tiết câu:", err);
-    } finally {
-      setIsLoadingText(false);
-    }
-  };
 
   const handleOpenReviewersModal = async (recording) => {
     setSelectedReviewersList({
@@ -310,16 +371,16 @@ export default function AdminRecordings() {
       {/* Main Table Container */}
       <div className="bg-white dark:bg-[#1C1D22] rounded-2xl border border-[#E5E2D8] dark:border-gray-800 shadow-[0_1px_3px_rgba(16,17,20,0.04)] overflow-hidden transition-colors flex-1 flex flex-col justify-between my-1 min-h-0">
         <div className="flex-1 min-h-0 overflow-auto">
-          <table className="w-full h-full text-left border-collapse table-fixed min-w-[900px]">
+          <table className="w-full h-full text-left border-collapse table-fixed min-w-[950px]">
             <thead>
               <tr className="bg-[#F7F5EF] dark:bg-[#25272E] type-label text-[#9A9CA3] dark:text-gray-400 border-b border-[#E5E2D8] dark:border-gray-800 h-8">
                 <th className="w-[65px] px-2 text-center">STT</th>
-                <th className="w-[150px] px-2 text-center">Nội dung câu</th>
+                <th className="px-4 text-left">Nội dung</th>
                 <th className="w-[160px] px-2">Chủ đề</th>
                 <th className="w-[140px] px-2">Speaker</th>
                 <th className="w-[170px] px-2 text-center">Phản hồi</th>
                 <th className="w-[100px] px-1.5 text-center">Nghe</th>
-                <th className="w-[100px] px-1.5 text-center">Trạng thái</th>
+                <th className="w-[125px] px-2 text-center whitespace-nowrap">Trạng thái</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0EEE6] dark:divide-gray-800 type-ui">
@@ -338,16 +399,35 @@ export default function AdminRecordings() {
                           {stt}
                         </td>
 
-                        {/* Nút xem nội dung câu */}
-                        <td className="px-2 text-center align-middle">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenTextDetail(r)}
-                            className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-xl bg-[#F7F5EF] dark:bg-[#25272E] hover:bg-[#E5E2D8] dark:hover:bg-gray-700 text-[#16171C] dark:text-gray-200 type-meta font-label border border-[#E5E2D8] dark:border-gray-700 transition-colors cursor-pointer w-full"
-                          >
-                            <Eye className="w-3.5 h-3.5 text-[#6E7078] dark:text-gray-400 shrink-0" />
-                            <span>Xem nội dung câu</span>
-                          </button>
+                        {/* Hiển thị 2 dòng VI-EN và VI sạch sẽ chuẩn y hệt AdminTextData */}
+                        <td className="px-4 align-middle min-w-0">
+                          <div className="space-y-0.5 my-0.5 pr-6">
+                            {/* Dòng 1: Trộn ngôn ngữ (VI-EN) */}
+                            <div className="flex items-center gap-2">
+                              <span 
+                                style={{ background: `${ADMIN_ACCENT}1A`, color: ADMIN_ACCENT }}
+                                className="w-11 shrink-0 rounded text-center text-caption leading-4 font-label"
+                              >
+                                VI-EN
+                              </span>
+                              <p className="truncate type-ui text-[#16171C] dark:text-gray-100">
+                                <HighlightCsText rawText={r.content} />
+                              </p>
+                            </div>
+
+                            {/* Dòng 2: Tiếng Việt thuần (VI) */}
+                            <div className="flex items-center gap-2">
+                              <span 
+                                style={{ background: '#F0EEE6', color: '#6E7078' }}
+                                className="w-11 shrink-0 rounded text-center text-caption leading-4 font-label dark:bg-[#25272E] dark:text-gray-400"
+                              >
+                                VI
+                              </span>
+                              <p className="truncate type-ui text-[#16171C] dark:text-gray-300">
+                                {cleanLanguageTags(r.contentVietnamese || r.content)}
+                              </p>
+                            </div>
+                          </div>
                         </td>
 
                         <td className="px-2 align-middle">
@@ -401,11 +481,11 @@ export default function AdminRecordings() {
                           </button>
                         </td>
 
-                        {/* Trạng thái */}
-                        <td className="px-1.5 text-center align-middle">
+                        {/* Trạng thái - Mở rộng width lên 125px & khoá whitespace-nowrap chống vỡ hàng */}
+                        <td className="px-2 text-center align-middle whitespace-nowrap w-[125px]">
                           {status === "Approved" && (
                             <span
-                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full type-caption font-label border"
+                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full type-caption font-label border whitespace-nowrap"
                               style={{
                                 backgroundColor: CHIP_SUCCESS_BG,
                                 borderColor: CHIP_SUCCESS_BORDER,
@@ -418,7 +498,7 @@ export default function AdminRecordings() {
 
                           {status === "Pending" && (
                             <span
-                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full type-caption font-label border"
+                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full type-caption font-label border whitespace-nowrap"
                               style={{
                                 backgroundColor: CHIP_WARNING_BG,
                                 borderColor: CHIP_WARNING_BORDER,
@@ -431,7 +511,7 @@ export default function AdminRecordings() {
 
                           {status === "Rejected" && (
                             <span
-                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full type-caption font-label border"
+                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full type-caption font-label border whitespace-nowrap"
                               style={{
                                 backgroundColor: CHIP_DANGER_BG,
                                 borderColor: CHIP_DANGER_BORDER,
@@ -508,7 +588,7 @@ export default function AdminRecordings() {
                   NỘI DUNG CÂU
                 </span>
                 <p className="type-body text-[#16171C] dark:text-gray-100 leading-relaxed">
-                  "{playingRecording.content}"
+                  "{cleanLanguageTags(playingRecording.content)}"
                 </p>
               </div>
 
@@ -542,70 +622,7 @@ export default function AdminRecordings() {
         </div>
       )}
 
-      {/* MODAL 2: HIỆN CẶP CÂU NỘI DUNG */}
-      {selectedTextContent && (
-        <div className="fixed inset-0 z-50 bg-[#16171C]/55 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#1C1D22] rounded-[24px] border border-[#E5E2D8] dark:border-gray-800 shadow-[0_20px_50px_rgba(16,17,20,0.25)] max-w-lg w-full overflow-hidden animate-in fade-in zoom-in duration-150">
-            <div 
-              style={{ backgroundColor: ADMIN_ACCENT }} 
-              className="h-1.5 w-full shrink-0" 
-            />
-
-            <div className="p-6 space-y-4">
-              <div className="flex items-center justify-between border-b border-[#E5E2D8] dark:border-gray-800 pb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-[#F7F5EF] dark:bg-[#25272E] flex items-center justify-center text-[#16171C] dark:text-gray-200">
-                    <Eye className="w-4 h-4" />
-                  </div>
-                  <h3 className="type-section text-[#16171C] dark:text-gray-100">
-                    Chi tiết nội dung câu
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedTextContent(null)}
-                  className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#F0EEE6] dark:hover:bg-gray-800 transition-colors cursor-pointer"
-                >
-                  <X className="w-4 h-4 text-[#6E7078]" />
-                </button>
-              </div>
-
-              <div className="space-y-3">
-                <div className="p-4 bg-[#F7F5EF] dark:bg-[#25272E] rounded-2xl border border-[#E5E2D8] dark:border-gray-700 space-y-1">
-                  <span className="type-label text-[#6E7078] dark:text-gray-400">
-                    Câu trộn Ngôn ngữ (Vietnamese - English):
-                  </span>
-                  <p className="type-body font-label text-[#16171C] dark:text-gray-100 leading-relaxed">
-                    "{selectedTextContent.content}"
-                  </p>
-                </div>
-
-                <div className="p-4 bg-[#E6F0FE] dark:bg-[#1E293B] rounded-2xl border border-[#C9DEFB] dark:border-blue-900 space-y-1">
-                  <span className="type-label text-[#1E40AF] dark:text-blue-300">
-                    Câu thuần Tiếng Việt (Nghĩa hoàn toàn tương đồng):
-                  </span>
-                  <p className="type-body font-label text-[#1E40AF] dark:text-blue-200 leading-relaxed">
-                    "{selectedTextContent.contentVietnamese}"
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex justify-end pt-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedTextContent(null)}
-                  style={{ backgroundColor: ADMIN_ACCENT }}
-                  className="w-full py-3 text-white rounded-xl type-button hover:opacity-90 transition-all cursor-pointer shadow-sm text-center"
-                >
-                  Đóng
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 3: KẾT QUẢ KIỂM DUYỆT */}
+      {/* MODAL 2: KẾT QUẢ KIỂM DUYỆT */}
       {selectedReviewersList && (() => {
         const revList = Array.isArray(selectedReviewersList.reviewers) ? selectedReviewersList.reviewers : [];
         const total = revList.length;
@@ -678,7 +695,7 @@ export default function AdminRecordings() {
                     CÂU VĂN
                   </span>
                   <p className="type-body font-label text-[#16171C] dark:text-gray-100 leading-relaxed">
-                    "{selectedReviewersList.content}"
+                    "{cleanLanguageTags(selectedReviewersList.content)}"
                   </p>
                 </div>
 
