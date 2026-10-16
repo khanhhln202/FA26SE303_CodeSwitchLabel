@@ -296,12 +296,13 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
         await TaskService.AssignAsync(task.TaskId, [speakers[0].UserId],
             TestContext.Current.CancellationToken, task.CreatedBy);
 
-        // Act — giao lại đúng người đang có.
-        var error = await Assert.ThrowsAnyAsync<AppException>(() => TaskService.AssignAsync(
-            task.TaskId, [speakers[0].UserId], TestContext.Current.CancellationToken, task.CreatedBy));
+        // Act — giao lại đúng người đang có (TEAM_017: no-op, không ném lỗi).
+        var result = await TaskService.AssignAsync(
+            task.TaskId, [speakers[0].UserId], TestContext.Current.CancellationToken, task.CreatedBy);
 
-        // Assert — tầng service chặn trước, database có index một phần chặn nữa.
-        Assert.Equal("already_assigned", error.Code);
+        // Assert — trả về chi tiết task bình thường, không ném.
+        Assert.NotNull(result);
+        Assert.NotNull(result.Summary);
     }
 
     [Fact]
