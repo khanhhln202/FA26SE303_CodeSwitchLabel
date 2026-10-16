@@ -195,6 +195,8 @@ POST /api/auth/login
   - `GET /api/speaker/recordings/history` chỉ nhận `lastRecordedAt` và `scriptId`. Mỗi dòng là một
     **cặp** bản ghi, cặp không có cột riêng nên trạng thái/thời lượng của cặp là thứ tính ra *sau khi
     đã cắt trang* — không sắp xếp được trước đó.
+  - `GET /api/reviewer/history/recordings` cũng mỗi dòng một **cặp**, nên chỉ nhận `reviewedAt`,
+    `decision`, `scriptId` — trạng thái của cặp tính ra *sau khi đã cắt trang* như trên.
 
   | Endpoint | Cột `sort` nhận được | Mặc định khi bỏ `sort` |
   |---|---|---|
@@ -206,7 +208,7 @@ POST /api/auth/login
   | `GET /api/campaigns` | `campaignId` `startDate` `endDate` `status` `createdAt` | `startDate` giảm dần |
   | `GET /api/datasets` | `datasetId` `createdAt` `status` `datasetName` `recordingCount` | `createdAt` giảm dần |
   | `GET /api/reviewer/tasks/{id}/recordings` | `recordedAt` `status` `reviewCount` `scriptId` | bản gần đủ lượt duyệt trước |
-  | `GET /api/reviewer/history/recordings` | `reviewedAt` `decision` `status` `scriptId` | `reviewedAt` giảm dần |
+  | `GET /api/reviewer/history/recordings` | `reviewedAt` `decision` `scriptId` | `reviewedAt` giảm dần |
   | `GET /api/reviewer/history/contributions` | `reviewedAt` `action` `status` `domain` | `reviewedAt` giảm dần |
   | `GET /api/speaker/recordings/history` | `lastRecordedAt` `scriptId` | `lastRecordedAt` giảm dần |
   | `GET /api/speaker/contributions/history` | `createdAt` `scriptId` `domain` `status` | `createdAt` giảm dần |
@@ -646,8 +648,8 @@ Reviewer cũng dùng được màn hình **duyệt câu** giống Speaker.
 | Tỉ lệ lý do từ chối | `GET /api/reviewer/stats/reject-reasons` |
 | Câu bị từ chối nhiều nhất | `GET /api/reviewer/stats/top-rejected-sentences?limit=8` |
 | Người đọc bị từ chối nhiều nhất | `GET /api/reviewer/stats/top-rejected-speakers?limit=8` |
-| Lịch sử duyệt bản ghi | `GET /api/reviewer/history/recordings?taskId&status&search&page&pageSize=` |
-| Lịch sử duyệt câu | `GET /api/reviewer/history/contributions?kind&status&category&search&page&pageSize=` (`kind`: `edit`\|`report`\|`contribution`) |
+| Lịch sử duyệt bản ghi | `GET /api/reviewer/history/recordings?taskId&status&search&page&pageSize=` — mỗi dòng là một **cặp** bản ghi (giống màn hình Speaker): `csText`/`viText`, `csAudioUrl`/`viAudioUrl` (link tạm 15 phút), `reviews` chỉ hiện khi bản đã chốt. `status` lọc theo bản mình đã duyệt; `recordingStatus` là trạng thái của cặp |
+| Lịch sử duyệt câu | `GET /api/reviewer/history/contributions?kind&status&category&search&page&pageSize=` (`kind`: `edit`\|`report`\|`contribution`) — kèm `alignment` (từ tiếng Anh - nghĩa tiếng Việt), `speakerId`/`speakerName`, và `reason`/`comment` khi lượt của mình là Từ chối; mỗi câu chỉ có một lượt duyệt nên tối đa một dòng |
 
 **Xem lại task duyệt đã đóng (mới):** `GET /api/reviewer/tasks/{taskId}/recordings` và
 `GET /api/reviewer/recordings/{id}` mở được cả khi task đã `Completed`/`Cancelled` (mình từng được
@@ -999,6 +1001,8 @@ Ai đã code theo bản API trước ngày 22/09/2026 thì cần sửa:
 | `progress.done` của task thu âm = số cặp câu **đã duyệt đạt** | = số cặp câu **đã thu đủ hai bản**, không chờ duyệt. Task Manager vẫn đếm cặp câu đã duyệt |
 | `GET /api/speaker/rounds/current` lấy đợt đã **đăng ký** khi chưa có task | Không có task thì trả 204 — đăng ký chiến dịch là tuỳ chọn, không phải điều kiện ghi âm |
 | `description` của lý do bản dịch cứng | Viết lại theo khuôn "vấn đề — cần làm gì" (migration `V4__reason_descriptions_vi.sql`) |
+| `GET /api/reviewer/history/recordings` một dòng = một **lượt duyệt**, chỉ có một câu | Mỗi dòng là một **CẶP** như lịch sử của Speaker: `csText`/`viText` (còn nhãn), `csRecordingId`/`viRecordingId`, `csAudioUrl`/`viAudioUrl` (thật, hết hạn 15 phút), `reviews: [{round, decision, reason}]` (chỉ khi bản đã chốt; `reason` ưu tiên bình luận, trống thì ghép mô tả mã lý do từ chối). `myDecision` gộp cả cặp — có lượt từ chối là `Rejected`; `recordingStatus` là trạng thái của cặp. Phân trang theo **cặp**, `total` là số cặp. `?sort=status` bỏ — nhận `reviewedAt`, `decision`, `scriptId` |
+| `GET /api/reviewer/history/contributions` thiếu người gửi, lý do, cặp từ Anh-Việt | Thêm `alignment` (từ tiếng Anh - nghĩa tiếng Việt), `speakerId`/`speakerName`, và khi lượt là Từ chối thì `reason` (mô tả lỗi) + `comment`. Mỗi câu đề xuất chỉ **một lượt duyệt** nên mỗi câu tối đa một dòng |
 
 ## 9. Chưa có — backend đang làm
 

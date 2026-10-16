@@ -1,12 +1,16 @@
+using CodeSwitchLabel.Repositories.Entities;
 using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Repositories.Persistence;
+using CodeSwitchLabel.Repositories.Storage;
 using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Dtos;
 using Microsoft.EntityFrameworkCore;
 
 namespace CodeSwitchLabel.Services.Implementations;
 
-public class ReviewerStatsService(CodeSwitchLabelDbContext db) : IReviewerStatsService
+public class ReviewerStatsService(
+    CodeSwitchLabelDbContext db,
+    IObjectStorage storage) : IReviewerStatsService
 {
     public async Task<ReviewerTotalsDto> GetTotalsAsync(long reviewerId, CancellationToken ct = default)
     {
@@ -130,52 +134,117 @@ public class ReviewerStatsService(CodeSwitchLabelDbContext db) : IReviewerStatsS
         {
             var needle = query.Search.Trim();
             q = q.Where(v => v.RecordingId.Contains(needle)
+                || v.Recording!.ScriptId.Contains(needle)
                 || v.Recording!.Script.CsContent.Contains(needle)
                 || v.Recording!.Speaker.FullName.Contains(needle));
         }
 
-        var total = await q.CountAsync(ct);
+        // Một dòng là MỘT CẶP bản ghi, nên phân trang theo cặp chứ không theo lượt duyệt:
+        // gom scriptId trước khi cắt trang. (Distinct + OrderBy thì Postgres không nhận,
+        // nên gom bằng GroupBy/Max — đúng cách lịch sử ghi âm của Speaker đang làm.)
+        //
+        // `myDecision` gộp ngay trong truy vấn gom nhóm: có lượt từ chối ở bất kỳ bản nào
+        // thì cả cặp là từ chối. Max của cờ 0/1 chính là phép "hoặc" đó, và dịch được xuống SQL.
+        var total = await q.Select(v => v.Recording!.ScriptId).Distinct().CountAsync(ct);
+
+        var pairs = q
+            .GroupBy(v => v.Recording!.ScriptId)
+            .Select(g => new
+            {
+                ScriptId = g.Key,
+                LastReviewedAt = g.Max(v => v.ReviewedAt),
+                HasReject = g.Max(v => v.Decision == ReviewDecision.Rejected ? 1 : 0)
+            });
 
         var sort = query.ToSort<ReviewSortField>();
 
-        // TEAM_012: nhánh cuối là thứ tự cũ (lượt duyệt mới nhất trước).
+        // TEAM_012: chỉ ba cột của cặp là sắp xếp được TRƯỚC khi cắt trang. Trạng thái của
+        // cặp gộp từ hai bản nên phải TÍNH RA sau đó — cùng lý do với SpeakerPairSortField.
         var ordered = sort.Field switch
         {
             ReviewSortField.ReviewedAt => sort.Descending
-                ? q.OrderByDescending(v => v.ReviewedAt)
-                : q.OrderBy(v => v.ReviewedAt),
+                ? pairs.OrderByDescending(x => x.LastReviewedAt)
+                : pairs.OrderBy(x => x.LastReviewedAt),
             ReviewSortField.Decision => sort.Descending
-                ? q.OrderByDescending(v => v.Decision)
-                : q.OrderBy(v => v.Decision),
-            ReviewSortField.Status => sort.Descending
-                ? q.OrderByDescending(v => v.Recording!.Status)
-                : q.OrderBy(v => v.Recording!.Status),
+                ? pairs.OrderByDescending(x => x.HasReject)
+                : pairs.OrderBy(x => x.HasReject),
             ReviewSortField.ScriptId => sort.Descending
-                ? q.OrderByDescending(v => v.Recording!.ScriptId)
-                : q.OrderBy(v => v.Recording!.ScriptId),
-            _ => q.OrderByDescending(v => v.ReviewedAt)
+                ? pairs.OrderByDescending(x => x.ScriptId)
+                : pairs.OrderBy(x => x.ScriptId),
+            _ => pairs.OrderByDescending(x => x.LastReviewedAt)
         };
 
-        var rows = await ordered
-            .ThenBy(v => v.ReviewId)
+        var page = await ordered
+            .ThenBy(x => x.ScriptId)
             .Skip((query.Page - 1) * query.PageSize)
             .Take(query.PageSize)
             .ToListAsync(ct);
 
-        var items = rows.Select(v => new ReviewerHistoryItemDto(
-            v.RecordingId,
-            v.Recording!.ScriptId,
-            v.Recording.SpeakerId,
-            v.Recording.Speaker.FullName,
-            v.Task?.Description,
-            CodeSwitchText.Strip(
-                v.Recording.SentenceVariant == SentenceVariant.CodeSwitching
-                    ? v.Recording.Script.CsContent
-                    : v.Recording.Script.ViContent),
-            v.Recording.DurationSec,
-            v.Decision.ToString(),
-            v.Recording.Status.ToString(),
-            v.ReviewedAt)).ToList();
+        var pageScripts = page.Select(x => x.ScriptId).ToList();
+
+        // Kéo MỌI lần thu của các cặp trong trang — cả hai biến thể lẫn các bản cũ để chọn bản
+        // mới nhất — kèm lượt duyệt và lý do từ chối của từng lượt.
+        var rows = await db.Recordings.AsNoTracking()
+            .Include(r => r.Script)
+            .Include(r => r.Speaker)
+            .Include(r => r.Task)
+            .Include(r => r.Reviews).ThenInclude(v => v.RejectionReasons).ThenInclude(rr => rr.Reason)
+            .Where(r => pageScripts.Contains(r.ScriptId))
+            .OrderByDescending(r => r.RecordedAt)
+            .ToListAsync(ct);
+
+        // Mỗi biến thể lấy lần thu mới nhất; link nghe cấp sau khi đã lấy đủ dòng, và mỗi
+        // bản một lần gọi kho lưu trữ — bản trỏ sang kho khác thì để null chứ không làm
+        // hỏng cả dòng lịch sử.
+        var rowsByScript = rows.ToLookup(r => r.ScriptId);
+        var items = new List<ReviewerHistoryItemDto>(page.Count);
+
+        // Dựng dòng theo đúng thứ tự đã cắt trang, KHÔNG theo thứ tự của `rows` — `rows` xếp
+        // theo thời điểm thu, nên `?sort=decision` hay `?sort=scriptId` sẽ trả về thứ tự khác
+        // hẳn thứ tự client yêu cầu.
+        foreach (var pair in page)
+        {
+            var takes = rowsByScript[pair.ScriptId];
+            var cs = takes.FirstOrDefault(r => r.SentenceVariant == SentenceVariant.CodeSwitching);
+            var vi = takes.FirstOrDefault(r => r.SentenceVariant == SentenceVariant.PureVietnamese);
+
+            // Cặp có mặt trong lịch sử nghĩa là tôi đã duyệt một bản của nó, nên chắc chắn có ít nhất một bản.
+            var take = (cs ?? vi)!;
+            var both = new[] { cs, vi }.OfType<Recording>().ToArray();
+
+            items.Add(new ReviewerHistoryItemDto(
+                pair.ScriptId,
+                take.SpeakerId,
+                take.Speaker.FullName,
+                take.Task?.Description,
+                take.Script.CsContent,
+                take.Script.ViContent,
+                cs?.RecordingId,
+                vi?.RecordingId,
+                await SignAsync(cs, ct),
+                await SignAsync(vi, ct),
+                cs?.DurationSec ?? vi?.DurationSec ?? 0,
+                (pair.HasReject == 1 ? ReviewDecision.Rejected : ReviewDecision.Approved).ToString(),
+                // Trạng thái của cặp, cùng luật với lịch sử ghi âm của Speaker: có bản bị từ
+                // chối thì cặp đó từ chối; đủ cả hai bản đạt thì mới là đạt; trượt QC hết thì
+                // báo lỗi chất lượng; còn lại là đang chờ.
+                both.Any(r => r.Status == RecordingStatus.Rejected)
+                    ? RecordingStatus.Rejected
+                    : cs?.Status == RecordingStatus.Approved && vi?.Status == RecordingStatus.Approved
+                        ? RecordingStatus.Approved
+                        : both.Length > 0 && both.All(r => r.Status == RecordingStatus.QcFailed)
+                            ? RecordingStatus.QcFailed
+                            : RecordingStatus.PendingReview,
+                pair.LastReviewedAt,
+                // Giống GET /api/recordings/{id}/reviews: chỉ hiện lượt duyệt khi bản đã chốt.
+                [.. both
+                    .Where(r => r.Status is RecordingStatus.Approved or RecordingStatus.Rejected)
+                    .SelectMany(r => r.Reviews)
+                    .GroupBy(v => v.ReviewRound)
+                    .Select(g => g.First())
+                    .OrderBy(v => v.ReviewRound)
+                    .Select(v => new HistoryReviewDto(v.ReviewRound, v.Decision.ToString(), ReasonOf(v)))]));
+        }
 
         return new PagedResult<ReviewerHistoryItemDto>(items, query.Page, query.PageSize, total);
     }
@@ -183,8 +252,10 @@ public class ReviewerStatsService(CodeSwitchLabelDbContext db) : IReviewerStatsS
     public async Task<PagedResult<ReviewerScriptHistoryItemDto>> GetScriptHistoryAsync(
         long reviewerId, ReviewerScriptHistoryQuery query, CancellationToken ct = default)
     {
-        var q = db.Set<Repositories.Entities.ScriptReview>().AsNoTracking()
-            .Include(r => r.Script)
+        var q = db.Set<ScriptReview>().AsNoTracking()
+            .Include(r => r.Script).ThenInclude(s => s.Words)
+            .Include(r => r.Script).ThenInclude(s => s.Creator)
+            .Include(r => r.ErrorReason)
             .Where(r => r.UserId == reviewerId);
 
         if (!string.IsNullOrWhiteSpace(query.Kind))
@@ -255,11 +326,53 @@ public class ReviewerStatsService(CodeSwitchLabelDbContext db) : IReviewerStatsS
             DomainName(r.Script.Domain),
             r.Script.CsContent,
             r.Script.ViContent,
+            // Từ tiếng Anh kèm nghĩa tiếng Việt — cùng dạng với lịch sử đóng góp của Speaker.
+            [.. r.Script.Words.OrderBy(w => w.WordPosition).Select(w => new AlignmentItem
+            {
+                Source = w.EnWord,
+                SourceLang = "en",
+                Target = w.ViWord,
+                TargetLang = "vi",
+                Relation = w.Relation == ScriptWordRelation.ProperNoun ? "proper_noun" : "semantic_equivalent"
+            })],
+            r.Script.CreatedBy,
+            r.Script.Creator.FullName,
             r.Action.ToString(),
+            r.ErrorReason?.Description ?? r.ErrorReason?.ReasonCode,
+            r.Comment,
             r.Script.Status.ToString(),
             r.ReviewedAt)).ToList();
 
         return new PagedResult<ReviewerScriptHistoryItemDto>(items, query.Page, query.PageSize, total);
+    }
+
+    /// <summary>Link nghe tạm của một bản ghi; hỏng thì để null chứ không làm hỏng cả dòng lịch sử.</summary>
+    private async Task<string?> SignAsync(Recording? rec, CancellationToken ct)
+    {
+        if (rec is null) return null;
+        try
+        {
+            var key = storage.GetObjectKey(rec.CloudLink);
+            return key is null ? null : (await storage.GetDownloadUrlAsync(key, ct)).Url;
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// Lý do hiển thị của một lượt duyệt: bình luận là chính; lượt từ chối không kèm bình luận
+    /// thì ghép mô tả các mã lý do từ chối, để dòng lịch sử luôn có lý do để hiện.
+    /// </summary>
+    private static string? ReasonOf(Review review)
+    {
+        if (!string.IsNullOrWhiteSpace(review.Comment)) return review.Comment;
+
+        var reasons = review.RejectionReasons
+            .Select(rr => rr.Reason.Description ?? rr.Reason.ReasonCode)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct()
+            .ToList();
+
+        return reasons.Count > 0 ? string.Join(", ", reasons) : null;
     }
 
     private static string CategoryLabel(RejectionCategory category) => category switch
