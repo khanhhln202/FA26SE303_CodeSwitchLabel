@@ -134,18 +134,18 @@ record('2.4', 'Nhập lại đúng file đó', await call(T.admin, 'POST', '/api
 
 record('2.5', 'Câu thuần Việt lại có nhãn [en]',
   await call(T.admin, 'POST', '/api/scripts', {
-    csContent: '[vi]Anh gửi em cái [en]link [vi]nhé', veContent: '[vi]Anh gửi em cái [en]link [vi]nhé', domain: 'DailyLife'
+    csContent: '[vi]Anh gửi em cái [en]link [vi]nhé', viContent: '[vi]Anh gửi em cái [en]link [vi]nhé', domain: 'DailyLife'
   }), { status: 422, code: 've_not_pure_vietnamese' });
 
 record('2.6', 'Câu không có nhãn mở đầu',
   await call(T.admin, 'POST', '/api/scripts', {
-    csContent: 'Anh gửi em cái [en]link [vi]nhé', veContent: '[vi]Anh gửi em cái đường dẫn nhé', domain: 'DailyLife'
+    csContent: 'Anh gửi em cái [en]link [vi]nhé', viContent: '[vi]Anh gửi em cái đường dẫn nhé', domain: 'DailyLife'
   }), { status: 422, code: 'invalid_language_tags' });
 
 r = record('2.7', 'Admin thêm tay một cặp câu',
   await call(T.admin, 'POST', '/api/scripts', {
     csContent: '[vi]Anh gửi em cái [en]link [vi]nhé',
-    veContent: '[vi]Anh gửi em cái đường dẫn nhé',
+    viContent: '[vi]Anh gửi em cái đường dẫn nhé',
     domain: 'DailyLife',
     alignment: [{ source: 'link', target: 'đường dẫn' }]
     // Câu Admin thêm tay vào thẳng Validated, kèm một lượt duyệt Accepted tự động của chính Admin.
@@ -181,7 +181,7 @@ record('3.1', 'reviewer đúng chủ đề duyệt câu sang Validated',
 console.log('\n== Thu âm: mỗi cặp câu hai bản ==');
 r = record('4.1', 'speaker1 lấy cặp câu tiếp theo', await call(T.speaker1, 'GET', '/api/speaker/scripts/next'),
   { status: 200, check: (b) => b.remainingVariants.length === 2 },
-  (b) => ({ scriptId: b.scriptId, csPlain: b.csPlain, vePlain: b.vePlain, remaining: b.remainingVariants }));
+  (b) => ({ scriptId: b.scriptId, csPlain: b.csPlain, viPlain: b.viPlain, remaining: b.remainingVariants }));
 ID.script = r.body?.scriptId;
 
 r = record('4.2', 'Nộp bản đọc câu chen tiếng Anh',
@@ -335,7 +335,7 @@ const testRec = r.body?.recording?.recordingId;
 
 for (const [i, who] of ['reviewer', 'reviewer2', 'reviewer3'].entries()) {
   await call(T[who], 'POST', `/api/recordings/${testRec}/reviews`,
-    { decision: 'Rejected', expectedRound: i + 1, rejectionReasonCodes: ['script_text_error'], comment: 'Câu sai chính tả' });
+    { decision: 'Rejected', expectedRound: i + 1, rejectionReasonCodes: ['content_mismatch'], comment: 'Câu sai chính tả' });
 }
 
 record('7.2', 'Bản ghi bị từ chối', await call(T.admin, 'GET', `/api/recordings/${testRec}`),

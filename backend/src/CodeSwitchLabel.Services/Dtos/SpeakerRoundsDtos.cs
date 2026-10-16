@@ -28,7 +28,11 @@ public record UpcomingRoundDto(
     string? RegisterOpensAt,
     bool IsRegistered);
 
-public record LeaderboardEntryDto(int Rank, long UserId, string Name, int Approved, bool IsMe);
+/// <summary>
+/// Một dòng bảng xếp hạng của đợt. TEAM_016: <see cref="Submitted"/> là số bản ghi
+/// người này ĐÃ NỘP (chờ duyệt / đạt / bị từ chối), không phải chỉ bản được duyệt.
+/// </summary>
+public record LeaderboardEntryDto(int Rank, long UserId, string Name, int Submitted, bool IsMe);
 
 /// <summary>Bản ghi bị từ chối của chính mình, kèm lý do và link nghe lại để thu lại.</summary>
 public record RejectedRecordingDto(

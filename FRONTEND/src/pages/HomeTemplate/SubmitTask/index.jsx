@@ -120,7 +120,7 @@ export default function SubmitTask() {
   const queryClient = useQueryClient();
 
   // Nhận từ RecordSpeech qua navigate state: câu + các bản ghi { cs?: { url, blob }, vi?: { url, blob } }
-  const { scriptId, csContent, vePlain, remainingVariants, recordings } = location.state || {};
+  const { scriptId, csContent, viPlain, remainingVariants, recordings } = location.state || {};
 
   // Chỉ nộp bản backend còn thiếu: bản đã nộp trước đó (đang chờ duyệt / đã đạt) mà gửi lại sẽ bị 409.
   // Trang vẫn cho ghi và nghe lại đủ 2 câu.
@@ -213,7 +213,7 @@ export default function SubmitTask() {
           <p className="text-caption font-label" style={{ color: AUDIO_PRIMARY }}>Câu tiếng Việt</p>
           <div className="p-4 rounded-xl" style={{ background: SURFACE_PAGE, border: `1px solid ${BORDER_LIGHT}` }}>
             <p className="type-reading-sm" style={{ color: TEXT_HEADING }}>
-              "{vePlain}"
+              "{viPlain}"
             </p>
           </div>
           <AudioBlock label="Bản ghi tiếng Việt" src={recordings.vi.url} />

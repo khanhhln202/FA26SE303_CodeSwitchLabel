@@ -1,7 +1,7 @@
 import { httpClient } from "../utils/setting";
 
 // Chi tiết một cặp câu: GET /api/scripts/{id}
-// Trả về { scriptId, csContent, veContent, alignment: [{ source, target, ... }], status, ... }
+// Trả về { scriptId, csContent, viContent, alignment: [{ source, target, ... }], status, ... }
 export const getScriptDetailApi = async (scriptId) => {
   try {
     const response = await httpClient.get(`/api/scripts/${scriptId}`);
@@ -29,7 +29,7 @@ export const getScriptErrorReasonsApi = async () => {
 };
 
 // Góp ý một cặp câu: POST /api/scripts/{id}/review
-// Sửa:     { action: "Edited", editedCsContent, editedVeContent, editedAlignment }
+// Sửa:     { action: "Edited", editedCsContent, editedViContent, editedAlignment }
 // Báo lỗi: { action: "Rejected", errorReasonCode, comment }
 export const reviewScriptApi = async ({ scriptId, ...values }) => {
   try {

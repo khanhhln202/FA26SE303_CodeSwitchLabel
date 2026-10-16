@@ -54,6 +54,10 @@ public interface IReviewRepository
 
     Task<List<RejectionReason>> GetReasonsByCodesAsync(string[] codes, CancellationToken ct = default);
 
+    /// <summary>
+    /// Task duyệt đang giao cho người này và còn nhận việc (chưa huỷ). TEAM_016:
+    /// task đã đủ chỉ tiêu (Completed) vẫn duyệt thêm được — KPI không chặn.
+    /// </summary>
     Task<bool> IsActiveReviewTaskOfAsync(long taskId, long reviewerId, CancellationToken ct = default);
 
     /// <summary>Task duyệt từng giao cho người này (kể cả đã đóng) — dùng cho xem lại read-only.</summary>
@@ -139,7 +143,8 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
         db.WorkTasks.AsNoTracking().AnyAsync(t =>
             t.TaskId == taskId &&
             t.TaskType == TaskType.Review &&
-            (t.Status == WorkTaskStatus.InProgress) &&
+            // TEAM_016: chỉ task đã huỷ mới chặn — task đủ chỉ tiêu vẫn duyệt thêm được.
+            t.Status != WorkTaskStatus.Cancelled &&
             t.Assignments.Any(a => a.UserId == reviewerId && a.AssignmentStatus == AssignmentStatus.Active), ct);
 
     public Task<bool> IsReviewTaskOfAsync(
@@ -156,7 +161,8 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
             tr.RecordingId == recordingId &&
             tr.Status == TaskRecordingStatus.Queued &&
             tr.Task.TaskType == TaskType.Review &&
-            (tr.Task.Status == WorkTaskStatus.InProgress) &&
+            // TEAM_016: task đã đủ chỉ tiêu vẫn nhận duyệt thêm.
+            tr.Task.Status != WorkTaskStatus.Cancelled &&
             tr.Task.Assignments.Any(a => a.UserId == reviewerId && a.AssignmentStatus == AssignmentStatus.Active), ct);
 
     public Task<List<TaskRecording>> GetQueuedItemsAsync(string recordingId, CancellationToken ct = default) =>
@@ -298,7 +304,9 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
             .AsNoTracking()
             .Where(a => a.UserId == reviewerId && a.AssignmentStatus == AssignmentStatus.Active)
             .Where(a => a.Task.TaskType == TaskType.Review)
-            .Where(a => a.Task.Status == WorkTaskStatus.InProgress)
+            // TEAM_016: trả cả task đã đủ chỉ tiêu — Reviewer vẫn vào duyệt thêm được,
+            // màn hình cá nhân phải còn thấy task để mở.
+            .Where(a => a.Task.Status != WorkTaskStatus.Cancelled)
             .OrderBy(a => a.Task.Deadline)
             .Select(a => new ReviewTaskProgress(
                 a.TaskId,

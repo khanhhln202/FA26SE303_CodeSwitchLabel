@@ -50,6 +50,7 @@ docker-compose.override.yml
 
 # ---- File do kịch bản demo tự sinh lại mỗi lần chạy ----
 demo/demo-live-import.json
+demo/demo-proposals-import.json
 
 # ---- Commit đang chạy trên máy deploy; deploy.sh tự ghi lại, không commit ----
 deploy/.deployed-sha

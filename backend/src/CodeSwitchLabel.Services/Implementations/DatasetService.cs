@@ -254,7 +254,7 @@ public class DatasetService(
                 variant = r.SentenceVariant.ToString(),
                 speakerId = r.SpeakerId,
                 csContent = r.Script.CsContent,
-                veContent = r.Script.ViContent,
+                viContent = r.Script.ViContent,
                 durationSec = r.DurationSec,
                 audioUrl = url
             });

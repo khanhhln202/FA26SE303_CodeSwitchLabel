@@ -151,7 +151,7 @@ export default function AdminTextData() {
         await adminService.reviewScript(editingItem.id, {
           action: "Edited",
           editedCsContent: formData.content,
-          editedVeContent: formData.content
+          editedViContent: formData.content
         });
         toast.success(`Đã cập nhật thành công câu văn bản!`);
         setShowModal(false);
@@ -194,7 +194,7 @@ export default function AdminTextData() {
 
         for (const item of itemsToUpload) {
           const csContent = item.cs_transcript || item.csContent || item.content || "";
-          const veContent = item.vi_equivalent || item.veContent || csContent;
+          const viContent = item.vi_equivalent || item.viContent || csContent;
           const domain = mapDomainToApi(item.domain || item.topic);
           const alignments = item.alignment || item.alignments || [];
 
@@ -202,7 +202,7 @@ export default function AdminTextData() {
             try {
               await adminService.createText({
                 csContent,
-                veContent,
+                viContent,
                 domain,
                 alignment: alignments
               });

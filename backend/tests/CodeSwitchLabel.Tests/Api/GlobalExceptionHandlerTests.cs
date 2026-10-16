@@ -54,6 +54,24 @@ public sealed class GlobalExceptionHandlerTests
         Assert.Contains($"\"code\":\"{code}\"", ReadBody(context));
     }
 
+    [Theory]
+    [InlineData("proposal: script s_111000001 must be validated (currently pending_validation)", "script_not_validated")]
+    [InlineData("proposal: script s_111000001 already has recordings", "script_already_recorded")]
+    public async Task TriggerDeXuat_Tra409VaMaNghiepVu(string triggerMessage, string code)
+    {
+        // Arrange — lưới chắn cuối của fn_script_proposal_guard, ca đua với kiểm tra ở service.
+        var (handler, context) = Create();
+
+        // Act
+        var handled = await handler.TryHandleAsync(
+            context, new InvalidOperationException(triggerMessage), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(handled);
+        Assert.Equal(409, context.Response.StatusCode);
+        Assert.Contains($"\"code\":\"{code}\"", ReadBody(context));
+    }
+
     [Fact]
     public async Task LoiLa_Production_GiauChiTietVaTra500()
     {

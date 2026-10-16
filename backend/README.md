@@ -37,9 +37,9 @@ winget install --id Gyan.FFmpeg -e
 docker compose up -d postgres minio
 ```
 
-Lần đầu, PostgreSQL tự chạy `docs/codeswitchlabel.sql`: 24 bảng, 22 kiểu ENUM, 23 trigger, 7 view,
-26 hàm (trong đó có 2 hàm sinh mã) và dữ liệu danh mục. Con số này sinh ra từ chính file lược đồ —
-đếm lại sau mỗi lần sửa (bảng ra 25 vì tính cả `audit_log_default`, là partition của `audit_log`):
+Lần đầu, PostgreSQL tự chạy `docs/codeswitchlabel.sql`: 25 bảng, 24 kiểu ENUM, 26 trigger, 7 view,
+29 hàm (trong đó có 2 hàm sinh mã) và dữ liệu danh mục. Con số này sinh ra từ chính file lược đồ —
+đếm lại sau mỗi lần sửa (bảng ra 26 vì tính cả `audit_log_default`, là partition của `audit_log`):
 
 ```powershell
 Select-String -Path docs/codeswitchlabel.sql -Pattern '^CREATE (TABLE|TYPE|TRIGGER|VIEW|OR REPLACE FUNCTION)' -AllMatches |
@@ -186,6 +186,37 @@ Admin nhập input_text.json  →  script: pending_validation
 | **Kiểm tra lạc quan** | Client gửi `expectedRound` — vòng họ thấy lúc nhận bản ghi | Người đến sau không bị **ghi nhầm vòng**, nhận 409 `round_changed` |
 | **Ràng buộc database** | `UNIQUE(recording_id, review_round)` | Lưới chắn cuối, kể cả khi ghi thẳng bằng SQL |
 
+## Đề xuất câu (yêu cầu 2.5)
+
+Speaker **báo lỗi** hoặc **đề xuất sửa** một câu đã duyệt nội dung nhưng **chưa có bản ghi âm**
+— đề xuất vào thẳng hàng chờ của Reviewer (`script_proposal`), không cần giao việc:
+
+```http
+POST /api/speaker/scripts/s_211000001/proposals     (Speaker)
+     { "kind": "Report", "errorReasonCode": "mismatch", "comment": "…" }
+     { "kind": "Edit", "proposedCsContent": "…", "proposedViContent": "…", "proposedAlignment": [ … ] }
+GET  /api/reviewer/proposals                        (Reviewer) — lọc ?kind=&domain=&keyword=, FIFO cũ nhất trước
+POST /api/reviewer/proposals/12/resolve             (Reviewer)
+     { "decision": "Accepted", "appliedCsContent": "…", "appliedViContent": "…" }
+     { "decision": "Rejected", "comment": "…" }
+```
+
+- **Trong lúc chờ, câu tạm rút khỏi hàng đợi ghi âm** (hàng `recording` chuyển `dropped`) và đường
+  nộp bản ghi trả `409 script_has_pending_proposal` — người đọc giữ câu từ trước cũng không nộp được
+  bản thu nội dung cũ.
+- **Mỗi câu tối đa MỘT đề xuất chờ** — index bộ phận `uq_script_proposal_pending`; gửi đề xuất thứ
+  hai trả `409 proposal_pending_exists`.
+- **Duyệt (Accepted)** = chốt nội dung mới cho câu: nội dung áp vào `script`, ghi thêm **một lượt
+  `Edited`** vào lịch sử câu; đề xuất Report **bắt buộc kèm bản chốt** (duyệt mà không sửa thì câu vẫn
+  sai như cũ, trả `422 applied_content_required`). Bản sửa theo đúng luật sửa nội dung — số từ tiếng
+  Anh (`en_word_count_locked`) và quan hệ Anh–Việt (`relation_locked`) khoá theo mã câu.
+- **Từ chối (Rejected)** bắt buộc ghi lý do (`422 decision_note_required`); câu không đổi gì.
+- **Chốt xong, câu quay lại hàng đợi ghi âm** (nếu vẫn `validated` và chưa có bản ghi âm); chốt rồi
+  thì không đổi quyết định được nữa (`409 proposal_already_decided`). Câu bị loại khỏi kho trong lúc
+  chờ thì đề xuất tự đóng.
+- Ba bất biến trên do **trigger database** giữ (`fn_script_proposal_guard` / `fn_script_proposal_sync`
+  / `fn_script_proposal_close_on_script`), không chỉ ở service — đường ghi SQL thẳng cũng phải tuân.
+
 ## Giao việc
 
 ```
@@ -206,6 +237,8 @@ Task mới tạo ra đã là `InProgress` — không còn `Draft`/`Open` (TEAM_0
   `reassigned`, không bị xoá. `target_qty` là của cả nhóm, không nhân theo số người nhận.
 - **Trạng thái task tự tính lại** từ số liệu thật sau mỗi việc xảy ra (đạt chỉ tiêu →
   `Completed`, chưa đạt → `InProgress`); chỉ còn ba giá trị (`InProgress`/`Completed`/`Cancelled`).
+  **TEAM_016**: `Completed` KHÔNG khoá công việc — người nhận còn lượt giao Active vẫn thu/duyệt
+  thêm được (KPI chỉ để đo, không để chặn); chỉ `Cancelled` mới cấm hoàn toàn.
   Task Manager đổi tay được qua `PATCH /api/tasks/{id}` với `status` — `Cancelled` bấm tay
   y hệt nút Huỷ (mọi lượt giao đang hoạt động cũng chuyển `cancelled`). Trạng thái đợt thì
   **không bấm tay**: nó là hàm của task (`Open` chưa có nhiệm vụ nào, `InProgress` đang làm,
@@ -296,6 +329,9 @@ Phụ thuộc đi một chiều: **Api → Services → Repositories**.
 - **Không gán trạng thái task ở ngoài `TaskStateMachine`**, trừ Huỷ.
 - **Không sửa nội dung cặp câu khi đã có bản ghi âm**, và không đổi số từ tiếng Anh vì nó nằm trong mã câu.
 - **Không xoá cứng `rejection_reason` và `script_error_reason`** — chỉ tắt `is_active`.
+  **TEAM_016**: 4 mã từ chối bản ghi (`content_mismatch`, `background_noise`, `mispronunciation`, `other`);
+  5 mã cũ cùng nhóm bị ẩn (`script_text_error`, `word_skipped_added`, `low_volume`, `clipping_distortion`, `excess_silence`);
+  lịch sử được gộp về mã giữ lại qua `migrations/V10__four_rejection_reasons.sql`.
 - **Không hard-code ngưỡng.** Mọi con số vào bảng `system_config`.
 - **Không đo thời lượng trên file âm thanh gốc.** Chuyển sang WAV trước rồi mới đo.
 - **Không dùng tên file client gửi lên làm đường dẫn.** Chỉ lấy phần đuôi.

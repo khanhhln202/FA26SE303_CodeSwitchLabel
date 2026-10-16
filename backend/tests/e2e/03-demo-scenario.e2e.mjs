@@ -109,7 +109,7 @@ console.log('\n== Màn 3 · Duyệt câu trước khi thu');
 // Câu này không tính vào bảng kết quả — nó chỉ là dữ liệu dựng trước cho hai bước kế.
 const cauCuaSpeaker = await call(T.speaker1, 'POST', '/api/speaker/scripts/contribute', {
   csContent: '[vi]Chiều nay [en]deadline [vi]của em là mấy giờ ạ?',
-  veContent: '[vi]Chiều nay hạn chót của em là mấy giờ ạ?',
+  viContent: '[vi]Chiều nay hạn chót của em là mấy giờ ạ?',
   domain: 'ItTechnology',
   alignment: [
     { source: 'deadline', source_lang: 'en', target: 'hạn chót', target_lang: 'vi', relation: 'semantic_equivalent' }
@@ -131,7 +131,7 @@ S('3.4', 'reviewer', 'POST', `/api/scripts/${maChoDuyet}/review`, await call(T.r
   editedCsContent: nhieuHon
     ? '[vi]Cô vừa đăng [en]quiz [vi]mới lên [en]online [vi], cả lớp làm trước tối nay nhé.'
     : '[vi]Cô vừa đăng [en]quiz [vi]mới lên hệ thống, cả lớp làm trước tối nay nhé.',
-  editedVeContent: nhieuHon
+  editedViContent: nhieuHon
     ? '[vi]Cô vừa đăng bài kiểm tra ngắn mới lên mạng, cả lớp làm trước tối nay nhé.'
     : '[vi]Cô vừa đăng bài kiểm tra ngắn mới lên hệ thống, cả lớp làm trước tối nay nhé.',
   comment: 'Thêm "lên hệ thống" cho rõ nghĩa'
@@ -140,7 +140,7 @@ S('3.5', 'reviewer', 'POST', `/api/scripts/${maNhap}/review`, await call(T.revie
   { action: 'Accepted', comment: 'Câu tự nhiên, đúng kiểu nói hằng ngày' }), 200, (b) => ({ status: b.status }));
 r = S('3.6', 'speaker1', 'POST', '/api/speaker/scripts/contribute', await call(T.speaker1, 'POST', '/api/speaker/scripts/contribute', {
   csContent: '[vi]Tối nay mình phải [en]fix bug [vi]gấp cho khách.',
-  veContent: '[vi]Tối nay mình phải sửa lỗi gấp cho khách.',
+  viContent: '[vi]Tối nay mình phải sửa lỗi gấp cho khách.',
   domain: 'ItTechnology',
   alignment: [
     { source: 'fix', source_lang: 'en', target: 'sửa', target_lang: 'vi', relation: 'semantic_equivalent' },

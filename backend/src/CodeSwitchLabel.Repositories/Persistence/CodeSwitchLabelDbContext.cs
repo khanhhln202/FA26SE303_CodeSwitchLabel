@@ -33,6 +33,9 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
     public DbSet<ScriptErrorReason> ScriptErrorReasons => Set<ScriptErrorReason>();
     public DbSet<ScriptReview> ScriptReviews => Set<ScriptReview>();
 
+    /// <summary>TEAM_015: đề xuất của Speaker (báo lỗi / đề xuất sửa) — hàng chờ của Reviewer.</summary>
+    public DbSet<ScriptProposal> ScriptProposals => Set<ScriptProposal>();
+
     // TEAM_010: hàng đợi chung cho duyệt văn bản và ghi âm. Chỉ đọc — hàng do
     // trigger fn_script_queue_sync sinh và hàm fn_queue_claim_next xử lý giữ chỗ.
     public DbSet<ScriptQueue> ScriptQueue => Set<ScriptQueue>();
@@ -125,6 +128,9 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         // TEAM_010
         modelBuilder.HasPostgresEnum<QueueStage>();
         modelBuilder.HasPostgresEnum<QueueState>();
+        // TEAM_015
+        modelBuilder.HasPostgresEnum<ProposalKind>();
+        modelBuilder.HasPostgresEnum<ProposalStatus>();
     }
 
     private static void MapUsers(ModelBuilder modelBuilder)
@@ -246,6 +252,29 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
                 .HasDatabaseName("uq_script_queue_open")
                 .IsUnique()
                 .HasFilter("state IN ('queued','claimed')");
+        });
+
+        // TEAM_015: đề xuất câu. Khoá ngoại tới app_user phải chỉ tường minh vì tên
+        // `DecidedByUser` + cột `decided_by` không khớp quy ước EF (<Navigation>Id).
+        modelBuilder.Entity<ScriptProposal>(e =>
+        {
+            e.ToTable("script_proposal");
+            e.HasKey(x => x.ProposalId);
+            e.Property(x => x.ScriptId).HasMaxLength(11);
+
+            // Lời giải Anh–Việt của bản sửa giữ nguyên dạng JSONB như lược đồ.
+            e.Property(x => x.ProposedAlignment).HasColumnType("jsonb");
+
+            e.HasOne(x => x.Script).WithMany(s => s.Proposals).HasForeignKey(x => x.ScriptId);
+            e.HasOne(x => x.Proposer).WithMany().HasForeignKey(x => x.ProposerId);
+            e.HasOne(x => x.DecidedByUser).WithMany().HasForeignKey(x => x.DecidedBy);
+            e.HasOne(x => x.ErrorReason).WithMany().HasForeignKey(x => x.ErrorReasonId);
+
+            // Mỗi câu tối đa MỘT đề xuất chờ — index một phần như lược đồ.
+            e.HasIndex(x => x.ScriptId)
+                .HasDatabaseName("uq_script_proposal_pending")
+                .IsUnique()
+                .HasFilter("status = 'pending'");
         });
     }
 

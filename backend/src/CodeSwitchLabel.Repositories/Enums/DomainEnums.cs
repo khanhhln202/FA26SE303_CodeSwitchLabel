@@ -40,6 +40,19 @@ public enum QueueStage { TextReview, Recording }
 public enum QueueState { Queued, Claimed, Done, Dropped }
 
 /// <summary>
+/// TEAM_015: loại đề xuất của Speaker trên một câu đã duyệt nội dung.
+/// Report = chỉ báo câu có lỗi (kèm lý do); Edit = gửi kèm bản sửa đề xuất.
+/// </summary>
+public enum ProposalKind { Report, Edit }
+
+/// <summary>
+/// TEAM_015: Pending = đang nằm trong hàng chờ của Reviewer; Accepted/Rejected = đã có
+/// quyết định. Đề xuất Pending giữ câu khỏi hàng đợi ghi âm (trigger fn_script_proposal_sync);
+/// xử lý xong câu tự quay lại hàng đợi.
+/// </summary>
+public enum ProposalStatus { Pending, Accepted, Rejected }
+
+/// <summary>
 /// Quan hệ giữa từ tiếng Anh và từ tiếng Việt tương ứng, lưu theo từng từ trong script_word.
 /// proper_noun = danh từ riêng giữ nguyên, không dịch, nên vi_word phải bằng en_word.
 /// </summary>

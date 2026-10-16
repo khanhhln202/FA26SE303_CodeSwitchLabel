@@ -54,6 +54,10 @@ public class Script
 
     /// <summary>TEAM_010: các lượt câu này đã đi qua hàng đợi chung.</summary>
     public ICollection<ScriptQueue> QueueRows { get; set; } = [];
+
+    /// <summary>TEAM_015: các đề xuất (báo lỗi / đề xuất sửa) Speaker gửi cho câu này.</summary>
+    public ICollection<ScriptProposal> Proposals { get; set; } = [];
+
     public ICollection<TaskScript> TaskScripts { get; set; } = [];
 }
 
@@ -140,5 +144,56 @@ public class ScriptReview
 
     public Script Script { get; set; } = null!;
     public AppUser User { get; set; } = null!;
+    public ScriptErrorReason? ErrorReason { get; set; }
+}
+
+/// <summary>
+/// TEAM_015: đề xuất của Speaker trên một câu ĐÃ duyệt nội dung — báo lỗi (Report) hoặc
+/// kèm bản sửa (Edit). Hàng chờ của Reviewer chính là các dòng đang Pending của bảng này.
+///
+/// Chỉ áp dụng cho câu chưa có bản ghi âm nào, và mỗi câu tối đa MỘT đề xuất chờ —
+/// hai bất biến đó do trigger của database giữ (fn_script_proposal_guard,
+/// uq_script_proposal_pending), không phải service.
+///
+/// Giải quyết xong (Accepted/Rejected) là câu tự quay lại hàng đợi ghi âm, không ai
+/// phải thêm hàng bằng tay — xem fn_script_proposal_sync.
+/// </summary>
+public class ScriptProposal
+{
+    public long ProposalId { get; set; }
+    public string ScriptId { get; set; } = string.Empty;
+    public long ProposerId { get; set; }
+    public ProposalKind Kind { get; set; }
+
+    /// <summary>Bắt buộc khi Kind = Report: lý do lỗi, lấy từ script_error_reason.</summary>
+    public short? ErrorReasonId { get; set; }
+
+    public string? Comment { get; set; }
+
+    /// <summary>Bản sửa đề xuất — bắt buộc khi Kind = Edit, sửa là sửa cả CẶP.</summary>
+    public string? ProposedCsContent { get; set; }
+    public string? ProposedViContent { get; set; }
+
+    /// <summary>
+    /// Lời giải Anh–Việt của bản sửa, lưu dạng JSONB đúng như client gửi lên (mảng AlignmentItem).
+    /// Null nghĩa là giữ nguyên các dòng script_word hiện có của câu.
+    /// </summary>
+    public string? ProposedAlignment { get; set; }
+
+    public ProposalStatus Status { get; set; }
+
+    /// <summary>FK tới app_user; NULL khi câu bị loại và đề xuất tự đóng.</summary>
+    public long? DecidedBy { get; set; }
+
+    public DateTimeOffset? DecidedAt { get; set; }
+    public string? DecisionNote { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public Script Script { get; set; } = null!;
+    public AppUser Proposer { get; set; } = null!;
+
+    /// <summary>Null khi câu bị loại khỏi kho và đề xuất tự đóng (fn_script_proposal_close_on_script).</summary>
+    public AppUser? DecidedByUser { get; set; }
+
     public ScriptErrorReason? ErrorReason { get; set; }
 }

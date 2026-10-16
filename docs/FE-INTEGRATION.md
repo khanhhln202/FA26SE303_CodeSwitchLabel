@@ -222,7 +222,7 @@ POST /api/auth/login
 
 Câu chen tiếng Anh giữ nguyên nhãn: `[vi]Em nên [en]scan [vi]tài liệu này rồi gửi qua [en]email [vi]cho tôi.`
 
-- Hiển thị cho người đọc thì dùng sẵn trường **`csPlain` / `vePlain`** (đã bỏ nhãn).
+- Hiển thị cho người đọc thì dùng sẵn trường **`csPlain` / `viPlain`** (đã bỏ nhãn).
 - Muốn tô màu phần tiếng Anh thì tách nhãn:
 
 ```ts
@@ -370,7 +370,7 @@ Các mã còn lại: `alignment_incomplete`, `alignment_word_missing`, `already_
 
 ```json
 { "action": "Accepted", "comment": "Câu tự nhiên" }
-{ "action": "Edited", "editedCsContent": "[vi]Em nên [en]scan [vi]tài liệu này.", "editedVeContent": "[vi]Em nên quét tài liệu này." }
+{ "action": "Edited", "editedCsContent": "[vi]Em nên [en]scan [vi]tài liệu này.", "editedViContent": "[vi]Em nên quét tài liệu này." }
 { "action": "Rejected", "errorReasonCode": "unnatural", "comment": "Không ai nói như vậy" }
 ```
 
@@ -391,8 +391,8 @@ Sửa là sửa **cả cặp**. Câu đã có bản ghi thì không sửa đư�
   "scriptId": "s_111000003",
   "csContent": "[vi]Mình cần [en]review [vi]lại phần mã nguồn này",
   "csPlain": "Mình cần review lại phần mã nguồn này",
-  "veContent": "[vi]Mình cần xem lại phần mã nguồn này",
-  "vePlain": "Mình cần xem lại phần mã nguồn này",
+  "viContent": "[vi]Mình cần xem lại phần mã nguồn này",
+  "viPlain": "Mình cần xem lại phần mã nguồn này",
   "domain": "ItTechnology",
   "wordCount": 8, "enWordCount": 1,
   "remainingVariants": ["CodeSwitching", "PureVietnamese"],
@@ -400,7 +400,7 @@ Sửa là sửa **cả cặp**. Câu đã có bản ghi thì không sửa đư�
 }
 ```
 
-2. Với mỗi biến thể trong **`remainingVariants`**: hiện đúng câu (`csPlain` cho `CodeSwitching`, `vePlain` cho `PureVietnamese`), thu âm, rồi nộp bằng `POST /api/recordings` (xem mục 5).
+2. Với mỗi biến thể trong **`remainingVariants`**: hiện đúng câu (`csPlain` cho `CodeSwitching`, `viPlain` cho `PureVietnamese`), thu âm, rồi nộp bằng `POST /api/recordings` (xem mục 5).
 3. Đọc kết quả nộp:
    - `qcPassed: false` — bản đã lưu nhưng trượt kiểm tra tự động. Hiện `qcIssues[].message` và mời thu lại.
    - `take` — đây là lần thu thứ mấy.
@@ -436,7 +436,7 @@ Bản trượt kiểm tra **vẫn được lưu** kèm toàn bộ số đo (th�
 ```json
 {
   "csContent": "[vi]Tối mình phải [en]fix bug [vi]gấp",
-  "veContent": "[vi]Tối mình phải sửa lỗi gấp",
+  "viContent": "[vi]Tối mình phải sửa lỗi gấp",
   "domain": "ItTechnology",
   "alignment": [{ "source": "fix bug", "source_lang": "en", "target": "sửa lỗi", "target_lang": "vi", "relation": "semantic_equivalent" }]
 }
@@ -494,7 +494,8 @@ trả 204 khi người đọc **chưa có task thu âm nào**, kể cả họ đ
 
 ```json
 {
-  "recording":    { "total": 40, "approved": 30, "rejected": 4, "pending": 6 },
+  "recording":    { "total": 40, "approved": 30, "rejected": 4, "pending": 6, "submitted": 34 },
+  // TEAM_016: submitted = tổng đã nộp (chờ duyệt + đạt + từ chối), không chỉ approved
   "contribution": { "total": 12, "validated": 9,  "rejected": 1, "pending": 2 }
 }
 ```
@@ -567,7 +568,7 @@ trả 204 khi người đọc **chưa có task thu âm nào**, kể cả họ đ
 - **Vẫn duyệt TỪNG bản một**: `POST /api/recordings/{recordingId}/reviews` không đổi,
   mỗi bản vẫn đủ ba lượt riêng. Xem cả hai bản là để người duyệt đối chiếu chúng với nhau.
 
-2. `GET /api/rejection-reasons` — danh sách lý do từ chối, chia theo `category`. `description` trả về **tiếng Việt**.
+2. `GET /api/rejection-reasons` — danh sách lý do từ chối, chia theo `category`. `description` trả về **tiếng Việt**. **TEAM_016**: 4 mã hoạt động; 5 mã cũ ẩn (`script_text_error`, `word_skipped_added`, `low_volume`, `clipping_distortion`, `excess_silence`).
 3. `POST /api/recordings/{recordingId}/reviews`:
 
 ```json
@@ -973,7 +974,7 @@ Ai đã code theo bản API trước ngày 22/09/2026 thì cần sửa:
 | Trước | Bây giờ |
 |---|---|
 | `scriptId`, `recordingId` là số | Là chuỗi có nghĩa: `s_211000001`, `r_cs_211000001` |
-| Một câu (`content`) | Cặp câu `csContent` + `veContent`, có nhãn, có `csPlain` / `vePlain` để hiển thị |
+| Một câu (`content`) | Cặp câu `csContent` + `viContent`, có nhãn, có `csPlain` / `viPlain` để hiển thị |
 | Nộp bản ghi: `Audio`, `ScriptId` | Thêm bắt buộc **`SentenceVariant`** — mỗi cặp câu cần hai bản |
 | Có endpoint bỏ qua câu (`/skip`) | **Đã bỏ**. Câu có vấn đề thì dùng duyệt câu để sửa hoặc từ chối |
 | `GET /api/recordings/mine` | Gộp vào `GET /api/recordings` — Speaker tự động chỉ thấy bản của mình |
@@ -1024,3 +1025,98 @@ curl -o swagger.json http://localhost:5053/swagger/v1/swagger.json
 
 rồi dùng một công cụ sinh kiểu từ OpenAPI. Đội frontend tự chọn công cụ trong repo frontend. Mỗi lần backend
 đổi API thì sinh lại — trình biên dịch TypeScript sẽ chỉ ra ngay chỗ nào phải sửa.
+
+## 12. TEAM_015 — đề xuất câu (báo lỗi / đề xuất sửa) vào hàng chờ Reviewer
+
+Màn "Đề xuất câu" của Reviewer và nút báo lỗi phía Speaker giờ có **API thật**. Theo yêu cầu 2.5, hàng chờ của Reviewer nhận ba loại câu:
+
+- **Câu đóng góp** (`POST /api/speaker/scripts/contribute`) — đã tự vào hàng chờ `text_review` từ TEAM_010, không có gì mới ở mục này.
+- **Câu báo lỗi** (`kind: "Report"`) và **câu đề xuất sửa** (`kind: "Edit"`) — cơ chế `script_proposal` của mục này, áp dụng cho câu **đã duyệt nội dung, chưa có bản ghi âm**.
+
+Ba endpoint:
+
+| Endpoint | Vai | Dùng để |
+|---|---|---|
+| `POST /api/speaker/scripts/{scriptId}/proposals` | Speaker | Gửi báo lỗi (`Report`) hoặc đề xuất sửa (`Edit`) |
+| `GET /api/reviewer/proposals` | Reviewer | Hàng chờ đề xuất — lọc `?kind=Report\|Edit&domain=&keyword=&page=&pageSize=&sort=` (`sort`: `proposalId`, `createdAt`, `kind`, `scriptId`; mặc định **cũ nhất trước**) |
+| `POST /api/reviewer/proposals/{proposalId}/resolve` | Reviewer | Chốt: `Accepted` (kèm bản chốt) hoặc `Rejected` (kèm lý do) |
+
+Đề xuất chờ nằm **ngay trong hàng chờ của Reviewer** — không cần giao việc, không cần thao tác nào thêm.
+
+Gửi báo lỗi — `errorReasonCode` lấy từ `GET /api/script-error-reasons` (danh mục sẵn có):
+
+```http
+POST /api/speaker/scripts/s_211000001/proposals
+{ "kind": "Report", "errorReasonCode": "mismatch", "comment": "Hai câu không cùng nghĩa" }
+
+→ 200 { "proposalId": 12, "scriptId": "s_211000001", "kind": "Report", "status": "Pending", "createdAt": "…" }
+```
+
+Gửi đề xuất sửa — sửa là **sửa cả cặp**:
+
+```http
+POST /api/speaker/scripts/s_211000001/proposals
+{ "kind": "Edit",
+  "proposedCsContent": "[vi]Em nên [en]scan [vi]tài liệu mới này.",
+  "proposedViContent": "[vi]Em nên quét tài liệu mới này.",
+  "proposedAlignment": [ { "source": "scan", "target": "quét", "relation": "semantic_equivalent" } ] }
+```
+
+Mục trong hàng chờ trả **cả câu gốc lẫn bản đề xuất** — đúng hai cột màn hình đang có:
+
+```json
+{
+  "proposalId": 12, "kind": "Edit", "status": "Pending",
+  "scriptId": "s_211000001", "domain": "ItTechnology",
+  "proposerId": 6, "proposerName": "Speaker 1",
+  "errorReasonCode": null, "errorReasonDescription": null,
+  "comment": "Thêm 'mới' cho đúng nội dung", "createdAt": "2026-10-16T04:44:13Z",
+  "original": { "csContent": "[vi]Em nên [en]scan [vi]tài liệu này.", "csPlain": "Em nên scan tài liệu này.",
+                "viContent": "[vi]Em nên quét tài liệu này.", "viPlain": "Em nên quét tài liệu này.",
+                "alignment": [ { "source": "scan", "target": "quét", "relation": "semantic_equivalent" } ] },
+  "proposed": { "csContent": "…", "csPlain": "…", "viContent": "…", "viPlain": "…", "alignment": [ … ] }
+}
+```
+
+`proposed` là **null** với `kind: "Report"` — Reviewer tự soạn bản chốt khi duyệt.
+
+Chốt đề xuất:
+
+```http
+POST /api/reviewer/proposals/12/resolve
+{ "decision": "Accepted",
+  "appliedCsContent": "[vi]Em nên [en]scan [vi]tài liệu mới này rồi.",
+  "appliedViContent": "[vi]Em nên quét tài liệu mới này rồi.",
+  "comment": "Đồng ý, chỉnh thêm cho trọn nghĩa" }
+
+→ 200 { "proposalId": 12, "status": "Accepted", "scriptStatus": "Validated",
+        "decidedBy": 3, "decidedAt": "…", "decisionNote": "Đồng ý, chỉnh thêm cho trọn nghĩa",
+        "scriptReviewId": 20 }
+```
+
+- Reviewer được **chỉnh thêm** so với bản Speaker đề xuất; bỏ `appliedCsContent`/`appliedViContent` thì lấy nguyên bản đề xuất (chỉ có với `Edit`).
+- Duyệt đề xuất **Report mà không có bản chốt** thì câu vẫn sai như cũ → `422 applied_content_required`.
+- Từ chối bắt buộc `comment` → `422 decision_note_required`; câu không đổi gì.
+- `appliedAlignment` / `proposedAlignment` viết theo **cùng dạng `alignment` của câu trong kho** (mảng, từng phần tử snake_case `source` / `source_lang` / `target` / `target_lang` / `relation`).
+
+### 12.1 Luật cần biết khi làm giao diện
+
+| Luật | Biểu hiện trên API |
+|---|---|
+| Chỉ đề xuất được câu **đã duyệt nội dung, chưa có bản ghi âm** | `409 script_not_validated` / `409 script_already_recorded` |
+| Mỗi câu tối đa **một đề xuất chờ** | gửi cái thứ hai → `409 proposal_pending_exists` |
+| Trong lúc chờ, câu **tạm rút khỏi hàng đợi ghi âm** | nộp bản ghi → `409 script_has_pending_proposal` — nên hiện banner "câu đang chờ xử lý đề xuất, tạm chưa thu được" |
+| Bản sửa giữ nguyên **số từ tiếng Anh** của câu (nằm trong mã câu) | `422 en_word_count_locked` |
+| Bản sửa giữ nguyên **quan hệ Anh–Việt** của câu | `422 relation_locked` |
+| Reviewer phải **đúng chủ đề** (domain) của câu | `422 reviewer_domain_required` |
+| Chốt rồi **không đổi quyết định** được nữa | `409 proposal_already_decided` |
+| Chốt xong câu **tự quay lại hàng đợi ghi âm** | không có bước phía FE — chỉ cần tải lại danh sách |
+
+### 12.2 Nối mock `FRONTEND/src/mocks/reviewer/proposals.js` với API thật
+
+- API trả enum **PascalCase**: `"Report"`, `"Edit"`, `"Pending"`, `"Accepted"`, `"Rejected"` — không phải chữ thường như mock.
+- `original` / `proposed` không dùng `cs_transcript` / `vi_equivalent`; dùng `csContent` / `csPlain` / `viContent` / `viPlain` (camelCase) + `alignment` (mảng, **từng phần tử vẫn snake_case**).
+- Mock dùng id kiểu `ERR-024`; API trả `proposalId` là **số**.
+- **Mock ERR-025 muốn bỏ một nhãn `[en]` — API không cho.** Số từ tiếng Anh nằm trong mã câu (`en_word_count`), muốn đổi số từ phải tạo cặp câu mới. Bản sửa chỉ nên đổi **lời dịch / lời câu**, giữ nguyên số nhãn `[en]`.
+
+Hàng chờ đề xuất dùng chung nếp đọc trang như các danh sách khác: `?page&pageSize` (max 100) + `?sort=&dir=`.

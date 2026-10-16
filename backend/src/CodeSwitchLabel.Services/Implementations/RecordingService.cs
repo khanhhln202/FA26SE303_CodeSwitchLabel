@@ -24,6 +24,7 @@ internal static class RecordingMapper
 public class RecordingService(
     IRecordingRepository recordings,
     IScriptRepository scripts,
+    IScriptProposalRepository proposals,
     IObjectStorage storage,
     IAudioProcessor audio,
     ISystemConfigService config,
@@ -209,6 +210,16 @@ public class RecordingService(
             throw new ConflictException(
                 "script_not_recordable",
                 $"Cặp câu {script.ScriptId} đang ở trạng thái {script.Status}, chỉ thu âm được câu đã duyệt nội dung.");
+        }
+
+        // TEAM_015: câu đang có đề xuất chờ thì tạm rút khỏi hàng đợi ghi âm. Hàng đợi đã
+        // không phát câu này ra nữa, nhưng người đọc có thể đã giữ câu TRƯỚC lúc đề xuất
+        // được gửi — chốt ở đây để bản thu của nội dung cũ không lọt vào kho.
+        if (await proposals.HasPendingAsync(command.ScriptId, ct))
+        {
+            throw new ConflictException(
+                "script_has_pending_proposal",
+                $"Cặp câu {script.ScriptId} đang có đề xuất chờ Reviewer xử lý nên tạm chưa thu âm được.");
         }
 
         // Luật cốt lõi của lược đồ: một cặp câu chỉ một người đọc, để hai bản cs và vi

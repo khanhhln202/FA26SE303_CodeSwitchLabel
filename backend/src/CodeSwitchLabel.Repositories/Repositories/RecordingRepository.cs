@@ -40,11 +40,17 @@ public interface IRecordingRepository
     Task<string> GenerateIdAsync(
         string scriptId, SentenceVariant variant, int take, CancellationToken ct = default);
 
-    /// <summary>Task có đúng là task thu âm đang chạy, đang giao cho người này, và chứa cặp câu này.</summary>
+    /// <summary>
+    /// Task có đúng là task thu âm còn nhận việc (chưa huỷ), đang giao cho người này,
+    /// và chứa cặp câu này. TEAM_016: task đã đủ chỉ tiêu (Completed) vẫn nhận — KPI không chặn.
+    /// </summary>
     Task<bool> IsRecordableInTaskAsync(
         long taskId, long speakerId, string scriptId, CancellationToken ct = default);
 
-    /// <summary>Task thu âm đang giao cho người này mà còn chứa cặp câu này ở phần chưa xong.</summary>
+    /// <summary>
+    /// Task thu âm còn nhận việc (chưa huỷ), đang giao cho người này, mà còn chứa cặp câu
+    /// này ở phần chưa xong. Dùng để tự gắn bản ghi vào task khi người gọi không gửi taskId.
+    /// </summary>
     Task<long?> FindOwnTaskContainingScriptAsync(
         long speakerId, string scriptId, CancellationToken ct = default);
 
@@ -146,7 +152,8 @@ public class RecordingRepository(CodeSwitchLabelDbContext db) : IRecordingReposi
         db.WorkTasks.AsNoTracking().AnyAsync(t =>
             t.TaskId == taskId &&
             t.TaskType == TaskType.Recording &&
-            (t.Status == WorkTaskStatus.InProgress) &&
+            // TEAM_016: chỉ task đã huỷ mới chặn — task đủ chỉ tiêu vẫn thu thêm được.
+            t.Status != WorkTaskStatus.Cancelled &&
             t.Assignments.Any(a => a.UserId == speakerId && a.AssignmentStatus == AssignmentStatus.Active) &&
             t.TaskScripts.Any(ts => ts.ScriptId == scriptId && ts.Status == TaskScriptStatus.Pending), ct);
 
@@ -155,7 +162,7 @@ public class RecordingRepository(CodeSwitchLabelDbContext db) : IRecordingReposi
         db.WorkTasks
             .AsNoTracking()
             .Where(t => t.TaskType == TaskType.Recording)
-            .Where(t => t.Status == WorkTaskStatus.InProgress)
+            .Where(t => t.Status != WorkTaskStatus.Cancelled)
             .Where(t => t.Assignments.Any(a => a.UserId == speakerId && a.AssignmentStatus == AssignmentStatus.Active))
             .Where(t => t.TaskScripts.Any(ts => ts.ScriptId == scriptId && ts.Status == TaskScriptStatus.Pending))
             .OrderBy(t => t.Deadline ?? DateTimeOffset.MaxValue)

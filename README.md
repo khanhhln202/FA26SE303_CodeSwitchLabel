@@ -191,6 +191,7 @@ Luồng chính (7 bước):
 - **Mã câu có nghĩa** do DB sinh (`fn_generate_script_id`): `s_211000001` = số từ EN + domain + quan hệ Anh–Việt + số thứ tự. CHECK constraint chặn mã sai ý nghĩa.
 - **Mỗi cặp cần 2 bản ghi âm**: `r_cs_…` + `r_vi_…` (`_t2` khi thu lại). Trigger `trg_recording_single_speaker` bắt 1 cặp chỉ 1 người đọc (cùng giọng/buổi) — **kể cả sau khi bản ghi bị loại**, nên câu quay lại hàng đợi thu lại với chính người đọc cũ.
 - **Duyệt mù 3 lượt của 3 người khác nhau, chốt đa số 2/3** bởi trigger `trg_review_majority`. Từ chối bắt buộc ≥1 lý do; lý do nhóm `content` kéo cặp câu về `pending_validation`. **Trạng thái do DATABASE chốt, code chỉ ghi lượt rồi đọc lại.** Trong vòng duyệt **không có kiểm tra tự động nào** — auto-QC chỉ chạy lúc nộp bản ghi.
+- **Đề xuất câu (yêu cầu 2.5)**: Speaker báo lỗi (kèm lý do lỗi) hoặc gửi bản sửa cho một câu đã duyệt nội dung nhưng **chưa có bản ghi âm** — đề xuất vào thẳng hàng chờ Reviewer. Trong lúc chờ, câu **bị rút khỏi hàng đợi ghi âm** (`dropped`) nên không ai thu nhầm nội dung cũ; Reviewer chốt xong (duyệt kèm bản chốt, hoặc từ chối kèm lý do) câu **tự quay lại hàng đợi ghi âm**. Mỗi câu tối đa một đề xuất chờ; duyệt đề xuất sửa ghi thêm một lượt `Edited` vào lịch sử câu. Ba bất biến này do trigger database giữ (`fn_script_proposal_guard` / `_sync` / `_close_on_script`), không chỉ ở service.
 - **Task**: `Draft → Open → InProgress → Completed (+Cancelled)`, tự tính lại từ số liệu thật. Task thu âm đếm theo cặp (cả cs+vi đạt mới tính), task duyệt đếm theo bản ghi.
 - **Một task giao cho NHIỀU người.** `target_qty` là của **cả nhóm**, không nhân theo số người (nên quota đợt vẫn cộng đúng một lần). Mỗi người thấy **tiến độ của chính mình** (`myProgress`) lẫn của cả nhóm (`teamProgress`). Ràng buộc còn lại: cùng một người không được nhận trùng một task.
 - **Chỉ tiêu tụt thì task tự mở lại.** Bản ghi bị từ chối → mục câu lùi `Completed → Pending`, mục duyệt `Reviewed → Skipped`; `TaskStateMachine` tính lại và kéo task rời `Completed`. Trước đây chỉ tiêu không bao giờ tụt nên task treo ở "Hoàn thành" dù người nhận chưa làm đủ.
@@ -212,7 +213,7 @@ Lưu ý `ObjectStorage:ServiceUrl` (API gọi MinIO trong mạng Docker, `http:/
 |---|---|
 | Backend unit + integration | `dotnet test backend/CodeSwitchLabel.sln` |
 | Bỏ qua nhóm cần ffmpeg | `dotnet test backend/CodeSwitchLabel.sln --filter "Category!=RequiresFfmpeg"` |
-| E2E (cần hệ thống chạy + DB mới) | `docker compose --profile api down -v; docker compose --profile api up -d --build` rồi `node backend/tests/e2e/01-core-flows.e2e.mjs`, `node backend/tests/e2e/02-users.e2e.mjs`, `node backend/tests/e2e/03-demo-scenario.e2e.mjs`, `node backend/tests/e2e/04-import-task-record.e2e.mjs` (mặc định `BASE=http://localhost:5053`) |
+| E2E (cần hệ thống chạy + DB mới) | `docker compose --profile api down -v; docker compose --profile api up -d --build` rồi `node backend/tests/e2e/01-core-flows.e2e.mjs`, `node backend/tests/e2e/02-users.e2e.mjs`, `node backend/tests/e2e/03-demo-scenario.e2e.mjs`, `node backend/tests/e2e/04-import-task-record.e2e.mjs`, `node backend/tests/e2e/05-proposals.e2e.mjs` (mặc định `BASE=http://localhost:5053`; riêng bộ 04 và 05 tự sinh dữ liệu riêng nên chạy lại không cần dựng lại DB) |
 | Nghiệm thu prod | `PASSWORD='<SEED_PASSWORD>' BASE=https://api.<domain> node backend/tests/e2e/01-core-flows.e2e.mjs` |
 
 File mẫu cho test nằm ở `demo/`: `input_text_demo.json`, `*.wav/*.m4a`, `test-them/` (JSON lỗi, file rỗng/giả, bản 35s).
@@ -227,7 +228,7 @@ docker exec csl-postgres psql -U csl -d codeswitchlabel -c "select changed_at, u
 
 - Swagger là nguồn sự thật khi backend chạy: `http://localhost:5053` (dev) / `https://api.<domain>` (prod). Export: `curl -o swagger.json http://localhost:5053/swagger/v1/swagger.json`
 - `docs/FE-INTEGRATION.md`: auth, format lỗi (`401/403` rỗng, `400` validation `errors`, nghiệp vụ `code+title+traceId`), recording/review/tasks/enum
-- 12 controller: `Auth, Scripts, Recordings, Reviews, ScriptQueue, Speaker, Tasks, Campaigns, Datasets, Users, Admin, Config` — xem chi tiết trong [`backend/README.md`](backend/README.md). Thêm controller thì đếm lại: `ls backend/src/CodeSwitchLabel.Api/Controllers/*.cs | wc -l`
+- 13 controller: `Auth, Scripts, Recordings, Reviews, ScriptQueue, Speaker, Tasks, Campaigns, Datasets, Users, Admin, Config, Proposals` — xem chi tiết trong [`backend/README.md`](backend/README.md). Thêm controller thì đếm lại: `ls backend/src/CodeSwitchLabel.Api/Controllers/*.cs | wc -l`
 
 ## Deploy
 

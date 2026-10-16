@@ -44,7 +44,7 @@ export const getSpeakerProgressApi = async () => {
 };
 
 // Cặp câu tiếp theo để thu âm: GET /api/speaker/scripts/next?taskId=
-// Trả về { scriptId, csContent, csPlain, veContent, vePlain, domain, remainingVariants, guidance }
+// Trả về { scriptId, csContent, csPlain, viContent, viPlain, domain, remainingVariants, guidance }
 // 204 = hết câu trong nhiệm vụ -> trả null
 export const getNextScriptApi = async (taskId) => {
   try {
@@ -134,7 +134,7 @@ export const getSpeakerRejectedRecordingsApi = async ({ limit = 5 } = {}) => {
 };
 
 // Đóng góp một cặp câu mới: POST /api/speaker/scripts/contribute
-// values: { csContent, veContent (có nhãn [vi]/[en]), domain: "DailyLife" | "ItTechnology" | "Education",
+// values: { csContent, viContent (có nhãn [vi]/[en]), domain: "DailyLife" | "ItTechnology" | "Education",
 //           relation: "DirectTranslation", alignment: [{ source, source_lang, target, target_lang, relation }] }
 // Trả về chi tiết cặp câu vừa tạo (trạng thái chờ duyệt nội dung)
 export const contributeScriptApi = async (values) => {

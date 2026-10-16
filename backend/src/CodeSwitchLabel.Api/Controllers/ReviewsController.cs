@@ -45,9 +45,9 @@ public class ReviewsController(IReviewService reviewService, IReviewerStatsServi
     /// <remarks>
     /// Dùng cho màn hình "task duyệt của tôi": thấy cả task một lượt thay vì bấm `next` từng bản.
     ///
-    /// Task đã đóng (Completed/Cancelled) vẫn mở xem lại được khi mình từng được giao;
-    /// các dòng khi đó có `canReview: false` và nộp duyệt vẫn trả 403 `task_not_reviewable`.
-    /// Muốn duyệt tiếp thì nhờ Task Manager giao task mới.
+    /// TEAM_016: task đã đủ chỉ tiêu (Completed) vẫn duyệt tiếp được — KPI không chặn.
+    /// Chỉ task đã huỷ (Cancelled) mới khoá: các dòng khi đó có `canReview: false` và
+    /// nộp duyệt trả 403 `task_not_reviewable`.
     ///
     /// **Giữ nguyên luật duyệt mù** — không trả quyết định của ai. Mỗi bản chỉ cho biết đã có mấy
     /// lượt trên tổng số cần có (`reviewsDone`/`roundsRequired`), và bản thân bạn đã duyệt chưa

@@ -33,6 +33,13 @@ CREATE TYPE rejection_category    AS ENUM ('content','audio_quality','pronunciat
 -- hai chặng theo thứ tự: text_review -> recording. enqueued_at là mốc FIFO.
 CREATE TYPE queue_stage           AS ENUM ('text_review','recording');
 CREATE TYPE queue_state           AS ENUM ('queued','claimed','done','dropped');
+
+-- TEAM_015: đề xuất của Speaker trên một câu ĐÃ duyệt nội dung — báo lỗi (report) hoặc
+-- kèm bản sửa (edit). Hàng chờ của Reviewer là truy vấn trên bảng script_proposal,
+-- không phải một chặng của script_queue: đề xuất là VIỆC RIÊNG chờ quyết định,
+-- không phải bước bắt buộc mà mọi câu đều phải đi qua.
+CREATE TYPE proposal_kind         AS ENUM ('report','edit');
+CREATE TYPE proposal_status       AS ENUM ('pending','accepted','rejected');
 CREATE TYPE dataset_status        AS ENUM ('draft','released','archived');
 CREATE TYPE dataset_file_format   AS ENUM ('json','csv');
 
@@ -203,6 +210,52 @@ CREATE TABLE script_review (
 
 CREATE INDEX idx_script_review_script ON script_review (script_id);
 CREATE INDEX idx_script_review_user   ON script_review (user_id);
+
+-- TEAM_015 — ĐỀ XUẤT CÂU (yêu cầu 2.5): Speaker thấy một câu đã duyệt có vấn đề thì gửi
+-- báo lỗi hoặc đề xuất bản sửa; đề xuất chờ nằm thẳng trong bảng này và hiện ra trong
+-- hàng chờ của Reviewer — hệ thống không cần bước trung gian nào.
+--
+-- Chỉ áp dụng cho câu ĐÃ duyệt nội dung và CHƯA có bản ghi âm nào — sửa nội dung câu đã
+-- thu sẽ làm transcript của bản ghi cũ không còn khớp âm thanh. Chốt này nằm trong
+-- fn_script_proposal_guard, không chỉ ở service, vì lược đồ chỉ có một nguồn sự thật.
+--
+-- Mỗi câu tối đa MỘT đề xuất chờ (uq_script_proposal_pending): nhiều đề xuất song song
+-- trên cùng một câu thì Reviewer không biết lấy bản nào làm gốc.
+CREATE TABLE script_proposal (
+    proposal_id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    script_id           VARCHAR(11) NOT NULL REFERENCES script(script_id),
+    proposer_id         BIGINT NOT NULL REFERENCES app_user(user_id),
+    kind                proposal_kind NOT NULL,
+
+    -- kind = 'report': lý do lỗi lấy từ script_error_reason.
+    error_reason_id     SMALLINT REFERENCES script_error_reason(reason_id),
+    comment             TEXT,
+
+    -- kind = 'edit': bản sửa đề xuất, sửa là sửa cả CẶP như bảng script_review.
+    -- proposed_alignment là lời giải Anh–Việt của bản sửa; bỏ trống thì giữ các dòng
+    -- script_word hiện có của câu.
+    proposed_cs_content TEXT,
+    proposed_vi_content TEXT,
+    proposed_alignment  JSONB,
+
+    status              proposal_status NOT NULL DEFAULT 'pending',
+    decided_by          BIGINT REFERENCES app_user(user_id),
+    decided_at          TIMESTAMPTZ,
+    decision_note       TEXT,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    CONSTRAINT ck_script_proposal_report_reason CHECK (kind <> 'report'
+        OR error_reason_id IS NOT NULL),
+    CONSTRAINT ck_script_proposal_edit_pair CHECK (kind <> 'edit'
+        OR (proposed_cs_content IS NOT NULL AND proposed_vi_content IS NOT NULL)),
+    -- Quyết định xong thì phải có mốc thời gian; chưa quyết định thì chưa có mốc.
+    CONSTRAINT ck_script_proposal_decision CHECK ((status = 'pending') = (decided_at IS NULL))
+);
+
+-- Hàng chờ Reviewer: chỉ đề xuất đang chờ mới tính là đang chờ, nên cả hai index
+-- đều là index một phần. đề xuất chờ tính theo thứ tự FIFO (created_at).
+CREATE UNIQUE INDEX uq_script_proposal_pending ON script_proposal (script_id) WHERE status = 'pending';
+CREATE INDEX idx_script_proposal_queue ON script_proposal (created_at) WHERE status = 'pending';
 
 
 -- ------------------------------------------------------------
@@ -1024,6 +1077,85 @@ CREATE TRIGGER trg_script_queue_sync
     AFTER INSERT OR UPDATE OF status ON script
     FOR EACH ROW EXECUTE FUNCTION fn_script_queue_sync();
 
+-- ============================================================
+-- TEAM_015 — ĐỀ XUẤT CÂU (báo lỗi / đề xuất sửa) đi vào hàng chờ Reviewer
+-- ============================================================
+-- Ba bất biến giữ bằng trigger, cùng lý do với hàng đợi chung: đường ghi SQL
+-- thẳng cũng phải tuân, không chỉ đường ghi qua service.
+
+-- 1. Câu nhận đề xuất phải ĐANG CHỜ THU: đã duyệt nội dung và chưa có bản ghi âm
+--    nào. Sửa nội dung sau khi đã thu sẽ làm transcript của bản ghi cũ lệch âm thanh.
+CREATE OR REPLACE FUNCTION fn_script_proposal_guard() RETURNS trigger AS $$
+DECLARE
+    v_status script_status;
+BEGIN
+    SELECT status INTO v_status FROM script WHERE script_id = NEW.script_id;
+
+    IF v_status IS DISTINCT FROM 'validated' THEN
+        RAISE EXCEPTION 'proposal: script % must be validated (currently %)', NEW.script_id, v_status;
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM recording WHERE script_id = NEW.script_id) THEN
+        RAISE EXCEPTION 'proposal: script % already has recordings', NEW.script_id;
+    END IF;
+
+    RETURN NEW;
+END $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_script_proposal_guard
+    BEFORE INSERT ON script_proposal
+    FOR EACH ROW EXECUTE FUNCTION fn_script_proposal_guard();
+
+-- 2. Đề xuất chờ GIỮ câu khỏi hàng đợi ghi âm: không ai thu bản cũ trong lúc chờ
+--    Reviewer chốt nội dung. Đề xuất có kết quả thì trả câu về hàng đợi ghi âm —
+--    chỉ khi câu vẫn validated và chưa có bản ghi âm nào (trường hợp hiếm: người
+--    đọc đã kịp nộp bản ghi của nội dung cũ trước khi đề xuất được tạo).
+CREATE OR REPLACE FUNCTION fn_script_proposal_sync() RETURNS trigger AS $$ BEGIN
+    IF TG_OP = 'INSERT' THEN
+        UPDATE script_queue
+           SET state = 'dropped'
+         WHERE script_id = NEW.script_id
+           AND stage = 'recording'
+           AND state IN ('queued','claimed');
+
+    ELSIF OLD.status = 'pending' AND NEW.status IN ('accepted','rejected') THEN
+        IF EXISTS (SELECT 1 FROM script s
+                    WHERE s.script_id = NEW.script_id AND s.status = 'validated')
+           AND NOT EXISTS (SELECT 1 FROM recording r WHERE r.script_id = NEW.script_id) THEN
+            -- Câu về CUỐI hàng đợi (mốc FIFO mới), không nhảy về chỗ cũ.
+            INSERT INTO script_queue (script_id, stage, state)
+            VALUES (NEW.script_id, 'recording', 'queued')
+            ON CONFLICT (script_id, stage) WHERE state IN ('queued','claimed')
+            DO NOTHING;
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_script_proposal_sync
+    AFTER INSERT OR UPDATE OF status ON script_proposal
+    FOR EACH ROW EXECUTE FUNCTION fn_script_proposal_sync();
+
+-- 3. Câu bị loại khỏi kho thì đề xuất đang chờ của nó tự đóng — không để lại mục
+--    treo mãi trong hàng chờ Reviewer. Đóng như một quyết định "từ chối" của hệ
+--    thống (decided_by NULL), kèm lý do trong decision_note.
+CREATE OR REPLACE FUNCTION fn_script_proposal_close_on_script() RETURNS trigger AS $$ BEGIN
+    IF NEW.status IN ('rejected','deactivated') AND OLD.status IS DISTINCT FROM NEW.status THEN
+        UPDATE script_proposal
+           SET status = 'rejected',
+               decided_at = now(),
+               decision_note = 'Câu đã bị loại khỏi kho nên đề xuất tự đóng.'
+         WHERE script_id = NEW.script_id AND status = 'pending';
+    END IF;
+
+    RETURN NEW;
+END $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_script_proposal_close_on_script
+    AFTER UPDATE OF status ON script
+    FOR EACH ROW EXECUTE FUNCTION fn_script_proposal_close_on_script();
+
 -- Claim một câu cho một người, NGAY TRONG LÀ 1 TRANSACTION.
 --
 -- SKIP LOCKED là mấu chốt của yêu cầu 3.2: khi hai người gọi cùng lúc, transaction
@@ -1502,15 +1634,13 @@ INSERT INTO script_error_reason (reason_code, description, sort_order) VALUES
     ('duplicate',      'Câu này đã có trong dữ liệu — không cần gửi lại', 60),
     ('other',          'Lỗi văn bản khác — ghi rõ ở ô bình luận', 99);
 
+-- TEAM_016: lý do từ chối bản ghi còn ĐÚNG 4 lý do — mỗi nhóm một mã.
+-- Các mã cũ cùng nhóm (script_text_error, word_skipped_added, low_volume,
+-- clipping_distortion, excess_silence) bị ẩn ở migrations/V10__four_rejection_reasons.sql.
 INSERT INTO rejection_reason (reason_code, category, description) VALUES
-    ('content_mismatch',    'content',        'Đọc sai nội dung — phần đọc không khớp với văn bản đã cho'),
-    ('script_text_error',   'content',        'Văn bản câu bị sai — câu này sẽ quay về bước duyệt nội dung'),
-    ('background_noise',    'audio_quality',  'Có tạp âm — nghe thấy tiếng khác lẫn vào trong bản ghi'),
-    ('low_volume',          'audio_quality',  'Âm lượng quá nhỏ — người nghe phải vặn to mới nghe rõ'),
-    ('clipping_distortion', 'audio_quality',  'Âm thanh bị vỡ — nói quá lớn hoặc thu trong lúc bị va chạm'),
-    ('excess_silence',      'audio_quality',  'Khoảng lặng đầu hoặc cuối quá dài — thu lại phần này'),
-    ('mispronunciation',    'pronunciation',  'Phát âm sai — đọc chưa đúng, cần tập lại rồi thu'),
-    ('word_skipped_added',  'pronunciation',  'Đọc thiếu, thêm hoặc thay từ — phần đọc lệch với văn bản'),
+    ('content_mismatch',    'content',        'Đọc thiếu / Sai văn bản — phần đọc không khớp với văn bản đã cho (thiếu từ, thêm từ hoặc sai nội dung)'),
+    ('background_noise',    'audio_quality',  'Tạp âm / Tiếng ồn môi trường — nghe thấy tiếng khác lẫn vào bản ghi'),
+    ('mispronunciation',    'pronunciation',  'Phát âm sai (Code-Switching) — đọc chưa đúng, cần tập lại rồi thu'),
     ('other',               'other',          'Lỗi khác — ghi rõ ở ô bình luận');
 
 INSERT INTO system_config (config_key, config_value, value_type, description) VALUES

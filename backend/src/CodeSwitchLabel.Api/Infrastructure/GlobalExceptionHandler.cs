@@ -103,6 +103,22 @@ public class GlobalExceptionHandler(
                     "self_review_forbidden",
                     "Bạn không được duyệt bản ghi do chính mình thu.");
             }
+
+            // TEAM_015: fn_script_proposal_guard. Service đã kiểm trước hai điều kiện này;
+            // nhánh dưới chỉ để ca đua hiếm gặp (bản ghi âm được ghi xen giữa lúc kiểm và
+            // lúc insert) trả đúng mã nghiệp vụ thay vì 500.
+            if (message.Contains("proposal: script", StringComparison.OrdinalIgnoreCase))
+            {
+                return message.Contains("already has recordings", StringComparison.OrdinalIgnoreCase)
+                    ? BusinessProblem(
+                        StatusCodes.Status409Conflict,
+                        "script_already_recorded",
+                        "Cặp câu đã có bản ghi âm nên không gửi đề xuất được.")
+                    : BusinessProblem(
+                        StatusCodes.Status409Conflict,
+                        "script_not_validated",
+                        "Cặp câu chưa ở trạng thái đã duyệt nội dung nên chưa gửi đề xuất được.");
+            }
         }
 
         return null;

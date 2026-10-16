@@ -90,6 +90,10 @@ public interface ITaskRepository
         DateTimeOffset now, int page, int pageSize, SortSpec<TaskSortField> sort,
         CancellationToken ct = default);
 
+    /// <summary>
+    /// Các task còn nhận việc (chưa huỷ) đang giao cho người này. TEAM_016: gồm cả task
+    /// đã đủ chỉ tiêu — người nhận vẫn làm thêm được nên màn hình cá nhân phải còn thấy task.
+    /// </summary>
     Task<List<TaskRow>> GetActiveRowsForAssigneeAsync(long userId, TaskType type, CancellationToken ct = default);
 
     /// <summary>
@@ -122,6 +126,11 @@ public interface ITaskRepository
     Task<List<TaskRecording>> GetReviewedRecordingItemsAsync(string recordingId, CancellationToken ct = default);
 
     Task<AppUser?> GetUserWithRoleAsync(long userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Task đúng loại, còn nhận việc (chưa huỷ), đang giao cho người này. TEAM_016:
+    /// task đã đủ chỉ tiêu (Completed) vẫn nhận thêm — KPI không chặn.
+    /// </summary>
     Task<bool> IsActiveTaskOfAsync(long taskId, long userId, TaskType type, CancellationToken ct = default);
 
     Task<HashSet<string>> FindScriptsQueuedInOtherActiveTasksAsync(
@@ -289,7 +298,8 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         ProjectRows(db.WorkTasks
                 .AsNoTracking()
                 .Where(t => t.TaskType == type)
-                .Where(t => t.Status == WorkTaskStatus.InProgress)
+                // TEAM_016: trả cả task đã đủ chỉ tiêu — người nhận vẫn làm thêm được.
+                .Where(t => t.Status != WorkTaskStatus.Cancelled)
                 .Where(t => t.Assignments.Any(a => a.UserId == userId && a.AssignmentStatus == AssignmentStatus.Active))
                 .OrderBy(t => t.Deadline))
             .ToListAsync(ct);
@@ -474,7 +484,8 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         db.WorkTasks.AsNoTracking().AnyAsync(t =>
             t.TaskId == taskId &&
             t.TaskType == type &&
-            t.Status == WorkTaskStatus.InProgress &&
+            // TEAM_016: chỉ task đã huỷ mới chặn — task đủ chỉ tiêu vẫn nhận thêm việc.
+            t.Status != WorkTaskStatus.Cancelled &&
             t.Assignments.Any(a => a.UserId == userId && a.AssignmentStatus == AssignmentStatus.Active), ct);
 
     public async Task<HashSet<string>> FindScriptsQueuedInOtherActiveTasksAsync(
@@ -485,7 +496,8 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         var query = db.TaskScripts.AsNoTracking()
             .Where(ts => scriptIds.Contains(ts.ScriptId) && ts.TaskId != excludeTaskId &&
                          ts.Status == TaskScriptStatus.Pending &&
-                         ts.Task.Status == WorkTaskStatus.InProgress);
+                         // TEAM_016: task đủ chỉ tiêu vẫn giữ mục chưa xong nên vẫn tính là "đang giữ".
+                         ts.Task.Status != WorkTaskStatus.Cancelled);
 
         // TEAM_010: "cùng người" giờ nghĩa là "có chung ít nhất một người nhận". Task giao
         // cho nhiều người nên câu đang nằm ở task kia thuộc về bất kỳ ai trong số này.
@@ -508,7 +520,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         var query = db.TaskScripts
             .Where(ts => scriptIds.Contains(ts.ScriptId) && ts.TaskId != excludeTaskId &&
                          ts.Status == TaskScriptStatus.Pending &&
-                         ts.Task.Status == WorkTaskStatus.InProgress);
+                         ts.Task.Status != WorkTaskStatus.Cancelled);
 
         // TEAM_010: "cùng người" giờ nghĩa là "có chung ít nhất một người nhận". Task giao
         // cho nhiều người nên câu đang nằm ở task kia thuộc về bất kỳ ai trong số này.
@@ -530,7 +542,8 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         var rows = await db.TaskRecordings.AsNoTracking()
             .Where(tr => recordingIds.Contains(tr.RecordingId) && tr.TaskId != excludeTaskId &&
                          tr.Status == TaskRecordingStatus.Queued &&
-                         tr.Task.Status == WorkTaskStatus.InProgress)
+                         // TEAM_016: task đủ chỉ tiêu vẫn giữ mục chưa duyệt nên vẫn tính là "đang giữ".
+                         tr.Task.Status != WorkTaskStatus.Cancelled)
             .Select(tr => tr.RecordingId)
             .Distinct()
             .ToListAsync(ct);
@@ -577,7 +590,8 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
                 // Chưa nằm trong task thu âm khác đang giao cho CHÍNH những người này.
                 .Where(s => !s.TaskScripts.Any(ts =>
                     ts.Status == TaskScriptStatus.Pending &&
-                    ts.Task.Status == WorkTaskStatus.InProgress &&
+                    // TEAM_016: task đủ chỉ tiêu vẫn giữ mục chưa xong nên vẫn tính là "đang giữ".
+                    ts.Task.Status != WorkTaskStatus.Cancelled &&
                     ts.Task.Assignments.Any(a =>
                         ids.Contains(a.UserId) && a.AssignmentStatus == AssignmentStatus.Active)));
         }
@@ -610,10 +624,10 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
             .Where(r => r.Status == RecordingStatus.PendingReview)
             .Where(r => r.Reviews.Count < roundsRequired)
             .Where(r => !r.TaskRecordings.Any(tr => tr.TaskId == taskId))
-            // Chưa bị một task duyệt khác đang chạy giữ.
+            // Chưa bị một task duyệt khác còn nhận việc giữ (TEAM_016: gồm task đủ chỉ tiêu).
             .Where(r => !r.TaskRecordings.Any(tr =>
                 tr.Status == TaskRecordingStatus.Queued &&
-                tr.Task.Status == WorkTaskStatus.InProgress));
+                tr.Task.Status != WorkTaskStatus.Cancelled));
 
         if (speakerId.HasValue) query = query.Where(r => r.SpeakerId == speakerId.Value);
 

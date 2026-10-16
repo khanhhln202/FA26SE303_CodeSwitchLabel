@@ -73,7 +73,7 @@ public record ImportBatchDetailDto(
 public record ScriptListItemDto(
     string ScriptId,
     string CsContent,
-    string VeContent,
+    string ViContent,
     ScriptStatus Status,
     ScriptDomain Domain,
     int WordCount,
@@ -85,8 +85,8 @@ public record ScriptDetailDto(
     string ScriptId,
     string CsContent,
     string CsPlain,
-    string VeContent,
-    string VePlain,
+    string ViContent,
+    string ViPlain,
     IReadOnlyList<AlignmentItem> Alignment,
     ScriptStatus Status,
     ScriptDomain Domain,
@@ -104,7 +104,7 @@ public record ScriptReviewDto(
     ScriptReviewAction Action,
     string? ErrorReasonCode,
     string? EditedCsContent,
-    string? EditedVeContent,
+    string? EditedViContent,
     string? Comment,
     DateTimeOffset ReviewedAt);
 
@@ -113,8 +113,8 @@ public record NextScriptDto(
     string ScriptId,
     string CsContent,
     string CsPlain,
-    string VeContent,
-    string VePlain,
+    string ViContent,
+    string ViPlain,
     ScriptDomain Domain,
     int WordCount,
     int EnWordCount,
@@ -139,7 +139,7 @@ public record CreateScriptRequest
     /// <summary>Câu thuần Việt tương đương, cũng có nhãn: [vi]Em nên quét tài liệu này.</summary>
     [Required(ErrorMessage = "Thiếu câu thuần Việt tương đương.")]
     [StringLength(1000, MinimumLength = 3)]
-    public string VeContent { get; init; } = string.Empty;
+    public string ViContent { get; init; } = string.Empty;
 
     [Required(ErrorMessage = "Phải chọn chủ đề.")]
     public ScriptDomain? Domain { get; init; }
@@ -160,7 +160,7 @@ public record ReviewScriptRequest
     public string? EditedCsContent { get; init; }
 
     [StringLength(1000, MinimumLength = 3)]
-    public string? EditedVeContent { get; init; }
+    public string? EditedViContent { get; init; }
 
     /// <summary>
     /// Ánh xạ lại từ tiếng Anh khi sửa. Bỏ trống thì giữ nguyên alignment cũ; gửi lên thì phải phủ

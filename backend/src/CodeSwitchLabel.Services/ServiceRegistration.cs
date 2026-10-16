@@ -73,6 +73,8 @@ public static class ServiceRegistration
         services.AddScoped<IScriptRepository, ScriptRepository>();
         services.AddScoped<IScriptQueueRepository, ScriptQueueRepository>();
         services.AddScoped<IScriptQueueService, ScriptQueueService>();
+        // TEAM_015: đề xuất câu — hàng chờ riêng của Reviewer, không đi qua script_queue.
+        services.AddScoped<IScriptProposalRepository, ScriptProposalRepository>();
         services.AddScoped<IRecordingRepository, RecordingRepository>();
         services.AddScoped<IReviewRepository, ReviewRepository>();
         services.AddScoped<ITaskRepository, TaskRepository>();
@@ -85,6 +87,7 @@ public static class ServiceRegistration
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IScriptService, ScriptService>();
+        services.AddScoped<IScriptProposalService, ScriptProposalService>();
         services.AddScoped<IScriptAssignmentService, ScriptAssignmentService>();
         services.AddScoped<IRecordingService, RecordingService>();
         services.AddScoped<IReviewService, ReviewService>();
@@ -134,7 +137,10 @@ public static class ServiceRegistration
         (typeof(DatasetFileFormat), "dataset_file_format"),
         // TEAM_010
         (typeof(QueueStage), "queue_stage"),
-        (typeof(QueueState), "queue_state")
+        (typeof(QueueState), "queue_state"),
+        // TEAM_015
+        (typeof(ProposalKind), "proposal_kind"),
+        (typeof(ProposalStatus), "proposal_status")
     ];
 
     private static NpgsqlDataSource BuildDataSource(string connectionString)
