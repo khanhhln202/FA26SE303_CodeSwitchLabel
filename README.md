@@ -73,7 +73,7 @@ FA26SE303_CodeSwitchLabel/
 │   ├── FE-INTEGRATION.md         # hợp đồng API cho frontend
 │   ├── Requirement.txt           # yêu cầu 4 actor + mẫu input_text.json
 │   └── demo-test-api.html
-├── migrations/                   # V2..V7 + file verify (tách task khỏi campaign, hàng đợi văn bản, đa người nhận)
+├── migrations/                   # V2..V8 + file verify (tách task khỏi campaign, hàng đợi văn bản, đa người nhận, trạng thái ba giá trị)
 ├── deploy/                       # prod: docker-compose.prod.yml, Caddyfile, deploy.sh, .env.example, README.md
 ├── demo/                         # input_text_demo.json + demo-live-import.json (7 câu, 3 câu lỗi cố ý) + wav/m4a mẫu + test-them/
 └── .github/workflows/            # backend.yml (CI build + test), deploy.yml (tự động lên máy chủ)
@@ -251,13 +251,12 @@ docker compose -f deploy/docker-compose.prod.yml logs -f api
 
 ### Việc chưa làm ở frontend
 
-Backend đã đổi hợp đồng API (TEAM_010) mà frontend chưa theo kịp. Ba chỗ đang hỏng:
+Backend đã đổi hợp đồng API (TEAM_010) — phần lớn frontend đã theo kịp, còn hai chỗ:
 
 - **Giao task hỏng và báo thành công.** `services/taskService.js` gửi `{ userId }` trong khi API đòi `{ userIds: [...] }` → 400; `TaskManagerManagement/index.jsx` nuốt lỗi bằng `.catch(console.warn)` rồi vẫn hiện "Đã phân công thành công". Sửa khoảng 5 dòng.
-- **Trang duyệt câu của Speaker trắng màn.** `HomeTemplate/ReviewText/index.jsx` đọc `selectedTask.progress`, DTO đã đổi thành `myProgress` / `teamProgress`.
-- **Danh sách task không hiện người nhận.** `TaskManagerManagement` và `TaskManagerDashboard` đọc `assigneeName` / `assigneeId`, nay là `assignees[]`.
+- **Thẻ "Đã phân công" trên dashboard đếm sai.** `TaskManagerDashboard/index.jsx` lọc theo `assigneeName` / `assigneeId` / `campaignId` — các trường người nhận cũ đã bỏ, DTO nay là `assignees[]`; task đã giao người nhưng chưa gắn đợt bị bỏ sót, task gắn đợt nhưng chưa giao ai lại bị tính là đã giao.
 
-Ngoài ra cả 7 màn Reviewer vẫn đọc dữ liệu mô phỏng trong `FRONTEND/src/mocks/reviewer/*`, còn `services/reviewerApi.js` là code chết không file nào import — nên **ba nút xử lý của yêu cầu 2.4 chưa có giao diện** (API thì đã có: `/reviews`, `/reject-audio`, `/discard-pair`). Nên chọn một nguồn thật: nối API thì xoá mocks, giữ prototype thì xoá `reviewerApi.js` — đừng giữ cả hai. Chi tiết hợp đồng: [`docs/FE-INTEGRATION.md`](docs/FE-INTEGRATION.md).
+Màn Reviewer giờ chia hai nửa: 4 màn dùng API thật qua `services/reviewerApi.js` (`ReviewTask`, `ReviewDashboard`, `ReviewRecording`, `ReviewHistoryContribution`), 3 màn còn đọc mocks trong `FRONTEND/src/mocks/reviewer/*` (`Profile`, `ReviewHistoryRecording`, `ReviewContribution`). **Ba nút xử lý của yêu cầu 2.4 vẫn chưa có giao diện** (API đã có: `/reviews`, `/reject-audio`, `/discard-pair`) — nối API thì xoá mocks, giữ prototype thì xoá `reviewerApi.js`, đừng giữ cả hai. Chi tiết hợp đồng: [`docs/FE-INTEGRATION.md`](docs/FE-INTEGRATION.md).
 
 ## Đóng góp (Contributing)
 

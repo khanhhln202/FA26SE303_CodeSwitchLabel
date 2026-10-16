@@ -1,7 +1,7 @@
 -- ============================================================
 -- V4 — Viết lại mô tả danh mục lý do bằng tiếng Việt cho tự nhiên.
 -- PostgreSQL 13+. Idempotent, single transaction.
--- Run: psql -d codeswitchlabel -f migrations/V4__reason_descriptions_vi_tieng_viet_ro_bo.sql
+-- Run: psql -d codeswitchlabel -f migrations/V4__reason_descriptions_vi.sql
 -- Fresh installs get the same result via docs/codeswitchlabel.sql.
 --
 -- V3 đã đổi sang tiếng Việt, nhưng nhiều mô tả còn dạng bản dịch cứng ngữ, đọc lộn:

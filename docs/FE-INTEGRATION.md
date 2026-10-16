@@ -12,9 +12,13 @@ màn hình nào gọi API nào theo thứ tự nào, cách xử lý đăng nhậ
 > `/api/reviewer/history/*`), tổng quan Task Manager (`/api/task-manager/overview`), đọc cấu hình
 > công khai (`/api/config`, `/api/config/topics`), khôi phục câu (`POST /api/scripts/{id}/restore`),
 > xem lại task duyệt đã đóng (read-only), và dataset (`/api/datasets/*`). Xem lại task đã đóng,
-> khôi phục câu và dataset không còn nằm ở mục 9.
+> khôi phục câu và dataset không còn nằm ở mục 10.
 >
 > Cập nhật 08/10/2026 — **API đã chạy trên máy chủ thật, HTTPS**. Xem mục 0 ngay dưới đây.
+>
+> Cập nhật 16/10/2026 — lịch sử duyệt trả về **cặp bản ghi** (hai câu, hai link nghe, quyết định
+> của tôi cho cả cặp) thay vì từng lượt rời; lịch sử câu đề xuất thêm người gửi, `alignment`
+> (cặp từ Anh–Việt) và lý do/bình luận khi bị từ chối.
 
 ---
 
@@ -105,7 +109,7 @@ Mật khẩu chung: **`Codeswitch@2026`**. Email có đuôi `@codeswitchlabel.lo
 
 Cần ba Reviewer vì mỗi bản ghi phải được **ba người khác nhau** duyệt.
 
-Dữ liệu mẫu phân sẵn **cả ba chủ đề** cho ba tài khoản Reviewer, và tạo sẵn **một chiến dịch đã giao cho `manager`,** nên luồng duyệt câu và luồng tạo task chạy được ngay sau khi dựng hệ thống. Tạo Reviewer mếi thì phải tự phân chủ đề.
+Dữ liệu mẫu phân sẵn **cả ba chủ đề** cho ba tài khoản Reviewer, và tạo sẵn **một chiến dịch đã giao cho `manager`,** nên luồng duyệt câu và luồng tạo task chạy được ngay sau khi dựng hệ thống. Tạo Reviewer mới thì phải tự phân chủ đề.
 
 ### Dữ liệu mẫu
 
@@ -335,8 +339,6 @@ Các mã còn lại: `alignment_incomplete`, `alignment_word_missing`, `already_
 ---
 
 ## 4. Màn hình và API theo từng vai
-
-### Chung
 
 ### Chung
 
@@ -867,7 +869,7 @@ không viết cứng trong frontend — Admin ẩn hay thêm lý do thì giao di
 
 ---
 
-## 7b. TEAM_010 — hàng đợi văn bản & đa người nhận task
+## 8. TEAM_010 — hàng đợi văn bản & đa người nhận task
 
 Bốn thay đổi dưới đây **phá vỡ** so với bản trước. Chọn clean break thay vì giữ tương
 thích, nên code cũ phải sửa.
@@ -964,7 +966,7 @@ POST /api/recordings/r_cs_211000001/discard-pair
 
 ---
 
-## 8. Đã đổi so với API cũ
+## 9. Đã đổi so với API cũ
 
 Ai đã code theo bản API trước ngày 22/09/2026 thì cần sửa:
 
@@ -1004,7 +1006,7 @@ Ai đã code theo bản API trước ngày 22/09/2026 thì cần sửa:
 | `GET /api/reviewer/history/recordings` một dòng = một **lượt duyệt**, chỉ có một câu | Mỗi dòng là một **CẶP** như lịch sử của Speaker: `csText`/`viText` (còn nhãn), `csRecordingId`/`viRecordingId`, `csAudioUrl`/`viAudioUrl` (thật, hết hạn 15 phút), `reviews: [{round, decision, reason}]` (chỉ khi bản đã chốt; `reason` ưu tiên bình luận, trống thì ghép mô tả mã lý do từ chối). `myDecision` gộp cả cặp — có lượt từ chối là `Rejected`; `recordingStatus` là trạng thái của cặp. Phân trang theo **cặp**, `total` là số cặp. `?sort=status` bỏ — nhận `reviewedAt`, `decision`, `scriptId` |
 | `GET /api/reviewer/history/contributions` thiếu người gửi, lý do, cặp từ Anh-Việt | Thêm `alignment` (từ tiếng Anh - nghĩa tiếng Việt), `speakerId`/`speakerName`, và khi lượt là Từ chối thì `reason` (mô tả lỗi) + `comment`. Mỗi câu đề xuất chỉ **một lượt duyệt** nên mỗi câu tối đa một dòng |
 
-## 9. Chưa có — backend đang làm
+## 10. Chưa có — backend đang làm
 
 | Chức năng | Ảnh hưởng tới màn hình |
 |---|---|
@@ -1012,7 +1014,7 @@ Ai đã code theo bản API trước ngày 22/09/2026 thì cần sửa:
 
 Giao diện cho các phần này cứ làm trước; khi backend xong sẽ cập nhật mục này và Swagger.
 
-## 10. Sinh kiểu TypeScript từ Swagger
+## 11. Sinh kiểu TypeScript từ Swagger
 
 Đừng gõ tay kiểu dữ liệu. Lấy file hợp đồng:
 

@@ -305,8 +305,9 @@ Phụ thuộc đi một chiều: **Api → Services → Repositories**.
 ## Chỗ chưa làm
 
 `dataset` và `dataset_recording` đã có đủ endpoint trong `DatasetsController` (tạo, tìm, chi tiết,
-phát hành, lưu trữ, tải ZIP). Phần còn dở: **test** — mới chỉ có kiểm tra ràng buộc ở
-`CheckConstraintTests`, chưa có test nào gọi thử các endpoint này.
+phát hành, lưu trữ, tải ZIP). `DatasetServiceTests` đã ghim ba luật dễ sai ở tầng service: chỉ nhận
+bản ĐÃ duyệt đạt, phát hành cần đủ hai bản của cặp câu, tải ZIP chỉ sau khi phát hành. Phần còn dở:
+chưa có test nào gọi **qua HTTP** vào `DatasetsController` — test hiện gọi thẳng service.
 
 `docs/demo-test-api.html` là trang tĩnh, tự viết tay theo lần chạy của `03-demo-scenario` — **không
 có script nào sinh ra nó**. Nên khi kịch bản demo đổi (mã câu, mã bản ghi, mã lỗi), phần bảng bên
