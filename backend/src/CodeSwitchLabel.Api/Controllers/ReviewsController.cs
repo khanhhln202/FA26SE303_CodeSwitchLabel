@@ -172,7 +172,18 @@ public class ReviewsController(IReviewService reviewService, IReviewerStatsServi
         => Ok(await statsService.GetTopRejectedSpeakersAsync(User.GetUserId(), limit, ct));
 
     /// <summary>Lịch sử duyệt bản ghi của chính mình.</summary>
-    /// <remarks>TEAM_012: `?sort=` nhận `reviewedAt`, `decision`, `status`, `scriptId`.</remarks>
+    /// <remarks>
+    /// Mỗi dòng là MỘT CẶP bản ghi, giống lịch sử ghi âm của Speaker: kèm cả hai câu
+    /// (`csText`/`viText`, vẫn giữ nhãn [vi]/[en]), link nghe tạm của cả hai bản
+    /// (`csAudioUrl`/`viAudioUrl`), và `reviews` gom từ hai bản nhưng CHỈ hiện khi bản đã
+    /// chốt — luật duyệt mù; quyết định của chính bạn luôn có ở `myDecision`.
+    ///
+    /// `status` lọc theo trạng thái của bản ghi MÌNH ĐÃ DUYỆT; `recordingStatus` trả về là
+    /// trạng thái của CẶP (gộp hai bản).
+    ///
+    /// TEAM_012: `?sort=` nhận `reviewedAt`, `decision`, `scriptId` — trạng thái của cặp
+    /// không sắp xếp được vì phải tính sau khi cắt trang.
+    /// </remarks>
     [HttpGet("api/reviewer/history/recordings")]
     [Authorize(Roles = "Reviewer")]
     [ProducesResponseType(typeof(PagedResult<ReviewerHistoryItemDto>), StatusCodes.Status200OK)]
@@ -181,7 +192,14 @@ public class ReviewsController(IReviewService reviewService, IReviewerStatsServi
         => Ok(await statsService.GetHistoryAsync(User.GetUserId(), query, ct));
 
     /// <summary>Lịch sử duyệt câu của chính mình.</summary>
-    /// <remarks>TEAM_012: `?sort=` nhận `reviewedAt`, `action`, `status`, `domain`.</remarks>
+    /// <remarks>
+    /// Mỗi dòng là một lượt duyệt câu của chính bạn — mỗi câu đề xuất chỉ đi qua MỘT lượt duyệt,
+    /// nên mỗi câu có tối đa một dòng. Kèm từ tiếng Anh - nghĩa tiếng Việt (`alignment`), người
+    /// gửi câu (`speakerId`/`speakerName`), và khi lượt đó là Từ chối thì có `reason` (mô tả lỗi)
+    /// cùng `comment`.
+    ///
+    /// TEAM_012: `?sort=` nhận `reviewedAt`, `action`, `status`, `domain`.
+    /// </remarks>
     [HttpGet("api/reviewer/history/contributions")]
     [Authorize(Roles = "Reviewer")]
     [ProducesResponseType(typeof(PagedResult<ReviewerScriptHistoryItemDto>), StatusCodes.Status200OK)]

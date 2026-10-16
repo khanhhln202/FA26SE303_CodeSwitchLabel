@@ -70,8 +70,13 @@ public enum DatasetSortField { DatasetId, CreatedAt, Status, DatasetName, Record
 /// <summary>Lô nhập: GET /api/scripts/import/batches.</summary>
 public enum ImportBatchSortField { BatchId, CreatedAt, FileName, ScriptCount }
 
-/// <summary>Lịch sử duyệt bản ghi: GET /api/reviewer/history/recordings.</summary>
-public enum ReviewSortField { ReviewedAt, Decision, Status, ScriptId }
+/// <summary>
+/// Lịch sử duyệt bản ghi: GET /api/reviewer/history/recordings.
+///
+/// TEAM_012: một dòng là MỘT CẶP bản ghi, mà trạng thái của cặp là thứ TÍNH RA sau khi cắt
+/// trang (gộp từ hai bản), nên không có cột `status` ở đây — cùng lý do với SpeakerPairSortField.
+/// </summary>
+public enum ReviewSortField { ReviewedAt, Decision, ScriptId }
 
 /// <summary>Lịch sử duyệt câu: GET /api/reviewer/history/contributions.</summary>
 public enum ScriptReviewSortField { ReviewedAt, Action, Status, Domain }
