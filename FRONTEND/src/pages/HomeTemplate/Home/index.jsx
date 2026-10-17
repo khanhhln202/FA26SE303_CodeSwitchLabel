@@ -170,20 +170,21 @@ function CurrentRoundCard({ round }) {
 /* ─────────────────────────── Bảng xếp hạng ─────────────────────────── */
 
 function Leaderboard({ rows, hasRound }) {
-  const maxApproved = Math.max(1, ...rows.map((r) => r.approved));
+  // API xếp hạng theo số bản đã nộp (submitted, không tính bản trượt kiểm tra tự động)
+  const maxSubmitted = Math.max(1, ...rows.map((r) => r.submitted));
   const meIndex = rows.findIndex((r) => r.isMe);
   const me = rows[meIndex];
   const ahead = meIndex > 0 ? rows[meIndex - 1] : null;
 
-  // API chỉ trả người đã có bản được duyệt, tối đa top 5 -> chưa có tên mình thì nhắc theo từng trường hợp
+  // API chỉ trả người đã có bản nộp, tối đa top 5 -> chưa có tên mình thì nhắc theo từng trường hợp
   let footer = 'Tham gia một đợt để có tên trong bảng xếp hạng.';
   if (hasRound && me) {
     footer = ahead
-      ? <>Còn <span style={{ color: HOME_ACCENT_HOVER }}>{ahead.approved - me.approved + 1} câu được duyệt</span> nữa là bạn vượt hạng {ahead.rank}.</>
+      ? <>Còn <span style={{ color: HOME_ACCENT_HOVER }}>{ahead.submitted - me.submitted + 1} bản nộp</span> nữa là bạn vượt hạng {ahead.rank}.</>
       : 'Bạn đang dẫn đầu đợt này.';
   } else if (hasRound) {
     // Bảng trống thì không hiện dòng chú thích
-    footer = rows.length === 0 ? null : 'Có bản ghi được duyệt để có tên trong top đợt này.';
+    footer = rows.length === 0 ? null : 'Nộp thêm bản ghi để có tên trong top đợt này.';
   }
 
   return (
@@ -225,10 +226,10 @@ function Leaderboard({ rows, hasRound }) {
                 )}
               </span>
               <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: HOME_TRACK }}>
-                <div className="h-full rounded-full" style={{ width: `${Math.round((user.approved / maxApproved) * 100)}%`, background: user.isMe ? HOME_ACCENT : HOME_BAR }} />
+                <div className="h-full rounded-full" style={{ width: `${Math.round((user.submitted / maxSubmitted) * 100)}%`, background: user.isMe ? HOME_ACCENT : HOME_BAR }} />
               </div>
               <span className="w-10 text-right text-body font-emphasis tabular-nums" style={{ color: user.isMe ? HOME_ACCENT : HOME_TEXT_HEADING }}>
-                {user.approved}
+                {user.submitted}
               </span>
             </div>
           );

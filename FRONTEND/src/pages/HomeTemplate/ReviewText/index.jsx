@@ -35,14 +35,14 @@ import {
 import Loading from "../../../components/Loading/Loading";
 import ErrorState from "../../../components/ErrorState/ErrorState";
 import EmptyState from "../../../components/EmptyState/EmptyState";
-import { getSpeakerProgressApi, getNextScriptApi } from "../../../services/speakerApi";
-import { getScriptDetailApi, getScriptErrorReasonsApi, reviewScriptApi } from "../../../services/scriptApi";
+import { getSpeakerProgressApi, getNextScriptApi, createScriptProposalApi } from "../../../services/speakerApi";
+import { getScriptDetailApi, getScriptErrorReasonsApi } from "../../../services/scriptApi";
 import {
   GET_SPEAKER_PROGRESS_API,
   GET_NEXT_SCRIPT_API,
   GET_SCRIPT_DETAIL_API,
   GET_SCRIPT_ERROR_REASONS_API,
-  REVIEW_SCRIPT_API,
+  CREATE_SCRIPT_PROPOSAL_API,
 } from "../../../utils/queryKey";
 
 // "2026-10-20T00:00:00Z" -> "20/10/2026"
@@ -75,6 +75,7 @@ export default function ReviewText() {
   const {
     data: sentence,
     isLoading: isLoadingScript,
+    isFetching: isFetchingScript,
     isError: isScriptError,
     error: scriptError,
     refetch: refetchScript,
@@ -114,26 +115,36 @@ export default function ReviewText() {
   // Hiện đúng mô tả backend trả về (tạm thời chưa dịch); gửi đi bằng reasonCode
   const reportReasons = reasons.map((r) => ({ id: r.reasonCode, label: r.description, desc: null }));
 
-  // Mutation sửa / báo lỗi câu. Xong thì tải lại câu (câu bị loại sẽ được thay câu khác) và tiến độ nhiệm vụ
-  const { mutate: reviewScript, isPending: isReviewing } = useMutation({
-    mutationKey: [REVIEW_SCRIPT_API],
-    mutationFn: reviewScriptApi,
+  // Mutation gửi đề xuất báo lỗi / sửa câu cho Reviewer. Trong lúc chờ duyệt câu tạm rút khỏi hàng ghi âm
+  // -> tải lại câu tiếp theo và tiến độ nhiệm vụ
+  const { mutate: sendProposal, isPending: isReviewing } = useMutation({
+    mutationKey: [CREATE_SCRIPT_PROPOSAL_API],
+    mutationFn: createScriptProposalApi,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [GET_NEXT_SCRIPT_API] });
       queryClient.invalidateQueries({ queryKey: [GET_SPEAKER_PROGRESS_API] });
     },
-    // Câu đã có bản ghi, đổi số từ tiếng Anh... -> backend trả câu báo lỗi tiếng Việt
+    // Câu đã có bản ghi, đã có đề xuất đang chờ, đổi số từ tiếng Anh... -> backend trả câu báo lỗi
     onError: (error) => toast.error(error.message),
   });
 
   const handleTaskChange = (e) => setSearchParams({ taskId: e.target.value });
 
   const handleNextStep = () => navigate(`/speaker/record-speech?taskId=${taskId}`);
-  // TODO: backend chưa có API bỏ qua câu - GET /api/speaker/scripts/next sẽ trả lại đúng câu này
-  const handleSkip = () =>
-    toast.info("Chưa bỏ qua câu được", {
-      description: "Hệ thống sẽ giao lại câu này. Nếu câu có lỗi, hãy dùng Báo lỗi câu này.",
-    });
+  // Bỏ qua = gọi lại GET /api/speaker/scripts/next. Backend giữ câu đang giao cho mình (mỗi cặp câu một người đọc)
+  // nên có thể trả lại đúng câu cũ -> báo cho người dùng biết thay vì im lặng
+  const handleSkip = async () => {
+    const currentId = sentence?.scriptId;
+    const { data: next, isError } = await refetchScript();
+    if (isError) return;
+    if (!next) {
+      toast.info("Đã hết câu trong nhiệm vụ này.");
+    } else if (next.scriptId === currentId) {
+      toast.info("Hệ thống vẫn giao lại câu này", {
+        description: "Câu chưa bỏ qua được. Nếu câu có lỗi, hãy dùng Báo lỗi câu này.",
+      });
+    }
+  };
 
   const openEditModal = async () => {
     setEditCs(sentence.csContent);
@@ -153,13 +164,13 @@ export default function ReviewText() {
   };
 
   const handleSaveEdit = () => {
-    reviewScript(
+    sendProposal(
       {
         scriptId: sentence.scriptId,
-        action: "Edited",
-        editedCsContent: editCs.trim(),
-        editedViContent: editVi.trim(),
-        editedAlignment: editPairs.map(({ source, target }) => ({
+        kind: "Edit",
+        proposedCsContent: editCs.trim(),
+        proposedViContent: editVi.trim(),
+        proposedAlignment: editPairs.map(({ source, target }) => ({
           source: source.trim(),
           source_lang: "en",
           target: target.trim(),
@@ -170,7 +181,7 @@ export default function ReviewText() {
       {
         onSuccess: () => {
           setShowEditModal(false);
-          toast.success("Đã lưu chỉnh sửa câu.");
+          toast.success("Đã gửi đề xuất sửa câu.", { description: "Reviewer duyệt xong câu sẽ quay lại hàng ghi âm." });
         },
       },
     );
@@ -178,10 +189,10 @@ export default function ReviewText() {
 
   const handleSubmitReport = () => {
     if (!reportReason) return;
-    reviewScript(
+    sendProposal(
       {
         scriptId: sentence.scriptId,
-        action: "Rejected",
+        kind: "Report",
         errorReasonCode: reportReason,
         comment: reportOther.trim() || null,
       },
@@ -190,7 +201,7 @@ export default function ReviewText() {
           setShowReportModal(false);
           setReportReason(null);
           setReportOther("");
-          toast.success("Đã gửi báo lỗi.", { description: "Cảm ơn bạn đã phản hồi!" });
+          toast.success("Đã gửi báo lỗi.", { description: "Cảm ơn bạn đã phản hồi! Reviewer sẽ kiểm tra câu này." });
         },
       },
     );
@@ -409,14 +420,15 @@ export default function ReviewText() {
       <div className="flex items-center justify-center gap-3.5 flex-wrap mt-3 [@media(min-height:900px)]:mt-5">
         <button
           onClick={handleSkip}
-          className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-body font-label hover:opacity-85 active:scale-[0.98] transition-all"
+          disabled={isFetchingScript}
+          className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-body font-label hover:opacity-85 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           style={{
             background: SURFACE_MUTED,
             color: TEXT_BODY,
             boxShadow: "0 4px 10px rgba(85,86,91,0.18)",
           }}
         >
-          <SkipForward className="w-[18px] h-[18px]" /> Bỏ qua câu này
+          <SkipForward className="w-[18px] h-[18px]" /> {isFetchingScript ? "Đang lấy câu..." : "Bỏ qua câu này"}
         </button>
         <button
           onClick={() => setShowReportModal(true)}
