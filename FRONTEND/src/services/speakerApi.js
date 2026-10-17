@@ -106,7 +106,7 @@ export const getSpeakerCurrentRoundApi = async () => {
 };
 
 // Bảng xếp hạng của một đợt: GET /api/speaker/rounds/{campaignId}/leaderboard?top=
-// Trả về [{ rank, userId, name, approved, isMe }] - chỉ người có bản được duyệt, xếp theo số bản được duyệt
+// Trả về [{ rank, userId, name, submitted, isMe }] - xếp theo số bản đã nộp (không tính bản trượt QC)
 export const getRoundLeaderboardApi = async ({ campaignId, top = 5 }) => {
   try {
     const response = await httpClient.get(`/api/speaker/rounds/${campaignId}/leaderboard`, { params: { top } });
@@ -129,6 +129,22 @@ export const getSpeakerRejectedRecordingsApi = async ({ limit = 5 } = {}) => {
     const message =
       error.response?.data?.title ||
       "Không lấy được bản ghi cần ghi lại!";
+    throw new Error(message, { cause: error });
+  }
+};
+
+// Gửi đề xuất cho một câu đã duyệt (vào hàng chờ của Reviewer): POST /api/speaker/scripts/{scriptId}/proposals
+// Báo lỗi: { kind: "Report", errorReasonCode, comment }
+// Sửa câu: { kind: "Edit", proposedCsContent, proposedViContent, proposedAlignment, comment } - sửa cả cặp, giữ số từ tiếng Anh
+// Trả về { proposalId, scriptId, kind, status, createdAt }. Trong lúc chờ duyệt, câu tạm rút khỏi hàng ghi âm
+export const createScriptProposalApi = async ({ scriptId, ...values }) => {
+  try {
+    const response = await httpClient.post(`/api/speaker/scripts/${scriptId}/proposals`, values);
+    return response.data;
+  } catch (error) {
+    const message =
+      error.response?.data?.title ||
+      "Gửi đề xuất thất bại, vui lòng thử lại!";
     throw new Error(message, { cause: error });
   }
 };
