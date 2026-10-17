@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 import Pagination from "../../../../components/Pagination/Pagination";
-import { CheckCircle2, XCircle, PencilLine, Search, X, FileText } from "lucide-react";
+import { CheckCircle2, XCircle, PencilLine, Search, X, FileText, ArrowRight } from "lucide-react";
 import { SPEAKER_ACCENT_ACTIVE_ICON as ACCENT, AUDIO_PRIMARY } from "../../../../constants/theme"; // ACCENT = xanh lá thương hiệu, AUDIO_PRIMARY = màu phần tiếng Anh
 import Loading from "../../../../components/Loading/Loading";
 import ErrorState from "../../../../components/ErrorState/ErrorState";
@@ -180,8 +180,7 @@ export default function ReviewHistoryContribution() {
                       <p className="text-meta font-regular text-[#16171C] truncate leading-5 mt-0.5">{item.viEquivalent}</p>
                     </td>
                     <td className="px-3 text-left">
-                      {/* API chưa trả người gửi - chờ backend bổ sung */}
-                      <p className="font-label text-[#9A9CA3] truncate">—</p>
+                      <p className="font-label text-[#16171C] truncate" title={item.speakerName}>{item.speakerName || "—"}</p>
                       <p className="text-[#9A9CA3] type-meta mt-0.5 tabular-nums whitespace-nowrap">{formatDateTime(item.reviewedAt)}</p>
                     </td>
                     <td className="px-3 text-left"><MyDecision action={item.myAction} /></td>
@@ -223,6 +222,7 @@ export default function ReviewHistoryContribution() {
                   <span className="px-2 py-0.5 rounded-md text-caption font-label border" style={{ background: cat.bg, color: cat.text, borderColor: cat.border }}>{detailItem.category}</span>
                   <span className="text-[#9A9CA3]">{formatDateTime(detailItem.reviewedAt)}</span>
                   <span className="text-[#9A9CA3]">· {detailItem.scriptId}</span>
+                  {detailItem.speakerName && <span className="font-label text-[#16171C]">· {detailItem.speakerName}</span>}
                 </div>
 
                 <div className="rounded-xl border border-[#E5E2D8] overflow-hidden">
@@ -236,10 +236,33 @@ export default function ReviewHistoryContribution() {
                   </div>
                 </div>
 
+                {/* Nghĩa từ tiếng Anh (alignment) */}
+                {detailItem.alignment?.length > 0 && (
+                  <div className="mt-4">
+                    <p className="text-meta font-label text-[#16171C] mb-2">Nghĩa từ</p>
+                    <div className="flex flex-wrap gap-2">
+                      {detailItem.alignment.map((a, i) => (
+                        <span key={i} className="h-7 flex items-center gap-1.5 bg-[#F4F3EE] rounded-md px-2">
+                          <span className="type-ui font-mono" style={{ color: AUDIO_PRIMARY }}>{a.source}</span>
+                          <ArrowRight className="w-3 h-3 text-[#B7B4A9] shrink-0" />
+                          <span className="type-ui text-[#16171C]">{a.target}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-center gap-2 mt-4">
                   <span className="text-meta font-label text-[#16171C]">Quyết định của bạn:</span>
                   <MyDecision action={detailItem.myAction} />
                 </div>
+                {/* Lượt Từ chối: lý do (mô tả lỗi) + ghi chú */}
+                {(detailItem.reason || detailItem.comment) && (
+                  <div className="mt-2.5 rounded-xl border border-[#F3C9C9] bg-[#FDEAEA] px-3 py-2 type-meta text-[#9F2D2D]">
+                    {detailItem.reason && <p><span className="font-label">Lý do:</span> {detailItem.reason}</p>}
+                    {detailItem.comment && <p className="mt-0.5"><span className="font-label">Ghi chú:</span> {detailItem.comment}</p>}
+                  </div>
+                )}
 
                 <button onClick={() => setDetailItem(null)} className="w-full mt-5 py-3 text-white rounded-xl text-body font-label transition-all hover:opacity-90 active:scale-[0.98] cursor-pointer" style={{ background: ACCENT }}>Đóng</button>
               </div>
