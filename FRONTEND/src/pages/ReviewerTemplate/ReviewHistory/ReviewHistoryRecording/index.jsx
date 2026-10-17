@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useEffect, useState } from "react";
+import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 import Pagination from "../../../../components/Pagination/Pagination";
 import WaveformInline from "../../../../components/AudioPlayer/WaveformInline";
 import {
@@ -11,28 +12,30 @@ import {
   BarChart3,
   Search,
 } from "lucide-react";
-import { parseCodeSwitch, stripTags } from "../../../../utils/codeSwitch";
+import { parseCodeSwitch } from "../../../../utils/codeSwitch";
 import {
   SPEAKER_ACCENT_ACTIVE_ICON as ACCENT, // xanh lá thương hiệu
   AUDIO_PRIMARY,
 } from "../../../../constants/theme";
-import { REVIEWED_RECORDINGS as AUDIO_HISTORY } from "../../../../mocks/reviewer/history";
+import Loading from "../../../../components/Loading/Loading";
+import ErrorState from "../../../../components/ErrorState/ErrorState";
+import { getReviewerProgressApi, getReviewerRecordingHistoryApi } from "../../../../services/reviewerApi";
+import { GET_REVIEWER_PROGRESS_API, GET_REVIEWER_RECORDING_HISTORY_API } from "../../../../utils/queryKey";
 
-// 3 reviewer -> trạng thái tổng: >=2 từ chối = Rejected, >=2 duyệt = Approved, còn lại Pending
-function resolveStatus(reviews) {
-  const rejected = reviews.filter((r) => r.decision === "reject").length;
-  const approved = reviews.filter((r) => r.decision === "approve").length;
-  if (rejected >= 2) return "Rejected";
-  if (approved >= 2) return "Approved";
-  return "Pending";
+const ITEMS_PER_PAGE = 10;
+
+// "2026-10-13T08:27:10Z" -> ["13/10/2026", "15:27"] (giờ máy người dùng)
+function splitDateTime(iso) {
+  const d = new Date(iso);
+  const pad = (n) => String(n).padStart(2, "0");
+  return [`${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`, `${pad(d.getHours())}:${pad(d.getMinutes())}`];
 }
 
-// Số phiếu THỰC SỰ đã bỏ (approve/reject) - loại cả "pending" (chưa tới lượt/chưa vote) lẫn
-// "not_needed" (R1+R2 đã đồng thuận nên R3 không cần đánh giá nữa).
-function votedCountOf(reviews) {
-  return reviews.filter(
-    (r) => r.decision === "approve" || r.decision === "reject",
-  ).length;
+// Câu giữ nhãn [vi]/[en] -> tô xanh phần tiếng Anh
+function TaggedText({ text }) {
+  return parseCodeSwitch(text ?? "").map((segment, i) => (
+    <span key={i} style={segment.lang === "en" ? { color: AUDIO_PRIMARY } : undefined}>{segment.text}</span>
+  ));
 }
 
 function InlineLabel({ variant }) {
@@ -66,27 +69,30 @@ function StatCard({ icon: Icon, label, value, pct, accent, bg }) {
   );
 }
 
-// Reviewer đang đăng nhập (mock) - dùng để lấy quyết định "của bạn" trong 3 phiếu
-const ME = "R1";
-
-// Quyết định của chính reviewer đang đăng nhập - cùng kiểu với trang Lịch sử duyệt đề xuất câu
-function MyDecision({ review }) {
-  if (review?.decision === "approve") {
+// Quyết định của chính mình (myDecision của API) - cùng kiểu với trang Lịch sử duyệt đề xuất câu
+function MyDecision({ decision }) {
+  if (decision === "Approved") {
     return <span className="w-[92px] h-6 inline-flex items-center justify-center gap-1 rounded-full type-caption bg-[#3FA66B]/10 text-[#1F5C3F] border border-[#3FA66B]/25 whitespace-nowrap"><CheckCircle2 className="w-3 h-3 text-[#3FA66B]" /> Đã duyệt</span>;
   }
-  if (review?.decision === "reject") {
+  if (decision === "Rejected") {
     return <span className="w-[92px] h-6 inline-flex items-center justify-center gap-1 rounded-full type-caption bg-[#FDEAEA] text-[#C63B3B] border border-[#F3C9C9] whitespace-nowrap"><XCircle className="w-3 h-3 text-[#C63B3B]" /> Từ chối</span>;
   }
   return <span className="text-caption text-[#9A9CA3]">-</span>;
 }
 
 // Kết quả chung (trạng thái + số phiếu đã bỏ) - gộp "Trạng thái" và "Phản hồi" cũ, bấm để xem chi tiết
+// Trạng thái của CẶP (recordingStatus của API)
+const STATUS_STYLE = {
+  Approved: { bg: "#EAF7EF", border: "rgba(63,166,107,0.25)", text: "#1F5C3F", accent: "#3FA66B", icon: CheckCircle2, label: "Đã duyệt" },
+  Rejected: { bg: "#FDEAEA", border: "#F3C9C9", text: "#C63B3B", accent: "#C63B3B", icon: XCircle, label: "Từ chối" },
+  PendingReview: { bg: "#FFF1DE", border: "#F5DFC0", text: "#A85E12", accent: "#A85E12", icon: Clock, label: "Chờ" },
+  QcFailed: { bg: "#F0EEE6", border: "#E5E2D8", text: "#6E7078", accent: "#6E7078", icon: AlertCircle, label: "Lỗi chất lượng" },
+};
+const styleOf = (status) => STATUS_STYLE[status] ?? STATUS_STYLE.PendingReview;
+
+// Kết quả (trạng thái cặp + số lượt duyệt API trả - chỉ có khi bản đã chốt), bấm để xem chi tiết
 function ResultButton({ status, votedCount, onClick, ariaLabel }) {
-  const s = {
-    Approved: { bg: "#EAF7EF", border: "rgba(63,166,107,0.25)", text: "#1F5C3F", icon: CheckCircle2, label: "Đã duyệt" },
-    Rejected: { bg: "#FDEAEA", border: "#F3C9C9", text: "#C63B3B", icon: XCircle, label: "Từ chối" },
-    Pending: { bg: "#FFF1DE", border: "#F5DFC0", text: "#A85E12", icon: Clock, label: "Chờ" },
-  }[status];
+  const s = styleOf(status);
   const Icon = s.icon;
   return (
     <button
@@ -96,17 +102,34 @@ function ResultButton({ status, votedCount, onClick, ariaLabel }) {
       style={{ background: s.bg, borderColor: s.border, color: s.text }}
     >
       <Icon className="w-3 h-3 shrink-0" />
-      <span>{s.label} · {votedCount}/3</span>
+      <span>{votedCount > 0 ? `${s.label} · ${votedCount}/3` : s.label}</span>
     </button>
   );
 }
 
+// Lọc theo trạng thái bản ghi mình đã duyệt (Status của API)
 const FILTER_OPTIONS = [
-  { value: "all", label: "Tất cả trạng thái" },
+  { value: "", label: "Tất cả trạng thái" },
   { value: "Approved", label: "Đã duyệt" },
   { value: "Rejected", label: "Từ chối" },
-  { value: "Pending", label: "Chờ duyệt" },
+  { value: "PendingReview", label: "Chờ duyệt" },
 ];
+
+// Thẻ thống kê: số cặp theo trạng thái - lấy total của API khi lọc Status
+const STAT_STATUSES = ["", "Approved", "Rejected", "PendingReview"];
+
+/** Sóng âm 1 bản trong cặp: dùng đúng link API trả, null thì báo không có audio. */
+function PairAudio({ url, variant, duration }) {
+  if (!url) {
+    return (
+      <div className="h-5 flex items-center gap-2">
+        <InlineLabel variant={variant} />
+        <span className="type-caption text-[#9A9CA3]">Không có audio</span>
+      </div>
+    );
+  }
+  return <WaveformInline compact label={variant === "cs" ? "VI-EN" : "VI"} src={url} demoSeed={url} demoDuration={duration} />;
+}
 
 export default function ReviewHistoryRecording() {
   const [currentPage, setCurrentPage] = useState(1);
@@ -114,50 +137,49 @@ export default function ReviewHistoryRecording() {
   const [detailItem, setDetailItem] = useState(null);
   // Popup CÂU VĂN (chỉ 2 câu VI-EN + VI, mở từ icon con mắt cạnh nội dung)
   const [sentenceItem, setSentenceItem] = useState(null);
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
-  const [taskFilter, setTaskFilter] = useState("all");
+  const [search, setSearch] = useState("");
+  const [taskFilter, setTaskFilter] = useState("");
 
-  const withStatus = useMemo(
-    () =>
-      AUDIO_HISTORY.map((it) => ({ ...it, status: resolveStatus(it.reviews) })),
-    [],
-  );
+  // Gõ xong 400ms mới gửi từ khoá lên API, tránh gọi mỗi lần bấm phím
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(searchTerm.trim()), 400);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
-  const stats = useMemo(() => {
-    const total = withStatus.length;
-    const approved = withStatus.filter((i) => i.status === "Approved").length;
-    const rejected = withStatus.filter((i) => i.status === "Rejected").length;
-    const pending = withStatus.filter((i) => i.status === "Pending").length;
-    const pct = (n) => (total ? Math.round((n / total) * 100) : 0);
-    return {
-      total,
-      approved,
-      rejected,
-      pending,
-      approvedPct: pct(approved),
-      rejectedPct: pct(rejected),
-      pendingPct: pct(pending),
-    };
-  }, [withStatus]);
+  // Call API lấy 1 trang lịch sử (lọc nhiệm vụ / trạng thái / từ khoá ở phía server)
+  const { data: history, isLoading, isError, error, refetch } = useQuery({
+    queryKey: [GET_REVIEWER_RECORDING_HISTORY_API, taskFilter, statusFilter, search, currentPage],
+    queryFn: () => getReviewerRecordingHistoryApi({ taskId: taskFilter, status: statusFilter, search, page: currentPage, pageSize: ITEMS_PER_PAGE }),
+    placeholderData: keepPreviousData,
+  });
 
-  const tasks = [...new Set(AUDIO_HISTORY.map((item) => item.task))];
-  const filteredData = useMemo(() => {
-    const query = searchTerm.trim().toLocaleLowerCase("vi");
-    return withStatus.filter(
-      (item) =>
-        (statusFilter === "all" || item.status === statusFilter) &&
-        (taskFilter === "all" || item.task === taskFilter) &&
-        [item.task, item.speaker, stripTags(item.csText), item.viText].some(
-          (value) => value.toLocaleLowerCase("vi").includes(query),
-        ),
-    );
-  }, [withStatus, statusFilter, taskFilter, searchTerm]);
-  // Cố định 10 mục mỗi trang; trang đầy thì các dòng giãn đều hết khung (màn thấp thì bảng cuộn bên trong)
-  const itemsPerPage = 10;
-  const totalPages = Math.max(1, Math.ceil(filteredData.length / itemsPerPage));
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const pageItems = filteredData.slice(startIndex, startIndex + itemsPerPage);
+  // Call API lấy số cặp theo từng trạng thái cho thẻ thống kê (total của API, chỉ lấy 1 dòng)
+  const statQueries = useQueries({
+    queries: STAT_STATUSES.map((status) => ({
+      queryKey: [GET_REVIEWER_RECORDING_HISTORY_API, "count", status],
+      queryFn: () => getReviewerRecordingHistoryApi({ status, page: 1, pageSize: 1 }),
+    })),
+  });
+  const [total, approved, rejected, pending] = statQueries.map((q) => q.data?.total ?? 0);
+  const pct = (n) => (total ? Math.round((n / total) * 100) : 0);
+  const stats = { total, approved, rejected, pending, approvedPct: pct(approved), rejectedPct: pct(rejected), pendingPct: pct(pending) };
+
+  // Call API lấy nhiệm vụ duyệt đang giao cho ô lọc nhiệm vụ
+  const { data: progress } = useQuery({
+    queryKey: [GET_REVIEWER_PROGRESS_API],
+    queryFn: getReviewerProgressApi,
+  });
+  const tasks = progress?.activeTasks ?? [];
+
+  const pageItems = history?.items ?? [];
+  const totalPages = Math.max(1, history?.totalPages ?? 1);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const itemsPerPage = ITEMS_PER_PAGE;
+
+  if (isLoading) return <Loading />;
+  if (isError) return <ErrorState message={error.message} onRetry={refetch} />;
 
   return (
     <div className="-mt-2 h-full min-h-0 flex flex-col gap-3 text-left font-sans">
@@ -208,7 +230,7 @@ export default function ReviewHistoryRecording() {
                   setSearchTerm(event.target.value);
                   setCurrentPage(1);
                 }}
-                placeholder="Tìm nhiệm vụ, speaker, nội dung..."
+                placeholder="Tìm nội dung, mã câu..."
                 className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-[#E5E2D8] text-ui leading-4 focus:outline-none focus:border-[#16A34A]"
               />
             </div>
@@ -221,10 +243,10 @@ export default function ReviewHistoryRecording() {
               }}
               className="min-w-0 rounded-lg border border-[#E5E2D8] px-3 py-1.5 bg-white text-meta text-[#16171C]"
             >
-              <option value="all">Tất cả nhiệm vụ</option>
+              <option value="">Tất cả nhiệm vụ</option>
               {tasks.map((task) => (
-                <option key={task} value={task}>
-                  {task}
+                <option key={task.taskId} value={task.taskId}>
+                  {task.description || `Nhiệm vụ #${task.taskId}`}
                 </option>
               ))}
             </select>
@@ -294,16 +316,15 @@ export default function ReviewHistoryRecording() {
               </tbody>
             ) : (
               pageItems.map((item, index) => {
-                const [date, time] = item.date.split(" - ");
-                const votedCount = votedCountOf(item.reviews);
+                const [date, time] = splitDateTime(item.reviewedAt);
+                const votedCount = item.reviews?.length ?? 0;
+                const task = item.taskTitle || "Thu âm tự do";
                 return (
                   <tbody
-                    key={item.id}
+                    key={item.scriptId}
                     className="border-b border-[#F0EEE6] last:border-b-0 text-meta font-label"
                   >
                     {["cs", "vi"].map((variant) => {
-                      const transcript =
-                        variant === "cs" ? item.csText : item.viText;
                       const cellSpacing =
                         variant === "cs" ? "pt-px pb-0" : "pt-0 pb-px";
                       return (
@@ -317,16 +338,16 @@ export default function ReviewHistoryRecording() {
                                 {startIndex + index + 1}
                               </td>
                               <td rowSpan={2} className="px-3">
-                                <p className="font-label text-[#16171C]">
-                                  {item.speaker}
+                                <p className="font-label text-[#16171C] truncate">
+                                  {item.speakerName}
                                 </p>
                                 <p className="mt-0.5 type-meta text-[#9A9CA3]">
                                   {date} - {time}
                                 </p>
                               </td>
                               <td rowSpan={2} className="px-3">
-                                <span title={item.task} className="flex w-full h-6 items-center justify-center rounded-md border border-[#E5E2D8] bg-[#F0EEE6] px-2 type-caption text-[#6E7078]"><span className="truncate">
-                                  {item.task}</span>
+                                <span title={task} className="flex w-full h-6 items-center justify-center rounded-md border border-[#E5E2D8] bg-[#F0EEE6] px-2 type-caption text-[#6E7078]"><span className="truncate">
+                                  {task}</span>
                                 </span>
                               </td>
                             </>
@@ -342,22 +363,7 @@ export default function ReviewHistoryRecording() {
                                         key={textIndex}
                                         className="font-regular text-[#16171C] truncate leading-5"
                                       >
-                                        {parseCodeSwitch(text).map(
-                                          (segment, segmentIndex) => (
-                                            <span
-                                              key={segmentIndex}
-                                              style={
-                                                segment.lang === "en"
-                                                  ? {
-                                                      color: AUDIO_PRIMARY,
-                                                    }
-                                                  : undefined
-                                              }
-                                            >
-                                              {segment.text}
-                                            </span>
-                                          ),
-                                        )}
+                                        <TaggedText text={text} />
                                       </p>
                                     ),
                                   )}
@@ -365,7 +371,7 @@ export default function ReviewHistoryRecording() {
                                 {/* Icon này CHỈ mở popup xem 2 câu - không hiện phản hồi/vote ở đây */}
                                 <button
                                   onClick={() => setSentenceItem(item)}
-                                  aria-label={`Xem cả hai câu của ${item.speaker}, ${item.id}`}
+                                  aria-label={`Xem cả hai câu của ${item.speakerName}, ${item.scriptId}`}
                                   title="Xem đầy đủ hai câu"
                                   className="shrink-0 w-6 h-6 rounded-md flex items-center justify-center text-[#9A9CA3] hover:text-[#16171C] hover:bg-[#F0EEE6] transition-colors cursor-pointer"
                                 >
@@ -375,24 +381,23 @@ export default function ReviewHistoryRecording() {
                             </td>
                           )}
                           <td className={`px-3 ${cellSpacing}`}>
-                            <WaveformInline compact
-                              label={variant === "cs" ? "VI-EN" : "VI"}
-                              src={variant === "cs" ? item.csAudioUrl : item.viAudioUrl}
-                              demoSeed={`${variant}-${transcript}`}
-                              demoDuration={variant === "cs" ? item.csDuration : item.viDuration}
+                            <PairAudio
+                              variant={variant}
+                              url={variant === "cs" ? item.csAudioUrl : item.viAudioUrl}
+                              duration={item.durationSec}
                             />
                           </td>
                           {variant === "cs" && (
                             <>
                               <td rowSpan={2} className="px-3">
-                                <MyDecision review={item.reviews.find((r) => r.reviewer === ME)} />
+                                <MyDecision decision={item.myDecision} />
                               </td>
                               <td rowSpan={2} className="px-3">
                                 <ResultButton
-                                  status={item.status}
+                                  status={item.recordingStatus}
                                   votedCount={votedCount}
                                   onClick={() => setDetailItem(item)}
-                                  ariaLabel={`Xem phản hồi cho ${item.speaker}, ${item.id}`}
+                                  ariaLabel={`Xem phản hồi cho ${item.speakerName}, ${item.scriptId}`}
                                 />
                               </td>
                             </>
@@ -439,7 +444,7 @@ export default function ReviewHistoryRecording() {
             <div className="p-6 overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
                 <span className="type-section text-[#16171C]">
-                  {sentenceItem.speaker}
+                  {sentenceItem.speakerName}
                 </span>
                 <button
                   onClick={() => setSentenceItem(null)}
@@ -452,12 +457,12 @@ export default function ReviewHistoryRecording() {
               <div className="bg-[#F7F5EF] p-3.5 rounded-xl border border-[#E5E2D8] mb-2.5 flex items-center gap-2.5">
                 <InlineLabel variant="cs" />
                 <p className="type-body text-[#16171C] break-words min-w-0">
-                  {parseCodeSwitch(sentenceItem.csText).map((segment, i) => <span key={i} style={segment.lang === "en" ? { color: AUDIO_PRIMARY } : undefined}>{segment.text}</span>)}
+                  <TaggedText text={sentenceItem.csText} />
                 </p>
               </div>
               <div className="bg-[#F7F5EF] p-3.5 rounded-xl border border-[#E5E2D8] flex items-center gap-2.5">
                 <InlineLabel variant="vi" />
-                <p className="type-body text-[#16171C] break-words min-w-0">{sentenceItem.viText}</p>
+                <p className="type-body text-[#16171C] break-words min-w-0"><TaggedText text={sentenceItem.viText} /></p>
               </div>
               <button
                 onClick={() => setSentenceItem(null)}
@@ -474,13 +479,8 @@ export default function ReviewHistoryRecording() {
       {/* POPUP PHẢN HỒI - 3 reviewer */}
       {detailItem &&
         (() => {
-          const ResultIcon = detailItem.status === "Approved" ? CheckCircle2 : detailItem.status === "Rejected" ? AlertCircle : Clock;
-          const accent =
-            detailItem.status === "Rejected"
-              ? "#C63B3B"
-              : detailItem.status === "Approved"
-                ? "#3FA66B"
-                : "#A85E12";
+          const { icon: ResultIcon, accent } = styleOf(detailItem.recordingStatus);
+          const reviews = detailItem.reviews ?? [];
           return (
             <div
               className="fixed inset-0 z-50 flex items-center justify-center p-4 lg:pl-64"
@@ -524,22 +524,30 @@ export default function ReviewHistoryRecording() {
                     </button>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 mb-3">
-                    <span className="px-2.5 py-1 rounded-md text-caption font-label border border-[#E5E2D8] bg-[#F0EEE6] text-[#6E7078]">{detailItem.task}</span>
-                    <span className="font-label text-meta text-[#16171C]">{detailItem.speaker}</span>
-                    <span className="type-meta text-[#9A9CA3]">{detailItem.date}</span>
+                    <span className="px-2.5 py-1 rounded-md text-caption font-label border border-[#E5E2D8] bg-[#F0EEE6] text-[#6E7078]">{detailItem.taskTitle || "Thu âm tự do"}</span>
+                    <span className="font-label text-meta text-[#16171C]">{detailItem.speakerName}</span>
+                    <span className="type-meta text-[#9A9CA3]">{splitDateTime(detailItem.reviewedAt).join(" - ")}</span>
                   </div>
                   <div className="bg-[#F7F5EF] p-3.5 rounded-xl border border-[#E5E2D8] mb-2.5 flex items-center gap-2.5">
                     <InlineLabel variant="cs" />
-                    <p className="type-body text-[#16171C] break-words min-w-0">{stripTags(detailItem.csText)}</p>
+                    <p className="type-body text-[#16171C] break-words min-w-0"><TaggedText text={detailItem.csText} /></p>
                   </div>
                   <div className="bg-[#F7F5EF] p-3.5 rounded-xl border border-[#E5E2D8] mb-4 flex items-center gap-2.5">
                     <InlineLabel variant="vi" />
-                    <p className="type-body text-[#16171C] break-words min-w-0">{detailItem.viText}</p>
+                    <p className="type-body text-[#16171C] break-words min-w-0"><TaggedText text={detailItem.viText} /></p>
                   </div>
+                  {/* Duyệt mù: API chỉ trả các lượt khi bản đã chốt */}
+                  <div className="flex items-center gap-2 mb-2.5">
+                    <span className="text-meta font-label text-[#16171C]">Quyết định của bạn:</span>
+                    <MyDecision decision={detailItem.myDecision} />
+                  </div>
+                  {reviews.length === 0 && (
+                    <p className="type-meta text-[#6E7078]">Kết quả các lượt duyệt chỉ hiện khi bản ghi đã chốt.</p>
+                  )}
                   <div className="flex flex-col gap-2">
-                    {detailItem.reviews.filter((r) => r.decision !== "not_needed").map((r, i) => {
-                      const isReject = r.decision === "reject";
-                      const isApprove = r.decision === "approve";
+                    {reviews.map((r, i) => {
+                      const isReject = r.decision === "Rejected";
+                      const isApprove = r.decision === "Approved";
                       const c = isReject
                         ? "#C63B3B"
                         : isApprove
@@ -565,16 +573,15 @@ export default function ReviewHistoryRecording() {
                             className="w-6 h-6 rounded-full text-white text-caption font-label flex items-center justify-center flex-shrink-0"
                             style={{ background: c }}
                           >
-                            {r.reviewer}
+                            R{r.round}
                           </span>
                           <div className="min-w-0">
                             <p
                               className="text-meta font-label"
                               style={{ color: isApprove ? "#1F5C3F" : c }}
                             >
-                              {r.reviewer === ME && <span className="mr-1">Bạn ·</span>}
                               {isReject
-                                ? `Từ chối${r.errorCategory ? " · " + r.errorCategory : ""}`
+                                ? "Từ chối"
                                 : isApprove
                                   ? "Đã duyệt"
                                   : "Chưa đánh giá"}

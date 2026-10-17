@@ -187,6 +187,9 @@ export default function Sidebar({ role, isOpen, onClose }) {
                             key={child.to}
                             to={child.to}
                             onClick={onClose}
+                            // Rê chuột / focus là tải sẵn (routes/prefetch.js) - đường dẫn chưa khai báo thì bỏ qua
+                            onMouseEnter={() => prefetchRoute(child.to)}
+                            onFocus={() => prefetchRoute(child.to)}
                             className={({ isActive: a }) =>
                               `flex items-center gap-2.5 px-3 py-2 rounded-lg text-ui font-label transition-all cursor-pointer ${
                                 a ? 'bg-[var(--sidebar-hover-bg)] text-[var(--sidebar-active-text)] font-bold' : idleCls
@@ -216,6 +219,8 @@ export default function Sidebar({ role, isOpen, onClose }) {
                 to={item.to}
                 end={item.end}
                 onClick={onClose}
+                onMouseEnter={() => prefetchRoute(item.to)}
+                onFocus={() => prefetchRoute(item.to)}
                 className={({ isActive }) => `${itemBase} cursor-pointer ${isActive ? activeCls : idleCls}`}
                 style={({ isActive }) => (isActive ? activeStyle : {})}
               >

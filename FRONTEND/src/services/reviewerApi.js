@@ -151,3 +151,21 @@ export const getReviewerContributionHistoryApi = async ({ kind, category, search
     throw new Error(message, { cause: error });
   }
 };
+
+// Lịch sử duyệt bản ghi của chính mình: GET /api/reviewer/history/recordings?TaskId=&Status=&Search=&Page=&PageSize=
+// Mỗi phần tử là MỘT CẶP bản ghi: { scriptId, speakerId, speakerName, taskTitle, csText, viText (giữ nhãn [vi]/[en]),
+//   csRecordingId, viRecordingId, csAudioUrl, viAudioUrl (link tạm 15 phút), durationSec,
+//   myDecision: "Approved" | "Rejected", recordingStatus (trạng thái của cặp), reviewedAt,
+//   reviews: [{ round, decision, reason }] (chỉ có khi bản đã chốt - duyệt mù) }
+// Status lọc theo trạng thái của bản ghi mình đã duyệt; total là số cặp
+export const getReviewerRecordingHistoryApi = async ({ taskId, status, search, page = 1, pageSize = 10 } = {}) => {
+  try {
+    const response = await httpClient.get("/api/reviewer/history/recordings", {
+      params: { TaskId: taskId || undefined, Status: status || undefined, Search: search || undefined, Page: page, PageSize: pageSize },
+    });
+    return response.data;
+  } catch (error) {
+    const message = error.response?.data?.title || "Không lấy được lịch sử kiểm duyệt ghi âm!";
+    throw new Error(message, { cause: error });
+  }
+};
