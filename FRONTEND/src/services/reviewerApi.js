@@ -138,8 +138,8 @@ export const getTopRejectedSpeakersApi = async ({ limit = 20 } = {}) => {
 
 // Lịch sử duyệt đề xuất câu của chính mình: GET /api/reviewer/history/contributions?Kind=&Category=&Search=&Page=&PageSize=
 // Kind: "contribution" (đã chấp nhận) | "edit" (đã sửa) | "report" (đã từ chối) - suy ra từ quyết định của mình
-// Trả về { items: [{ scriptId, kind, category, csTranscript, viEquivalent, myAction: "Accepted" | "Edited" | "Rejected",
-//   scriptStatus, reviewedAt }], page, pageSize, total, totalPages, hasNext }
+// Trả về { items: [{ scriptId, kind, category, csTranscript, viEquivalent, alignment, speakerId, speakerName,
+//   myAction: "Accepted" | "Edited" | "Rejected", reason, comment (khi Từ chối), scriptStatus, reviewedAt }], page, pageSize, total, totalPages, hasNext }
 export const getReviewerContributionHistoryApi = async ({ kind, category, search, page = 1, pageSize = 10 } = {}) => {
   try {
     const response = await httpClient.get("/api/reviewer/history/contributions", {
