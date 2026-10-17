@@ -14,6 +14,7 @@ import {
   getTopRejectedSpeakersApi,
   getReviewerRecordingHistoryApi,
   getReviewerContributionHistoryApi,
+  getReviewerProposalsApi,
 } from '../services/reviewerApi';
 import {
   GET_SPEAKER_PROGRESS_API,
@@ -28,6 +29,7 @@ import {
   GET_TOP_REJECTED_SPEAKERS_API,
   GET_REVIEWER_RECORDING_HISTORY_API,
   GET_REVIEWER_CONTRIBUTION_HISTORY_API,
+  GET_REVIEWER_PROPOSALS_API,
 } from '../utils/queryKey';
 
 /**
@@ -85,7 +87,16 @@ Object.assign(ROUTE_PREFETCH, {
     // Danh sách bản ghi phụ thuộc nhiệm vụ đang chọn -> chỉ tải sẵn danh sách nhiệm vụ
     prefetchReviewerProgress();
   },
-  '/reviewer/contribution': () => import('../pages/ReviewerTemplate/Review/ReviewContribution/index'),
+  '/reviewer/contribution': () => {
+    import('../pages/ReviewerTemplate/Review/ReviewContribution/index');
+    // Tab mặc định là Đề xuất & báo lỗi. Tab Câu đóng góp KHÔNG tải trước vì gọi next là nhận giữ câu
+    prefetchData({
+      queryKey: [GET_REVIEWER_PROPOSALS_API, 1],
+      queryFn: () => getReviewerProposalsApi({ page: 1, pageSize: 10 }),
+    });
+    prefetchData({ queryKey: [GET_REVIEWER_PROPOSALS_API, 'count'], queryFn: () => getReviewerProposalsApi({ page: 1, pageSize: 1 }) });
+    prefetchData({ queryKey: [GET_TOPICS_API], queryFn: getTopicsApi, staleTime: Infinity });
+  },
   '/reviewer/history-recording': () => {
     import('../pages/ReviewerTemplate/ReviewHistory/ReviewHistoryRecording/index');
     prefetchReviewerProgress();

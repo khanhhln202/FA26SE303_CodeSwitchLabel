@@ -169,3 +169,32 @@ export const getReviewerRecordingHistoryApi = async ({ taskId, status, search, p
     throw new Error(message, { cause: error });
   }
 };
+
+// Hàng chờ đề xuất báo lỗi / sửa câu của Speaker: GET /api/reviewer/proposals?Kind=&Domain=&Keyword=&Page=&PageSize= (cũ nhất trước)
+// Mỗi mục: { proposalId, kind: "Report" | "Edit", status, scriptId, domain, proposerId, proposerName, errorReasonCode,
+//   errorReasonDescription, comment, createdAt, original: { csContent, csPlain, viContent, viPlain, alignment },
+//   proposed (chỉ có với Edit, Report là null) }
+export const getReviewerProposalsApi = async ({ kind, domain, keyword, page = 1, pageSize = 10 } = {}) => {
+  try {
+    const response = await httpClient.get("/api/reviewer/proposals", {
+      params: { Kind: kind || undefined, Domain: domain || undefined, Keyword: keyword || undefined, Page: page, PageSize: pageSize },
+    });
+    return response.data;
+  } catch (error) {
+    const message = error.response?.data?.title || "Không lấy được hàng chờ đề xuất!";
+    throw new Error(message, { cause: error });
+  }
+};
+
+// Chốt một đề xuất: POST /api/reviewer/proposals/{proposalId}/resolve
+// Duyệt:   { decision: "Accepted", appliedCsContent, appliedViContent, appliedAlignment } - Report bắt buộc gửi bản chốt
+// Từ chối: { decision: "Rejected", comment } - bắt buộc lý do. Đã chốt rồi gọi lại trả 409
+export const resolveProposalApi = async ({ proposalId, ...values }) => {
+  try {
+    const response = await httpClient.post(`/api/reviewer/proposals/${proposalId}/resolve`, values);
+    return response.data;
+  } catch (error) {
+    const message = error.response?.data?.title || "Chốt đề xuất thất bại, vui lòng thử lại!";
+    throw new Error(message, { cause: error });
+  }
+};
