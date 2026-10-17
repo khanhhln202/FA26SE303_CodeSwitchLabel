@@ -79,3 +79,7 @@ export const GET_TOP_REJECTED_SPEAKERS_API = 'GET_TOP_REJECTED_SPEAKERS_API'
 export const GET_REVIEWER_CONTRIBUTION_HISTORY_API = 'GET_REVIEWER_CONTRIBUTION_HISTORY_API'
 // Lịch sử duyệt bản ghi của Reviewer (GET /api/reviewer/history/recordings)
 export const GET_REVIEWER_RECORDING_HISTORY_API = 'GET_REVIEWER_RECORDING_HISTORY_API'
+// Hàng chờ đề xuất báo lỗi / sửa câu (GET /api/reviewer/proposals)
+export const GET_REVIEWER_PROPOSALS_API = 'GET_REVIEWER_PROPOSALS_API'
+// Chốt một đề xuất (POST /api/reviewer/proposals/{id}/resolve)
+export const RESOLVE_PROPOSAL_API = 'RESOLVE_PROPOSAL_API'
