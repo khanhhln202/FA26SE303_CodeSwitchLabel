@@ -314,6 +314,43 @@ public class ScriptService(
             pg.SqlState == Npgsql.PostgresErrorCodes.UniqueViolation;
     }
 
+    /// <summary>
+    /// Sửa nội dung câu đang chờ duyệt, KHÔNG ghi lượt duyệt.
+    ///
+    /// Vì sao tách khỏi <c>ReviewAsync</c>: ở đó "sửa" nghĩa là "sửa xong và cho qua" — hợp với
+    /// Reviewer mở một câu trong hàng đợi, thấy sai chính tả thì chữa rồi duyệt luôn. Admin dọn
+    /// kho câu lại cần việc khác: đổi đi đổi lại cho tới khi ưng mới chốt. Không ghi lượt duyệt
+    /// nên <c>HasAcceptedReviewAsync</c> vẫn false, câu ở nguyên Chờ duyệt và sửa tiếp được.
+    ///
+    /// Dùng lại đúng bộ kiểm tra của luồng duyệt, nên các ràng buộc giữ nguyên: không sửa câu đã
+    /// có bản ghi âm, không đổi số từ tiếng Anh, không đổi quan hệ Anh–Việt — hai thứ sau nằm
+    /// trong mã câu mà mã thì không đổi được.
+    /// </summary>
+    public async Task<ScriptDetailDto> UpdatePendingAsync(
+        string scriptId, UpdateScriptContentRequest request, CancellationToken ct = default)
+    {
+        var script = await repository.GetForUpdateAsync(scriptId, ct)
+                     ?? throw NotFoundException.Script(scriptId);
+
+        if (script.Status != ScriptStatus.PendingValidation)
+        {
+            throw new ConflictException(
+                "script_not_pending",
+                $"Cặp câu {scriptId} đang là {script.Status} nên không sửa trực tiếp được. " +
+                "Chỉ câu đang chờ duyệt mới sửa được; câu đã duyệt thì gửi đề xuất sửa để Reviewer xử lý.");
+        }
+
+        var cs = request.CsContent.Trim();
+        var vi = request.ViContent.Trim();
+
+        var plan = await ScriptPairRules.ValidateEditContentAsync(repository, script, cs, vi, request.Alignment, ct);
+        ScriptPairRules.ApplyEdit(repository, script, cs, vi, plan);
+
+        await repository.SaveChangesAsync(ct);
+
+        return (await repository.GetWithReviewsAsync(scriptId, ct))!.ToDetail();
+    }
+
     public async Task<ScriptDetailDto> ReviewAsync(
         string scriptId, long userId, ReviewScriptRequest request, CancellationToken ct = default)
     {

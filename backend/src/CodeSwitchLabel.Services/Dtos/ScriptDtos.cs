@@ -150,6 +150,29 @@ public record CreateScriptRequest
     public List<AlignmentItem> Alignment { get; init; } = [];
 }
 
+/// <summary>
+/// Sửa nội dung một cặp câu đang chờ duyệt. Khác <see cref="ReviewScriptRequest"/> ở chỗ
+/// không kèm kết quả duyệt: sửa xong câu vẫn nằm ở Chờ duyệt để còn sửa tiếp.
+/// </summary>
+public record UpdateScriptContentRequest
+{
+    /// <summary>Câu chen tiếng Anh, PHẢI có nhãn: [vi]Em nên [en]scan [vi]tài liệu này.</summary>
+    [Required(ErrorMessage = "Thiếu câu chen tiếng Anh.")]
+    [StringLength(1000, MinimumLength = 3)]
+    public string CsContent { get; init; } = string.Empty;
+
+    /// <summary>Câu thuần Việt tương đương, cũng có nhãn.</summary>
+    [Required(ErrorMessage = "Thiếu câu thuần Việt tương đương.")]
+    [StringLength(1000, MinimumLength = 3)]
+    public string ViContent { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Ánh xạ lại từ tiếng Anh. Bỏ trống thì giữ nguyên alignment cũ; gửi lên thì phải phủ đủ
+    /// số từ tiếng Anh và không được đổi quan hệ Anh–Việt — cả hai đều nằm trong mã câu.
+    /// </summary>
+    public List<AlignmentItem>? Alignment { get; init; }
+}
+
 public record ReviewScriptRequest
 {
     [Required(ErrorMessage = "Phải chọn kết quả duyệt.")]

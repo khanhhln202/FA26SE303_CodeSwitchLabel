@@ -19,8 +19,15 @@ public interface IScriptService
     /// <summary>Admin thêm tay một cặp câu — vào thẳng trạng thái đã duyệt kèm lượt duyệt tự động.</summary>
     Task<ScriptDetailDto> CreateAsync(CreateScriptRequest request, long createdById, CancellationToken ct = default);
 
-    /// <summary>Speaker đóng góp một cặp câu — nằm chờ duyệt nội dung.</summary>
+    /// <summary>Speaker hoặc Reviewer đóng góp một cặp câu — nằm chờ duyệt nội dung.</summary>
     Task<ScriptDetailDto> ContributeAsync(CreateScriptRequest request, long contributorId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Admin sửa nội dung một cặp câu đang CHỜ DUYỆT, không ghi lượt duyệt nào nên câu
+    /// vẫn ở Chờ duyệt và sửa tiếp được. Câu đã duyệt thì không dùng đường này.
+    /// </summary>
+    Task<ScriptDetailDto> UpdatePendingAsync(
+        string scriptId, UpdateScriptContentRequest request, CancellationToken ct = default);
 
     /// <summary>Nhập hàng loạt từ file input_text.json. Câu hợp lệ vào thẳng đã duyệt kèm lượt duyệt tự động; câu hỏng không làm hỏng cả file.</summary>
     Task<ImportResultDto> ImportAsync(
