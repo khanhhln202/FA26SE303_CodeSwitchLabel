@@ -84,6 +84,15 @@ public interface ITaskRepository
 
     Task<TaskRow?> GetRowAsync(long taskId, CancellationToken ct = default);
 
+    /// <summary>TEAM_018: đợt của một task, để định tuyến công việc sang các task cùng đợt.</summary>
+    Task<long?> GetCampaignIdAsync(long taskId, CancellationToken ct = default);
+
+    /// <summary>
+    /// TEAM_018: các task duyệt còn nhận việc của một đợt (chưa huỷ), theo thứ tự tạo.
+    /// Gồm cả task đã đủ chỉ tiêu — TEAM_016: người nhận vẫn duyệt thêm được, KPI không chặn.
+    /// </summary>
+    Task<List<long>> GetReviewTaskIdsForCampaignAsync(long campaignId, CancellationToken ct = default);
+
     /// <summary>TEAM_012: <paramref name="sort"/> rỗng (Field = null) là thứ tự mặc định.</summary>
     Task<(IReadOnlyList<TaskRow> Items, int Total)> SearchAsync(
         TaskType? type, WorkTaskStatus? status, long? assigneeId, ScriptDomain? domain, bool? overdue,
@@ -118,6 +127,12 @@ public interface ITaskRepository
     Task<TaskScript?> GetScriptItemAsync(long taskId, string scriptId, CancellationToken ct = default);
     Task<TaskRecording?> GetRecordingItemAsync(long taskId, string recordingId, CancellationToken ct = default);
     Task<List<TaskRecording>> GetQueuedRecordingItemsAsync(string recordingId, CancellationToken ct = default);
+
+    /// <summary>
+    /// TEAM_018: mọi mục đang chờ của MỌI bản ghi thuộc một cặp câu, ở bất kỳ task nào.
+    /// Xoá cả cặp thì tất cả bản ghi của câu bị loại, nên mục chờ ở task duyệt anh em cũng chết theo.
+    /// </summary>
+    Task<List<TaskRecording>> GetQueuedRecordingItemsByScriptAsync(string scriptId, CancellationToken ct = default);
 
     /// <summary>Mọi mục còn chờ của một cặp câu, ở bất kỳ task nào. Có theo dõi thay đổi.</summary>
     Task<List<TaskScript>> GetPendingScriptItemsAsync(string scriptId, CancellationToken ct = default);
@@ -231,6 +246,22 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
 
     public Task<TaskRow?> GetRowAsync(long taskId, CancellationToken ct = default) =>
         ProjectRows(db.WorkTasks.AsNoTracking().Where(t => t.TaskId == taskId)).FirstOrDefaultAsync(ct);
+
+    public Task<long?> GetCampaignIdAsync(long taskId, CancellationToken ct = default) =>
+        db.WorkTasks.AsNoTracking()
+            .Where(t => t.TaskId == taskId)
+            .Select(t => t.CampaignId)
+            .FirstOrDefaultAsync(ct);
+
+    public Task<List<long>> GetReviewTaskIdsForCampaignAsync(
+        long campaignId, CancellationToken ct = default) =>
+        db.WorkTasks.AsNoTracking()
+            .Where(t => t.CampaignId == campaignId &&
+                        t.TaskType == TaskType.Review &&
+                        t.Status != WorkTaskStatus.Cancelled)
+            .OrderBy(t => t.TaskId)
+            .Select(t => t.TaskId)
+            .ToListAsync(ct);
 
     public async Task<(IReadOnlyList<TaskRow> Items, int Total)> SearchAsync(
         TaskType? type, WorkTaskStatus? status, long? assigneeId, ScriptDomain? domain, bool? overdue,
@@ -443,6 +474,12 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         string recordingId, CancellationToken ct = default) =>
         db.TaskRecordings
             .Where(tr => tr.RecordingId == recordingId && tr.Status == TaskRecordingStatus.Queued)
+            .ToListAsync(ct);
+
+    public Task<List<TaskRecording>> GetQueuedRecordingItemsByScriptAsync(
+        string scriptId, CancellationToken ct = default) =>
+        db.TaskRecordings
+            .Where(tr => tr.Recording.ScriptId == scriptId && tr.Status == TaskRecordingStatus.Queued)
             .ToListAsync(ct);
 
     public Task<List<TaskScript>> GetPendingScriptItemsAsync(

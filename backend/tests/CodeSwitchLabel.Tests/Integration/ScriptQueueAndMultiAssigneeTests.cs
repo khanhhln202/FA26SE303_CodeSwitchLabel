@@ -3,6 +3,7 @@ using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Repositories.Repositories;
 using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Common;
+using CodeSwitchLabel.Services.Dtos;
 using CodeSwitchLabel.Services.WorkTasks;
 using CodeSwitchLabel.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -263,6 +264,25 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
         return task;
     }
 
+    /// <summary>
+    /// TEAM_018: task duyệt TRONG đợt với hàng chờ TRỐNG — đúng thế "giao việc trước
+    /// khi có bản ghi" mà đợt nào cũng gặp lúc khởi tạo.
+    /// </summary>
+    private async Task<WorkTask> TaoTaskDuyetTrongDotAsync(string nhan, int chiTieu = 3)
+    {
+        var manager = await CreateUserAsync($"tm-{nhan}-{Guid.NewGuid():N}@test.local", RoleName.TaskManager);
+
+        var campaign = await CreateCampaignAsync($"Đợt {nhan}", 2000,
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), manager.UserId, CampaignStatus.Open);
+
+        campaign.AssignedTo = manager.UserId;
+        await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        return await CreateTaskAsync(campaign.CampaignId, TaskType.Review, chiTieu,
+            manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
+    }
+
     [Fact]
     public async Task TaskGiaoChoNhieuNguoi_CaNguoiDungNhan()
     {
@@ -284,6 +304,56 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
             Assert.True(await Tasks.IsActiveTaskOfAsync(
                 task.TaskId, speaker.UserId, TaskType.Recording, TestContext.Current.CancellationToken));
         }
+    }
+
+    /// <summary>
+    /// TEAM_018 — yêu cầu user: "RV vẫn trong hàng chờ dù chưa có bản ghi". Giao task duyệt
+    /// trong đợt lúc hàng chờ trống phải THÀNH CÔNG; bản ghi sẽ tự vào khi Speaker nộp.
+    /// Trước đây luật "chỉ tiêu không vượt số mục" chặn bằng 422 target_exceeds_items.
+    /// </summary>
+    [Fact]
+    public async Task GiaoTaskDuyetTrongDot_KhiHangChoTrong_VanChoPhep()
+    {
+        // Arrange
+        var task = await TaoTaskDuyetTrongDotAsync("duyet-trong");
+        var reviewer = await CreateUserAsync($"rv-empty-{Guid.NewGuid():N}@test.local", RoleName.Reviewer);
+
+        // Act
+        var detail = await TaskService.AssignAsync(
+            task.TaskId, [reviewer.UserId], TestContext.Current.CancellationToken, task.CreatedBy);
+
+        // Assert — có lượt giao Active thật, không phải chỉ không ném lỗi.
+        Assert.Contains(detail.Assignments, a => a.Status == AssignmentStatus.Active);
+        Assert.True(await Tasks.IsActiveTaskOfAsync(
+            task.TaskId, reviewer.UserId, TaskType.Review, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// Task duyệt NGOÀI đợt không có đường tự đẩy nào — hàng chờ trống vẫn bị chặn như cũ,
+    /// nới luật TEAM_018 chỉ áp cho task duyệt thuộc đợt.
+    /// </summary>
+    [Fact]
+    public async Task GiaoTaskDuyetNgoaiDot_KhiHangChoTrong_VanChan()
+    {
+        // Arrange
+        var standalone = await TaskService.CreateAsync(new CreateTaskRequest
+        {
+            CampaignId = null,
+            TaskType = TaskType.Review,
+            Description = "Duyệt độc lập, hàng chờ trống",
+            TargetQty = 3,
+            Deadline = DateTimeOffset.UtcNow.AddDays(7)
+        }, ManagerUserId, TestContext.Current.CancellationToken);
+
+        var reviewer = await CreateUserAsync($"rv-alone-{Guid.NewGuid():N}@test.local", RoleName.Reviewer);
+
+        // Act
+        var ex = await Assert.ThrowsAsync<UnprocessableException>(() =>
+            TaskService.AssignAsync(standalone.Summary.TaskId, [reviewer.UserId],
+                TestContext.Current.CancellationToken, ManagerUserId));
+
+        // Assert
+        Assert.Equal("target_exceeds_items", ex.Code);
     }
 
     [Fact]

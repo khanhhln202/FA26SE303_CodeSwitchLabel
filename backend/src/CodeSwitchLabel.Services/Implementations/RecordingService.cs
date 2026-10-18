@@ -127,10 +127,10 @@ public class RecordingService(
                         $"Cặp câu {command.ScriptId} đã do người đọc khác thu. Mỗi cặp câu chỉ một người đọc.");
                 }
 
-                if (taskId.HasValue)
-                {
-                    await taskTracker.OnRecordingSubmittedAsync(taskId.Value, ct);
-                }
+                // TEAM_018: vừa lưu bản ghi là tính lại task thu âm VÀ tự đẩy bản chờ duyệt
+                // vào hàng chờ của các task duyệt đang mở cùng đợt (không có thì thôi —
+                // bản thu ngoài task/ngoài đợt vẫn nằm ở hàng chờ chung như trước).
+                await taskTracker.OnRecordingSubmittedAsync(recording, ct);
 
                 await transaction.CommitAsync(ct);
             }

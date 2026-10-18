@@ -401,7 +401,8 @@ public class TaskService(
                 var share = PerPersonQuota(request.TargetQty.Value, active.Count);
                 var (workable, blocked) = await CountWorkableAsync(task, active, null, ct);
 
-                if (share > workable)
+                // TEAM_018: task duyệt trong đợt được nâng chỉ tiêu trước khi có bản ghi.
+                if (RequiresItemsToAssign(task) && share > workable)
                 {
                     throw new UnprocessableException(
                         "target_exceeds_items",
@@ -673,7 +674,10 @@ public class TaskService(
         afterAssigning.AddRange(fresh.Select(f => new TaskAssignment { TaskId = taskId, UserId = f.UserId }));
         var (workable, blocked) = await CountWorkableAsync(task, afterAssigning, null, ct);
 
-        if (share > workable)
+        // TEAM_018: task duyệt trong đợt nhận việc qua đường tự đẩy lúc Speaker nộp, nên hàng
+        // chờ rỗng lúc giao KHÔNG phải lỗi — giao reviewer trước, bản ghi tự tới sau là luồng
+        // chính. Task thu âm và task duyệt ngoài đợt vẫn phải đủ mục trước khi giao.
+        if (RequiresItemsToAssign(task) && share > workable)
         {
             throw new UnprocessableException(
                 "target_exceeds_items",
@@ -760,6 +764,14 @@ public class TaskService(
     /// <summary>Chỉ tiêu mỗi người phải đạt khi task có n người nhận. Luôn ít nhất 1.</summary>
     private static int PerPersonQuota(int targetQty, int assigneeCount) =>
         assigneeCount <= 1 ? targetQty : Math.Max(1, (int)Math.Ceiling(targetQty / (double)assigneeCount));
+
+    /// <summary>
+    /// TEAM_018: task duyệt trong đợt nhận việc qua đường tự đẩy lúc Speaker nộp, nên hàng chờ
+    /// rỗng lúc giao KHÔNG phải lỗi — giao reviewer trước, bản ghi tự tới sau là luồng chính.
+    /// Task thu âm và task duyệt ngoài đợt vẫn phải đủ mục trước khi giao/nâng chỉ tiêu.
+    /// </summary>
+    private static bool RequiresItemsToAssign(WorkTask task) =>
+        task.TaskType != TaskType.Review || task.CampaignId is null;
 
     public async Task<TaskDetailDto> CancelAsync(
         long taskId, CancellationToken ct = default,
@@ -1025,7 +1037,9 @@ public class TaskService(
 
         var (workable, blocked) = await CountWorkableAsync(task, active, itemId, ct);
 
-        if (task.TargetQty > workable)
+        // TEAM_018: task duyệt trong đợt tự đầy lại khi có bản ghi mới, nên gỡ một mục
+        // không làm task kẹt — cùng lý do với RequiresItemsToAssign ở đường giao việc.
+        if (RequiresItemsToAssign(task) && task.TargetQty > workable)
         {
             throw new ConflictException(
                 "target_exceeds_items",
