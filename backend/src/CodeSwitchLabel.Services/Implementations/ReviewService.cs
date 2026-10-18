@@ -78,10 +78,18 @@ public class ReviewService(
             query.ToSort<TaskReviewSortField>(), ct);
 
         // Một lần lấy đủ hai bản của mọi cặp câu trên trang, thay vì gọi N lần cho từng dòng.
+        // Cùng một biến thể có thể có NHIỀU lần thu (bản cũ trượt QC / bị bỏ audio rồi thu lại
+        // `_t2`): chọn lần thu MỚI NHẤT mỗi biến thể — cùng luật với lịch sử ghi âm của Speaker.
+        // Không chọn một dòng thì hai bản cùng biến thể làm ToDictionary ném trùng khoá, cả
+        // danh sách trả 500.
         var pairs = (await reviews.GetSummariesByScriptsAsync(
                 [.. rows.Select(r => r.ScriptId).Distinct()], reviewerId, ct))
             .GroupBy(r => r.ScriptId)
-            .ToDictionary(g => g.Key, g => g.ToDictionary(r => r.SentenceVariant));
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderByDescending(r => r.RecordedAt)
+                    .GroupBy(r => r.SentenceVariant)
+                    .ToDictionary(v => v.Key, v => v.First()));
 
         var items = rows
             .Select(x =>
@@ -515,7 +523,12 @@ public class ReviewService(
 
         foreach (var variant in new[] { SentenceVariant.CodeSwitching, SentenceVariant.PureVietnamese })
         {
-            var row = siblings.FirstOrDefault(r => r.SentenceVariant == variant);
+            // Cùng biến thể có thể có nhiều lần thu (bản cũ trượt QC rồi thu lại): lấy bản MỚI NHẤT.
+            // Lấy đại dòng đầu thì ô cặp câu chỉ vào bản đã chết thay vì bản đang chờ duyệt.
+            var row = siblings
+                .Where(r => r.SentenceVariant == variant)
+                .OrderByDescending(r => r.RecordedAt)
+                .FirstOrDefault();
 
             if (row is null)
             {

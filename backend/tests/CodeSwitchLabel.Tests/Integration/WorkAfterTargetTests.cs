@@ -18,6 +18,7 @@ namespace CodeSwitchLabel.Tests.Integration;
 ///   • task đạt chỉ tiêu (Completed) vẫn nhận thêm bản ghi / lượt duyệt — KPI để đo, không để khoá
 ///   • chỉ task đã huỷ (Cancelled) mới chặn
 ///   • bảng xếp hạng đếm bản đã qua kiểm tra tự động, không đếm bản trượt QC
+///   • danh sách bản ghi của task duyệt đọc được cả khi cặp câu có bản thu lại
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection("Database")]
@@ -198,6 +199,75 @@ public sealed class WorkAfterTargetTests(DatabaseFixture fixture)
         // Duyệt thêm vẫn không kéo task rời Hoàn thành.
         await Db.Entry(task).ReloadAsync(ct);
         Assert.Equal(WorkTaskStatus.Completed, task.Status);
+    }
+
+    // ------------------------------------------------------------------ cặp câu có bản thu lại
+
+    /// <summary>
+    /// Ca đã làm sập danh sách task duyệt ngoài đời: một cặp câu có HAI bản thu cùng biến thể
+    /// (bản cũ trượt QC không nằm trong task, bản thu lại `_t2` đang chờ duyệt). Danh sách phải
+    /// trả về bình thường — trước đây gom hai bản cùng biến thể vào ToDictionary là trùng khoá,
+    /// cả endpoint 500 — và ô anh em phải trỏ lần thu MỚI NHẤT, không phải bản đã chết.
+    /// </summary>
+    [Fact]
+    public async Task DanhSachTaskDuyet_CoBanThuLaiCungBienThe_TraDuocVaAnhEmLaBanMoiNhat()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (manager, campaign) = await TaoDotAsync("thu-lai", ct);
+        var speaker = await CreateUserAsync($"sp-lai-{Guid.NewGuid():N}@test.local", RoleName.Speaker);
+        var reviewer = await CreateUserAsync($"rv-lai-{Guid.NewGuid():N}@test.local", RoleName.Reviewer);
+
+        var task = await CreateTaskAsync(campaign.CampaignId, TaskType.Review, 2,
+            manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
+
+        var script = await CreateValidatedScriptAsync(
+            $"[vi]Em [en]thu{Guid.NewGuid():N} [vi]lại lần nữa", "[vi]Em thu lại lần nữa",
+            ScriptDomain.ItTechnology, speaker.UserId);
+
+        // Bản CS cũ trượt QC — KHÔNG nằm trong task; speaker thu lại thành _t2 đang chờ duyệt.
+        var dead = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
+        dead.Status = RecordingStatus.QcFailed;
+        dead.RecordedAt = DateTimeOffset.UtcNow.AddMinutes(-10);
+
+        var live = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
+        var vi = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.PureVietnamese);
+
+        Db.TaskRecordings.Add(new TaskRecording
+        {
+            TaskId = task.TaskId,
+            RecordingId = live.RecordingId,
+            Status = TaskRecordingStatus.Queued
+        });
+        Db.TaskRecordings.Add(new TaskRecording
+        {
+            TaskId = task.TaskId,
+            RecordingId = vi.RecordingId,
+            Status = TaskRecordingStatus.Queued
+        });
+        Db.TaskAssignments.Add(new TaskAssignment
+        {
+            TaskId = task.TaskId,
+            UserId = reviewer.UserId,
+            AssignmentStatus = AssignmentStatus.Active,
+            AssignedAt = DateTimeOffset.UtcNow
+        });
+        await Db.SaveChangesAsync(ct);
+
+        var page = await ReviewService.GetTaskRecordingsAsync(
+            task.TaskId, reviewer.UserId, new TaskReviewQuery(), ct);
+
+        Assert.Equal(2, page.Items.Count);
+
+        // Dòng VI nhìn sang phải thấy đúng bản CS mới nhất, không phải bản trượt QC.
+        var viItem = Assert.Single(page.Items, i => i.SentenceVariant == SentenceVariant.PureVietnamese);
+        Assert.Equal(live.RecordingId, viItem.Sibling!.RecordingId);
+        Assert.Equal(RecordingStatus.PendingReview, viItem.Sibling!.Status);
+
+        // Mở một bản để duyệt: ô cặp câu cũng trỏ bản mới nhất.
+        var open = await ReviewService.GetForReviewAsync(live.RecordingId, reviewer.UserId, ct);
+        var csInPair = Assert.Single(open.Pair, v => v.SentenceVariant == SentenceVariant.CodeSwitching);
+        Assert.Equal(live.RecordingId, csInPair.RecordingId);
+        Assert.Equal(RecordingStatus.PendingReview, csInPair.Status);
     }
 
     // ------------------------------------------------------------------ task đã huỷ
