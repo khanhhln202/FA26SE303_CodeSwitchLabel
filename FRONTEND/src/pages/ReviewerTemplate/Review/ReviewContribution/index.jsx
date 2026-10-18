@@ -7,39 +7,21 @@ import { SPEAKER_ACCENT_ACTIVE_ICON as ACCENT, AUDIO_PRIMARY } from '../../../..
 import Pagination from '../../../../components/Pagination/Pagination';
 import Loading from '../../../../components/Loading/Loading';
 import ErrorState from '../../../../components/ErrorState/ErrorState';
-import { getReviewerProposalsApi, resolveProposalApi } from '../../../../services/reviewerApi';
+import { getReviewerProposalsApi, resolveProposalApi, getReviewerContributionsApi } from '../../../../services/reviewerApi';
+import { getScriptDetailApi, getScriptErrorReasonsApi, reviewScriptApi } from '../../../../services/scriptApi';
 import { getTopicsApi } from '../../../../services/configApi';
 import {
   GET_REVIEWER_PROPOSALS_API,
   RESOLVE_PROPOSAL_API,
   GET_TOPICS_API,
   GET_REVIEWER_CONTRIBUTION_HISTORY_API,
+  GET_REVIEWER_CONTRIBUTIONS_API,
+  GET_SCRIPT_DETAIL_API,
+  GET_SCRIPT_ERROR_REASONS_API,
+  REVIEW_SCRIPT_API,
 } from '../../../../utils/queryKey';
-// Tab Câu đóng góp tạm dùng dữ liệu mẫu (chưa gắn API)
-import { CONTRIBUTION_QUEUE } from '../../../../mocks/reviewer/proposals';
 
 const PAGE_SIZE = 10;
-
-// Câu đóng góp mẫu đổi về cùng dạng câu API ({ csContent, viContent, alignment }) để dùng chung khung xem / sửa
-const MOCK_CONTRIBUTIONS = CONTRIBUTION_QUEUE.map((it) => ({
-  id: it.id,
-  author: it.author,
-  category: it.category,
-  time: it.time,
-  csContent: it.cs_transcript,
-  viContent: it.vi_equivalent,
-  alignment: it.alignment,
-}));
-
-// Loại lỗi khi từ chối câu đóng góp (dữ liệu mẫu)
-const MOCK_REJECT_CATEGORIES = [
-  { value: 'grammar', label: 'Sai ngữ pháp / cấu trúc câu' },
-  { value: 'label', label: 'Gắn nhãn [vi]/[en] sai hoặc thiếu' },
-  { value: 'alignment', label: 'Nghĩa từ tiếng Anh không đúng' },
-  { value: 'abbr', label: 'Viết tắt / từ mượn không hợp lệ' },
-  { value: 'context', label: 'Thiếu ngữ cảnh / nghĩa không rõ' },
-  { value: 'other', label: 'Lỗi khác' },
-];
 
 // Nhãn loại đề xuất (kind của API)
 const PROPOSAL_KIND = {
@@ -281,7 +263,6 @@ export default function ReviewContribution() {
   const [drafts, setDrafts] = useState({}); // bản sẽ lưu của từng đề xuất, giữ lại khi chuyển qua lại
 
   // ---------- Tab Câu đóng góp ----------
-  const [mockQueue, setMockQueue] = useState(MOCK_CONTRIBUTIONS);
   const [scriptPage, setScriptPage] = useState(1);
   const [selectedScriptId, setSelectedScriptId] = useState(null);
 
@@ -312,12 +293,37 @@ export default function ReviewContribution() {
     queryFn: () => getReviewerProposalsApi({ page: 1, pageSize: 1 }),
   });
 
-  const scripts = mockQueue;
-  // Phân trang 10 câu / trang ở FE (dữ liệu mẫu)
-  const scriptTotalPages = Math.max(1, Math.ceil(scripts.length / PAGE_SIZE));
-  const currentScriptPage = Math.min(scriptPage, scriptTotalPages);
-  const pagedScripts = scripts.slice((currentScriptPage - 1) * PAGE_SIZE, currentScriptPage * PAGE_SIZE);
-  const script = pagedScripts.find((it) => it.id === selectedScriptId) ?? pagedScripts[0] ?? null;
+  // Call API lấy 1 trang câu đóng góp chờ duyệt (chỉ đọc, không giữ chỗ câu)
+  const {
+    data: contributionPage,
+    isLoading: isLoadingScripts,
+    isError: isScriptsError,
+    error: scriptsError,
+    refetch: refetchScripts,
+  } = useQuery({
+    queryKey: [GET_REVIEWER_CONTRIBUTIONS_API, scriptPage],
+    queryFn: () => getReviewerContributionsApi({ page: scriptPage, pageSize: PAGE_SIZE }),
+    placeholderData: keepPreviousData,
+  });
+  const pagedScripts = contributionPage?.items ?? [];
+  const scriptTotalPages = Math.max(1, contributionPage?.totalPages ?? 1);
+  const currentScriptPage = scriptPage;
+  const script = pagedScripts.find((it) => it.scriptId === selectedScriptId) ?? pagedScripts[0] ?? null;
+
+  // Call API lấy chi tiết câu đang chọn - danh sách không kèm nghĩa từ (alignment)
+  const { data: scriptDetail } = useQuery({
+    queryKey: [GET_SCRIPT_DETAIL_API, script?.scriptId],
+    queryFn: () => getScriptDetailApi(script.scriptId),
+    enabled: tab === 'contributions' && Boolean(script?.scriptId),
+  });
+
+  // Call API lấy lý do lỗi câu - chỉ khi từ chối câu đóng góp
+  const { data: errorReasons = [] } = useQuery({
+    queryKey: [GET_SCRIPT_ERROR_REASONS_API],
+    queryFn: getScriptErrorReasonsApi,
+    enabled: rejectTarget?.type === 'script',
+    staleTime: Infinity,
+  });
 
   const proposals = proposalPage?.items ?? [];
   const totalPages = Math.max(1, proposalPage?.totalPages ?? 1);
@@ -352,15 +358,25 @@ export default function ReviewContribution() {
     },
   });
 
-  // Câu đóng góp (dữ liệu mẫu): xử lý xong thì rời danh sách, chuyển sang câu kế tiếp
-  const finishMock = (id, message) => {
-    const idx = pagedScripts.findIndex((it) => it.id === id);
-    const next = pagedScripts[idx + 1] ?? pagedScripts[idx - 1] ?? null;
-    setMockQueue((prev) => prev.filter((it) => it.id !== id));
-    setSelectedScriptId(next?.id ?? null);
-    closeReject();
-    toast.success(message);
-  };
+  // Mutation duyệt nội dung câu đóng góp (Chấp nhận / Từ chối) - xong thì câu rời danh sách, chuyển câu kế tiếp
+  const { mutate: reviewScript, isPending: isReviewing } = useMutation({
+    mutationKey: [REVIEW_SCRIPT_API],
+    mutationFn: reviewScriptApi,
+    onSuccess: (_, variables) => {
+      const idx = pagedScripts.findIndex((it) => it.scriptId === variables.scriptId);
+      const next = pagedScripts[idx + 1] ?? pagedScripts[idx - 1] ?? null;
+      setSelectedScriptId(next?.scriptId ?? null);
+      closeReject();
+      toast.success(variables.action === 'Accepted' ? 'Đã duyệt câu đóng góp.' : 'Đã từ chối câu.');
+      queryClient.invalidateQueries({ queryKey: [GET_REVIEWER_CONTRIBUTIONS_API] });
+      queryClient.invalidateQueries({ queryKey: [GET_REVIEWER_CONTRIBUTION_HISTORY_API] });
+    },
+    // 403 câu thuộc lô người khác, 409 đã có người duyệt... -> hiện đúng câu backend trả, tải lại danh sách
+    onError: (error) => {
+      toast.error(error.message);
+      queryClient.invalidateQueries({ queryKey: [GET_REVIEWER_CONTRIBUTIONS_API] });
+    },
+  });
 
   const handleApproveProposal = () => {
     if (!selected || failedChecks.length) return;
@@ -373,10 +389,9 @@ export default function ReviewContribution() {
     });
   };
 
-  // TODO: gọi API duyệt câu đóng góp khi chốt được API
   const handleApproveScript = () => {
     if (!script) return;
-    finishMock(script.id, 'Đã duyệt câu đóng góp.');
+    reviewScript({ scriptId: script.scriptId, action: 'Accepted' });
   };
 
   const handleRejectSubmit = (e) => {
@@ -386,8 +401,8 @@ export default function ReviewContribution() {
       // Từ chối đề xuất: bắt buộc ghi lý do, câu giữ nguyên
       resolveProposal({ proposalId: rejectTarget.item.proposalId, decision: 'Rejected', comment: rejectComment.trim() });
     } else {
-      // Từ chối câu đóng góp (dữ liệu mẫu)
-      finishMock(rejectTarget.item.id, 'Đã từ chối câu.');
+      // Từ chối câu đóng góp: bắt buộc mã lỗi từ GET /api/script-error-reasons
+      reviewScript({ scriptId: rejectTarget.item.scriptId, action: 'Rejected', errorReasonCode: rejectReasonCode, comment: rejectComment.trim() || null });
     }
   };
 
@@ -413,7 +428,7 @@ export default function ReviewContribution() {
                 style={tab === t.key ? { color: '#15803D' } : undefined}
               >
                 {t.label}
-                <span className="ml-1 text-[#9A9CA3] tabular-nums">{t.key === 'proposals' ? proposalCount?.total ?? '·' : mockQueue.length}</span>
+                <span className="ml-1 text-[#9A9CA3] tabular-nums">{(t.key === 'proposals' ? proposalCount : contributionPage)?.total ?? '·'}</span>
               </button>
             ))}
           </div>
@@ -510,7 +525,7 @@ export default function ReviewContribution() {
 
       {/* ================= TAB CÂU ĐÓNG GÓP - danh sách câu chờ duyệt nội dung (dữ liệu mẫu, chưa gắn API) ================= */}
       {tab === 'contributions' && (
-        (
+        isLoadingScripts ? <Loading /> : isScriptsError ? <ErrorState message={scriptsError.message} onRetry={refetchScripts} /> : (
           <div className="flex-1 min-h-0 grid gap-2.5 lg:grid-cols-[minmax(280px,0.34fr)_minmax(0,0.66fr)]">
             <aside className="min-h-[300px] bg-white rounded-2xl border border-[#E5E2D8] flex flex-col overflow-hidden" aria-label="Câu đóng góp chờ duyệt">
               {/* Luôn chia đúng PAGE_SIZE ô cao bằng nhau lấp đầy cột -> 10 câu vừa 1 màn hình; màn quá thấp (ô < 44px) mới cuộn */}
@@ -523,16 +538,17 @@ export default function ReviewContribution() {
                       </li>
                     );
                   }
-                  const active = script?.id === it.id;
+                  const active = script?.scriptId === it.scriptId;
                   return (
-                    <li key={it.id} className="min-h-0 min-w-0">
+                    <li key={it.scriptId} className="min-h-0 min-w-0">
                       <button
                         type="button"
-                        onClick={() => setSelectedScriptId(it.id)}
-                        className={`w-full h-full min-w-0 text-left px-2.5 rounded-lg border transition-colors cursor-pointer flex flex-col justify-center overflow-hidden ${active ? 'bg-[#EDF7F0] border-[#BFE3CB]' : 'border-transparent hover:bg-[#F7F5EF]'}`}
+                        onClick={() => setSelectedScriptId(it.scriptId)}
+                        // Câu đã chia cho lô người khác (canReview: false) thì làm mờ
+                        className={`w-full h-full min-w-0 text-left px-2.5 rounded-lg border transition-colors cursor-pointer flex flex-col justify-center overflow-hidden ${active ? 'bg-[#EDF7F0] border-[#BFE3CB]' : 'border-transparent hover:bg-[#F7F5EF]'} ${!it.canReview && !active ? 'opacity-55' : ''}`}
                       >
                         <span className="flex items-center gap-2 w-full min-w-0">
-                          <span className="text-meta font-label leading-4 [@media(max-height:820px)]:leading-[14px] text-[#16171C] truncate flex-1 min-w-0">{it.author}</span>
+                          <span className="text-meta font-label leading-4 [@media(max-height:820px)]:leading-[14px] text-[#16171C] truncate flex-1 min-w-0">{it.contributor?.fullName ?? '—'}</span>
                           <span className="w-[76px] h-4 rounded type-caption inline-flex items-center justify-center shrink-0" style={{ background: CONTRIBUTION_TAG.bg, color: CONTRIBUTION_TAG.text }}>{CONTRIBUTION_TAG.label}</span>
                         </span>
                         {/* Cặp câu: VI-EN rồi VI */}
@@ -558,16 +574,21 @@ export default function ReviewContribution() {
                   <div className="min-w-0">
                     <p className="type-card-title text-[#16171C]">Đóng góp</p>
                     <p className="type-meta text-[#6E7078]">
-                      {script.author} · {script.category} · <span className="tabular-nums">{script.time}</span>
+                      {script.contributor?.fullName ?? '—'} · {topicName(script.domain)} · <span className="tabular-nums">{formatDateTime(script.createdAt)}</span>
                     </p>
                   </div>
-                  <ActionButtons
-                    onReject={() => setRejectTarget({ type: 'script', item: script })}
-                    onApprove={handleApproveScript}
-                  />
+                  {script.canReview ? (
+                    <ActionButtons
+                      onReject={() => setRejectTarget({ type: 'script', item: script })}
+                      onApprove={handleApproveScript}
+                      disabled={isReviewing}
+                    />
+                  ) : (
+                    <span className="type-label shrink-0 text-[#6E7078]">Câu đã chia cho lô của người khác</span>
+                  )}
                 </div>
                 <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-4">
-                  <SentenceView sentence={script} />
+                  <SentenceView sentence={scriptDetail?.scriptId === script.scriptId ? scriptDetail : script} />
                 </div>
               </> : <EmptyDone text="Tuyệt vời! Không còn câu đóng góp nào đang chờ." />}
             </section>
@@ -605,10 +626,10 @@ export default function ReviewContribution() {
               </div>
 
               <form onSubmit={handleRejectSubmit} className="space-y-4">
-                {/* Câu đóng góp (dữ liệu mẫu): chọn loại lỗi; đề xuất: chỉ cần ghi lý do */}
+                {/* Câu đóng góp: bắt buộc chọn lý do từ API; đề xuất: chỉ cần ghi lý do */}
                 {rejectTarget.type === 'script' && (
                   <div>
-                    <label className="block text-meta font-label text-[#16171C] mb-1.5">Loại lỗi kiểm duyệt</label>
+                    <label className="block text-meta font-label text-[#16171C] mb-1.5">Lý do lỗi câu</label>
                     <select
                       required
                       value={rejectReasonCode}
@@ -616,7 +637,7 @@ export default function ReviewContribution() {
                       className="w-full text-meta border border-[#E5E2D8] rounded-xl p-2.5 bg-white text-[#16171C] font-label outline-none focus:border-[#C63B3B] focus:ring-4 focus:ring-[#C63B3B]/10 transition-all"
                     >
                       <option value="" disabled>Chọn lý do...</option>
-                      {MOCK_REJECT_CATEGORIES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                      {errorReasons.map((r) => <option key={r.reasonCode} value={r.reasonCode}>{r.description}</option>)}
                     </select>
                   </div>
                 )}
@@ -639,10 +660,10 @@ export default function ReviewContribution() {
                   </button>
                   <button
                     type="submit"
-                    disabled={isResolving || (rejectTarget.type === 'proposal' ? !rejectComment.trim() : !rejectReasonCode)}
+                    disabled={isResolving || isReviewing || (rejectTarget.type === 'proposal' ? !rejectComment.trim() : !rejectReasonCode)}
                     className="flex-1 py-2.5 bg-[#C63B3B] text-white rounded-xl type-button hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    {isResolving ? 'Đang gửi...' : 'Xác nhận từ chối'}
+                    {isResolving || isReviewing ? 'Đang gửi...' : 'Xác nhận từ chối'}
                   </button>
                 </div>
               </form>

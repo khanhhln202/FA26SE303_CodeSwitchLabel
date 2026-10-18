@@ -66,7 +66,8 @@ export default function SpeakerDashboard() {
   });
 
   // Call API lấy top 5 của đợt đang tham gia (chỉ khi có đợt)
-  const { data: leaderboard = [] } = useQuery({
+  // API trả { campaignTargetQty, allocatedTargetQty, items: [{ rank, userId, name, submitted, isMe }] }
+  const { data: leaderboard } = useQuery({
     queryKey: [GET_ROUND_LEADERBOARD_API, round?.campaignId],
     queryFn: () => getRoundLeaderboardApi({ campaignId: round.campaignId, top: LIST_SLOTS }),
     enabled: Boolean(round?.campaignId),
@@ -84,7 +85,7 @@ export default function SpeakerDashboard() {
   return (
     <div className="lg:h-full grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:grid-rows-[auto_minmax(0,1fr)] text-left font-sans">
       <CurrentRoundCard round={round} />
-      <Leaderboard rows={round ? leaderboard : []} hasRound={Boolean(round)} />
+      <Leaderboard rows={round ? leaderboard?.items ?? [] : []} hasRound={Boolean(round)} />
       <RejectedList items={rejected} />
     </div>
   );

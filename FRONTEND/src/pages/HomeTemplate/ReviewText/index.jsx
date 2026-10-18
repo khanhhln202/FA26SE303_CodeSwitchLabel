@@ -221,8 +221,9 @@ export default function ReviewText() {
     );
   }
 
-  // API trả myProgress (của riêng mình) và teamProgress (cả nhóm cùng task) - thanh tiến độ ở đây là của mình
-  const { done, targetQty, percent } = selectedTask.myProgress;
+  // API trả myProgress (của riêng mình) và teamProgress (cả nhóm cùng task) - thanh tiến độ ở đây là SỐ ĐÃ NỘP của mình
+  const { submitted, targetQty } = selectedTask.myProgress;
+  const percent = targetQty ? Math.min(100, Math.round((submitted / targetQty) * 100)) : 0;
   const barColor = percent >= 50 ? SUCCESS : WARNING;
 
   return (
@@ -266,7 +267,7 @@ export default function ReviewText() {
           <div className="flex justify-between text-caption font-label mb-1.5">
             <span style={{ color: TEXT_BODY }}>Tiến độ</span>
             <span className="tabular-nums" style={{ color: TEXT_HEADING }}>
-              {done}/{targetQty} · {percent}%
+              {submitted}/{targetQty} · {percent}%
             </span>
           </div>
           <div
@@ -359,7 +360,7 @@ export default function ReviewText() {
                 className="type-meta"
                 style={{ color: TEXT_BODY }}
               >
-                Câu {Math.min(done + 1, targetQty)}/{targetQty}
+                Câu {Math.min(submitted + 1, targetQty)}/{targetQty}
               </span>
             </div>
 
