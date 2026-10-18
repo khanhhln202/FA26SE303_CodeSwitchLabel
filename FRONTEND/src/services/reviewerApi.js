@@ -198,3 +198,19 @@ export const resolveProposalApi = async ({ proposalId, ...values }) => {
     throw new Error(message, { cause: error });
   }
 };
+
+// Câu đóng góp đang chờ duyệt (chỉ đọc, không giữ chỗ câu): GET /api/reviewer/contributions?Domain=&OnlyReviewable=&Page=&PageSize=
+// Mỗi mục: { scriptId, csContent, viContent, domain, createdAt, contributor: { userId, fullName },
+//   blocker: "None" | "AssignedToOtherTask", canReview } - không kèm alignment, xem chi tiết bằng GET /api/scripts/{id}
+// Duyệt / từ chối dùng POST /api/scripts/{id}/review
+export const getReviewerContributionsApi = async ({ domain, onlyReviewable, page = 1, pageSize = 10 } = {}) => {
+  try {
+    const response = await httpClient.get("/api/reviewer/contributions", {
+      params: { Domain: domain || undefined, OnlyReviewable: onlyReviewable || undefined, Page: page, PageSize: pageSize },
+    });
+    return response.data;
+  } catch (error) {
+    const message = error.response?.data?.title || "Không lấy được danh sách câu đóng góp!";
+    throw new Error(message, { cause: error });
+  }
+};

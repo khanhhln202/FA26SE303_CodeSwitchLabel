@@ -83,3 +83,5 @@ export const GET_REVIEWER_RECORDING_HISTORY_API = 'GET_REVIEWER_RECORDING_HISTOR
 export const GET_REVIEWER_PROPOSALS_API = 'GET_REVIEWER_PROPOSALS_API'
 // Chốt một đề xuất (POST /api/reviewer/proposals/{id}/resolve)
 export const RESOLVE_PROPOSAL_API = 'RESOLVE_PROPOSAL_API'
+// Câu đóng góp chờ duyệt của Reviewer (GET /api/reviewer/contributions)
+export const GET_REVIEWER_CONTRIBUTIONS_API = 'GET_REVIEWER_CONTRIBUTIONS_API'

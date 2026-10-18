@@ -106,7 +106,8 @@ export const getSpeakerCurrentRoundApi = async () => {
 };
 
 // Bảng xếp hạng của một đợt: GET /api/speaker/rounds/{campaignId}/leaderboard?top=
-// Trả về [{ rank, userId, name, submitted, isMe }] - xếp theo số bản đã nộp (không tính bản trượt QC)
+// Trả về { campaignTargetQty, allocatedTargetQty, items: [{ rank, userId, name, submitted, isMe }] }
+// items xếp theo số bản đã nộp (không tính bản trượt QC)
 export const getRoundLeaderboardApi = async ({ campaignId, top = 5 }) => {
   try {
     const response = await httpClient.get(`/api/speaker/rounds/${campaignId}/leaderboard`, { params: { top } });
