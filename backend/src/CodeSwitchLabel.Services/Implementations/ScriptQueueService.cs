@@ -64,6 +64,40 @@ public class ScriptQueueService(
         return await tasks.IsActiveTaskOfAsync(row.TaskId.Value, userId, TaskType.Review, ct);
     }
 
+    public async Task<PagedResult<ContributionReviewItemDto>> ListPendingContributionsAsync(
+        long reviewerId, ContributionSearchRequest request, CancellationToken ct = default)
+    {
+        var (rows, total) = await queue.ListPendingContributionsAsync(
+            request.Domain, request.Page, request.PageSize, ct);
+
+        // Câu chưa chia lô thì ai cũng duyệt được; câu đã chia thì chỉ người nhận lô đó.
+        // Hỏi một lần cho mỗi lô thay vì mỗi dòng: một trang thường chỉ chạm một hai lô.
+        var cuaToi = new Dictionary<long, bool>();
+
+        foreach (var taskId in rows.Where(r => r.TaskId is not null).Select(r => r.TaskId!.Value).Distinct())
+        {
+            cuaToi[taskId] = await tasks.IsActiveTaskOfAsync(taskId, reviewerId, TaskType.Review, ct);
+        }
+
+        var items = rows
+            .Select(r => new ContributionReviewItemDto(
+                r.ScriptId, r.CsContent, r.ViContent, r.Domain, r.CreatedAt,
+                new ContributorDto(r.ContributorId, r.ContributorName),
+                r.TaskId is null || cuaToi[r.TaskId.Value]
+                    ? ContributionBlocker.None
+                    : ContributionBlocker.AssignedToOtherTask))
+            .ToList();
+
+        // Lọc sau khi tính chặn: phân trang vẫn chạy trên toàn bộ câu chờ duyệt, nên tổng số
+        // không đổi theo người xem. Trang có thể ngắn hơn pageSize — đó là chủ ý.
+        if (request.OnlyReviewable)
+        {
+            items = [.. items.Where(i => i.CanReview)];
+        }
+
+        return new PagedResult<ContributionReviewItemDto>(items, request.Page, request.PageSize, total);
+    }
+
     public async Task<AssignTextBatchResult> ClaimTextBatchAsync(
         long taskId, long userId, int? count, CancellationToken ct = default)
     {

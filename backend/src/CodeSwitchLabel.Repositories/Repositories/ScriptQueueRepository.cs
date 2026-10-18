@@ -51,11 +51,23 @@ public interface IScriptQueueRepository
     /// được duyệt câu này không" mà không phải dò thêm một vòng.
     /// </summary>
     Task<ScriptQueue?> GetOpenRowAsync(string scriptId, QueueStage stage, CancellationToken ct = default);
+
+    /// <summary>Câu đang chờ duyệt nội dung, cũ nhất trước, kèm người đóng góp.</summary>
+    Task<(IReadOnlyList<PendingContributionRow> Items, int Total)> ListPendingContributionsAsync(
+        ScriptDomain? domain, int page, int pageSize, CancellationToken ct = default);
 }
 
 public record QueueClaimDto(string ScriptId, long QueueId, DateTimeOffset EnqueuedAt, DateTimeOffset ClaimExpiresAt);
 
 public record QueueStatsDto(int Queued, int Claimed);
+
+/// <summary>
+/// Một câu đang chờ duyệt nội dung, kèm người đóng góp và lô đang giữ nó (nếu có).
+/// <paramref name="TaskId"/> null nghĩa là câu còn trong hàng đợi chung, ai cũng duyệt được.
+/// </summary>
+public record PendingContributionRow(
+    string ScriptId, string CsContent, string ViContent, ScriptDomain Domain,
+    DateTimeOffset CreatedAt, long ContributorId, string ContributorName, long? TaskId);
 
 public class ScriptQueueRepository(CodeSwitchLabelDbContext db) : IScriptQueueRepository
 {
@@ -124,6 +136,34 @@ public class ScriptQueueRepository(CodeSwitchLabelDbContext db) : IScriptQueueRe
             .CountAsync(q => q.Stage == stage && q.State == QueueState.Claimed, ct);
 
         return new QueueStatsDto(queued, claimed);
+    }
+
+    public async Task<(IReadOnlyList<PendingContributionRow> Items, int Total)> ListPendingContributionsAsync(
+        ScriptDomain? domain, int page, int pageSize, CancellationToken ct = default)
+    {
+        var scripts = db.Scripts.AsNoTracking()
+            .Where(s => s.Status == ScriptStatus.PendingValidation);
+
+        if (domain is not null) scripts = scripts.Where(s => s.Domain == domain);
+
+        var total = await scripts.CountAsync(ct);
+
+        // Cũ nhất trước: câu chờ lâu nhất được duyệt trước, giống thứ tự FIFO của hàng đợi.
+        var items = await scripts
+            .OrderBy(s => s.CreatedAt).ThenBy(s => s.ScriptId)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(s => new PendingContributionRow(
+                s.ScriptId, s.CsContent, s.ViContent, s.Domain, s.CreatedAt,
+                s.CreatedBy, s.Creator.FullName,
+                db.ScriptQueue
+                    .Where(q => q.ScriptId == s.ScriptId && q.Stage == QueueStage.TextReview &&
+                                (q.State == QueueState.Queued || q.State == QueueState.Claimed))
+                    .Select(q => q.TaskId)
+                    .FirstOrDefault()))
+            .ToListAsync(ct);
+
+        return (items, total);
     }
 
     public Task<ScriptQueue?> GetOpenRowAsync(string scriptId, QueueStage stage, CancellationToken ct = default) =>

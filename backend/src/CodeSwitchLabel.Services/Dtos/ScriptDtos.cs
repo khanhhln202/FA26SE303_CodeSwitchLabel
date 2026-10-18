@@ -200,6 +200,44 @@ public record ReviewScriptRequest
     public string? Comment { get; init; }
 }
 
+/// <summary>Người đóng góp câu, hiện ở cột trái màn hình duyệt.</summary>
+public record ContributorDto(long UserId, string FullName);
+
+/// <summary>Vì sao chưa duyệt được câu này; <c>None</c> là bấm vào duyệt được ngay.</summary>
+public enum ContributionBlocker
+{
+    None,
+
+    /// <summary>Task Manager đã chia câu này vào lô của người khác.</summary>
+    AssignedToOtherTask
+}
+
+/// <summary>
+/// Một câu chờ duyệt trong danh sách của Reviewer.
+///
+/// Không kèm alignment: danh sách dài mà mỗi lần chỉ xem một câu, nên bấm vào dòng nào thì
+/// gọi <c>GET /api/scripts/{id}</c> lấy đầy đủ cho khung bên phải.
+/// </summary>
+public record ContributionReviewItemDto(
+    string ScriptId,
+    string CsContent,
+    string ViContent,
+    ScriptDomain Domain,
+    DateTimeOffset CreatedAt,
+    ContributorDto Contributor,
+    ContributionBlocker Blocker)
+{
+    /// <summary>Bấm vào duyệt hay từ chối được ngay không.</summary>
+    public bool CanReview => Blocker == ContributionBlocker.None;
+}
+
+/// <param name="OnlyReviewable">true: bỏ qua câu đang nằm trong lô của người khác.</param>
+public record ContributionSearchRequest : PageRequest
+{
+    public ScriptDomain? Domain { get; init; }
+    public bool OnlyReviewable { get; init; }
+}
+
 public record ScriptSearchRequest : PageRequest
 {
     public ScriptStatus? Status { get; init; }
