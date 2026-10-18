@@ -83,14 +83,58 @@ public sealed class ScriptUpdatePendingTests(DatabaseFixture fixture) : ApiTestB
     }
 
     [Fact]
-    public async Task Reviewer_DongGopCauMoi_NamOChoDuyet()
+    public async Task Speaker_DongGopCauMoi_NamOChoDuyet()
+    {
+        var speaker = await GetSpeakerTokenAsync();
+
+        var response = await PostAsync("/api/scripts/contribute", CauMoi(), speaker);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Equal("PendingValidation", await LayTruongAsync(response, "status"));
+    }
+
+    /// <summary>
+    /// Reviewer đi duyệt câu đóng góp chứ không tự đóng góp — người vừa viết vừa duyệt là
+    /// xung đột vai, cùng lý do hệ thống cấm tự duyệt bản ghi của mình.
+    /// </summary>
+    [Fact]
+    public async Task Reviewer_KhongDungDuocDuongDongGop()
     {
         var reviewer = await GetReviewerTokenAsync();
 
         var response = await PostAsync("/api/scripts/contribute", CauMoi(), reviewer);
 
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        Assert.Equal("PendingValidation", await LayTruongAsync(response, "status"));
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Reviewer_ThayCauDongGop_KemTenNguoiDongGop()
+    {
+        var scriptId = await TaoCauChoDuyetAsync();
+        var reviewer = await GetReviewerTokenAsync();
+
+        using var client = CreateAuthenticatedClient(reviewer);
+        var trang = await client.GetFromJsonAsync<JsonElement>(
+            "/api/reviewer/contributions?pageSize=100", JsonOptions, TestContext.Current.CancellationToken);
+
+        var dong = trang.GetProperty("items").EnumerateArray()
+            .FirstOrDefault(i => i.GetProperty("scriptId").GetString() == scriptId);
+
+        Assert.True(dong.ValueKind is not JsonValueKind.Undefined, "Câu vừa đóng góp phải nằm trong danh sách chờ duyệt.");
+        Assert.False(string.IsNullOrWhiteSpace(dong.GetProperty("contributor").GetProperty("fullName").GetString()));
+        Assert.True(dong.GetProperty("canReview").GetBoolean(), "Câu chưa chia lô thì Reviewer nào cũng duyệt được.");
+        Assert.Equal("None", dong.GetProperty("blocker").GetString());
+    }
+
+    /// <summary>Danh sách này là màn hình của Reviewer; vai khác không mở được.</summary>
+    [Fact]
+    public async Task VaiKhac_KhongXemDuocDanhSachCauDongGop()
+    {
+        var speaker = await GetSpeakerTokenAsync();
+
+        var response = await GetAsync("/api/reviewer/contributions", speaker);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
     /// <summary>Admin có đường riêng (POST /api/scripts, vào thẳng đã duyệt) nên không dùng đường đóng góp.</summary>

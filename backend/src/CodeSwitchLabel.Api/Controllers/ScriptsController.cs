@@ -57,15 +57,19 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
         return CreatedAtAction(nameof(Get), new { id = created.ScriptId }, created);
     }
 
-    /// <summary>Đóng góp một cặp câu mới — dành cho Speaker và Reviewer.</summary>
+    /// <summary>Đóng góp một cặp câu mới — dành cho Speaker.</summary>
     /// <remarks>
     /// Câu vào trạng thái **chờ duyệt nội dung**, khác với `POST /api/scripts` của Admin (vào thẳng đã duyệt).
     ///
-    /// Đây là đường dùng chung cho mọi vai được phép đóng góp. `POST /api/speaker/scripts/contribute`
-    /// vẫn chạy và làm đúng việc này, giữ lại để frontend đang gọi nó không phải sửa ngay.
+    /// Trùng việc với `POST /api/speaker/scripts/contribute`; đường kia vẫn chạy nên frontend
+    /// đang gọi nó không phải sửa.
+    ///
+    /// Reviewer **không** dùng đường này: người vừa viết câu vừa duyệt câu là xung đột vai, cùng
+    /// lý do hệ thống cấm tự duyệt bản ghi của chính mình. Màn hình duyệt câu đóng góp của
+    /// Reviewer nằm ở `GET /api/reviewer/contributions`.
     /// </remarks>
     [HttpPost("contribute")]
-    [Authorize(Roles = "Speaker,Reviewer")]
+    [Authorize(Roles = "Speaker")]
     [ProducesResponseType(typeof(ScriptDetailDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]

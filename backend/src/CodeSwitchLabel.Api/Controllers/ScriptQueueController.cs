@@ -42,6 +42,29 @@ public class ScriptQueueController(IScriptQueueService queue) : ControllerBase
         return script is null ? NoContent() : Ok(script);
     }
 
+    /// <summary>Danh sách câu đóng góp đang chờ duyệt — cho màn hình duyệt của Reviewer.</summary>
+    /// <remarks>
+    /// Khác `GET /api/reviewer/scripts/next`: đường đó đưa **một** câu và giữ chỗ cho người gọi,
+    /// hợp với lối làm tuần tự. Đường này chỉ **đọc** cả danh sách để người duyệt tự chọn, không
+    /// giữ chỗ câu nào.
+    ///
+    /// Mỗi dòng có tên người đóng góp, và `canReview` cho biết bấm vào duyệt được ngay không —
+    /// `blocker: AssignedToOtherTask` nghĩa là Task Manager đã chia câu đó vào lô người khác.
+    /// Đặt `onlyReviewable=true` để bỏ hẳn những câu đó khỏi danh sách.
+    ///
+    /// Không kèm alignment: bấm vào một dòng thì gọi `GET /api/scripts/{id}` lấy đầy đủ cho
+    /// khung bên phải, gồm nghĩa từng từ tiếng Anh và lịch sử duyệt.
+    ///
+    /// Duyệt hoặc từ chối vẫn dùng `POST /api/scripts/{id}/review` với `action` là
+    /// `Accepted` hoặc `Rejected` — không có endpoint riêng.
+    /// </remarks>
+    [HttpGet("api/reviewer/contributions")]
+    [Authorize(Roles = "Reviewer")]
+    [ProducesResponseType(typeof(PagedResult<ContributionReviewItemDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResult<ContributionReviewItemDto>>> PendingContributions(
+        [FromQuery] ContributionSearchRequest request, CancellationToken ct)
+        => Ok(await queue.ListPendingContributionsAsync(User.GetUserId(), request, ct));
+
     /// <summary>Số câu đang tồn trong hàng đợi — cho Task Manager quyết định chia lô.</summary>
     /// <remarks>
     /// Yêu cầu 2.2: Task Manager chia duyệt theo TỔNG SỐ CÂU ĐANG TỒN trong hàng đợi
