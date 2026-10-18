@@ -129,7 +129,7 @@ Dữ liệu dưới đây được tạo khi API khởi động có khoá `Seed:
 | Task | Giao cho | Chỉ tiêu | Nội dung |
 |---|---|---|---|
 | `Ghi âm đợt mẫu` | `speaker1` | 8 cặp câu | 8 mục, tất cả còn chờ — chưa có bản ghi nào được thu |
-| `Duyệt bản ghi đợt mẫu` | `reviewer` | 4 bản ghi | hàng chờ trống, chờ có bản ghi để đưa vào |
+| `Duyệt bản ghi đợt mẫu` | `reviewer` | 4 bản ghi | hàng chờ trống lúc seed; khi `speaker1` thu trong task `Ghi âm đợt mẫu` (cùng đợt) thì bản ghi chờ duyệt **tự vào đây** |
 
 Dữ liệu mẫu **không có bản ghi**. Muốn có số liệu thống kê và lịch sử ghi âm thì tự thu bằng
 `POST /api/recordings` (xem mục 5), hoặc thêm câu vào task rồi ghi như bình thường. Sau khi
@@ -723,6 +723,11 @@ Task chưa giao cho ai thì không được cướp câu của người khác �
   Task đã `Cancelled` thì khoá, không sửa được nữa (409 `task_cancelled`).
 - **Chỉ tiêu không được vượt số mục trong task.** Giao task mà `targetQty` lớn hơn số mục người nhận làm được
   thì nhận **422 `target_exceeds_items`**. Thêm mục hoặc hạ chỉ tiêu trước khi giao.
+- **Bản ghi chờ duyệt tự vào hàng chờ task duyệt cùng đợt.** Speaker nộp xong một bản `PendingReview`
+  thuộc task thu âm của đợt X thì hệ thống tự thêm nó vào **mọi task duyệt chưa huỷ của đợt X**
+  (kể cả task đã đủ chỉ tiêu — Reviewer vẫn duyệt thêm được). Không phải bấm "Thêm mục";
+  hai cách thêm tay/autoFill ở trên vẫn dùng bình thường. Bản trượt QC không vào hàng chờ;
+  bản thu ngoài đợt vẫn để Reviewer nhặt ở hàng chờ chung.
 
 ### Admin
 

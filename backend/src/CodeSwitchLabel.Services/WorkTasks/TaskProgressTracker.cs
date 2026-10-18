@@ -13,7 +13,12 @@ namespace CodeSwitchLabel.Services.WorkTasks;
 /// </summary>
 public interface ITaskProgressTracker
 {
-    Task OnRecordingSubmittedAsync(long taskId, CancellationToken ct = default);
+    /// <summary>
+    /// TEAM_018: Speaker nộp bản ghi thì bản chờ duyệt tự vào hàng chờ của MỌI task duyệt
+    /// đang mở trong cùng đợt — Reviewer nhận việc trước vẫn có việc ngay, Task Manager
+    /// không phải "Thêm mục" thủ công lần nữa. Sau đó vẫn tính lại trạng thái task thu âm.
+    /// </summary>
+    Task OnRecordingSubmittedAsync(Recording recording, CancellationToken ct = default);
 
     /// <summary>
     /// Gọi SAU khi đã ghi lượt duyệt và đọc lại trạng thái bản ghi do trigger chốt.
@@ -40,11 +45,49 @@ public interface ITaskProgressTracker
     Task RefreshStatusAsync(long taskId, CancellationToken ct = default);
 }
 
-public class TaskProgressTracker(ITaskRepository tasks, ICampaignRepository campaigns)
+public class TaskProgressTracker(
+    ITaskRepository tasks, ICampaignRepository campaigns, TimeProvider clock)
     : ITaskProgressTracker
 {
-    public Task OnRecordingSubmittedAsync(long taskId, CancellationToken ct = default) =>
-        RefreshStatusAsync(taskId, ct);
+    public async Task OnRecordingSubmittedAsync(Recording recording, CancellationToken ct = default)
+    {
+        if (recording.TaskId is not { } taskId) return;
+
+        if (recording.Status == RecordingStatus.PendingReview)
+        {
+            await PushToCampaignReviewTasksAsync(recording, taskId, ct);
+        }
+
+        await RefreshStatusAsync(taskId, ct);
+    }
+
+    /// <summary>
+    /// TEAM_018: thêm dòng task_recording (Queued) cho bản ghi vào mọi task duyệt chưa huỷ
+    /// của đợt — gồm cả task đã đủ chỉ tiêu, theo TEAM_016: người nhận vẫn duyệt thêm được.
+    /// Bản trượt QC không tới vòng duyệt; bản thu ngoài đợt thì Reviewer nhặt ở hàng chờ chung.
+    /// </summary>
+    private async Task PushToCampaignReviewTasksAsync(
+        Recording recording, long taskId, CancellationToken ct)
+    {
+        var campaignId = await tasks.GetCampaignIdAsync(taskId, ct);
+        if (campaignId is null) return;
+
+        var reviewTaskIds = await tasks.GetReviewTaskIdsForCampaignAsync(campaignId.Value, ct);
+        if (reviewTaskIds.Count == 0) return;
+
+        // Bản ghi vừa được tạo nên chưa thể nằm trong task nào — không cần lọc trùng.
+        // Khoá chính (task_id, recording_id) của bảng vẫn là lưới an toàn cuối cùng.
+        var now = clock.GetUtcNow();
+        tasks.AddRecordingItems(reviewTaskIds.Select(id => new TaskRecording
+        {
+            TaskId = id,
+            RecordingId = recording.RecordingId,
+            Status = TaskRecordingStatus.Queued,
+            IncludedAt = now
+        }));
+
+        await tasks.SaveChangesAsync(ct);
+    }
 
     public async Task OnReviewSubmittedAsync(
         Recording recording, RecordingStatus finalStatus, long? taskId, CancellationToken ct = default)
@@ -137,6 +180,16 @@ public class TaskProgressTracker(ITaskRepository tasks, ICampaignRepository camp
             touched.Add(item.TaskId);
         }
 
+        // TEAM_018: bản ghi bị gỡ khỏi vòng duyệt thì mọi task duyệt còn giữ nó trong hàng
+        // chờ phải bỏ mục. Thiếu bước này, các task duyệt anh em — nơi bản ghi tự vào lúc
+        // Speaker nộp — giữ mục `queued` trỏ vào bản đã bị loại: mục kẹt vĩnh viễn và số mục
+        // của task bị đếm sai.
+        foreach (var item in await tasks.GetQueuedRecordingItemsAsync(recording.RecordingId, ct))
+        {
+            item.Status = TaskRecordingStatus.Skipped;
+            touched.Add(item.TaskId);
+        }
+
         await tasks.SaveChangesAsync(ct);
 
         foreach (var id in touched) await RefreshStatusAsync(id, ct);
@@ -147,13 +200,21 @@ public class TaskProgressTracker(ITaskRepository tasks, ICampaignRepository camp
         var pending = await tasks.GetPendingScriptItemsAsync(scriptId, ct);
         var completed = await tasks.GetCompletedScriptItemsAsync(scriptId, ct);
 
-        if (pending.Count == 0 && completed.Count == 0) return;
+        // TEAM_018: xoá cả cặp thì MỌI bản ghi của câu bị loại, nên mục đang chờ ở các task
+        // duyệt anh em — nơi bản ghi tự vào lúc Speaker nộp — cũng chết theo. Gác sau khi
+        // lấy đủ ba nhóm: câu có thể chỉ nằm trong task duyệt (thêm tay) mà không có mục câu nào.
+        var queuedReviews = await tasks.GetQueuedRecordingItemsByScriptAsync(scriptId, ct);
+
+        if (pending.Count == 0 && completed.Count == 0 && queuedReviews.Count == 0) return;
 
         // Gom taskId TRƯỚC khi sửa: sau khi lưu thì truy vấn lại sẽ trả về rỗng.
-        var taskIds = pending.Concat(completed).Select(i => i.TaskId).Distinct().ToList();
+        var taskIds = pending.Concat(completed).Select(i => i.TaskId)
+            .Concat(queuedReviews.Select(i => i.TaskId))
+            .Distinct().ToList();
 
         foreach (var item in pending) item.Status = TaskScriptStatus.Rejected;
         foreach (var item in completed) item.Status = TaskScriptStatus.Rejected;
+        foreach (var item in queuedReviews) item.Status = TaskRecordingStatus.Skipped;
 
         await tasks.SaveChangesAsync(ct);
 

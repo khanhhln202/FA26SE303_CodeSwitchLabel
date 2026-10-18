@@ -178,6 +178,20 @@ Admin nhập input_text.json  →  script: pending_validation
 > **đọc lại** trạng thái. Lớp `ReviewRules` trong C# chỉ là bản sao của luật để tầng trên hiển thị
 > và để unit test — không bao giờ được dùng để ghi.
 
+### Bản ghi tự vào hàng chờ task duyệt (TEAM_018)
+
+Task Manager giao nhiệm vụ duyệt cho Reviewer **trước khi có bản ghi** là chuyện thường — hàng chờ
+lúc đó trống. Speaker thu xong (bản `pending_review`), hệ thống tự thêm bản ghi vào **mọi task duyệt
+chưa huỷ của cùng đợt** (`task_recording`, trạng thái `queued`), kể cả task đã đủ chỉ tiêu —
+TEAM_016: KPI đo chứ không khoá. Task Manager không phải "Thêm mục" lần nữa; cách thêm tay/autoFill
+vẫn giữ nguyên cho việc điều chỉnh.
+
+- Bản **trượt QC** (`qc_failed`) không bao giờ tới vòng duyệt nên không vào hàng chờ.
+- Bản thu **ngoài đợt** (task độc lập hoặc thu ngoài task) không push vào task nào — Reviewer nhặt
+  ở hàng chờ chung (`GET /api/reviewer/recordings/next`).
+- Việc thêm nằm **trong cùng transaction** với lúc lưu bản ghi (`RecordingService` →
+  `TaskProgressTracker`), nên không có cửa sổ "bản ghi có mà hàng chờ chưa có".
+
 ### Hai người duyệt cùng lúc
 
 | Lớp | Cách làm | Chặn được gì |

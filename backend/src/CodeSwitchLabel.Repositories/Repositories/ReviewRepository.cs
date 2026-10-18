@@ -26,13 +26,19 @@ public record TaskReviewRow(
     int ReviewsDone,
     bool MyReviewDone);
 
-/// <summary>Bản ghi của một cặp câu, rút gọn để dựng nhanh danh sách hai bản cạnh nhau.</summary>
+/// <summary>
+/// Bản ghi của một cặp câu, rút gọn để dựng nhanh danh sách hai bản cạnh nhau.
+///
+/// Một biến thể có thể có NHIỀU dòng (bản cũ trượt QC / bị bỏ audio rồi thu lại `_t2`),
+/// nên kèm <see cref="RecordedAt"/> để người gọi chọn lần thu MỚI NHẤT thay vì lấy đại một dòng.
+/// </summary>
 public record RecordingSummaryRow(
     string RecordingId,
     string ScriptId,
     SentenceVariant SentenceVariant,
     string ScriptTagged,
     RecordingStatus Status,
+    DateTimeOffset RecordedAt,
     int ReviewsDone,
     bool MyReviewDone);
 
@@ -90,7 +96,10 @@ public interface IReviewRepository
 
     Task<List<Recording>> GetByScriptAsync(string scriptId, CancellationToken ct = default);
 
-    /// <summary>Rút gọn nhiều cặp câu cùng lúc, để dựng danh sách hai bản mà không gọi N lần.</summary>
+    /// <summary>
+    /// Rút gọn nhiều cặp câu cùng lúc, để dựng danh sách hai bản mà không gọi N lần.
+    /// Trả CẢ mọi lần thu của từng biến thể — chọn lần mới nhất là việc của người gọi.
+    /// </summary>
     Task<List<RecordingSummaryRow>> GetSummariesByScriptsAsync(
         string[] scriptIds, long viewerId, CancellationToken ct = default);
 
@@ -293,6 +302,7 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
                     ? r.Script.CsContent
                     : r.Script.ViContent,
                 r.Status,
+                r.RecordedAt,
                 r.Reviews.Count,
                 r.Reviews.Any(v => v.ReviewerId == viewerId)))
             .ToListAsync(ct);
