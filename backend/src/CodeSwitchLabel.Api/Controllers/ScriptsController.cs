@@ -57,6 +57,48 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
         return CreatedAtAction(nameof(Get), new { id = created.ScriptId }, created);
     }
 
+    /// <summary>Đóng góp một cặp câu mới — dành cho Speaker và Reviewer.</summary>
+    /// <remarks>
+    /// Câu vào trạng thái **chờ duyệt nội dung**, khác với `POST /api/scripts` của Admin (vào thẳng đã duyệt).
+    ///
+    /// Đây là đường dùng chung cho mọi vai được phép đóng góp. `POST /api/speaker/scripts/contribute`
+    /// vẫn chạy và làm đúng việc này, giữ lại để frontend đang gọi nó không phải sửa ngay.
+    /// </remarks>
+    [HttpPost("contribute")]
+    [Authorize(Roles = "Speaker,Reviewer")]
+    [ProducesResponseType(typeof(ScriptDetailDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ActionResult<ScriptDetailDto>> Contribute(
+        [FromBody] CreateScriptRequest request, CancellationToken ct)
+    {
+        var created = await scriptService.ContributeAsync(request, User.GetUserId(), ct);
+        return CreatedAtAction(nameof(Get), new { id = created.ScriptId }, created);
+    }
+
+    /// <summary>Admin sửa nội dung một cặp câu đang chờ duyệt — sửa bao nhiêu lần cũng được.</summary>
+    /// <remarks>
+    /// Khác `POST /api/scripts/{id}/review` với `action: Edited`: đường đó **sửa xong là duyệt luôn**,
+    /// câu chuyển sang đã duyệt và không sửa tiếp được. Đường này chỉ đổi nội dung, câu **ở nguyên
+    /// trạng thái chờ duyệt**, nên Admin đổi đi đổi lại tới khi ưng rồi mới chốt bằng `action: Accepted`.
+    ///
+    /// Ba thứ không đổi được vì chúng nằm trong mã câu: **số từ tiếng Anh**, **chủ đề** và
+    /// **quan hệ Anh–Việt**. Muốn đổi thì loại câu này rồi tạo cặp mới.
+    ///
+    /// - **409 `script_not_pending`** — câu đã duyệt, đã bị loại hoặc đã ngừng dùng.
+    /// - **409 `script_already_recorded`** — đã có bản ghi âm, sửa sẽ làm transcript lệch với âm thanh.
+    /// - **422 `en_word_count_locked`** / **`relation_locked`** — bản sửa đổi thứ nằm trong mã câu.
+    /// </remarks>
+    [HttpPut("{id}")]
+    [Authorize(Roles = "Admin")]
+    [ProducesResponseType(typeof(ScriptDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ActionResult<ScriptDetailDto>> UpdatePending(
+        string id, [FromBody] UpdateScriptContentRequest request, CancellationToken ct)
+        => Ok(await scriptService.UpdatePendingAsync(id, request, ct));
+
     /// <summary>Nhập hàng loạt từ file input_text.json.</summary>
     /// <remarks>
     /// Nhận cả file một câu lẫn file nhiều câu. Mỗi phần tử gồm `id`, `domain`, `cs_transcript`,
@@ -66,8 +108,12 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
     /// (số từ tiếng Anh, chủ đề, quan hệ Anh–Việt) rồi cấp số thứ tự mới.
     ///
     /// Câu hỏng **không làm hỏng cả file**: phần hợp lệ vẫn được nhập, phần bị loại nằm trong
-    /// `skipped` kèm lý do. Câu nhập vào ở trạng thái **đã duyệt**, kèm một lượt duyệt
-    /// `Accepted` tự động của chính Admin nhập (để qua trigger kiểm tra đúng chủ đề).
+    /// `skipped` kèm lý do.
+    ///
+    /// Câu nhập vào nằm ở trạng thái **chờ duyệt nội dung**, KHÔNG tự động duyệt. Admin xem lại
+    /// từng câu rồi chốt: `PUT /api/scripts/{id}` để sửa (sửa bao nhiêu lần cũng được),
+    /// `POST /api/scripts/{id}/review` với `action: Rejected` để loại,
+    /// hoặc `action: Accepted` để đưa sang đã duyệt — sau bước đó thì câu bị khoá, không sửa nữa.
     /// </remarks>
     [HttpPost("import")]
     [Authorize(Roles = "Admin")]
