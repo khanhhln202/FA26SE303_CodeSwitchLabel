@@ -34,6 +34,19 @@ public record UpcomingRoundDto(
 /// </summary>
 public record LeaderboardEntryDto(int Rank, long UserId, string Name, int Submitted, bool IsMe);
 
+/// <summary>
+/// Bảng xếp hạng kèm mốc để vẽ thanh tiến độ.
+///
+/// Hai mốc vì chúng khác nhau rất xa và dùng cho hai câu hỏi khác nhau:
+/// <see cref="CampaignTargetQty"/> là chỉ tiêu cả đợt (còn bao xa tới đích),
+/// <see cref="AllocatedTargetQty"/> là tổng chỉ tiêu các nhiệm vụ đã chia (còn bao nhiêu
+/// việc đang thật sự giao). Đợt mới mở thường có mốc thứ hai nhỏ hơn mốc thứ nhất rất nhiều.
+/// </summary>
+public record LeaderboardDto(
+    int CampaignTargetQty,
+    int AllocatedTargetQty,
+    IReadOnlyList<LeaderboardEntryDto> Items);
+
 /// <summary>Bản ghi bị từ chối của chính mình, kèm lý do và link nghe lại để thu lại.</summary>
 public record RejectedRecordingDto(
     string RecordingId,

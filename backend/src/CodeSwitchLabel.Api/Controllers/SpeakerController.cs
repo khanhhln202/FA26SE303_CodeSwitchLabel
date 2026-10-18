@@ -116,9 +116,9 @@ public class SpeakerController(
 
     /// <summary>Bảng xếp hạng của một đợt, xếp theo số bản đã nộp (không tính bản trượt kiểm tra tự động).</summary>
     [HttpGet("rounds/{campaignId:long}/leaderboard")]
-    [ProducesResponseType(typeof(IEnumerable<LeaderboardEntryDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(LeaderboardDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<IEnumerable<LeaderboardEntryDto>>> Leaderboard(
+    public async Task<ActionResult<LeaderboardDto>> Leaderboard(
         long campaignId, [FromQuery] int top = 5, CancellationToken ct = default)
         => Ok(await roundsService.GetLeaderboardAsync(campaignId, User.GetUserId(), top, ct));
 

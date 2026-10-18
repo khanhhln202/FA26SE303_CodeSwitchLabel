@@ -18,14 +18,15 @@ internal static class TaskMapper
     /// Task Manager đếm việc đã ĐƯỢC DUYỆT xong; Speaker đếm việc đã THU xong. Cùng một task
     /// nhưng hai bộ số khác nhau, nên chỗ nào muốn bộ nào thì truyền bộ đó vào.
     /// </param>
-    public static TaskProgressDto ProgressOf(this TaskRow r, DateTimeOffset now, int? doneOverride = null)
+    public static TaskProgressDto ProgressOf(
+        this TaskRow r, DateTimeOffset now, int? doneOverride = null, int? submittedOverride = null)
     {
         var done = doneOverride ?? r.Done;
 
         return new(r.TaskType == TaskType.Recording ? "cặp câu" : "bản ghi",
             r.TargetQty,
             done,
-            r.Started,
+            submittedOverride ?? r.Started,
             r.UsableItems,
             r.TotalItems,
             TaskStateMachine.Percent(done, r.TargetQty),
@@ -82,7 +83,7 @@ internal static class TaskMapper
     // Chỉ trả một bộ thì hoặc người đó tưởng mình làm cả nhiệm vụ, hoặc tưởng nhóm
     // mình không làm gì cả.
     public static SpeakerActiveTaskDto ToSpeakerActiveTask(
-        this TaskRow r, DateTimeOffset now, int myDone) =>
+        this TaskRow r, DateTimeOffset now, int myDone, int mySubmitted) =>
         new(r.TaskId,
             r.Description,
             r.Description,
@@ -90,7 +91,10 @@ internal static class TaskMapper
             r.TaskType,
             r.Status,
             r.Deadline,
-            r.ProgressOf(now, myDone),
+            // Cả 'done' lẫn 'submitted' đều phải là của riêng người xem. Trước đây chỉ đè
+            // 'done', nên task có ba người nhận thì cả ba cùng thấy tổng số bản ghi của nhóm
+            // nằm trong myProgress — ai cũng tưởng mình nộp bằng đó.
+            r.ProgressOf(now, myDone, mySubmitted),
             r.ProgressOf(now, r.SubmittedPairs),
             [.. r.Assignees.Select(a => new TaskAssigneeDto(a.UserId, a.FullName))]);
 }
@@ -846,7 +850,10 @@ public class TaskService(
             // TEAM_010: đếm riêng phần việc của người này. Task có 3 người nhận thì
             // cả ba sẽ thấy cùng TaskRow.Done nếu không tra riêng.
             var mine = await tasks.GetAssigneeDoneAsync(row.TaskId, row.TaskType, ct);
-            active.Add(row.ToSpeakerActiveTask(now, mine.GetValueOrDefault(speakerId)));
+            var nop = await tasks.GetAssigneeSubmittedAsync(row.TaskId, row.TaskType, ct);
+
+            active.Add(row.ToSpeakerActiveTask(
+                now, mine.GetValueOrDefault(speakerId), nop.GetValueOrDefault(speakerId)));
         }
 
         var (submitted, approved) = await tasks.GetSpeakerTotalsAsync(speakerId, ct);

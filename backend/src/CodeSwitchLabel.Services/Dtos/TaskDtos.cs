@@ -103,7 +103,21 @@ public record TaskProgressDto(
     int TotalItems,
     int Percent,
     double? HoursRemaining,
-    bool IsOverdue);
+    bool IsOverdue)
+{
+    /// <summary>
+    /// <see cref="Done"/> nhưng không vượt quá chỉ tiêu — dùng để vẽ thanh tiến độ.
+    ///
+    /// Hệ thống cho làm tiếp sau khi đạt chỉ tiêu (xem WorkAfterTargetTests), nên
+    /// <see cref="Done"/> lớn hơn <see cref="TargetQty"/> là chuyện bình thường, không
+    /// phải lỗi dữ liệu. Giao diện vẽ "13/2" thì khó hiểu, nên có sẵn bản đã chặn ở đây.
+    /// Số thật vẫn nằm nguyên ở <see cref="Done"/> để Task Manager biết nhóm làm dư bao nhiêu.
+    /// </summary>
+    public int DoneCapped => Math.Min(Done, TargetQty);
+
+    /// <summary><see cref="Submitted"/> nhưng không vượt quá chỉ tiêu. Xem <see cref="DoneCapped"/>.</summary>
+    public int SubmittedCapped => Math.Min(Submitted, TargetQty);
+}
 
 /// <summary>Gắn task vào chiến dịch (attach/move), hoặc gỡ ra (detach) khi CampaignId = null.</summary>
 public record AttachTaskRequest

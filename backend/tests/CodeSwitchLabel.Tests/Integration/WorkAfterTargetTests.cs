@@ -320,15 +320,19 @@ public sealed class WorkAfterTargetTests(DatabaseFixture fixture)
         var board = await Rounds.GetLeaderboardAsync(campaign.CampaignId, speaker1.UserId, 5, ct);
 
         // Hai người có bản đã nộp; thứ tự theo số bản đã nộp, không theo bản được duyệt.
-        Assert.Equal(2, board.Count);
+        Assert.Equal(2, board.Items.Count);
 
-        var hang1 = board[0];
+        // Mốc để giao diện vẽ thanh tiến độ: chỉ tiêu cả đợt và tổng chỉ tiêu các nhiệm vụ đã chia.
+        Assert.Equal(campaign.TargetQty, board.CampaignTargetQty);
+        Assert.True(board.AllocatedTargetQty > 0, "Đợt đã có nhiệm vụ thu âm nên phần đã chia phải lớn hơn 0.");
+
+        var hang1 = board.Items[0];
         Assert.Equal(1, hang1.Rank);
         Assert.Equal(speaker1.UserId, hang1.UserId);
         Assert.Equal(3, hang1.Submitted);
         Assert.True(hang1.IsMe);
 
-        var hang2 = board[1];
+        var hang2 = board.Items[1];
         Assert.Equal(2, hang2.Rank);
         Assert.Equal(speaker2.UserId, hang2.UserId);
         Assert.Equal(1, hang2.Submitted);
