@@ -105,6 +105,12 @@ public interface ITaskRepository
     /// người nhận cùng một task thấy một con số giống nhau — sai.
     /// </summary>
     Task<Dictionary<long, int>> GetAssigneeDoneAsync(long taskId, TaskType type, CancellationToken ct = default);
+
+    /// <summary>
+    /// TEAM_010: số việc đã NỘP của từng người trong task — khác <see cref="GetAssigneeDoneAsync"/>
+    /// ở chỗ nộp rồi vẫn có thể chưa được duyệt đạt.
+    /// </summary>
+    Task<Dictionary<long, int>> GetAssigneeSubmittedAsync(long taskId, TaskType type, CancellationToken ct = default);
     Task<List<AssigneeSummaryRow>> GetAssigneeSummaryAsync(DateTimeOffset now, CancellationToken ct = default);
 
     Task<List<TaskScript>> GetScriptItemsAsync(long taskId, CancellationToken ct = default);
@@ -303,6 +309,31 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
                 .Where(t => t.Assignments.Any(a => a.UserId == userId && a.AssignmentStatus == AssignmentStatus.Active))
                 .OrderBy(t => t.Deadline))
             .ToListAsync(ct);
+
+    public async Task<Dictionary<long, int>> GetAssigneeSubmittedAsync(
+        long taskId, TaskType type, CancellationToken ct = default)
+    {
+        if (type == TaskType.Recording)
+        {
+            // Bản trượt QC không tính: người đó vẫn phải thu lại, chưa coi là đã nộp.
+            var rows = await db.Recordings.AsNoTracking()
+                .Where(r => r.TaskId == taskId && r.Status != RecordingStatus.QcFailed)
+                .GroupBy(r => r.SpeakerId)
+                .Select(g => new { UserId = g.Key, Submitted = g.Count() })
+                .ToListAsync(ct);
+
+            return rows.ToDictionary(x => x.UserId, x => x.Submitted);
+        }
+
+        // Task duyệt: "nộp" chính là lượt duyệt đã ghi, nên trùng với Done.
+        var reviews = await db.Reviews.AsNoTracking()
+            .Where(rv => rv.TaskId == taskId)
+            .GroupBy(rv => rv.ReviewerId)
+            .Select(g => new { UserId = g.Key, Submitted = g.Count() })
+            .ToListAsync(ct);
+
+        return reviews.ToDictionary(x => x.UserId, x => x.Submitted);
+    }
 
     public async Task<Dictionary<long, int>> GetAssigneeDoneAsync(
         long taskId, TaskType type, CancellationToken ct = default)

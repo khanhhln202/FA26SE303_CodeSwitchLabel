@@ -68,13 +68,20 @@ public class SpeakerRoundsService(
             mine.Contains(c.CampaignId)))];
     }
 
-    public async Task<IReadOnlyList<LeaderboardEntryDto>> GetLeaderboardAsync(
+    public async Task<LeaderboardDto> GetLeaderboardAsync(
         long campaignId, long speakerId, int top, CancellationToken ct = default)
     {
-        if (!await db.Campaigns.AsNoTracking().AnyAsync(c => c.CampaignId == campaignId, ct))
-        {
-            throw new NotFoundException("campaign_not_found", $"Không tìm thấy chiến dịch #{campaignId}.");
-        }
+        var chiTieu = await db.Campaigns.AsNoTracking()
+            .Where(c => c.CampaignId == campaignId)
+            .Select(c => (int?)c.TargetQty)
+            .FirstOrDefaultAsync(ct)
+            ?? throw new NotFoundException("campaign_not_found", $"Không tìm thấy chiến dịch #{campaignId}.");
+
+        // Tổng chỉ tiêu các nhiệm vụ thu âm đã chia trong đợt — mốc sát thực tế hơn chỉ tiêu
+        // cả đợt khi đợt mới mở và mới giao được một phần việc.
+        var daChia = await db.WorkTasks.AsNoTracking()
+            .Where(t => t.CampaignId == campaignId && t.TaskType == TaskType.Recording)
+            .SumAsync(t => (int?)t.TargetQty, ct) ?? 0;
 
         // TEAM_016: xếp hạng theo CÂU ĐÃ NỘP — đếm mọi bản ghi đã qua kiểm tra tự động
         // (chờ duyệt / đạt / bị từ chối), không chỉ bản được duyệt. Bản trượt QC không tính.
@@ -87,8 +94,9 @@ public class SpeakerRoundsService(
             .Take(Math.Clamp(top, 1, 50))
             .ToListAsync(ct);
 
-        return [.. rows.Select((x, i) => new LeaderboardEntryDto(
-            i + 1, x.SpeakerId, x.FullName, x.Submitted, x.SpeakerId == speakerId))];
+        return new LeaderboardDto(chiTieu, daChia,
+            [.. rows.Select((x, i) => new LeaderboardEntryDto(
+                i + 1, x.SpeakerId, x.FullName, x.Submitted, x.SpeakerId == speakerId))]);
     }
 
     public async Task<SpeakerRoundDto> RegisterAsync(

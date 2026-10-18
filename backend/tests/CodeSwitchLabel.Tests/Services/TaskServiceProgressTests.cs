@@ -42,6 +42,8 @@ public sealed class TaskServiceProgressTests
         _tasks.Setup(t => t.GetSpeakerTotalsAsync(9, It.IsAny<CancellationToken>()))
             .ReturnsAsync((8, 0));
         // TEAM_010: riêng phần việc của người 9 trong task.
+        _tasks.Setup(t => t.GetAssigneeSubmittedAsync(7, TaskType.Recording, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<long, int> { [9] = 5, [10] = 6, [11] = 7 });
         _tasks.Setup(t => t.GetAssigneeDoneAsync(7, TaskType.Recording, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Dictionary<long, int> { [9] = 4 });
 
@@ -61,6 +63,8 @@ public sealed class TaskServiceProgressTests
             .ReturnsAsync([Row(submittedPairs: 10)]);
         _tasks.Setup(t => t.GetSpeakerTotalsAsync(9, It.IsAny<CancellationToken>()))
             .ReturnsAsync((10, 0));
+        _tasks.Setup(t => t.GetAssigneeSubmittedAsync(7, TaskType.Recording, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<long, int> { [9] = 5, [10] = 6, [11] = 7 });
         _tasks.Setup(t => t.GetAssigneeDoneAsync(7, TaskType.Recording, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Dictionary<long, int> { [9] = 10 });
 
@@ -86,6 +90,8 @@ public sealed class TaskServiceProgressTests
             .ReturnsAsync([row]);
         _tasks.Setup(t => t.GetSpeakerTotalsAsync(9, It.IsAny<CancellationToken>()))
             .ReturnsAsync((12, 9));
+        _tasks.Setup(t => t.GetAssigneeSubmittedAsync(7, TaskType.Recording, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<long, int> { [9] = 5, [10] = 6, [11] = 7 });
         _tasks.Setup(t => t.GetAssigneeDoneAsync(7, TaskType.Recording, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Dictionary<long, int> { [9] = 3, [10] = 4, [11] = 5 });
 
@@ -100,6 +106,11 @@ public sealed class TaskServiceProgressTests
         // Cả nhóm: 12 cặp câu đã thu đủ trên tổng 30 → 40%.
         Assert.Equal(12, task.TeamProgress.Done);
         Assert.Equal(40, task.TeamProgress.Percent);
+
+        // Số đã NỘP cũng phải là của riêng người xem, không phải của cả task.
+        // Đây là lỗi đội frontend báo: task ba người thì cả ba cùng thấy tổng của nhóm.
+        Assert.Equal(5, task.MyProgress.Submitted);
+        Assert.Equal(8, task.TeamProgress.Submitted);
 
         // Thấy rõ các người cùng nhận.
         Assert.Equal(3, task.Assignees.Count);
