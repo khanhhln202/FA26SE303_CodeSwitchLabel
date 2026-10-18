@@ -150,6 +150,29 @@ public record CreateScriptRequest
     public List<AlignmentItem> Alignment { get; init; } = [];
 }
 
+/// <summary>
+/// Sửa nội dung một cặp câu đang chờ duyệt. Khác <see cref="ReviewScriptRequest"/> ở chỗ
+/// không kèm kết quả duyệt: sửa xong câu vẫn nằm ở Chờ duyệt để còn sửa tiếp.
+/// </summary>
+public record UpdateScriptContentRequest
+{
+    /// <summary>Câu chen tiếng Anh, PHẢI có nhãn: [vi]Em nên [en]scan [vi]tài liệu này.</summary>
+    [Required(ErrorMessage = "Thiếu câu chen tiếng Anh.")]
+    [StringLength(1000, MinimumLength = 3)]
+    public string CsContent { get; init; } = string.Empty;
+
+    /// <summary>Câu thuần Việt tương đương, cũng có nhãn.</summary>
+    [Required(ErrorMessage = "Thiếu câu thuần Việt tương đương.")]
+    [StringLength(1000, MinimumLength = 3)]
+    public string ViContent { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Ánh xạ lại từ tiếng Anh. Bỏ trống thì giữ nguyên alignment cũ; gửi lên thì phải phủ đủ
+    /// số từ tiếng Anh và không được đổi quan hệ Anh–Việt — cả hai đều nằm trong mã câu.
+    /// </summary>
+    public List<AlignmentItem>? Alignment { get; init; }
+}
+
 public record ReviewScriptRequest
 {
     [Required(ErrorMessage = "Phải chọn kết quả duyệt.")]
@@ -175,6 +198,44 @@ public record ReviewScriptRequest
 
     [StringLength(1000)]
     public string? Comment { get; init; }
+}
+
+/// <summary>Người đóng góp câu, hiện ở cột trái màn hình duyệt.</summary>
+public record ContributorDto(long UserId, string FullName);
+
+/// <summary>Vì sao chưa duyệt được câu này; <c>None</c> là bấm vào duyệt được ngay.</summary>
+public enum ContributionBlocker
+{
+    None,
+
+    /// <summary>Task Manager đã chia câu này vào lô của người khác.</summary>
+    AssignedToOtherTask
+}
+
+/// <summary>
+/// Một câu chờ duyệt trong danh sách của Reviewer.
+///
+/// Không kèm alignment: danh sách dài mà mỗi lần chỉ xem một câu, nên bấm vào dòng nào thì
+/// gọi <c>GET /api/scripts/{id}</c> lấy đầy đủ cho khung bên phải.
+/// </summary>
+public record ContributionReviewItemDto(
+    string ScriptId,
+    string CsContent,
+    string ViContent,
+    ScriptDomain Domain,
+    DateTimeOffset CreatedAt,
+    ContributorDto Contributor,
+    ContributionBlocker Blocker)
+{
+    /// <summary>Bấm vào duyệt hay từ chối được ngay không.</summary>
+    public bool CanReview => Blocker == ContributionBlocker.None;
+}
+
+/// <param name="OnlyReviewable">true: bỏ qua câu đang nằm trong lô của người khác.</param>
+public record ContributionSearchRequest : PageRequest
+{
+    public ScriptDomain? Domain { get; init; }
+    public bool OnlyReviewable { get; init; }
 }
 
 public record ScriptSearchRequest : PageRequest

@@ -27,6 +27,15 @@ public interface IScriptQueueService
     /// <summary>Người này có được phép duyệt câu đang nằm trong lô của mình không.</summary>
     Task<bool> CanReviewAsync(string scriptId, long userId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Danh sách câu chờ duyệt nội dung cho màn hình duyệt của Reviewer.
+    ///
+    /// Khác <see cref="ClaimNextForTextReviewAsync"/>: đó là "đưa tôi câu kế tiếp" và có giữ chỗ,
+    /// còn đây chỉ đọc để người duyệt nhìn cả danh sách rồi tự chọn. Đọc không giữ chỗ câu nào.
+    /// </summary>
+    Task<PagedResult<ContributionReviewItemDto>> ListPendingContributionsAsync(
+        long reviewerId, ContributionSearchRequest request, CancellationToken ct = default);
+
     /// <summary>Chia lô câu chờ duyệt cho một task (yêu cầu 2.2 — mặc định 100 câu/người).</summary>
     Task<AssignTextBatchResult> ClaimTextBatchAsync(
         long taskId, long userId, int? count, CancellationToken ct = default);

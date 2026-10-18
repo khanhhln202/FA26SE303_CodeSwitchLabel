@@ -7,7 +7,8 @@ public interface ISpeakerRoundsService
 {
     Task<SpeakerRoundDto?> GetCurrentAsync(long speakerId, CancellationToken ct = default);
     Task<IReadOnlyList<UpcomingRoundDto>> GetUpcomingAsync(long speakerId, CancellationToken ct = default);
-    Task<IReadOnlyList<LeaderboardEntryDto>> GetLeaderboardAsync(
+    /// <summary>Bảng xếp hạng người đọc trong đợt, kèm hai mốc để vẽ thanh tiến độ.</summary>
+    Task<LeaderboardDto> GetLeaderboardAsync(
         long campaignId, long speakerId, int top, CancellationToken ct = default);
     Task<SpeakerRoundDto> RegisterAsync(long campaignId, long speakerId, CancellationToken ct = default);
     Task UnregisterAsync(long campaignId, long speakerId, CancellationToken ct = default);
