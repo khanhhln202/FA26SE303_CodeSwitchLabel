@@ -17,6 +17,7 @@ public class DatasetsController(IDatasetService datasets) : ControllerBase
     [HttpPost]
     [ProducesResponseType(typeof(CreateDatasetResult), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<CreateDatasetResult>> Create(
         [FromBody] CreateDatasetRequest request, CancellationToken ct)
     {
@@ -58,6 +59,17 @@ public class DatasetsController(IDatasetService datasets) : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<DatasetDto>> Archive(long id, CancellationToken ct)
         => Ok(await datasets.ArchiveAsync(id, ct));
+
+    /// <summary>Xoá dataset nháp. Dataset đã phát hành hoặc lưu trữ thì không xoá được.</summary>
+    [HttpDelete("{id:long}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Delete(long id, CancellationToken ct)
+    {
+        await datasets.DeleteAsync(id, ct);
+        return NoContent();
+    }
 
     /// <summary>Tải dataset đã phát hành (ZIP gồm manifest.json + metadata.csv, link nghe 15 phút).</summary>
     [HttpGet("{id:long}/download")]
