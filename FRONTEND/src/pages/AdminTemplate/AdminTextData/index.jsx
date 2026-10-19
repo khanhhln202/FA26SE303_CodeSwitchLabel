@@ -11,7 +11,8 @@ import {
   AlertTriangle,
   Upload,
   FileJson,
-  Loader2
+  Loader2,
+  ChevronDown
 } from "lucide-react";
 import { toast } from "sonner";
 import Pagination from "../../../components/Pagination/Pagination";
@@ -50,29 +51,12 @@ const normalizeTopicName = (rawTopic) => {
   return rawTopic;
 };
 
-// Map chuẩn domain gửi về API Backend
-const mapDomainToApi = (rawTopic) => {
-  if (!rawTopic) return 'ItTechnology';
-  const topicLower = String(rawTopic).trim().toLowerCase();
-
-  if (topicLower.includes('it') || topicLower.includes('tech') || topicLower.includes('công nghệ')) {
-    return 'ItTechnology';
-  }
-  if (topicLower.includes('daily') || topicLower.includes('life') || topicLower.includes('hội thoại')) {
-    return 'DailyLife';
-  }
-  if (topicLower.includes('edu') || topicLower.includes('giáo dục')) {
-    return 'Education';
-  }
-  return 'ItTechnology';
-};
-
 const catStyle = (cat) => {
   const normalized = normalizeTopicName(cat);
   return CATEGORY_COLORS[normalized] || { bg: '#F7F5EF', text: '#6E7078', border: '#E5E2D8' };
 };
 
-// Hàm xóa chính xác tuyệt đối thẻ [vi] và [en] (Bắt buộc dùng xược \ để thoát ngoặc vuông)
+// Hàm xóa chính xác tuyệt đối thẻ [vi] và [en]
 const cleanLanguageTags = (str) => {
   if (!str) return "";
   return str
@@ -84,18 +68,9 @@ const cleanLanguageTags = (str) => {
     .trim();
 };
 
-
-const countWords = (text) => {
-  if (!text || !text.trim()) return 0;
-  const clean = cleanLanguageTags(text);
-  const words = clean.trim().match(/\S+/g);
-  return words ? words.length : 0;
-};
-
 function HighlightCsText({ rawText }) {
   if (!rawText) return null;
 
-  // Trường hợp 1: Chuỗi gốc chứa thẻ [en]...[/en] từ Backend
   if (rawText.includes("[en]") || rawText.includes("[vi]")) {
     const parts = rawText.split(/([en].*?\[\/en\]|[vi].*?\[\/vi\])/gi);
     
@@ -119,7 +94,6 @@ function HighlightCsText({ rawText }) {
     );
   }
 
-  // Trường hợp 2: Văn bản đã làm sạch, tự động tô màu TẤT CẢ các từ tiếng Anh
   const cleanStr = cleanLanguageTags(rawText);
   const words = cleanStr.split(" ");
 
@@ -128,12 +102,15 @@ function HighlightCsText({ rawText }) {
       {words.map((word, i) => {
         const cleanWord = word.replace(/^[.,!?;:]+|[.,!?;:]+$/g, "").toLowerCase();
 
-        // Tự động nhận diện TẤT CẢ từ tiếng Anh/từ mượn IT không chứa ký tự tiếng Việt
         const isEnglishWord = /^[a-z]+$/i.test(cleanWord) && 
           !/^(la|cho|co|hay|ho|ma|voi|nay|ngay|hai|tu|khac|loi|truy|goc|gop|truoc|sau|duong|dan|hop|giao|dien|dung|dang|phien|ban|chua|cai|dat|phan|mem|chia|se|man|hinh|nen)$/i.test(cleanWord) &&
           cleanWord.length > 1;
 
-        return 
+        return (
+          <span key={i}>
+            {isEnglishWord ? <span className="font-semibold">{word}</span> : word}{" "}
+          </span>
+        );
       })}
     </>
   );
@@ -151,7 +128,6 @@ export default function AdminTextData() {
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState(null); 
   const [itemToDelete, setItemToDelete] = useState(null);
-  const [formData, setFormData] = useState({ content: "", topic: "Công nghệ thông tin", status: "active" });
   
   const [selectedJsonFile, setSelectedJsonFile] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -185,6 +161,29 @@ export default function AdminTextData() {
   useEffect(() => {
     fetchTexts();
   }, [currentPage]);
+
+  // Hàm cập nhật trạng thái từ Chờ duyệt sang Sẵn sàng
+  const handleScriptStatusChange = async (item, newStatus) => {
+    if (newStatus === "active" && item.status !== "active") {
+      // Cập nhật UI tạm thời
+      setTextList((prev) =>
+        prev.map((t) => (t.id === item.id ? { ...t, status: "active" } : t))
+      );
+
+      try {
+        await adminService.reviewScript(item.id, {
+          action: "Accepted"
+        });
+        toast.success("Đã duyệt văn bản sang trạng thái Sẵn sàng!");
+        fetchTexts();
+      } catch (err) {
+        console.error("Lỗi duyệt văn bản:", err);
+        const serverMsg = err?.response?.data?.title || err?.response?.data?.message || "Không thể thay đổi trạng thái văn bản!";
+        toast.error(`Lỗi: ${serverMsg}`);
+        fetchTexts();
+      }
+    }
+  };
 
   const handleSearch = () => {
     setActiveSearchTerm(searchInput);
@@ -224,7 +223,6 @@ export default function AdminTextData() {
 
   const handleOpenAddModal = () => {
     setEditingItem(null);
-    setFormData({ content: "", topic: "Công nghệ thông tin", status: "active" });
     setSelectedJsonFile(null);
     setFileLoading(false);
     setUploadProgress(0);
@@ -233,7 +231,6 @@ export default function AdminTextData() {
 
   const handleOpenEditModal = (item) => {
     setEditingItem(item);
-    setFormData({ content: item.content, topic: item.topic, status: item.status });
     setSelectedJsonFile(null);
     setFileLoading(false);
     setUploadProgress(0);
@@ -241,93 +238,62 @@ export default function AdminTextData() {
   };
 
   const handleSubmitForm = async (e) => {
-    e.preventDefault();
+  e.preventDefault();
 
+  try {
+    if (!selectedJsonFile) {
+      toast.error("Vui lòng chọn hoặc kéo thả file JSON!");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    // Bóc tách file JSON để lấy nội dung mới
+    const fileContent = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (event) => resolve(event.target.result);
+      reader.onerror = (error) => reject(error);
+      reader.readAsText(selectedJsonFile, "UTF-8");
+    });
+
+    let parsedData;
     try {
-      if (!selectedJsonFile) {
-        toast.error("Vui lòng chọn hoặc kéo thả file JSON!");
-        return;
-      }
+      parsedData = JSON.parse(fileContent);
+    } catch (jsonErr) {
+      toast.error("File không đúng chuẩn JSON! Vui lòng kiểm tra lại cú pháp.");
+      setIsSubmitting(false);
+      return;
+    }
 
-      setIsSubmitting(true);
+    const itemsToUpload = Array.isArray(parsedData) ? parsedData : [parsedData];
+    if (itemsToUpload.length === 0) {
+      toast.error("File JSON rỗng!");
+      setIsSubmitting(false);
+      return;
+    }
 
-      const fileContent = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (event) => resolve(event.target.result);
-        reader.onerror = (error) => reject(error);
-        reader.readAsText(selectedJsonFile, "UTF-8");
+    const item = itemsToUpload[0];
+    const csContent = item.cs_transcript || item.csContent || item.content || "";
+    const viContent = item.vi_equivalent || item.viContent || csContent;
+
+    if (editingItem) {
+      // Gọi API PUT /api/scripts/{id} để sửa câu mà GIỮ NGUYÊN trạng thái Chờ duyệt
+      await adminService.updatePendingScript(editingItem.id, {
+        csContent,
+        viContent
       });
+      toast.success("Đã cập nhật câu văn bản! Trạng thái vẫn giữ nguyên Chờ duyệt.");
+    } else {
+      // Thêm mới từ file JSON qua API Import -> Tạo câu ở trạng thái CHỜ DUYỆT (pending)
+      await adminService.importScripts(selectedJsonFile);
+      toast.success("Đã thêm thành công câu văn bản ở trạng thái Chờ duyệt!");
+    }
 
-      let parsedData;
-      try {
-        parsedData = JSON.parse(fileContent);
-      } catch (jsonErr) {
-        console.error("Lỗi cú pháp file JSON:", jsonErr);
-        toast.error("File không đúng chuẩn JSON! Vui lòng kiểm tra lại cú pháp.");
-        setIsSubmitting(false);
-        return;
-      }
-
-      const itemsToUpload = Array.isArray(parsedData) ? parsedData : [parsedData];
-
-      if (itemsToUpload.length === 0) {
-        toast.error("File JSON rỗng!");
-        setIsSubmitting(false);
-        return;
-      }
-
-      let successCount = 0;
-      let lastErrorMsg = "";
-
-      if (editingItem) {
-        // Cập nhật câu văn bản thông qua file JSON đã tải lên
-        const item = itemsToUpload[0];
-        const csContent = item.cs_transcript || item.csContent || item.content || formData.content;
-        const viContent = item.vi_equivalent || item.viContent || csContent;
-
-        await adminService.reviewScript(editingItem.id, {
-          action: "Edited",
-          editedCsContent: csContent,
-          editedViContent: viContent
-        });
-        toast.success(`Đã cập nhật thành công câu văn bản từ file JSON!`);
-        setShowModal(false);
-        fetchTexts();
-      } else {
-        // Thêm mới từ danh sách trong file JSON
-        for (const item of itemsToUpload) {
-          const csContent = item.cs_transcript || item.csContent || item.content || "";
-          const viContent = item.vi_equivalent || item.viContent || csContent;
-          const domain = mapDomainToApi(item.domain || item.topic);
-          const alignments = item.alignment || item.alignments || [];
-
-          if (csContent) {
-            try {
-              await adminService.createText({
-                csContent,
-                viContent,
-                domain,
-                alignment: alignments
-              });
-              successCount++;
-            } catch (apiErr) {
-              console.error("Lỗi gửi dữ liệu câu văn bản:", csContent, apiErr);
-              lastErrorMsg = apiErr.response?.data?.title || apiErr.response?.data?.message || apiErr.message;
-            }
-          }
-        }
-
-        if (successCount > 0) {
-          toast.success(`Đã thêm thành công ${successCount}/${itemsToUpload.length} văn bản!`);
-          setShowModal(false);
-          fetchTexts();
-        } else {
-          toast.error(`Không thể lưu dữ liệu: ${lastErrorMsg || "Lỗi API Server!"}`);
-        }
-      }
+    setShowModal(false);
+    fetchTexts();
     } catch (err) {
       console.error("Lỗi xử lý form:", err);
-      const errorMsg = err.response?.data?.title || "Thao tác xử lý file thất bại!";
+      const errorMsg = err.response?.data?.title || err.response?.data?.message || "Thao tác xử lý file thất bại!";
       toast.error(errorMsg);
     } finally {
       setIsSubmitting(false);
@@ -335,24 +301,25 @@ export default function AdminTextData() {
   };
 
   const handleConfirmDelete = async () => {
-    if (!itemToDelete) return;
-    try {
-      await adminService.deleteText(itemToDelete.id);
-      toast.success(`Đã loại bỏ thành công câu văn bản!`);
-      fetchTexts();
-    } catch (err) {
-      console.error("Lỗi xóa văn bản:", err.response?.data);
-      const errorData = err.response?.data;
-      let errorMsg = errorData?.title || errorData?.message || "Loại bỏ văn bản thất bại!";
-      
-      if (errorData?.errors) {
-        const firstKey = Object.keys(errorData.errors)[0];
-        errorMsg = errorData.errors[firstKey][0] || errorMsg;
-      }
-      
-      toast.error(errorMsg);
+  if (!itemToDelete) return;
+  try {
+    await adminService.deleteText(itemToDelete.id);
+    toast.success("Đã loại bỏ thành công câu văn bản khỏi hệ thống!");
+    fetchTexts();
+  } catch (err) {
+    console.error("Lỗi xóa văn bản:", err?.response?.data || err);
+    const errorData = err?.response?.data;
+    
+    let errorMsg = errorData?.title || errorData?.message || "Loại bỏ văn bản thất bại!";
+    if (errorData?.errors) {
+      const firstKey = Object.keys(errorData.errors)[0];
+      errorMsg = errorData.errors[firstKey][0] || errorMsg;
     }
-    setItemToDelete(null);
+    
+    toast.error(`Xóa thất bại: ${errorMsg}`);
+    } finally {
+      setItemToDelete(null);
+    }
   };
 
   const filteredTexts = useMemo(() => {
@@ -457,7 +424,7 @@ export default function AdminTextData() {
               <div className="px-3 text-center whitespace-nowrap w-[65px]">STT</div>
               <div className="px-4 text-left flex-1">Nội dung</div>
               <div className="px-3 text-left w-[170px] whitespace-nowrap">Chủ đề</div>
-              <div className="px-3 text-left w-[125px] whitespace-nowrap">Trạng thái</div>
+              <div className="px-3 text-left w-[135px] whitespace-nowrap">Trạng thái</div>
               <div className="px-4 text-center w-[100px] whitespace-nowrap">Thao tác</div>
             </div>
 
@@ -473,7 +440,7 @@ export default function AdminTextData() {
                         {stt}
                       </div>
                       
-                      {/* Hiển thị 2 dòng dạng badge VI-EN và VI chuẩn y hệt ReviewDashboard */}
+                      {/* Hiển thị 2 dòng dạng badge VI-EN và VI */}
                       <div className="px-4 flex-1 space-y-0.5 my-0.5 pr-6 min-w-0">
                         {/* Dòng 1: Trộn ngôn ngữ (VI-EN) */}
                         <div className="flex items-center gap-2">
@@ -511,10 +478,11 @@ export default function AdminTextData() {
                         </span>
                       </div>
                       
-                      <div className="px-3 w-[125px] whitespace-nowrap">
+                      {/* CỘT TRẠNG THÁI: XỔ XUỐNG KHI CHỜ DUYỆT, ẨN MŨI TÊN KHI ĐÃ SẴN SÀNG */}
+                      <div className="px-3 w-[135px] whitespace-nowrap">
                         {item.status === "active" ? (
                           <span 
-                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full type-caption font-label border"
+                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full type-caption font-label border select-none"
                             style={{
                               backgroundColor: CHIP_SUCCESS_BG,
                               borderColor: CHIP_SUCCESS_BORDER,
@@ -524,16 +492,28 @@ export default function AdminTextData() {
                             <CheckCircle2 className="w-3 h-3 shrink-0" style={{ color: CHIP_SUCCESS_TEXT }} /> Sẵn sàng
                           </span>
                         ) : (
-                          <span 
-                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full type-caption font-label border"
-                            style={{
-                              backgroundColor: CHIP_WARNING_BG,
-                              borderColor: CHIP_WARNING_BORDER,
-                              color: CHIP_WARNING_TEXT
-                            }}
-                          >
-                            <Clock className="w-3 h-3 shrink-0" style={{ color: CHIP_WARNING_TEXT }} /> Chờ duyệt
-                          </span>
+                          <div className="relative inline-block group">
+                            <span 
+                              className="inline-flex items-center justify-center gap-1 px-2.5 py-0.5 rounded-full type-caption font-label border cursor-pointer select-none"
+                              style={{
+                                backgroundColor: CHIP_WARNING_BG,
+                                borderColor: CHIP_WARNING_BORDER,
+                                color: CHIP_WARNING_TEXT
+                              }}
+                            >
+                              <Clock className="w-3 h-3 shrink-0" style={{ color: CHIP_WARNING_TEXT }} /> Chờ duyệt
+                              <ChevronDown className="w-3 h-3 ml-0.5 opacity-60" />
+                            </span>
+
+                            <select
+                              value={item.status}
+                              onChange={(e) => handleScriptStatusChange(item, e.target.value)}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            >
+                              <option value="pending">Chờ duyệt</option>
+                              <option value="active">Sẵn sàng</option>
+                            </select>
+                          </div>
                         )}
                       </div>
 
@@ -652,7 +632,7 @@ export default function AdminTextData() {
                       </span>
                     </div>
                   ) : selectedJsonFile ? (
-                    /* Trạng thái 2: Đã nạp xong -> Hiện icon file + Tên file bên dưới */
+                    /* Trạng thái 2: Đã nạp xong */
                     <label htmlFor="json-file-input" className="cursor-pointer flex flex-col items-center justify-center space-y-2 py-1">
                       <div 
                         className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-xs"
@@ -668,7 +648,7 @@ export default function AdminTextData() {
                       </span>
                     </label>
                   ) : (
-                    /* Trạng thái 3: Chưa chọn file -> Mặc định */
+                    /* Trạng thái 3: Chưa chọn file */
                     <label htmlFor="json-file-input" className="cursor-pointer flex flex-col items-center justify-center space-y-2">
                       <div className="w-12 h-12 rounded-full bg-white dark:bg-[#1C1D22] flex items-center justify-center shadow-xs">
                         <Upload className="w-6 h-6 text-[#6E7078] dark:text-gray-300" />
