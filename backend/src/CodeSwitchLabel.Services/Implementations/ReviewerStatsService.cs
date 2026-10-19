@@ -4,6 +4,7 @@ using CodeSwitchLabel.Repositories.Persistence;
 using CodeSwitchLabel.Repositories.Storage;
 using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Dtos;
+using CodeSwitchLabel.Services.Reviews;
 using Microsoft.EntityFrameworkCore;
 
 namespace CodeSwitchLabel.Services.Implementations;
@@ -243,7 +244,8 @@ public class ReviewerStatsService(
                     .GroupBy(v => v.ReviewRound)
                     .Select(g => g.First())
                     .OrderBy(v => v.ReviewRound)
-                    .Select(v => new HistoryReviewDto(v.ReviewRound, v.Decision.ToString(), ReasonOf(v)))]));
+                    .Select(v => new HistoryReviewDto(
+                        v.ReviewRound, v.Decision.ToString(), ReviewDisplay.ReasonOf(v)))]));
         }
 
         return new PagedResult<ReviewerHistoryItemDto>(items, query.Page, query.PageSize, total);
@@ -356,23 +358,6 @@ public class ReviewerStatsService(
             return key is null ? null : (await storage.GetDownloadUrlAsync(key, ct)).Url;
         }
         catch { return null; }
-    }
-
-    /// <summary>
-    /// Lý do hiển thị của một lượt duyệt: bình luận là chính; lượt từ chối không kèm bình luận
-    /// thì ghép mô tả các mã lý do từ chối, để dòng lịch sử luôn có lý do để hiện.
-    /// </summary>
-    private static string? ReasonOf(Review review)
-    {
-        if (!string.IsNullOrWhiteSpace(review.Comment)) return review.Comment;
-
-        var reasons = review.RejectionReasons
-            .Select(rr => rr.Reason.Description ?? rr.Reason.ReasonCode)
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .Distinct()
-            .ToList();
-
-        return reasons.Count > 0 ? string.Join(", ", reasons) : null;
     }
 
     private static string CategoryLabel(RejectionCategory category) => category switch
