@@ -42,11 +42,11 @@ import { taskService } from "../../../services/taskService";
 
 // Helper format ngày hiển thị VN (dd/mm/yyyy)
 const formatDateToVN = (dateStr) => {
-  if (!dateStr) return "";
+  if (!dateStr) return "---";
   if (dateStr.includes("/")) return dateStr;
   const clean = dateStr.split("T")[0];
   const [year, month, day] = clean.split("-");
-  if (!year || !month || !day) return "";
+  if (!year || !month || !day) return "---";
   return `${day}/${month}/${year}`;
 };
 
@@ -163,7 +163,6 @@ export default function TaskManagerManagement() {
 
   const todayIso = useMemo(() => new Date().toISOString().split("T")[0], []);
 
-  // 1. Trạng thái Modal Tạo/Cập nhật Đợt
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState("CREATE");
   const [modalTargetBatchId, setModalTargetBatchId] = useState(null);
@@ -178,7 +177,6 @@ export default function TaskManagerManagement() {
     assignedReviewers: []
   });
 
-  // 2. Trạng thái Modal Phân công Nhiệm vụ
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState(null);
   const [allAdminUsers, setAllAdminUsers] = useState([]);
@@ -194,7 +192,6 @@ export default function TaskManagerManagement() {
   const [viewingAssignedTask, setViewingAssignedTask] = useState(null);
   const [deletingBatch, setDeletingBatch] = useState(null);
 
-  // 3. Modal SỬA / XÓA NHIỆM VỤ TRONG BẢNG
   const [isEditTaskModalOpen, setIsEditTaskModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [editTaskFormData, setEditTaskFormData] = useState({
@@ -275,10 +272,8 @@ export default function TaskManagerManagement() {
         const rawType = String(t.taskType || t.type || t.role || "").toLowerCase();
         const isSpeaker = rawType === "recording" || rawType === "speaker" || rawType === "0";
 
-        // BÓC TÁCH DANH SÁCH NGƯỜI DÙNG TỪ BE TRẢ VỀ THÀNH CÔNG DÙ F5 LẠI TRANG
         let usersList = [];
         
-        // Trường hợp 1: BE trả về t.assignees dạng mảng TaskAssigneeDto [{ userId, fullName }]
         if (Array.isArray(t.assignees) && t.assignees.length > 0) {
           usersList = t.assignees.map(u => {
             if (typeof u === "string") return u;
@@ -289,9 +284,7 @@ export default function TaskManagerManagement() {
             const found = combinedUsers.find(cu => String(cu.id) === rawUid);
             return found ? found.name : (rawUid ? `User ${rawUid}` : "");
           }).filter(Boolean);
-        } 
-        // Trường hợp 2: BE trả về t.assignments
-        else if (Array.isArray(t.assignments) && t.assignments.length > 0) {
+        } else if (Array.isArray(t.assignments) && t.assignments.length > 0) {
           usersList = t.assignments.map(u => {
             if (typeof u === "string") return u;
             if (u.fullName) return u.fullName;
@@ -302,13 +295,9 @@ export default function TaskManagerManagement() {
             const found = combinedUsers.find(cu => String(cu.id) === rawUid);
             return found ? found.name : (rawUid ? `User ${rawUid}` : "");
           }).filter(Boolean);
-        } 
-        // Trường hợp 3: BE trả về array t.assignedUsers
-        else if (Array.isArray(t.assignedUsers) && t.assignedUsers.length > 0) {
+        } else if (Array.isArray(t.assignedUsers) && t.assignedUsers.length > 0) {
           usersList = t.assignedUsers.map(u => typeof u === "string" ? u : u.fullName || u.userName || u.name);
-        } 
-        // Trường hợp 4: Single assigneeName hoặc ID
-        else if (t.assigneeName) {
+        } else if (t.assigneeName) {
           usersList = [t.assigneeName];
         } else if (t.assignedToUserId) {
           const rawAssignedId = String(t.assignedToUserId || t.assigneeId || "");
@@ -318,6 +307,8 @@ export default function TaskManagerManagement() {
           }
         }
 
+        const actualTarget = t.targetQty ?? t.target ?? t.targetQuantity ?? t.targetCount ?? t.totalItems ?? 10;
+
         return {
           id: t.taskId || t.id,
           taskId: t.taskId || t.id,
@@ -325,8 +316,11 @@ export default function TaskManagerManagement() {
           role: isSpeaker ? "Speaker" : "Reviewer",
           campaignId: Number(t.campaignId),
           topic: mapDomainToTopicVN(t.domain || t.topic || t.categoryName),
+          targetQty: Number(actualTarget),
           assignedUsers: usersList,
           assignedToUserId: t.assignedToUserId || t.assigneeId,
+          createdAt: formatDateToVN(t.createdAt || t.createdDate),
+          deadline: formatDateToVN(t.deadline || t.dueDate || t.endDate),
           status: calculatedStatus
         };
       });
@@ -469,7 +463,6 @@ export default function TaskManagerManagement() {
     });
   };
 
-  // PHẦN XỬ LÝ GỬI API PHÂN CÔNG TẬP TRUNG CHUẨN BACKEND
   const handleSubmitAssignForm = async (e) => {
     e.preventDefault();
 
@@ -483,10 +476,8 @@ export default function TaskManagerManagement() {
         return;
       }
 
-      // 1. Gắn Task vào Chiến dịch/Đợt
       await taskService.attachTaskToCampaign(taskId, targetBatchId);
 
-      // 2. TỰ ĐỘNG THÊM MỤC/KỊCH BẢN NẾU TASK CHƯA CÓ MỤC (Tránh lỗi BE chỉ tiêu vượt quá 0 mục)
       try {
         await taskService.addTaskItems(taskId, {
           autoFill: {
@@ -499,7 +490,6 @@ export default function TaskManagerManagement() {
         console.warn("AutoFill items warning:", itemErr);
       }
 
-      // 3. Chuẩn bị mảng userIds để gửi Backend
       const selectedUsers = targetUserList.filter(u => assignFormData.assignedUsers.includes(u.name));
       const userIdsToAssign = selectedUsers.map(u => Number(u.id)).filter(Boolean);
 
@@ -510,7 +500,6 @@ export default function TaskManagerManagement() {
       toast.success(`Đã phân công nhiệm vụ "${taskObj.title}" vào đợt thành công!`);
       setIsAssignModalOpen(false);
 
-      // 4. Reload lại dữ liệu
       await loadDataFromApi();
     } catch (err) {
       console.error("Lỗi khi phân công nhiệm vụ vào đợt:", err?.response?.data || err);
@@ -704,7 +693,6 @@ export default function TaskManagerManagement() {
     }
 
     try {
-      // 1. Cập nhật thông tin tiêu đề/mô tả task
       if (typeof taskService.updateTask === "function") {
         await taskService.updateTask(editingTask.id, {
           title: editTaskFormData.title,
@@ -712,12 +700,10 @@ export default function TaskManagerManagement() {
         }).catch((err) => console.warn("Lỗi updateTask:", err));
       }
 
-      // 2. Lấy danh sách ID người dùng được chọn mới
       const userList = editTaskFormData.role === "Speaker" ? activeSpeakers : activeReviewers;
       const selectedUsers = userList.filter(u => editTaskFormData.assignedUsers.includes(u.name));
       const userIdsToAssign = selectedUsers.map(u => Number(u.id)).filter(Boolean);
 
-      // 3. Phân công reviewer mới
       if (userIdsToAssign.length > 0) {
         await taskService.assignTask(editingTask.id, userIdsToAssign).catch((err) => {
           console.warn("Lỗi assignTask khi sửa nhiệm vụ:", err?.response?.data || err);
@@ -1495,7 +1481,7 @@ export default function TaskManagerManagement() {
             </h3>
           </div>
 
-          <div className="flex flex-col gap-2.5 overflow-y-auto max-h-[580px] pr-1">
+          <div className="flex flex-col gap-2.5 overflow-y-auto flex-1 h-0 pr-1">
             {batches.length === 0 ? (
               <div className="p-4 text-center type-ui text-[#9A9CA3] dark:text-gray-500">
                 Chưa có đợt nào. Bấm nút tạo đợt ở trên để tạo.
@@ -1700,21 +1686,24 @@ export default function TaskManagerManagement() {
           {/* BẢNG CHUẨN */}
           <div className="rounded-2xl border border-[#E5E2D8] dark:border-gray-800 bg-white dark:bg-[#1C1D22] shadow-[0_1px_3px_rgba(16,17,20,0.04)] overflow-hidden flex-1 flex flex-col">
             <div className="overflow-x-auto flex-1">
-              <table className="w-full text-left type-ui min-w-[700px]">
+              <table className="w-full text-left type-ui min-w-[1050px]">
                 <thead>
                   <tr className="border-b border-[#E5E2D8] dark:border-gray-800 text-[#9A9CA3] dark:text-gray-400 type-label h-8 bg-[#F7F5EF] dark:bg-[#25272E]">
                     <th className="py-2 px-3 text-center w-[50px]">STT</th>
-                    <th className="py-2 px-3 min-w-[200px]">Nhiệm vụ</th>
-                    <th className="py-2 px-3 text-center w-[100px]">Vai trò</th>
-                    <th className="py-2 px-3 text-center w-[200px]">Người được phân công</th>
-                    <th className="py-2 px-3 text-center w-[150px]">Trạng thái</th>
-                    <th className="py-2 px-3 text-center w-[100px]">Thao tác</th>
+                    <th className="py-2 px-3 min-w-[180px]">Nhiệm vụ</th>
+                    <th className="py-2 px-3 text-center w-[90px]">Vai trò</th>
+                    <th className="py-2 px-3 text-center w-[180px]">Người được phân công</th>
+                    <th className="py-2 px-3 text-center w-[110px] whitespace-nowrap">Mục tiêu</th>
+                    <th className="py-2 px-3 text-center w-[120px]">Ngày tạo</th>
+                    <th className="py-2 px-3 text-center w-[120px]">Hạn chót</th>
+                    <th className="py-2 px-3 text-center w-[130px]">Trạng thái</th>
+                    <th className="py-2 px-3 text-center w-[90px]">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#F0EEE6] dark:divide-gray-800">
                   {!selectedBatchObj || filteredTasks.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center text-[#9A9CA3] dark:text-gray-500 type-ui">
+                      <td colSpan={9} className="py-12 text-center text-[#9A9CA3] dark:text-gray-500 type-ui">
                         {!selectedBatchObj 
                           ? "Hãy chọn hoặc tạo một đợt để xem danh sách nhiệm vụ." 
                           : `Không tìm thấy nhiệm vụ nào trong ${selectedBatchObj.campaignName || selectedBatchObj.name}.`}
@@ -1771,8 +1760,21 @@ export default function TaskManagerManagement() {
                               <span>Xem danh sách ({countUsers})</span>
                             </button>
                           </td>
+
+                          {/* CỘT MỤC TIÊU SỐ CÂU */}
+                          <td className="py-2 px-3 text-center font-bold text-[#16171C] dark:text-white whitespace-nowrap font-sans">
+                            {task.targetQty || 10} câu
+                          </td>
+
+                          <td className="py-2 px-3 text-center font-semibold text-[#16171C] dark:text-white whitespace-nowrap font-sans">
+                            {task.createdAt || "---"}
+                          </td>
+
+                          <td className="py-2 px-3 text-center font-semibold text-[#16171C] dark:text-white whitespace-nowrap font-sans">
+                            {task.deadline || "---"}
+                          </td>
                           
-                          {/* BADGE TRẠNG THÁI GỐC */}
+                          {/* BADGE TRẠNG THÁI */}
                           <td className="py-2 px-3 text-center whitespace-nowrap">
                             <div className="relative inline-block group">
                               <span
