@@ -36,6 +36,15 @@ public interface IScriptProposalRepository
         ProposalKind? kind, ScriptDomain? domain, string? keyword,
         int page, int pageSize, SortSpec<ProposalSortField> sort, CancellationToken ct = default);
 
+    /// <summary>
+    /// Lịch sử đề xuất của MỘT người gửi — mọi trạng thái, mặc định mới nhất trước.
+    /// Ngược chiều <see cref="ListPendingAsync"/>: đó là hàng chờ nên cũ nhất đứng trước,
+    /// còn đây là lịch sử nên việc vừa làm đứng trên.
+    /// </summary>
+    Task<(IReadOnlyList<ScriptProposal> Items, int Total)> ListByProposerAsync(
+        long proposerId, ProposalKind? kind, ProposalStatus? status,
+        int page, int pageSize, SortSpec<ProposalSortField> sort, CancellationToken ct = default);
+
     Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction> BeginTransactionAsync(
         CancellationToken ct = default);
 
@@ -114,6 +123,50 @@ public class ScriptProposalRepository(CodeSwitchLabelDbContext db) : IScriptProp
 
         var items = await ordered
             .ThenBy(p => p.ProposalId)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        return (items, total);
+    }
+
+    public async Task<(IReadOnlyList<ScriptProposal> Items, int Total)> ListByProposerAsync(
+        long proposerId, ProposalKind? kind, ProposalStatus? status,
+        int page, int pageSize, SortSpec<ProposalSortField> sort, CancellationToken ct = default)
+    {
+        var query = db.ScriptProposals.AsNoTracking()
+            .Include(p => p.Script).ThenInclude(s => s.Words)
+            .Include(p => p.Proposer)
+            .Include(p => p.ErrorReason)
+            .Include(p => p.DecidedByUser)
+            .Where(p => p.ProposerId == proposerId);
+
+        if (kind.HasValue) query = query.Where(p => p.Kind == kind.Value);
+        if (status.HasValue) query = query.Where(p => p.Status == status.Value);
+
+        var total = await query.CountAsync(ct);
+
+        var ordered = sort.Field switch
+        {
+            ProposalSortField.ProposalId => sort.Descending
+                ? query.OrderByDescending(p => p.ProposalId)
+                : query.OrderBy(p => p.ProposalId),
+            ProposalSortField.CreatedAt => sort.Descending
+                ? query.OrderByDescending(p => p.CreatedAt)
+                : query.OrderBy(p => p.CreatedAt),
+            ProposalSortField.Kind => sort.Descending
+                ? query.OrderByDescending(p => p.Kind)
+                : query.OrderBy(p => p.Kind),
+            ProposalSortField.ScriptId => sort.Descending
+                ? query.OrderByDescending(p => p.ScriptId)
+                : query.OrderBy(p => p.ScriptId),
+            _ => query.OrderByDescending(p => p.CreatedAt)
+        };
+
+        // TEAM_012: nối tiếp proposalId để trang sau không lặp hoặc hụt dòng khi cột sắp xếp
+        // bằng nhau. Giảm dần ở đây vì nhánh mặc định cũng giảm dần.
+        var items = await ordered
+            .ThenByDescending(p => p.ProposalId)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(ct);

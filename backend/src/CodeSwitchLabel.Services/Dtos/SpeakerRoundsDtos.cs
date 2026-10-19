@@ -32,7 +32,19 @@ public record UpcomingRoundDto(
 /// Một dòng bảng xếp hạng của đợt. TEAM_016: <see cref="Submitted"/> là số bản ghi
 /// người này ĐÃ NỘP (chờ duyệt / đạt / bị từ chối), không phải chỉ bản được duyệt.
 /// </summary>
-public record LeaderboardEntryDto(int Rank, long UserId, string Name, int Submitted, bool IsMe);
+/// <param name="Submitted">Số bản đã nộp trong đợt — số thật, dùng để xếp hạng.</param>
+/// <param name="TargetQty">
+/// Chỉ tiêu riêng của người này trong đợt: tổng chỉ tiêu các nhiệm vụ thu âm họ đang nhận.
+/// Task nhiều người nhận thì mỗi người lấy trọn chỉ tiêu của task — đó là mục tiêu của
+/// nhiệm vụ, không chia nhỏ theo đầu người. 0 nghĩa là chưa nhận nhiệm vụ nào trong đợt.
+/// </param>
+/// <param name="SubmittedCapped">
+/// <paramref name="Submitted"/> nhưng không vượt <paramref name="TargetQty"/> — dùng vẽ thanh
+/// tiến độ. Hệ thống cho thu tiếp sau khi đạt chỉ tiêu nên số thật vượt mốc là bình thường;
+/// xếp hạng vẫn tính trên số thật để người làm nhiều hơn không bị tụt hạng oan.
+/// </param>
+public record LeaderboardEntryDto(
+    int Rank, long UserId, string Name, int Submitted, bool IsMe, int TargetQty, int SubmittedCapped);
 
 /// <summary>
 /// Bảng xếp hạng kèm mốc để vẽ thanh tiến độ.
@@ -90,7 +102,23 @@ public record RecordingStats(int Total, int Approved, int Rejected, int Pending)
 /// <param name="Rejected">Câu bị từ chối, cộng cả câu đã bị ẩn.</param>
 public record ContributionStats(int Total, int Validated, int Rejected, int Pending);
 
-/// <summary>Dòng lịch sử đóng góp câu của Speaker.</summary>
+/// <summary>
+/// Lượt duyệt nội dung của một câu đóng góp.
+///
+/// Duyệt văn bản chỉ có MỘT lượt (TEAM_010), khác bản ghi âm cần ba lượt quá bán — nên ở đây
+/// là một đối tượng chứ không phải danh sách, và không có số vòng.
+/// </summary>
+public record ContributionReviewDto(
+    long ReviewId,
+    string Action,
+    long ReviewerId,
+    string ReviewerName,
+    string? ErrorReasonCode,
+    string? ErrorReasonDescription,
+    string? Comment,
+    DateTimeOffset ReviewedAt);
+
+/// <param name="Review">Null khi câu còn đang chờ duyệt.</param>
 public record SpeakerContributionHistoryDto(
     string ScriptId,
     string Category,
@@ -99,7 +127,7 @@ public record SpeakerContributionHistoryDto(
     IReadOnlyList<AlignmentItem> Alignment,
     DateTimeOffset CreatedAt,
     ScriptStatus Status,
-    IReadOnlyList<HistoryReviewDto> Reviews);
+    ContributionReviewDto? Review);
 
 public record SpeakerHistoryQuery : PageRequest
 {

@@ -94,9 +94,24 @@ public class SpeakerRoundsService(
             .Take(Math.Clamp(top, 1, 50))
             .ToListAsync(ct);
 
+        // Chỉ tiêu riêng từng người: tổng chỉ tiêu các nhiệm vụ thu âm họ đang nhận trong đợt.
+        var chiTieuRieng = await db.TaskAssignments.AsNoTracking()
+            .Where(a => a.AssignmentStatus == AssignmentStatus.Active)
+            .Where(a => a.Task.CampaignId == campaignId && a.Task.TaskType == TaskType.Recording)
+            .GroupBy(a => a.UserId)
+            .Select(g => new { UserId = g.Key, Target = g.Sum(x => x.Task.TargetQty) })
+            .ToDictionaryAsync(x => x.UserId, x => x.Target, ct);
+
         return new LeaderboardDto(chiTieu, daChia,
-            [.. rows.Select((x, i) => new LeaderboardEntryDto(
-                i + 1, x.SpeakerId, x.FullName, x.Submitted, x.SpeakerId == speakerId))]);
+            [.. rows.Select((x, i) =>
+            {
+                var target = chiTieuRieng.GetValueOrDefault(x.SpeakerId);
+
+                return new LeaderboardEntryDto(
+                    i + 1, x.SpeakerId, x.FullName, x.Submitted, x.SpeakerId == speakerId,
+                    target,
+                    target > 0 ? Math.Min(x.Submitted, target) : x.Submitted);
+            })]);
     }
 
     public async Task<SpeakerRoundDto> RegisterAsync(
@@ -303,6 +318,7 @@ public class SpeakerRoundsService(
         var q = db.Scripts.AsNoTracking()
             .Include(s => s.Words)
             .Include(s => s.Reviews).ThenInclude(r => r.ErrorReason)
+            .Include(s => s.Reviews).ThenInclude(r => r.User)
             .Where(s => s.CreatedBy == speakerId);
 
         if (!string.IsNullOrWhiteSpace(query.Search))
@@ -360,7 +376,16 @@ public class SpeakerRoundsService(
             })],
             s.CreatedAt,
             s.Status,
-            [.. s.Reviews.Select(r => new HistoryReviewDto(0, r.Action.ToString(), r.Comment))])).ToList();
+            // Một câu chỉ một lượt duyệt. Vài câu cũ còn hai lượt từ trước khi siết luật,
+            // nên lấy lượt mới nhất thay vì giả định chỉ có một dòng.
+            s.Reviews
+                .OrderByDescending(r => r.ReviewedAt)
+                .ThenByDescending(r => r.ScriptReviewId)
+                .Select(r => new ContributionReviewDto(
+                    r.ScriptReviewId, r.Action.ToString(), r.UserId, r.User.FullName,
+                    r.ErrorReason?.ReasonCode, r.ErrorReason?.Description,
+                    r.Comment, r.ReviewedAt))
+                .FirstOrDefault())).ToList();
 
         return new PagedResult<SpeakerContributionHistoryDto>(items, query.Page, query.PageSize, total);
     }

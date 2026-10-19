@@ -169,6 +169,26 @@ public class SpeakerController(
         [FromQuery] SpeakerContributionHistoryQuery query, CancellationToken ct)
         => Ok(await roundsService.GetContributionHistoryAsync(User.GetUserId(), query, ct));
 
+    /// <summary>Lịch sử đề xuất của chính mình: câu báo lỗi (Report) và câu chỉnh sửa (Edit).</summary>
+    /// <remarks>
+    /// Mọi trạng thái, **mới nhất trước** — khác hàng chờ của Reviewer (chỉ `Pending`, cũ nhất
+    /// trước), nên đề xuất đã bị từ chối vẫn xem lại được.
+    ///
+    /// Lọc bằng `?kind=Report|Edit` và `?status=Pending|Accepted|Rejected`.
+    /// TEAM_012: `?sort=` nhận `createdAt`, `proposalId`, `kind`, `scriptId`.
+    ///
+    /// `original` là câu **đang** có trong kho chứ không phải bản chụp lúc gửi đề xuất: đề xuất
+    /// Edit đã duyệt thì `original` chính là bản sửa đã ghi vào câu.
+    ///
+    /// `decidedAt` có mà `decidedByName` trống nghĩa là câu đã bị loại khỏi kho và đề xuất
+    /// tự đóng theo, không phải Reviewer nào xử lý.
+    /// </remarks>
+    [HttpGet("proposals/history")]
+    [ProducesResponseType(typeof(PagedResult<SpeakerProposalHistoryDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResult<SpeakerProposalHistoryDto>>> ProposalHistory(
+        [FromQuery] SpeakerProposalHistoryQuery query, CancellationToken ct)
+        => Ok(await proposalService.ListForProposerAsync(User.GetUserId(), query, ct));
+
     /// <summary>Tổng hợp số bản đã nộp / đạt / bị từ chối / đang chờ của chính mình.</summary>
     [HttpGet("stats")]
     [ProducesResponseType(typeof(SpeakerStatsDto), StatusCodes.Status200OK)]
