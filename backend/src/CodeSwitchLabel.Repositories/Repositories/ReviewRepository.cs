@@ -75,6 +75,17 @@ public interface IReviewRepository
     Task<List<TaskRecording>> GetQueuedItemsAsync(string recordingId, CancellationToken ct = default);
 
     /// <summary>
+    /// Trong số người đang nhận task này, còn ai được duyệt bản ghi đó nữa không: không phải
+    /// người thu, và chưa duyệt lần nào. Dùng để biết lô đã hết việc với bản ghi này chưa.
+    ///
+    /// Trigger của lược đồ không cho giao task duyệt cho người có vai Speaker, nên vế "không
+    /// phải người thu" là lưới chắn cho trường hợp đổi vai sau khi đã giao, không phải đường
+    /// chạy thường.
+    /// </summary>
+    Task<bool> HasEligibleReviewerLeftAsync(
+        long taskId, string recordingId, long speakerId, CancellationToken ct = default);
+
+    /// <summary>
     /// Bản ghi tiếp theo người này được duyệt: còn chờ duyệt, không phải bản của chính mình,
     /// mình chưa duyệt lần nào, và chưa đủ số vòng yêu cầu.
     /// </summary>
@@ -178,6 +189,13 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
         db.TaskRecordings
             .Where(tr => tr.RecordingId == recordingId && tr.Status == TaskRecordingStatus.Queued)
             .ToListAsync(ct);
+
+    public Task<bool> HasEligibleReviewerLeftAsync(
+        long taskId, string recordingId, long speakerId, CancellationToken ct = default) =>
+        db.TaskAssignments.AsNoTracking()
+            .Where(a => a.TaskId == taskId && a.AssignmentStatus == AssignmentStatus.Active)
+            .Where(a => a.UserId != speakerId)
+            .AnyAsync(a => !db.Reviews.Any(v => v.RecordingId == recordingId && v.ReviewerId == a.UserId), ct);
 
     public Task<Recording?> GetNextForReviewerAsync(
         long reviewerId, long? taskId, long? speakerId, bool random,

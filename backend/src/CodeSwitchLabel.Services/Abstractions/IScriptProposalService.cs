@@ -25,6 +25,13 @@ public interface IScriptProposalService
         ProposalQueueQuery query, CancellationToken ct = default);
 
     /// <summary>
+    /// Lịch sử đề xuất của chính Speaker — mọi trạng thái, mới nhất trước. Hàng chờ của
+    /// Reviewer chỉ có đề xuất đang chờ, nên không dùng được cho màn hình này.
+    /// </summary>
+    Task<PagedResult<SpeakerProposalHistoryDto>> ListForProposerAsync(
+        long proposerId, SpeakerProposalHistoryQuery query, CancellationToken ct = default);
+
+    /// <summary>
     /// Reviewer chốt một đề xuất: duyệt thì ghi nội dung mới vào câu (kèm lượt duyệt sửa
     /// trong lịch sử), từ chối thì giữ nguyên câu. Cả hai đường đều trả câu về hàng đợi ghi âm.
     /// </summary>

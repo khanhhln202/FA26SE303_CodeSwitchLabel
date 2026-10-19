@@ -125,6 +125,17 @@ public class ScriptProposalService(
             [.. items.Select(ToQueueItem)], query.Page, query.PageSize, total);
     }
 
+    public async Task<PagedResult<SpeakerProposalHistoryDto>> ListForProposerAsync(
+        long proposerId, SpeakerProposalHistoryQuery query, CancellationToken ct = default)
+    {
+        var (items, total) = await proposals.ListByProposerAsync(
+            proposerId, query.Kind, query.Status, query.Page, query.PageSize,
+            query.ToSort<ProposalSortField>(), ct);
+
+        return new PagedResult<SpeakerProposalHistoryDto>(
+            [.. items.Select(ToHistoryItem)], query.Page, query.PageSize, total);
+    }
+
     public async Task<ProposalResolutionDto> ResolveAsync(
         long proposalId, long reviewerId, ResolveProposalRequest request, CancellationToken ct = default)
     {
@@ -305,6 +316,23 @@ public class ScriptProposalService(
             p.ProposedCsContent is null || p.ProposedViContent is null
                 ? null
                 : ToSentence(p.ProposedCsContent, p.ProposedViContent, proposedAlignment));
+    }
+
+    private static SpeakerProposalHistoryDto ToHistoryItem(ScriptProposal p)
+    {
+        var script = p.Script;
+        var proposedAlignment = DeserializeAlignment(p.ProposedAlignment)
+                                ?? [.. ScriptPairRules.ToAlignment(script.Words)];
+
+        return new SpeakerProposalHistoryDto(
+            p.ProposalId, p.Kind, p.Status, p.ScriptId, script.Domain,
+            p.ErrorReason?.ReasonCode, p.ErrorReason?.Description,
+            p.Comment, p.CreatedAt,
+            ToSentence(script.CsContent, script.ViContent, ScriptPairRules.ToAlignment(script.Words)),
+            p.ProposedCsContent is null || p.ProposedViContent is null
+                ? null
+                : ToSentence(p.ProposedCsContent, p.ProposedViContent, proposedAlignment),
+            p.DecidedBy, p.DecidedByUser?.FullName, p.DecidedAt, p.DecisionNote);
     }
 
     private static ProposalSentenceDto ToSentence(
