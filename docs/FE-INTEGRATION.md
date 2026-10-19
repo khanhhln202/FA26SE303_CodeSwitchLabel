@@ -10,7 +10,8 @@ màn hình nào gọi API nào theo thứ tự nào, cách xử lý đăng nhậ
 > (`/api/speaker/rounds/*`, `/api/speaker/recordings/rejected|history`, `/api/speaker/contributions/history`,
 > `/api/speaker/stats`), thống kê + lịch sử của Reviewer (`/api/reviewer/stats/*`,
 > `/api/reviewer/history/*`), tổng quan Task Manager (`/api/task-manager/overview`), đọc cấu hình
-> công khai (`/api/config`, `/api/config/topics`), khôi phục câu (`POST /api/scripts/{id}/restore`),
+> công khai (`/api/config`, `/api/config/topics`), vòng đời câu (`POST /api/scripts/{id}/reactivate|deactivate`,
+> `DELETE /api/scripts/{id}`),
 > xem lại task duyệt đã đóng (read-only), và dataset (`/api/datasets/*`). Xem lại task đã đóng,
 > khôi phục câu và dataset không còn nằm ở mục 10.
 >
@@ -129,7 +130,7 @@ Dữ liệu dưới đây được tạo khi API khởi động có khoá `Seed:
 | Task | Giao cho | Chỉ tiêu | Nội dung |
 |---|---|---|---|
 | `Ghi âm đợt mẫu` | `speaker1` | 8 cặp câu | 8 mục, tất cả còn chờ — chưa có bản ghi nào được thu |
-| `Duyệt bản ghi đợt mẫu` | `reviewer` | 4 bản ghi | hàng chờ trống, chờ có bản ghi để đưa vào |
+| `Duyệt bản ghi đợt mẫu` | `reviewer` | 4 bản ghi | hàng chờ trống lúc seed; khi `speaker1` thu trong task `Ghi âm đợt mẫu` (cùng đợt) thì bản ghi chờ duyệt **tự vào đây** |
 
 Dữ liệu mẫu **không có bản ghi**. Muốn có số liệu thống kê và lịch sử ghi âm thì tự thu bằng
 `POST /api/recordings` (xem mục 5), hoặc thêm câu vào task rồi ghi như bình thường. Sau khi
@@ -301,7 +302,7 @@ Lỗi hệ thống trả 500 với `code: "internal_error"`. Gặp lỗi này th
 | `assignee_required` | 422 (giao) / 403 (chia lô câu) | Giao task mà không chọn người nhận, hoặc chia lô câu cho người không giữ task | Chặn ngay ở form: bắt chọn người nhận hợp lệ |
 | `assignee_not_found` | 404 | Gỡ một người không giữ task đó | Tải lại chi tiết task |
 | `campaign_not_owned` | 403 | Chiến dịch thuộc Task Manager khác quản lý | Ẩn nút sửa/xoá chiến dịch ngoài danh sách của mình |
-| `task_in_campaign` / `task_has_work` / `task_not_owned` | 409 / 409 / 403 | Xoá task đang gắn chiến dịch, task đã có người nhận hoặc công việc, hay task không của mình | Hiện `title`; chỉ hiện nút **Xoá** cho task rỗng thuộc quyền mình |
+| `task_in_campaign` / `task_has_work` / `task_not_owned` | 409 / 409 / 403 | Xoá task đang gắn chiến dịch, task đã có dữ liệu nộp/duyệt, hay task không của mình | Hiện `title`; gỡ task khỏi đợt trước khi xoá — lượt giao và hàng chờ bị xoá theo task, chỉ dữ liệu nộp thật mới chặn |
 | `task_domain_mismatch_campaign` | 422 | Chủ đề của task khác chủ đề của chiến dịch | Khoá ô chọn chủ đề theo chủ đề chiến dịch |
 | `batch_size_invalid` | 422 | Chia lô câu với `count` < 1 | Chặn ở ô nhập số câu |
 | `not_a_review_task` / `text_review_not_assigned` | 422 / 403 | Chia lô câu cho task không phải task duyệt, hoặc duyệt câu chưa được giao cho mình | Tải lại danh sách lô được giao |
@@ -322,6 +323,7 @@ Lỗi hệ thống trả 500 với `code: "internal_error"`. Gặp lỗi này th
 | `already_registered` | 409 | Đăng ký đợt đã đăng ký rồi | Hiện `title`, không làm gì thêm |
 | `registration_not_found` | 404 | Huỷ đăng ký đợt chưa đăng ký | Tải lại trạng thái đăng ký |
 | `script_not_restorable` | 409 | Khôi phục câu đang dùng được | Ẩn nút khôi phục khi `status` là `PendingValidation`/`Validated` |
+| `script_not_pending` / `script_not_deactivatable` | 409 | Xoá cứng câu không còn chờ duyệt, hoặc ngừng dùng câu đã ở trạng thái khác | Ẩn nút xoá/ngừng dùng theo `status` |
 | `dataset_exists` | 409 | Tạo dataset trùng tên + phiên bản | Hiện lỗi cạnh ô tên/phiên bản |
 | `dataset_not_found` | 404 | Dataset không tồn tại | Tải lại danh sách |
 | `dataset_not_releasable` / `dataset_not_released` | 409 | Thao tác sai trạng thái dataset | Ẩn nút theo `status` |
@@ -673,11 +675,13 @@ giao) — các dòng có `canReview: false`, nộp duyệt vẫn trả 403 `task
 3. **Gỡ chứ không xoá:** `DELETE /api/campaigns/{id}/tasks/{taskId}` chỉ gỡ task khỏi chiến dịch
    (task còn tồn tại với `campaignId: null`, giữ assignments/items). Muốn đóng task thì dùng
    `POST /api/tasks/{id}/cancel` (task ở lại với trạng thái `Cancelled`).
-4. **Xoá task rỗng** là việc duy nhất API cho phép xoá cứng: `DELETE /api/tasks/{id}` → **204**.
-   Chỉ xoá được task **chưa giao ai, chưa có việc/mục/dữ liệu nộp**; đã gắn chiến dịch thì
-   **409 `task_in_campaign`**, đã hoàn thành thì **409 `task_completed`**, còn có người nhận hoặc
-   công việc thì **409 `task_has_work`**. Task không của mình thì **403 `task_not_owned`**
-   (Admin thì qua được).
+4. **Xoá task** là việc không hoàn tác được: `DELETE /api/tasks/{id}` → **204**.
+   Xoá cứng được task **đã gỡ khỏi chiến dịch** (`campaignId: null`) và **chưa có dữ liệu
+   nộp thật** — không có bản ghi nộp về hay lượt duyệt nào trỏ tới task; lượt giao
+   (`task_assignment`) và hàng chờ (`task_script`/`task_recording`) bị xoá theo. Đã gắn
+   chiến dịch thì **409 `task_in_campaign`**, đã hoàn thành thì **409 `task_completed`**,
+   đã có dữ liệu nộp thì **409 `task_has_work`** (dùng `POST /api/tasks/{id}/cancel` để
+   giữ dấu vết). Task không của mình thì **403 `task_not_owned`** (Admin thì qua được).
 
 | Lỗi | Nghĩa |
 |---|---|
@@ -692,7 +696,7 @@ giao) — các dòng có `canReview: false`, nộp duyệt vẫn trả 403 `task
 | Tạo task | `POST /api/tasks` `{ "campaignId": 2, "taskType": "Recording", "description": "…", "targetQty": 10, "deadline": "2026-09-30T17:00:00+07:00" }` — `campaignId` để trống/`null` = task độc lập |
 | Gắn/chuyển/gỡ chiến dịch | `PATCH /api/tasks/{id}/campaign` `{ "campaignId": 2 }` — `null` = gỡ về độc lập |
 | Gỡ task khỏi chiến dịch (giữ task) | `DELETE /api/campaigns/{id}/tasks/{taskId}` |
-| Xoá task rỗng | `DELETE /api/tasks/{id}` → 204 — chỉ task chưa giao, chưa có việc, chưa gắn chiến dịch |
+| Xoá task | `DELETE /api/tasks/{id}` → 204 — task đã gỡ khỏi chiến dịch và chưa có dữ liệu nộp thật (lượt giao, hàng chờ xoá theo) |
 | Chi tiết task | `GET /api/tasks/{id}` — tiến độ, lịch sử giao, danh sách mục (`campaignId`/`campaignName` có thể `null`) |
 | Sửa task | `PATCH /api/tasks/{id}` — chỉ gửi trường cần đổi (không đổi chiến dịch ở đây) |
 | Thêm mục chọn tay | `POST /api/tasks/{id}/items` `{ "ids": ["s_211000001", "s_131000002"] }` |
@@ -723,6 +727,11 @@ Task chưa giao cho ai thì không được cướp câu của người khác �
   Task đã `Cancelled` thì khoá, không sửa được nữa (409 `task_cancelled`).
 - **Chỉ tiêu không được vượt số mục trong task.** Giao task mà `targetQty` lớn hơn số mục người nhận làm được
   thì nhận **422 `target_exceeds_items`**. Thêm mục hoặc hạ chỉ tiêu trước khi giao.
+- **Bản ghi chờ duyệt tự vào hàng chờ task duyệt cùng đợt.** Speaker nộp xong một bản `PendingReview`
+  thuộc task thu âm của đợt X thì hệ thống tự thêm nó vào **mọi task duyệt chưa huỷ của đợt X**
+  (kể cả task đã đủ chỉ tiêu — Reviewer vẫn duyệt thêm được). Không phải bấm "Thêm mục";
+  hai cách thêm tay/autoFill ở trên vẫn dùng bình thường. Bản trượt QC không vào hàng chờ;
+  bản thu ngoài đợt vẫn để Reviewer nhặt ở hàng chờ chung.
 
 ### Admin
 
@@ -731,7 +740,9 @@ Task chưa giao cho ai thì không được cướp câu của người khác �
 | Nhập kho câu từ file | `POST /api/scripts/import` — multipart, trường **`File`** là file JSON theo mẫu `docs/Requirement.txt` |
 | Thêm một cặp câu | `POST /api/scripts` — body như phần đóng góp câu. Câu vào thẳng `Validated` kèm một lượt duyệt `Accepted` tự động của chính Admin |
 | Kho câu | `GET /api/scripts` — lọc tuỳ chọn: `status`, `domain`, `keyword`, `page`, `pageSize`. Chi tiết: `GET /api/scripts/{id}` |
-| Khôi phục câu đã loại | `POST /api/scripts/{id}/restore` — `Rejected`/`Deactivated` về `PendingValidation` |
+| Xoá cứng câu chờ duyệt | `DELETE /api/scripts/{id}` — chỉ `PendingValidation`; `409 script_not_pending` nếu đã duyệt, `409 script_already_recorded` nếu đã có bản ghi âm |
+| Ngừng dùng câu (xoá mềm) | `POST /api/scripts/{id}/deactivate` — `PendingValidation`/`Validated` → `Deactivated`; chặn nếu đã có bản ghi âm |
+| Khôi phục câu đã loại/ngừng dùng | `POST /api/scripts/{id}/reactivate` — `Rejected`/`Deactivated` về `PendingValidation` |
 | Dataset | `POST /api/datasets` (gom bản duyệt đạt theo `recordingIds` và/hoặc `campaignIds`), `GET /api/datasets`, `GET /api/datasets/{id}` (kèm `missingPairs`), `POST /api/datasets/{id}/release`, `POST /api/datasets/{id}/archive`, `GET /api/datasets/{id}/download` (ZIP `manifest.json` + `metadata.csv`, link nghe 15 phút) |
 | Bản ghi | `GET /api/recordings` — lọc tuỳ chọn: `status`, `scriptId`, `speakerId`, `page`, `pageSize`. Nghe: `GET /api/recordings/{id}/audio-url` |
 | Cấu hình | `GET /api/admin/config`, `PUT /api/admin/config/{key}` `{ "value": "30" }` |

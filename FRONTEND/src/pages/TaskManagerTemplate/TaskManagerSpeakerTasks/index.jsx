@@ -109,7 +109,7 @@ export default function TaskManagerSpeakerTasks() {
         }
 
         // Lấy đúng trường chỉ tiêu từ API Backend
-        const actualTarget = t.targetQty ?? t.target ?? t.targetQuantity ?? t.targetCount ?? t.totalItems ?? 10;
+        const actualTarget = t.progress?.targetQty ?? 10;
 
         return {
           id: t.taskId || t.id,

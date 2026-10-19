@@ -32,7 +32,7 @@ export const adminService = {
   // 3. Cấu hình Hệ thống (System Config)
   getTextConfig: async (key) => {
     const res = await httpClient.get(`/api/config/${key}`);
-    return res.data; // SystemConfigDto { key, value }
+    return res.data;
   },
   updateTextConfig: async (key, value) => {
     const res = await httpClient.put(`/api/admin/config/${key}`, {
@@ -56,15 +56,32 @@ export const adminService = {
     const res = await httpClient.post("/api/scripts", data);
     return res.data;
   },
+  importScripts: async (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await httpClient.post("/api/scripts/import", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data"
+      }
+    });
+    return res.data;
+  },
+  updatePendingScript: async (id, data) => {
+    const res = await httpClient.put(`/api/scripts/${id}`, data);
+    return res.data;
+  },
   reviewScript: async (id, data) => {
     const res = await httpClient.post(`/api/scripts/${id}/review`, data);
     return res.data;
   },
-  // Xóa/Loại bỏ văn bản đúng quy chuẩn Backend Review API
   deleteText: async (id) => {
+    const reasonsRes = await httpClient.get("/api/script-error-reasons");
+    const reasonsList = reasonsRes.data || [];
+    const validReasonCode = reasonsList[0]?.code || "INVALID_CONTENT";
+
     const res = await httpClient.post(`/api/scripts/${id}/review`, {
       action: "Rejected",
-      errorReasonCode: "OTHER" // Hoặc mã lý do do Backend trả về từ API /api/script-error-reasons
+      errorReasonCode: validReasonCode
     });
     return res.data;
   },
@@ -80,6 +97,48 @@ export const adminService = {
   },
   getRecordingReviews: async (id) => {
     const res = await httpClient.get(`/api/recordings/${id}/reviews`);
+    return res.data;
+  },
+
+  // 7. Quản lý Datasets theo DatasetsController chuẩn BE
+  getDatasets: async (params) => {
+    const res = await httpClient.get("/api/datasets", { params });
+    return res.data;
+  },
+  getDatasetDetail: async (id) => {
+    const res = await httpClient.get(`/api/datasets/${id}`);
+    return res.data;
+  },
+  createDataset: async (data) => {
+    const res = await httpClient.post("/api/datasets", data);
+    return res.data;
+  },
+  releaseDataset: async (id, data = { fileFormat: 1 }) => {
+    const res = await httpClient.post(`/api/datasets/${id}/release`, data);
+    return res.data;
+  },
+  archiveDataset: async (id) => {
+    const res = await httpClient.post(`/api/datasets/${id}/archive`);
+    return res.data;
+  },
+  exportDatasetZip: async (datasetId) => {
+    let targetId = datasetId;
+
+    if (!targetId) {
+      const listRes = await httpClient.get("/api/datasets?pageSize=1");
+      const items = listRes.data?.items || listRes.data || [];
+      if (items.length > 0) {
+        targetId = items[0].datasetId || items[0].id;
+      }
+    }
+
+    if (!targetId) {
+      throw new Error("Chưa có Dataset nào được khởi tạo hoặc phát hành trên hệ thống!");
+    }
+
+    const res = await httpClient.get(`/api/datasets/${targetId}/download`, {
+      responseType: "blob"
+    });
     return res.data;
   }
 };

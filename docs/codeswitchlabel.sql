@@ -442,6 +442,9 @@ CREATE INDEX idx_recording_status  ON recording (status);
 CREATE UNIQUE INDEX uq_recording_active_variant
     ON recording (script_id, sentence_variant) WHERE status IN ('pending_review', 'approved');
 
+-- Hàng chờ của task duyệt. [TEAM_018] Không chỉ Task Manager thêm tay/autoFill: khi Speaker nộp
+-- một bản ghi 'pending_review' thuộc task có đợt X, hệ thống tự thêm bản ghi vào MỌI task duyệt
+-- chưa huỷ của đợt X (RecordingService → TaskProgressTracker, cùng transaction với lúc lưu bản ghi).
 CREATE TABLE task_recording (
     task_id      BIGINT NOT NULL REFERENCES task(task_id) ON DELETE CASCADE,
     recording_id VARCHAR(20) NOT NULL REFERENCES recording(recording_id),

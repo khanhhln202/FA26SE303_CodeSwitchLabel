@@ -474,8 +474,84 @@ public class ScriptService(
 
     // ----------------------------------------------------------------- nội bộ
 
-    /// <summary>Khôi phục câu đã bị loại về chờ duyệt nội dung.</summary>
-    public async Task<ScriptDetailDto> RestoreAsync(string scriptId, CancellationToken ct = default)
+    /// <summary>
+    /// Xoá cứng một câu đang chờ duyệt.
+    ///
+    /// Chỉ câu chưa từng được duyệt mới đi đường này. Câu đã có bản ghi âm bị chặn vì
+    /// audio/S3 và lịch sử duyệt sẽ mồ côi — trường hợp đó dùng nút "Xoá hoàn toàn" ở màn
+    /// bản ghi (xoá mềm, giữ dấu vết).
+    /// </summary>
+    public async Task DeletePendingAsync(string scriptId, CancellationToken ct = default)
+    {
+        await using var transaction = await repository.BeginTransactionAsync(ct);
+
+        var script = await repository.GetForUpdateAsync(scriptId, ct)
+                     ?? throw NotFoundException.Script(scriptId);
+
+        if (script.Status != ScriptStatus.PendingValidation)
+        {
+            throw new ConflictException(
+                "script_not_pending",
+                $"Cặp câu {scriptId} đang là {script.Status} nên không xoá cứng được. " +
+                "Chỉ câu đang chờ duyệt mới xoá cứng được.");
+        }
+
+        if (await repository.HasRecordingsAsync(scriptId, ct))
+        {
+            throw new ConflictException(
+                "script_already_recorded",
+                $"Cặp câu {scriptId} đã có bản ghi âm nên không xoá cứng được. " +
+                "Dùng 'Xoá hoàn toàn' ở màn bản ghi để loại cả câu lẫn audio.");
+        }
+
+        await repository.DeleteRelatedAsync(scriptId, ct);
+        repository.Remove(script);
+        await repository.SaveChangesAsync(ct);
+
+        await transaction.CommitAsync(ct);
+    }
+
+    /// <summary>
+    /// Ngừng dùng một câu — xoá mềm bằng status Deactivated. Trigger fn_script_queue_sync
+    /// tự rút câu khỏi mọi chặng; TaskProgressTracker dọn các mục đang nằm trong task.
+    ///
+    /// Câu đã có bản ghi âm không đi đường này: phải dùng "Xoá hoàn toàn" ở màn bản ghi
+    /// để đánh dấu audio bị loại, nếu không audio vẫn nằm trong kho/dataset.
+    /// </summary>
+    public async Task<ScriptDetailDto> DeactivateAsync(string scriptId, CancellationToken ct = default)
+    {
+        await using var transaction = await repository.BeginTransactionAsync(ct);
+
+        var script = await repository.GetForUpdateAsync(scriptId, ct)
+                     ?? throw NotFoundException.Script(scriptId);
+
+        if (script.Status is not (ScriptStatus.PendingValidation or ScriptStatus.Validated))
+        {
+            throw new ConflictException(
+                "script_not_deactivatable",
+                $"Cặp câu {scriptId} đang là {script.Status} nên không ngừng dùng được.");
+        }
+
+        if (await repository.HasRecordingsAsync(scriptId, ct))
+        {
+            throw new ConflictException(
+                "script_already_recorded",
+                $"Cặp câu {scriptId} đã có bản ghi âm nên không ngừng dùng trực tiếp được. " +
+                "Dùng 'Xoá hoàn toàn' ở màn bản ghi để loại cả câu lẫn audio.");
+        }
+
+        script.Status = ScriptStatus.Deactivated;
+        await repository.SaveChangesAsync(ct);
+
+        await taskTracker.OnPairDiscardedAsync(scriptId, ct);
+
+        await transaction.CommitAsync(ct);
+
+        return (await repository.GetWithReviewsAsync(scriptId, ct))!.ToDetail();
+    }
+
+    /// <summary>Khôi phục câu đã bị loại/ngừng dùng về chờ duyệt nội dung.</summary>
+    public async Task<ScriptDetailDto> ReactivateAsync(string scriptId, CancellationToken ct = default)
     {
         var script = await repository.GetForUpdateAsync(scriptId, ct)
                      ?? throw NotFoundException.Script(scriptId);

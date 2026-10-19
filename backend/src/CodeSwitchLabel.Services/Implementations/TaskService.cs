@@ -34,7 +34,7 @@ internal static class TaskMapper
             r.Deadline.HasValue && r.Deadline.Value < now && TaskStateMachine.AcceptsWork(r.Status));
     }
 
-    // TEAM_003: Tính toán khả năng xoá của task (chỉ task rảnh: chưa gắn đợt + chưa có việc)
+    // TEAM_003: Tính toán khả năng xoá của task (đã gỡ khỏi đợt + chưa có dữ liệu nộp thật)
     public static (bool CanDelete, string? Reason) EvaluateCanDelete(this TaskRow r)
     {
         if (r.CampaignId.HasValue)
@@ -43,15 +43,8 @@ internal static class TaskMapper
         if (r.Status == WorkTaskStatus.Completed)
             return (false, "Nhiệm vụ đã hoàn thành, không xoá được.");
 
-        if (r.AssigneeCount > 0)
-        {
-            var names = string.Join(", ", r.Assignees.Select(a => a.FullName));
-            var who = r.AssigneeCount == 1 ? names : $"{names} ({r.AssigneeCount} người)";
-            return (false, $"Nhiệm vụ đã giao cho {who}. Dùng chức năng Huỷ nếu muốn dừng việc.");
-        }
-
-        if (r.TotalItems > 0 || r.Started > 0)
-            return (false, "Nhiệm vụ đã có mục công việc hoặc dữ liệu nộp về. Dùng chức năng Huỷ để giữ dấu vết.");
+        if (r.Started > 0)
+            return (false, "Nhiệm vụ đã có dữ liệu nộp/duyệt. Dùng chức năng Huỷ để giữ dấu vết.");
 
         return (true, null);
     }
@@ -401,7 +394,8 @@ public class TaskService(
                 var share = PerPersonQuota(request.TargetQty.Value, active.Count);
                 var (workable, blocked) = await CountWorkableAsync(task, active, null, ct);
 
-                if (share > workable)
+                // TEAM_018: task duyệt trong đợt được nâng chỉ tiêu trước khi có bản ghi.
+                if (RequiresItemsToAssign(task) && share > workable)
                 {
                     throw new UnprocessableException(
                         "target_exceeds_items",
@@ -673,7 +667,10 @@ public class TaskService(
         afterAssigning.AddRange(fresh.Select(f => new TaskAssignment { TaskId = taskId, UserId = f.UserId }));
         var (workable, blocked) = await CountWorkableAsync(task, afterAssigning, null, ct);
 
-        if (share > workable)
+        // TEAM_018: task duyệt trong đợt nhận việc qua đường tự đẩy lúc Speaker nộp, nên hàng
+        // chờ rỗng lúc giao KHÔNG phải lỗi — giao reviewer trước, bản ghi tự tới sau là luồng
+        // chính. Task thu âm và task duyệt ngoài đợt vẫn phải đủ mục trước khi giao.
+        if (RequiresItemsToAssign(task) && share > workable)
         {
             throw new UnprocessableException(
                 "target_exceeds_items",
@@ -761,6 +758,14 @@ public class TaskService(
     private static int PerPersonQuota(int targetQty, int assigneeCount) =>
         assigneeCount <= 1 ? targetQty : Math.Max(1, (int)Math.Ceiling(targetQty / (double)assigneeCount));
 
+    /// <summary>
+    /// TEAM_018: task duyệt trong đợt nhận việc qua đường tự đẩy lúc Speaker nộp, nên hàng chờ
+    /// rỗng lúc giao KHÔNG phải lỗi — giao reviewer trước, bản ghi tự tới sau là luồng chính.
+    /// Task thu âm và task duyệt ngoài đợt vẫn phải đủ mục trước khi giao/nâng chỉ tiêu.
+    /// </summary>
+    private static bool RequiresItemsToAssign(WorkTask task) =>
+        task.TaskType != TaskType.Review || task.CampaignId is null;
+
     public async Task<TaskDetailDto> CancelAsync(
         long taskId, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false)
@@ -784,7 +789,7 @@ public class TaskService(
         return await LoadDetailAsync(taskId, ct);
     }
 
-    // TEAM_003: Xoá cứng task rảnh (chưa gắn đợt nào và chưa có việc/mục/lượt giao)
+    // TEAM_003: Xoá cứng task đã gỡ khỏi đợt và chưa có dữ liệu nộp thật
     public async Task DeleteAsync(
         long taskId, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false)
@@ -808,13 +813,15 @@ public class TaskService(
             throw new ConflictException("task_completed", $"Nhiệm vụ #{taskId} đã hoàn thành, không xoá được.");
         }
 
-        // 3. Chặn xoá khi task đã có việc (lượt giao, mục script/bản ghi, bản ghi nộp về)
-        var hasWork = await tasks.HasWorkAsync(taskId, ct);
-        if (hasWork)
+        // 3. Chặn xoá khi task đã có dữ liệu nộp/duyệt thật (bản ghi nộp về, lượt duyệt).
+        //    Lượt giao và hàng chờ chỉ là sổ sách — task_assignment / task_script /
+        //    task_recording xoá theo task (ON DELETE CASCADE).
+        var hasSubmitted = await tasks.HasSubmittedWorkAsync(taskId, ct);
+        if (hasSubmitted)
         {
             throw new ConflictException(
                 "task_has_work",
-                $"Nhiệm vụ #{taskId} đã có người nhận, mục công việc hoặc dữ liệu nộp về. Dùng chức năng Huỷ nếu không làm nữa để giữ dấu vết.");
+                $"Nhiệm vụ #{taskId} đã có dữ liệu nộp/duyệt. Dùng chức năng Huỷ nếu không làm nữa để giữ dấu vết.");
         }
 
         tasks.RemoveTask(task);
@@ -1025,7 +1032,9 @@ public class TaskService(
 
         var (workable, blocked) = await CountWorkableAsync(task, active, itemId, ct);
 
-        if (task.TargetQty > workable)
+        // TEAM_018: task duyệt trong đợt tự đầy lại khi có bản ghi mới, nên gỡ một mục
+        // không làm task kẹt — cùng lý do với RequiresItemsToAssign ở đường giao việc.
+        if (RequiresItemsToAssign(task) && task.TargetQty > workable)
         {
             throw new ConflictException(
                 "target_exceeds_items",
