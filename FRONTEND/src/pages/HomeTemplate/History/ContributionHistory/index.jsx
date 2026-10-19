@@ -36,9 +36,8 @@ function toRow(item) {
     alignment: item.alignment ?? [],
     date: formatDateTime(item.createdAt),
     status: STATUS_OF[item.status] ?? "Pending",
-    // Lượt duyệt nội dung: Accepted / Edited / Rejected (kèm nhận xét)
-    reviews: (item.reviews ?? []).map((r, i) => ({
-      reviewer: `R${i + 1}`,
+    // Lượt duyệt nội dung (mỗi câu chỉ 1 người duyệt): Accepted / Edited / Rejected (kèm nhận xét)
+    reviews: (item.reviews ?? []).map((r) => ({
       decision: r.decision === "Rejected" ? "reject" : "approve",
       reason: r.decision === "Edited" ? `Đã sửa câu${r.reason ? `: ${r.reason}` : ""}` : r.reason,
     })),
@@ -97,8 +96,8 @@ function StatCard({ icon: Icon, label, value, pct, accent, bg }) {
   );
 }
 
-// Kết quả (trạng thái + số phiếu đã bỏ) - gộp "Trạng thái" và "Phản hồi" cũ, bấm để xem chi tiết
-function ResultButton({ status, votedCount, onClick, ariaLabel }) {
+// Kết quả (trạng thái câu API trả về, mỗi câu chỉ 1 người duyệt) - bấm để xem chi tiết
+function ResultButton({ status, onClick, ariaLabel }) {
   const s = {
     Approved: { bg: "#EAF7EF", border: "rgba(63,166,107,0.25)", text: "#1F5C3F", icon: CheckCircle2, label: "Đã duyệt" },
     Rejected: { bg: "#FDEAEA", border: "#F3C9C9", text: "#C63B3B", icon: XCircle, label: "Từ chối" },
@@ -113,7 +112,7 @@ function ResultButton({ status, votedCount, onClick, ariaLabel }) {
       style={{ background: s.bg, borderColor: s.border, color: s.text }}
     >
       <Icon className="w-3 h-3 shrink-0" />
-      <span>{s.label} · {votedCount}/3</span>
+      <span>{s.label}</span>
     </button>
   );
 }
@@ -252,7 +251,6 @@ export default function ContributionHistory() {
                   </td>
                 </tr>
               ) : pageItems.map((item, idx) => {
-                const votedCount = item.reviews.filter((r) => r.decision === "approve" || r.decision === "reject").length;
                 return (
                   <tr key={item.id} onClick={() => setDetailItem(item)} className={`border-b border-[#F0EEE6] hover:bg-[#F7F5EF]/70 transition-colors group h-11 cursor-pointer ${pageItems.length === itemsPerPage ? "last:border-b-0" : ""}`}>
                     <td className="px-3 text-center whitespace-nowrap align-middle">
@@ -269,7 +267,7 @@ export default function ContributionHistory() {
                       <span className="text-[#6E7078] type-meta">{item.date}</span>
                     </td>
                     <td className="px-3 text-left align-middle">
-                      <ResultButton status={item.status} votedCount={votedCount} onClick={(e) => { e.stopPropagation(); setDetailItem(item); }} ariaLabel={`Xem kết quả kiểm duyệt, ${item.id}`} />
+                      <ResultButton status={item.status} onClick={(e) => { e.stopPropagation(); setDetailItem(item); }} ariaLabel={`Xem kết quả kiểm duyệt, ${item.id}`} />
                     </td>
                   </tr>
                 );
@@ -283,7 +281,7 @@ export default function ContributionHistory() {
         </div>
       </div>
 
-      {/* POPUP CHI TIẾT - 3 reviewer, giống RecordingHistory */}
+      {/* POPUP CHI TIẾT - kết quả của người duyệt */}
       {detailItem && (() => {
         const ResultIcon = detailItem.status === "Approved" ? CheckCircle2 : detailItem.status === "Rejected" ? AlertCircle : Clock;
         const accent = detailItem.status === "Rejected" ? "#C63B3B" : detailItem.status === "Approved" ? "#3FA66B" : "#A85E12";
@@ -315,7 +313,7 @@ export default function ContributionHistory() {
                 {detailItem.reviews.length === 0 && (
                   <p className="type-meta text-[#6E7078]">Câu đang chờ duyệt nội dung. Kết quả hiện khi có người duyệt.</p>
                 )}
-                {/* 3 reviewer - giống RecordingHistory */}
+                {/* Lượt duyệt API trả về (1 người duyệt) */}
                 <div className="flex flex-col gap-2">
                   {detailItem.reviews.filter((r) => r.decision !== "not_needed" && (detailItem.status === "Pending" || r.decision === "approve" || r.decision === "reject")).map((r, i) => {
                     const isReject = r.decision === "reject";
@@ -325,7 +323,7 @@ export default function ContributionHistory() {
                     const rowBorder = isReject ? "#F3C9C9" : isApprove ? "rgba(63,166,107,0.2)" : "#F5DFC0";
                     return (
                       <div key={i} className="flex gap-2.5 px-3 py-2.5 rounded-xl border" style={{ background: rowBg, borderColor: rowBorder }}>
-                        <span className="w-6 h-6 rounded-full text-white text-caption font-label flex items-center justify-center flex-shrink-0" style={{ background: c }}>{r.reviewer}</span>
+                        <span className="w-6 h-6 rounded-full text-white text-caption font-label flex items-center justify-center flex-shrink-0" style={{ background: c }}>{isReject ? <XCircle className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}</span>
                         <div className="min-w-0">
                           <p className="text-meta font-label" style={{ color: isApprove ? "#1F5C3F" : c }}>
                             {isReject ? `Từ chối${r.errorCategory ? " · " + r.errorCategory : ""}` : isApprove ? "Đã duyệt" : "Chưa đánh giá"}
