@@ -301,7 +301,7 @@ Lỗi hệ thống trả 500 với `code: "internal_error"`. Gặp lỗi này th
 | `assignee_required` | 422 (giao) / 403 (chia lô câu) | Giao task mà không chọn người nhận, hoặc chia lô câu cho người không giữ task | Chặn ngay ở form: bắt chọn người nhận hợp lệ |
 | `assignee_not_found` | 404 | Gỡ một người không giữ task đó | Tải lại chi tiết task |
 | `campaign_not_owned` | 403 | Chiến dịch thuộc Task Manager khác quản lý | Ẩn nút sửa/xoá chiến dịch ngoài danh sách của mình |
-| `task_in_campaign` / `task_has_work` / `task_not_owned` | 409 / 409 / 403 | Xoá task đang gắn chiến dịch, task đã có người nhận hoặc công việc, hay task không của mình | Hiện `title`; chỉ hiện nút **Xoá** cho task rỗng thuộc quyền mình |
+| `task_in_campaign` / `task_has_work` / `task_not_owned` | 409 / 409 / 403 | Xoá task đang gắn chiến dịch, task đã có dữ liệu nộp/duyệt, hay task không của mình | Hiện `title`; gỡ task khỏi đợt trước khi xoá — lượt giao và hàng chờ bị xoá theo task, chỉ dữ liệu nộp thật mới chặn |
 | `task_domain_mismatch_campaign` | 422 | Chủ đề của task khác chủ đề của chiến dịch | Khoá ô chọn chủ đề theo chủ đề chiến dịch |
 | `batch_size_invalid` | 422 | Chia lô câu với `count` < 1 | Chặn ở ô nhập số câu |
 | `not_a_review_task` / `text_review_not_assigned` | 422 / 403 | Chia lô câu cho task không phải task duyệt, hoặc duyệt câu chưa được giao cho mình | Tải lại danh sách lô được giao |
@@ -673,11 +673,13 @@ giao) — các dòng có `canReview: false`, nộp duyệt vẫn trả 403 `task
 3. **Gỡ chứ không xoá:** `DELETE /api/campaigns/{id}/tasks/{taskId}` chỉ gỡ task khỏi chiến dịch
    (task còn tồn tại với `campaignId: null`, giữ assignments/items). Muốn đóng task thì dùng
    `POST /api/tasks/{id}/cancel` (task ở lại với trạng thái `Cancelled`).
-4. **Xoá task rỗng** là việc duy nhất API cho phép xoá cứng: `DELETE /api/tasks/{id}` → **204**.
-   Chỉ xoá được task **chưa giao ai, chưa có việc/mục/dữ liệu nộp**; đã gắn chiến dịch thì
-   **409 `task_in_campaign`**, đã hoàn thành thì **409 `task_completed`**, còn có người nhận hoặc
-   công việc thì **409 `task_has_work`**. Task không của mình thì **403 `task_not_owned`**
-   (Admin thì qua được).
+4. **Xoá task** là việc không hoàn tác được: `DELETE /api/tasks/{id}` → **204**.
+   Xoá cứng được task **đã gỡ khỏi chiến dịch** (`campaignId: null`) và **chưa có dữ liệu
+   nộp thật** — không có bản ghi nộp về hay lượt duyệt nào trỏ tới task; lượt giao
+   (`task_assignment`) và hàng chờ (`task_script`/`task_recording`) bị xoá theo. Đã gắn
+   chiến dịch thì **409 `task_in_campaign`**, đã hoàn thành thì **409 `task_completed`**,
+   đã có dữ liệu nộp thì **409 `task_has_work`** (dùng `POST /api/tasks/{id}/cancel` để
+   giữ dấu vết). Task không của mình thì **403 `task_not_owned`** (Admin thì qua được).
 
 | Lỗi | Nghĩa |
 |---|---|
@@ -692,7 +694,7 @@ giao) — các dòng có `canReview: false`, nộp duyệt vẫn trả 403 `task
 | Tạo task | `POST /api/tasks` `{ "campaignId": 2, "taskType": "Recording", "description": "…", "targetQty": 10, "deadline": "2026-09-30T17:00:00+07:00" }` — `campaignId` để trống/`null` = task độc lập |
 | Gắn/chuyển/gỡ chiến dịch | `PATCH /api/tasks/{id}/campaign` `{ "campaignId": 2 }` — `null` = gỡ về độc lập |
 | Gỡ task khỏi chiến dịch (giữ task) | `DELETE /api/campaigns/{id}/tasks/{taskId}` |
-| Xoá task rỗng | `DELETE /api/tasks/{id}` → 204 — chỉ task chưa giao, chưa có việc, chưa gắn chiến dịch |
+| Xoá task | `DELETE /api/tasks/{id}` → 204 — task đã gỡ khỏi chiến dịch và chưa có dữ liệu nộp thật (lượt giao, hàng chờ xoá theo) |
 | Chi tiết task | `GET /api/tasks/{id}` — tiến độ, lịch sử giao, danh sách mục (`campaignId`/`campaignName` có thể `null`) |
 | Sửa task | `PATCH /api/tasks/{id}` — chỉ gửi trường cần đổi (không đổi chiến dịch ở đây) |
 | Thêm mục chọn tay | `POST /api/tasks/{id}/items` `{ "ids": ["s_211000001", "s_131000002"] }` |

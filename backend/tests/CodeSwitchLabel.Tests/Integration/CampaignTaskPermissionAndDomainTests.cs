@@ -264,7 +264,7 @@ public sealed class CampaignTaskPermissionAndDomainTests(DatabaseFixture fixture
     }
 
     [Fact]
-    public async Task XoaTask_DaCoNguoiNhan_BaoLoi409()
+    public async Task XoaTask_DaGiaoNguoiNhungChuaCoDuLieuNop_XoaDuoc()
     {
         var adminToken = await GetAdminTokenAsync();
         var managerToken = await GetManagerTokenAsync();
@@ -310,10 +310,13 @@ public sealed class CampaignTaskPermissionAndDomainTests(DatabaseFixture fixture
         var assignRes = await PostAsync($"/api/tasks/{taskId}/assign", new { userIds = new[] { speakerId } }, managerToken);
         Assert.Equal(HttpStatusCode.OK, assignRes.StatusCode);
 
-        // 5. Xoá task đã có việc -> 409 task_has_work
+        // 5. Xoá task: lượt giao + mục công việc chỉ là sổ sách, chưa có dữ liệu nộp -> xoá cứng được
         var deleteRes = await DeleteAsync($"/api/tasks/{taskId}", managerToken);
-        Assert.Equal(HttpStatusCode.Conflict, deleteRes.StatusCode);
-        Assert.Equal("task_has_work", await LayMaLoiAsync(deleteRes));
+        Assert.Equal(HttpStatusCode.NoContent, deleteRes.StatusCode);
+
+        // 6. Task biến mất hẳn
+        var getRes = await GetAsync($"/api/tasks/{taskId}", managerToken);
+        Assert.Equal(HttpStatusCode.NotFound, getRes.StatusCode);
     }
 
     // ----------------------------------------------------------------- Trợ giúp
