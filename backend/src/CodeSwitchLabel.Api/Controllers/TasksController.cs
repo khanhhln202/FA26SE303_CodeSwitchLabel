@@ -194,8 +194,8 @@ public class TasksController(ITaskService taskService) : ControllerBase
     public async Task<ActionResult<TaskDetailDto>> Cancel(long id, CancellationToken ct)
         => Ok(await taskService.CancelAsync(id, ct, User.GetUserId(), User.IsInRole("Admin")));
 
-    // TEAM_003: Xoá cứng nhiệm vụ rảnh (chưa gắn đợt và chưa có việc)
-    /// <summary>Xoá nhiệm vụ. Chỉ xoá được task rảnh (chưa gắn vào đợt nào và chưa có việc/mục/người nhận).</summary>
+    // TEAM_003: Xoá cứng nhiệm vụ đã gỡ khỏi đợt (chưa có dữ liệu nộp thật)
+    /// <summary>Xoá nhiệm vụ. Chỉ xoá được task đã gỡ khỏi đợt và chưa có dữ liệu nộp/duyệt thật.</summary>
     [HttpDelete("{id:long}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
