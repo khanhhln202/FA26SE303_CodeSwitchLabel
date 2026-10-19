@@ -199,14 +199,47 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
         string id, [FromBody] ReviewScriptRequest request, CancellationToken ct)
         => Ok(await scriptService.ReviewAsync(id, User.GetUserId(), request, ct));
 
-    /// <summary>Khôi phục cặp câu đã bị loại về chờ duyệt.</summary>
-    [HttpPost("{id}/restore")]
+    /// <summary>Xoá cứng một câu đang chờ duyệt.</summary>
+    /// <remarks>
+    /// Chỉ câu `PendingValidation` mới xoá cứng được. Câu đã duyệt trả **409 `script_not_pending`**;
+    /// câu đã có bản ghi âm trả **409 `script_already_recorded`** — trường hợp đó dùng
+    /// `POST /api/recordings/{id}/discard-pair` để xoá mềm cả câu lẫn audio.
+    ///
+    /// Xoá cứng kéo theo lịch sử duyệt và đề xuất của câu; dữ liệu không khôi phục được.
+    /// </remarks>
+    [HttpDelete("{id}")]
+    [Authorize(Roles = "Admin")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Delete(string id, CancellationToken ct)
+    {
+        await scriptService.DeletePendingAsync(id, ct);
+        return NoContent();
+    }
+
+    /// <summary>Ngừng dùng một câu (xoá mềm).</summary>
+    /// <remarks>
+    /// Câu chuyển sang `Deactivated` và tự rút khỏi mọi hàng đợi. Chỉ nhận câu đang
+    /// `PendingValidation` hoặc `Validated`; câu đã có bản ghi âm trả **409 `script_already_recorded`**
+    /// vì phải dùng `discard-pair` để đánh dấu audio bị loại.
+    /// </remarks>
+    [HttpPost("{id}/deactivate")]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(ScriptDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
-    public async Task<ActionResult<ScriptDetailDto>> Restore(string id, CancellationToken ct)
-        => Ok(await scriptService.RestoreAsync(id, ct));
+    public async Task<ActionResult<ScriptDetailDto>> Deactivate(string id, CancellationToken ct)
+        => Ok(await scriptService.DeactivateAsync(id, ct));
+
+    /// <summary>Khôi phục câu đã bị loại/ngừng dùng về chờ duyệt nội dung.</summary>
+    [HttpPost("{id}/reactivate")]
+    [Authorize(Roles = "Admin")]
+    [ProducesResponseType(typeof(ScriptDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<ScriptDetailDto>> Reactivate(string id, CancellationToken ct)
+        => Ok(await scriptService.ReactivateAsync(id, ct));
 }
 
 public class ImportScriptsForm
