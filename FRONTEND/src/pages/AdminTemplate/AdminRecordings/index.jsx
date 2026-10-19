@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Search, Download, CheckCircle2, XCircle, Play, Pause, Headphones, Filter, Eye, Clock, X, AlertCircle } from "lucide-react";
 import Pagination from "../../../components/Pagination/Pagination";
 import {
@@ -26,20 +26,33 @@ const CATEGORY_COLORS = {
 const getCatStyle = (cat) => CATEGORY_COLORS[cat] || { bg: '#F7F5EF', text: '#6E7078', border: '#E5E2D8' };
 
 const formatDurationText = (sec) => {
+  if (isNaN(sec) || sec < 0) return "00:00";
   const integerSec = Math.round(Number(sec));
+  const m = Math.floor(integerSec / 60);
   const s = integerSec % 60;
-  return `00:${s < 10 ? '0' : ''}${s}`;
+  return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
 };
 
 const calculateRecordingStatus = (reviewers = []) => {
   if (!Array.isArray(reviewers) || !reviewers.length) return "Pending";
-  const hasPending = reviewers.some((rev) => rev?.status === "Pending");
-  if (hasPending) return "Pending";
 
-  const rejectedCount = reviewers.filter((rev) => rev?.status === "Rejected").length;
+  const approvedCount = reviewers.filter(
+    (rev) => rev?.status === "Approved" || rev?.status === "Accepted"
+  ).length;
+
+  const rejectedCount = reviewers.filter(
+    (rev) => rev?.status === "Rejected"
+  ).length;
+
+  const hasPending = reviewers.some(
+    (rev) => rev?.status === "Pending" || rev?.status === "PendingReview"
+  );
+
+  if (rejectedCount > 0 && approvedCount === 0) return "Rejected";
   if (rejectedCount >= 2) return "Rejected";
+  if (approvedCount > 0 && approvedCount >= rejectedCount && !hasPending) return "Approved";
 
-  return "Approved";
+  return "Pending";
 };
 
 const getInitials = (name) => {
@@ -49,7 +62,6 @@ const getInitials = (name) => {
   return (parts[parts.length - 2].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 };
 
-// Hàm xóa chính xác tuyệt đối thẻ [vi] và [en] (Bắt buộc phải thoát ngoặc vuông [ ])
 const cleanLanguageTags = (str) => {
   if (!str) return "";
   return str
@@ -62,7 +74,6 @@ const cleanLanguageTags = (str) => {
 };
 
 
-// Component Highlight từ tiếng Anh chuẩn giống y hệt AdminTextData
 function HighlightCsText({ rawText }) {
   if (!rawText) return null;
 
@@ -123,12 +134,17 @@ export default function AdminRecordings() {
   
   const [playingRecording, setPlayingRecording] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+
+  const [userMapState, setUserMapState] = useState({});
+  const audioRef = useRef(null);
 
   const fetchRecordings = async () => {
     try {
       const [recRes, usersRes] = await Promise.all([
-        adminService.getRecordings({ page: currentPage, pageSize: 100 }),
-        adminService.getUsers({ page: 1, pageSize: 200 })
+        adminService.getRecordings({ page: 1, pageSize: 500 }),
+        adminService.getUsers({ page: 1, pageSize: 500 })
       ]);
 
       const items = recRes.items || recRes || [];
@@ -138,8 +154,8 @@ export default function AdminRecordings() {
       userItems.forEach((u) => {
         userMap[u.userId || u.id] = u.fullName || u.name;
       });
+      setUserMapState(userMap);
 
-      // Lấy danh sách ID các câu văn bản độc nhất để fetch thông tin nội dung
       const scriptIds = [...new Set(items.map(r => r.scriptId || r.textId).filter(Boolean))];
       const scriptMap = {};
 
@@ -159,25 +175,41 @@ export default function AdminRecordings() {
         })
       );
 
-      setRecordings(
-        items.map((r) => {
+      const recordingsWithReviews = await Promise.all(
+        items.map(async (r) => {
+          const recId = r.recordingId || r.id;
+          let reviews = [];
+          try {
+            const reviewsData = await adminService.getRecordingReviews(recId);
+            reviews = (Array.isArray(reviewsData) ? reviewsData : []).map((rev) => ({
+              name: rev.reviewerName || userMap[rev.reviewerId] || (rev.reviewerId ? `User #${rev.reviewerId}` : "Người kiểm duyệt"),
+              status: rev.decision || rev.status || "Pending",
+              reason: rev.reason || rev.comment || ""
+            }));
+          } catch (e) {
+            reviews = Array.isArray(r.reviewers) ? r.reviewers : [];
+          }
+
           const sId = r.scriptId || r.textId;
           const scriptInfo = scriptMap[sId] || {};
-          
+
           return {
-            id: r.recordingId || r.id || "",
-            rawId: r.recordingId || r.id || "",
+            id: recId || "",
+            rawId: recId || "",
             textId: sId || "N/A",
             content: r.csContent || r.scriptText || scriptInfo.csContent || r.content || "",
             contentVietnamese: r.viContent || r.contentVietnamese || scriptInfo.viContent || "",
             topic: r.domain || r.topic || "Công nghệ thông tin",
             speaker: userMap[r.speakerId] || (r.speakerId ? `User #${r.speakerId}` : "Chưa xác định"),
-            reviewers: Array.isArray(r.reviewers) ? r.reviewers : [],
+            reviewers: reviews,
             durationSec: r.durationSec || 0,
+            audioUrl: r.audioUrl || r.fileUrl || "",
             createdAt: r.recordedAt ? new Date(r.recordedAt).toLocaleDateString("vi-VN") : ""
           };
         })
       );
+
+      setRecordings(recordingsWithReviews);
     } catch (err) {
       console.error("Lỗi lấy danh sách bản thu âm:", err);
     }
@@ -185,13 +217,13 @@ export default function AdminRecordings() {
 
   useEffect(() => {
     fetchRecordings();
-  }, [currentPage]);
+  }, []);
 
   const handleOpenReviewersModal = async (recording) => {
     setSelectedReviewersList({
       ...recording,
       content: recording.content || "Đang tải nội dung câu...",
-      reviewers: []
+      reviewers: recording.reviewers || []
     });
 
     try {
@@ -203,7 +235,7 @@ export default function AdminRecordings() {
       ]);
 
       const formattedReviewers = (Array.isArray(reviewsData) ? reviewsData : []).map(rev => ({
-        name: rev.reviewerName || (rev.reviewerId ? `Reviewer #${rev.reviewerId}` : "Reviewer"),
+        name: rev.reviewerName || userMapState[rev.reviewerId] || (rev.reviewerId ? `User #${rev.reviewerId}` : "Người kiểm duyệt"),
         status: rev.decision || rev.status || "Pending",
         reason: rev.reason || rev.comment || ""
       }));
@@ -211,7 +243,7 @@ export default function AdminRecordings() {
       setSelectedReviewersList({
         ...recording,
         content: scriptDetail?.csContent || recording.content || "Không có nội dung",
-        reviewers: formattedReviewers
+        reviewers: formattedReviewers.length > 0 ? formattedReviewers : recording.reviewers
       });
     } catch (err) {
       console.error("Lỗi lấy thông tin kiểm duyệt:", err);
@@ -265,32 +297,50 @@ export default function AdminRecordings() {
     return Math.max(0, pageSize - paginatedRecordings.length);
   }, [paginatedRecordings.length, pageSize]);
 
+  // Hàm tải file Dataset chuẩn .ZIP từ API Backend
   const handleExportDataset = async () => {
     try {
-      const blob = await adminService.exportDatasetZip(1);
+      const blob = await adminService.exportDatasetZip();
       const url = window.URL.createObjectURL(new Blob([blob]));
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", `Dataset_Codeswitching.zip`);
+      link.setAttribute("download", `Dataset_Codeswitching_${new Date().toISOString().slice(0,10)}.zip`);
       document.body.appendChild(link);
       link.click();
       link.parentNode.removeChild(link);
+      window.URL.revokeObjectURL(url);
     } catch (err) {
-      alert("Xuất tập dữ liệu dataset thất bại!");
+      console.error("Lỗi tải dataset:", err);
+      alert("Không thể tải tập dữ liệu dataset! Vui lòng kiểm tra lại phía Server Backend.");
     }
   };
 
   const openAudioPlayer = async (recording) => {
+    let finalAudioUrl = recording.audioUrl;
     try {
       const res = await adminService.getAudioUrl(recording.rawId);
-      setPlayingRecording({
-        ...recording,
-        audioUrl: res.url || res
-      });
-    } catch {
-      setPlayingRecording(recording);
+      finalAudioUrl = res?.url || res || recording.audioUrl;
+    } catch (e) {
+      console.warn("Không lấy được URL audio riêng từ API, dùng fallback:", e);
     }
-    setIsPlaying(false);
+
+    setPlayingRecording({
+      ...recording,
+      audioUrl: finalAudioUrl
+    });
+    setIsPlaying(true);
+    setCurrentTime(0);
+  };
+
+  const togglePlayAudio = () => {
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      audioRef.current.play();
+      setIsPlaying(true);
+    }
   };
 
   return (
@@ -371,14 +421,14 @@ export default function AdminRecordings() {
       {/* Main Table Container */}
       <div className="bg-white dark:bg-[#1C1D22] rounded-2xl border border-[#E5E2D8] dark:border-gray-800 shadow-[0_1px_3px_rgba(16,17,20,0.04)] overflow-hidden transition-colors flex-1 flex flex-col justify-between my-1 min-h-0">
         <div className="flex-1 min-h-0 overflow-auto">
-          <table className="w-full h-full text-left border-collapse table-fixed min-w-[950px]">
+          <table className="w-full h-full text-left border-collapse table-fixed min-w-[980px]">
             <thead>
               <tr className="bg-[#F7F5EF] dark:bg-[#25272E] type-label text-[#9A9CA3] dark:text-gray-400 border-b border-[#E5E2D8] dark:border-gray-800 h-8">
                 <th className="w-[65px] px-2 text-center">STT</th>
                 <th className="px-4 text-left">Nội dung</th>
-                <th className="w-[160px] px-2">Chủ đề</th>
-                <th className="w-[140px] px-2">Speaker</th>
-                <th className="w-[170px] px-2 text-center">Phản hồi</th>
+                <th className="w-[150px] px-2">Chủ đề</th>
+                <th className="w-[170px] px-2">Speaker</th>
+                <th className="w-[160px] px-2 text-center">Phản hồi</th>
                 <th className="w-[100px] px-1.5 text-center">Nghe</th>
                 <th className="w-[125px] px-2 text-center whitespace-nowrap">Trạng thái</th>
               </tr>
@@ -399,10 +449,8 @@ export default function AdminRecordings() {
                           {stt}
                         </td>
 
-                        {/* Hiển thị 2 dòng VI-EN và VI sạch sẽ chuẩn y hệt AdminTextData */}
                         <td className="px-4 align-middle min-w-0">
                           <div className="space-y-0.5 my-0.5 pr-6">
-                            {/* Dòng 1: Trộn ngôn ngữ (VI-EN) */}
                             <div className="flex items-center gap-2">
                               <span 
                                 style={{ background: `${ADMIN_ACCENT}1A`, color: ADMIN_ACCENT }}
@@ -415,7 +463,6 @@ export default function AdminRecordings() {
                               </p>
                             </div>
 
-                            {/* Dòng 2: Tiếng Việt thuần (VI) */}
                             <div className="flex items-center gap-2">
                               <span 
                                 style={{ background: '#F0EEE6', color: '#6E7078' }}
@@ -443,11 +490,11 @@ export default function AdminRecordings() {
                           </span>
                         </td>
 
-                        <td className="px-2 font-bold text-[#16171C] dark:text-gray-100 align-middle truncate">
-                          <span title={r.speaker}>{r.speaker}</span>
+                        <td className="px-2 font-bold text-[#16171C] dark:text-gray-100 align-middle whitespace-nowrap">
+                          {r.speaker}
                         </td>
 
-                        {/* Cột Phản hồi */}
+                        {/* Cột Phản hồi - Sửa chuẩn ngữ pháp 1 reviewer vs N reviewers */}
                         <td className="px-2 text-center align-middle">
                           <button
                             type="button"
@@ -461,7 +508,9 @@ export default function AdminRecordings() {
                               className={rejectedRevCount > 0 ? "font-bold" : "text-[#6E7078] dark:text-gray-300"}
                             >
                               {totalRev > 0
-                                ? (rejectedRevCount > 0 ? `${rejectedRevCount}/${totalRev} từ chối` : `${totalRev} reviewers`)
+                                ? (rejectedRevCount > 0 
+                                    ? `${rejectedRevCount}/${totalRev} từ chối` 
+                                    : (totalRev === 1 ? `1 reviewer` : `${totalRev} reviewers`))
                                 : "Xem phản hồi"}
                             </span>
                             <Eye className="w-3 h-3 text-[#9A9CA3] dark:text-gray-400 shrink-0" />
@@ -481,7 +530,7 @@ export default function AdminRecordings() {
                           </button>
                         </td>
 
-                        {/* Trạng thái - Mở rộng width lên 125px & khoá whitespace-nowrap chống vỡ hàng */}
+                        {/* Trạng thái */}
                         <td className="px-2 text-center align-middle whitespace-nowrap w-[125px]">
                           {status === "Approved" && (
                             <span
@@ -564,6 +613,25 @@ export default function AdminRecordings() {
               className="h-1.5 w-full shrink-0" 
             />
 
+            {playingRecording.audioUrl && (
+              <audio
+                ref={audioRef}
+                src={playingRecording.audioUrl}
+                autoPlay={isPlaying}
+                onTimeUpdate={() => {
+                  if (audioRef.current) {
+                    setCurrentTime(audioRef.current.currentTime);
+                  }
+                }}
+                onLoadedMetadata={() => {
+                  if (audioRef.current) {
+                    setDuration(audioRef.current.duration || playingRecording.durationSec);
+                  }
+                }}
+                onEnded={() => setIsPlaying(false)}
+              />
+            )}
+
             <div className="p-6 space-y-5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
@@ -576,7 +644,10 @@ export default function AdminRecordings() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setPlayingRecording(null)}
+                  onClick={() => {
+                    if (audioRef.current) audioRef.current.pause();
+                    setPlayingRecording(null);
+                  }}
                   className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#F0EEE6] dark:hover:bg-gray-800 transition-colors cursor-pointer"
                 >
                   <X className="w-4 h-4 text-[#6E7078]" />
@@ -593,20 +664,42 @@ export default function AdminRecordings() {
               </div>
 
               <div className="space-y-1 pt-1">
-                <div className="relative w-full h-1.5 bg-[#E5E2D8] dark:bg-gray-700 rounded-full flex items-center cursor-pointer">
-                  <div className="h-full rounded-full w-0" style={{ backgroundColor: ADMIN_ACCENT }} />
-                  <div className="w-3 h-3 bg-white dark:bg-gray-200 border-2 rounded-full shadow-xs absolute left-0 -translate-x-1/2 cursor-pointer" style={{ borderColor: ADMIN_ACCENT }} />
+                <div 
+                  className="relative w-full h-1.5 bg-[#E5E2D8] dark:bg-gray-700 rounded-full flex items-center cursor-pointer"
+                  onClick={(e) => {
+                    if (!audioRef.current || !duration) return;
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const clickX = e.clientX - rect.left;
+                    const newTime = (clickX / rect.width) * duration;
+                    audioRef.current.currentTime = newTime;
+                    setCurrentTime(newTime);
+                  }}
+                >
+                  <div 
+                    className="h-full rounded-full transition-all duration-75" 
+                    style={{ 
+                      backgroundColor: ADMIN_ACCENT,
+                      width: `${duration ? (currentTime / duration) * 100 : 0}%` 
+                    }} 
+                  />
+                  <div 
+                    className="w-3 h-3 bg-white dark:bg-gray-200 border-2 rounded-full shadow-xs absolute -translate-x-1/2 cursor-pointer" 
+                    style={{ 
+                      borderColor: ADMIN_ACCENT,
+                      left: `${duration ? (currentTime / duration) * 100 : 0}%` 
+                    }} 
+                  />
                 </div>
                 <div className="flex items-center justify-between type-caption font-label text-[#9A9CA3] dark:text-gray-400 pt-1">
-                  <span>0:00</span>
-                  <span>-{formatDurationText(playingRecording.durationSec)}</span>
+                  <span>{formatDurationText(currentTime)}</span>
+                  <span>-{formatDurationText(duration > 0 ? duration - currentTime : playingRecording.durationSec)}</span>
                 </div>
               </div>
 
               <div className="flex justify-center pt-1 pb-1">
                 <button
                   type="button"
-                  onClick={() => setIsPlaying(!isPlaying)}
+                  onClick={togglePlayAudio}
                   style={{ backgroundColor: ADMIN_ACCENT }}
                   className="w-12 h-12 rounded-full text-white flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-md cursor-pointer"
                 >
@@ -626,7 +719,7 @@ export default function AdminRecordings() {
       {selectedReviewersList && (() => {
         const revList = Array.isArray(selectedReviewersList.reviewers) ? selectedReviewersList.reviewers : [];
         const total = revList.length;
-        const approvedCount = revList.filter(r => r?.status === "Approved").length;
+        const approvedCount = revList.filter(r => r?.status === "Approved" || r?.status === "Accepted").length;
         const rejectedCount = revList.filter(r => r?.status === "Rejected").length;
         const finalStatus = calculateRecordingStatus(revList);
 
@@ -702,7 +795,7 @@ export default function AdminRecordings() {
                 <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                   {revList.length > 0 ? (
                     revList.map((rev, idx) => {
-                      const isApp = rev?.status === "Approved";
+                      const isApp = rev?.status === "Approved" || rev?.status === "Accepted";
                       const isRej = rev?.status === "Rejected";
 
                       const itemBg = isApp ? CHIP_SUCCESS_BG : isRej ? CHIP_DANGER_BG : CHIP_WARNING_BG;
@@ -726,7 +819,7 @@ export default function AdminRecordings() {
                               {getInitials(rev?.name)}
                             </div>
 
-                            <span className="type-ui font-bold text-[#16171C] flex-1 truncate">
+                            <span className="type-ui font-bold text-[#16171C] dark:text-gray-100 flex-1 truncate">
                               {rev?.name || "Reviewer"}
                             </span>
 
@@ -739,7 +832,7 @@ export default function AdminRecordings() {
                           </div>
 
                           {isRej && rev?.reason && (
-                            <div className="pl-8 type-meta font-label text-[#16171C]">
+                            <div className="pl-8 type-meta font-label text-[#16171C] dark:text-gray-300">
                               {rev.reason}
                             </div>
                           )}
