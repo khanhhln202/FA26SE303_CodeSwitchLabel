@@ -10,7 +10,8 @@ màn hình nào gọi API nào theo thứ tự nào, cách xử lý đăng nhậ
 > (`/api/speaker/rounds/*`, `/api/speaker/recordings/rejected|history`, `/api/speaker/contributions/history`,
 > `/api/speaker/stats`), thống kê + lịch sử của Reviewer (`/api/reviewer/stats/*`,
 > `/api/reviewer/history/*`), tổng quan Task Manager (`/api/task-manager/overview`), đọc cấu hình
-> công khai (`/api/config`, `/api/config/topics`), khôi phục câu (`POST /api/scripts/{id}/restore`),
+> công khai (`/api/config`, `/api/config/topics`), vòng đời câu (`POST /api/scripts/{id}/reactivate|deactivate`,
+> `DELETE /api/scripts/{id}`),
 > xem lại task duyệt đã đóng (read-only), và dataset (`/api/datasets/*`). Xem lại task đã đóng,
 > khôi phục câu và dataset không còn nằm ở mục 10.
 >
@@ -322,6 +323,7 @@ Lỗi hệ thống trả 500 với `code: "internal_error"`. Gặp lỗi này th
 | `already_registered` | 409 | Đăng ký đợt đã đăng ký rồi | Hiện `title`, không làm gì thêm |
 | `registration_not_found` | 404 | Huỷ đăng ký đợt chưa đăng ký | Tải lại trạng thái đăng ký |
 | `script_not_restorable` | 409 | Khôi phục câu đang dùng được | Ẩn nút khôi phục khi `status` là `PendingValidation`/`Validated` |
+| `script_not_pending` / `script_not_deactivatable` | 409 | Xoá cứng câu không còn chờ duyệt, hoặc ngừng dùng câu đã ở trạng thái khác | Ẩn nút xoá/ngừng dùng theo `status` |
 | `dataset_exists` | 409 | Tạo dataset trùng tên + phiên bản | Hiện lỗi cạnh ô tên/phiên bản |
 | `dataset_not_found` | 404 | Dataset không tồn tại | Tải lại danh sách |
 | `dataset_not_releasable` / `dataset_not_released` | 409 | Thao tác sai trạng thái dataset | Ẩn nút theo `status` |
@@ -738,7 +740,9 @@ Task chưa giao cho ai thì không được cướp câu của người khác �
 | Nhập kho câu từ file | `POST /api/scripts/import` — multipart, trường **`File`** là file JSON theo mẫu `docs/Requirement.txt` |
 | Thêm một cặp câu | `POST /api/scripts` — body như phần đóng góp câu. Câu vào thẳng `Validated` kèm một lượt duyệt `Accepted` tự động của chính Admin |
 | Kho câu | `GET /api/scripts` — lọc tuỳ chọn: `status`, `domain`, `keyword`, `page`, `pageSize`. Chi tiết: `GET /api/scripts/{id}` |
-| Khôi phục câu đã loại | `POST /api/scripts/{id}/restore` — `Rejected`/`Deactivated` về `PendingValidation` |
+| Xoá cứng câu chờ duyệt | `DELETE /api/scripts/{id}` — chỉ `PendingValidation`; `409 script_not_pending` nếu đã duyệt, `409 script_already_recorded` nếu đã có bản ghi âm |
+| Ngừng dùng câu (xoá mềm) | `POST /api/scripts/{id}/deactivate` — `PendingValidation`/`Validated` → `Deactivated`; chặn nếu đã có bản ghi âm |
+| Khôi phục câu đã loại/ngừng dùng | `POST /api/scripts/{id}/reactivate` — `Rejected`/`Deactivated` về `PendingValidation` |
 | Dataset | `POST /api/datasets` (gom bản duyệt đạt theo `recordingIds` và/hoặc `campaignIds`), `GET /api/datasets`, `GET /api/datasets/{id}` (kèm `missingPairs`), `POST /api/datasets/{id}/release`, `POST /api/datasets/{id}/archive`, `GET /api/datasets/{id}/download` (ZIP `manifest.json` + `metadata.csv`, link nghe 15 phút) |
 | Bản ghi | `GET /api/recordings` — lọc tuỳ chọn: `status`, `scriptId`, `speakerId`, `page`, `pageSize`. Nghe: `GET /api/recordings/{id}/audio-url` |
 | Cấu hình | `GET /api/admin/config`, `PUT /api/admin/config/{key}` `{ "value": "30" }` |

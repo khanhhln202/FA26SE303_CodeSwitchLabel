@@ -58,8 +58,16 @@ public interface IScriptRepository
     void AddReview(ScriptReview review);
     void AddBatch(ImportBatch batch);
     void RemoveBatch(ImportBatch batch);
+    void Remove(Script script);
     void AddWords(IEnumerable<ScriptWord> words);
     void RemoveWords(IEnumerable<ScriptWord> words);
+
+    /// <summary>
+    /// Xoá các bảng con của câu không có ON DELETE CASCADE: script_review, script_proposal
+    /// và task_script. script_word + script_queue đã cascade ở database.
+    /// </summary>
+    Task DeleteRelatedAsync(string scriptId, CancellationToken ct = default);
+
     void ClearTracked();
 
     Task<int> SaveChangesAsync(CancellationToken ct = default);
@@ -236,9 +244,17 @@ public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
     public void AddReview(ScriptReview review) => db.ScriptReviews.Add(review);
     public void AddBatch(ImportBatch batch) => db.ImportBatches.Add(batch);
     public void RemoveBatch(ImportBatch batch) => db.ImportBatches.Remove(batch);
+    public void Remove(Script script) => db.Scripts.Remove(script);
     public void AddWords(IEnumerable<ScriptWord> words) => db.ScriptWords.AddRange(words);
     public void RemoveWords(IEnumerable<ScriptWord> words) => db.ScriptWords.RemoveRange(words);
     public void ClearTracked() => db.ChangeTracker.Clear();
+
+    public async Task DeleteRelatedAsync(string scriptId, CancellationToken ct = default)
+    {
+        await db.ScriptReviews.Where(r => r.ScriptId == scriptId).ExecuteDeleteAsync(ct);
+        await db.ScriptProposals.Where(p => p.ScriptId == scriptId).ExecuteDeleteAsync(ct);
+        await db.TaskScripts.Where(ts => ts.ScriptId == scriptId).ExecuteDeleteAsync(ct);
+    }
 
     public Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction> BeginTransactionAsync(
         CancellationToken ct = default) =>

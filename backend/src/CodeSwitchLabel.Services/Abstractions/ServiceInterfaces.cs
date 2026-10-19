@@ -41,8 +41,20 @@ public interface IScriptService
     Task<ScriptDetailDto> ReviewAsync(
         string scriptId, long userId, ReviewScriptRequest request, CancellationToken ct = default);
 
-    /// <summary>Khôi phục câu đã bị loại (Rejected/Deactivated) về chờ duyệt.</summary>
-    Task<ScriptDetailDto> RestoreAsync(string scriptId, CancellationToken ct = default);
+    /// <summary>
+    /// Xoá CỨNG một câu đang chờ duyệt. Chặn nếu câu đã duyệt hoặc đã có bản ghi âm —
+    /// câu đã thu phải dùng đường xoá mềm/discard-pair để không làm mồ côi audio.
+    /// </summary>
+    Task DeletePendingAsync(string scriptId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Ngừng dùng một câu (xoá mềm): PendingValidation/Validated → Deactivated.
+    /// Chặn nếu câu đã có bản ghi âm.
+    /// </summary>
+    Task<ScriptDetailDto> DeactivateAsync(string scriptId, CancellationToken ct = default);
+
+    /// <summary>Khôi phục câu đã bị loại/ngừng dùng (Rejected/Deactivated) về chờ duyệt.</summary>
+    Task<ScriptDetailDto> ReactivateAsync(string scriptId, CancellationToken ct = default);
 }
 
 public interface IScriptAssignmentService
