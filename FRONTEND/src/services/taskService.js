@@ -94,6 +94,12 @@ export const taskService = {
     return res.data;
   },
 
+  // Gỡ một người khỏi nhiệm vụ (bỏ phân công — API assign chỉ thêm, không tự bỏ)
+  unassignTask: async (id, userId) => {
+    const res = await apiClient.delete(`/api/tasks/${id}/assign/${Number(userId)}`);
+    return res.data;
+  },
+
   cancelTask: async (id) => {
     const res = await apiClient.post(`/api/tasks/${id}/cancel`);
     return res.data;

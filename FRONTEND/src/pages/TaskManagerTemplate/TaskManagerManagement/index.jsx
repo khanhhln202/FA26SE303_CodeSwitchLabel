@@ -197,7 +197,7 @@ export default function TaskManagerManagement() {
   const [editTaskFormData, setEditTaskFormData] = useState({
     title: "",
     role: "Speaker",
-    assignedUsers: []
+    assignedUserIds: []
   });
   const [deletingTask, setDeletingTask] = useState(null);
 
@@ -307,7 +307,15 @@ export default function TaskManagerManagement() {
           }
         }
 
-        const actualTarget = t.targetQty ?? t.target ?? t.targetQuantity ?? t.targetCount ?? t.totalItems ?? 10;
+        const actualTarget = t.progress?.targetQty ?? 10;
+
+        // Id người đang nhận để tick/bỏ checkbox — so theo tên là dính người trùng tên.
+        const rawAssigneesForIds = Array.isArray(t.assignees) && t.assignees.length > 0
+          ? t.assignees
+          : (Array.isArray(t.assignments) ? t.assignments : []);
+        const assignedUserIds = rawAssigneesForIds
+          .map(u => (u && typeof u === "object") ? Number(u.userId || u.id) : NaN)
+          .filter(Boolean);
 
         return {
           id: t.taskId || t.id,
@@ -318,6 +326,7 @@ export default function TaskManagerManagement() {
           topic: mapDomainToTopicVN(t.domain || t.topic || t.categoryName),
           targetQty: Number(actualTarget),
           assignedUsers: usersList,
+          assignedUserIds,
           assignedToUserId: t.assignedToUserId || t.assigneeId,
           createdAt: formatDateToVN(t.createdAt || t.createdDate),
           deadline: formatDateToVN(t.deadline || t.dueDate || t.endDate),
@@ -668,18 +677,18 @@ export default function TaskManagerManagement() {
     setEditTaskFormData({
       title: task.title || "",
       role: task.role || "Speaker",
-      assignedUsers: task.assignedUsers || []
+      assignedUserIds: task.assignedUserIds || []
     });
     setIsEditTaskModalOpen(true);
   };
 
-  const handleToggleUserInEditTask = (userName) => {
+  const handleToggleUserInEditTask = (userId) => {
     setEditTaskFormData((prev) => {
-      const exists = prev.assignedUsers.includes(userName);
+      const exists = prev.assignedUserIds.includes(userId);
       if (exists) {
-        return { ...prev, assignedUsers: prev.assignedUsers.filter((u) => u !== userName) };
+        return { ...prev, assignedUserIds: prev.assignedUserIds.filter((id) => id !== userId) };
       } else {
-        return { ...prev, assignedUsers: [...prev.assignedUsers, userName] };
+        return { ...prev, assignedUserIds: [...prev.assignedUserIds, userId] };
       }
     });
   };
@@ -701,13 +710,18 @@ export default function TaskManagerManagement() {
       }
 
       const userList = editTaskFormData.role === "Speaker" ? activeSpeakers : activeReviewers;
-      const selectedUsers = userList.filter(u => editTaskFormData.assignedUsers.includes(u.name));
-      const userIdsToAssign = selectedUsers.map(u => Number(u.id)).filter(Boolean);
+      const roleUserIds = new Set(userList.map(u => Number(u.id)));
+      const currentIds = (editingTask.assignedUserIds || []).map(Number);
+      const selectedIds = (editTaskFormData.assignedUserIds || []).map(Number).filter(id => roleUserIds.has(id));
 
-      if (userIdsToAssign.length > 0) {
-        await taskService.assignTask(editingTask.id, userIdsToAssign).catch((err) => {
-          console.warn("Lỗi assignTask khi sửa nhiệm vụ:", err?.response?.data || err);
-        });
+      // API phân công chỉ THÊM người, không tự bỏ — người bị bỏ tick phải gọi gỡ riêng.
+      for (const userId of currentIds.filter(id => roleUserIds.has(id) && !selectedIds.includes(id))) {
+        await taskService.unassignTask(editingTask.id, userId);
+      }
+
+      const addedIds = selectedIds.filter(id => !currentIds.includes(id));
+      if (addedIds.length > 0) {
+        await taskService.assignTask(editingTask.id, addedIds);
       }
 
       toast.success(`Đã cập nhật nhiệm vụ "${editTaskFormData.title}" thành công!`);
@@ -1255,7 +1269,7 @@ export default function TaskManagerManagement() {
 
                       <div className="max-h-52 overflow-y-auto border border-[#E5E2D8] dark:border-gray-700 bg-[#F7F5EF] dark:bg-[#25272E] rounded-xl p-2.5 space-y-2">
                         {userList.map((u) => {
-                          const isChecked = editTaskFormData.assignedUsers.includes(u.name);
+                          const isChecked = editTaskFormData.assignedUserIds.includes(Number(u.id));
                           const hasPreferenceReason = editTaskFormData.role === "Speaker" && 
                                                       u.performanceReason && 
                                                       (u.performanceTag === "GOOD" || u.performanceTag === "BAD");
@@ -1274,7 +1288,7 @@ export default function TaskManagerManagement() {
                                 <input
                                   type="checkbox"
                                   checked={isChecked}
-                                  onChange={() => handleToggleUserInEditTask(u.name)}
+                                  onChange={() => handleToggleUserInEditTask(Number(u.id))}
                                   style={{ accentColor: TASK_MANAGER_ACCENT }}
                                   className="rounded focus:ring-0 cursor-pointer shrink-0 mt-0.5"
                                 />

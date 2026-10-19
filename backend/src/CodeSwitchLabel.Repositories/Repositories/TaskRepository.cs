@@ -32,11 +32,7 @@ public record TaskRow(
     int Done,
     int SubmittedPairs,
     int UsableItems,
-    int TotalItems)
-{
-    /// <summary>TEAM_010: số người đang nhận. Chỉ tiêu là của cả nhóm nên không nhân theo số này.</summary>
-    public int AssigneeCount => Assignees.Count;
-}
+    int TotalItems);
 
 /// <summary>TEAM_010: một người đang nhận task. Trước đây TaskRow chỉ giữ một người đầu tiên.</summary>
 public record TaskAssigneeRow(long UserId, string FullName);
@@ -59,18 +55,18 @@ public interface ITaskRepository
     void Remove(TaskRecording item);
 
     /// <summary>
-    /// Xoá cứng một task đã nạp sẵn (tracked). Chỉ dùng cho task rảnh —
-    /// task_assignment / task_script / task_recording đều ON DELETE CASCADE,
-    /// còn recording.task_id là SET NULL.
+    /// Xoá cứng một task đã nạp sẵn (tracked): task_assignment / task_script /
+    /// task_recording đều ON DELETE CASCADE, còn recording.task_id là SET NULL.
+    /// Đừng gọi khi task còn dữ liệu nộp — xem <see cref="HasSubmittedWorkAsync"/>.
     /// </summary>
     void RemoveTask(WorkTask task);
 
     /// <summary>
-    /// Task còn "việc" để bảo toàn dấu vết hay không: đã có lượt giao cho ai,
-    /// đã có mục (script/bản ghi), hoặc đã có bản ghi nộp về. Task có việc thì
-    /// không xoá cứng được — dùng cancel để giữ lịch sử.
+    /// Task đã có dữ liệu nộp/duyệt THẬT chưa: bản ghi nộp về hoặc lượt duyệt
+    /// đang trỏ tới task. Chỉ thứ này mới chặn xoá cứng — lượt giao và hàng chờ
+    /// chỉ là sổ sách, xoá task là xoá theo (cascade).
     /// </summary>
-    Task<bool> HasWorkAsync(long taskId, CancellationToken ct = default);
+    Task<bool> HasSubmittedWorkAsync(long taskId, CancellationToken ct = default);
 
     Task<WorkTask?> GetForUpdateAsync(long taskId, CancellationToken ct = default);
 
@@ -209,11 +205,8 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
 
     public void RemoveTask(WorkTask task) => db.WorkTasks.Remove(task);
 
-    public async Task<bool> HasWorkAsync(long taskId, CancellationToken ct = default) =>
-        await db.TaskAssignments.AnyAsync(a => a.TaskId == taskId, ct)
-            || await db.TaskScripts.AnyAsync(ts => ts.TaskId == taskId, ct)
-            || await db.TaskRecordings.AnyAsync(tr => tr.TaskId == taskId, ct)
-            || await db.Recordings.AnyAsync(r => r.TaskId == taskId, ct)
+    public async Task<bool> HasSubmittedWorkAsync(long taskId, CancellationToken ct = default) =>
+        await db.Recordings.AnyAsync(r => r.TaskId == taskId, ct)
             || await db.Reviews.AnyAsync(rv => rv.TaskId == taskId, ct);
 
     /// <summary>
