@@ -75,14 +75,8 @@ export const adminService = {
     return res.data;
   },
   deleteText: async (id) => {
-    const reasonsRes = await httpClient.get("/api/script-error-reasons");
-    const reasonsList = reasonsRes.data || [];
-    const validReasonCode = reasonsList[0]?.code || "INVALID_CONTENT";
-
-    const res = await httpClient.post(`/api/scripts/${id}/review`, {
-      action: "Rejected",
-      errorReasonCode: validReasonCode
-    });
+    // Gọi trực tiếp HTTP DELETE /api/scripts/{id} để xóa cứng câu ở trạng thái Chờ duyệt
+    const res = await httpClient.delete(`/api/scripts/${id}`);
     return res.data;
   },
 
