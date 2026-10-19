@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { Search, Download, CheckCircle2, XCircle, Play, Pause, Headphones, Filter, Eye, Clock, X, AlertCircle } from "lucide-react";
+import { toast } from "sonner";
+import { Search, Download, CheckCircle2, XCircle, Play, Pause, Headphones, Filter, Eye, Clock, X, AlertCircle, Plus, Send } from "lucide-react";
 import Pagination from "../../../components/Pagination/Pagination";
 import {
   ADMIN_ACCENT,
@@ -69,10 +70,9 @@ const cleanLanguageTags = (str) => {
     .replace(/\[en\]/gi, " ")
     .replace(/\[\/vi\]/gi, " ")
     .replace(/\[\/en\]/gi, " ")
-    .replace(/\s+/g, " ") // Chuẩn hóa khoảng trắng thừa
+    .replace(/\s+/g, " ")
     .trim();
 };
-
 
 function HighlightCsText({ rawText }) {
   if (!rawText) return null;
@@ -136,9 +136,29 @@ export default function AdminRecordings() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [smoothPercent, setSmoothPercent] = useState(0);
 
   const [userMapState, setUserMapState] = useState({});
   const audioRef = useRef(null);
+  const animFrameRef = useRef(null);
+
+  // STATE DÀNH CHO 3 MODAL DATASET
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isReleaseModalOpen, setIsReleaseModalOpen] = useState(false);
+  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
+
+  const [datasetForm, setDatasetForm] = useState({
+    datasetName: "",
+    version: "v1",
+    description: ""
+  });
+
+  const [selectedRecordingIds, setSelectedRecordingIds] = useState([]);
+  const [allDatasets, setAllDatasets] = useState([]);
+  const [loadingDatasets, setLoadingDatasets] = useState(false);
+
+  // STATE LƯU CÁC DATASET ĐÃ BẤM TẢI VỀ ĐỂ ẨN ĐI
+  const [downloadedDatasetIds, setDownloadedDatasetIds] = useState([]);
 
   const fetchRecordings = async () => {
     try {
@@ -212,12 +232,48 @@ export default function AdminRecordings() {
       setRecordings(recordingsWithReviews);
     } catch (err) {
       console.error("Lỗi lấy danh sách bản thu âm:", err);
+      toast.error("Không thể tải danh sách bản thu âm!");
     }
   };
 
   useEffect(() => {
     fetchRecordings();
+    return () => {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    };
   }, []);
+
+  useEffect(() => {
+    const updateProgressLoop = () => {
+      if (audioRef.current && isPlaying) {
+        const cur = audioRef.current.currentTime || 0;
+        const dur = audioRef.current.duration || duration || 1;
+        setCurrentTime(cur);
+        setSmoothPercent(Math.min(100, Math.max(0, (cur / dur) * 100)));
+        animFrameRef.current = requestAnimationFrame(updateProgressLoop);
+      }
+    };
+
+    if (isPlaying) {
+      animFrameRef.current = requestAnimationFrame(updateProgressLoop);
+    } else if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+    }
+
+    return () => {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    };
+  }, [isPlaying, duration]);
+
+  const approvedRecordings = useMemo(() => {
+    return recordings.filter((r) => calculateRecordingStatus(r.reviewers) === "Approved");
+  }, [recordings]);
+
+  // ĐÃ SỬA: Không tự động chọn tất cả bản ghi đã duyệt nữa, để mặc định là mảng rỗng []
+  const handleOpenCreateModal = () => {
+    setSelectedRecordingIds([]);
+    setIsCreateModalOpen(true);
+  };
 
   const handleOpenReviewersModal = async (recording) => {
     setSelectedReviewersList({
@@ -297,10 +353,101 @@ export default function AdminRecordings() {
     return Math.max(0, pageSize - paginatedRecordings.length);
   }, [paginatedRecordings.length, pageSize]);
 
-  // Hàm tải file Dataset chuẩn .ZIP từ API Backend
-  const handleExportDataset = async () => {
+  // HÀM FETCH BỘ DATASET: ĐỌC ĐÚNG DatasetDetailDto -> DatasetDto (Summary.recordingCount)
+  const fetchDatasetsList = async () => {
+    setLoadingDatasets(true);
     try {
-      const blob = await adminService.exportDatasetZip();
+      const res = await adminService.getDatasets({ page: 1, pageSize: 100 });
+      const items = res.items || res || [];
+
+      const itemsWithDetails = await Promise.all(
+        items.map(async (ds) => {
+          const dsId = ds.datasetId || ds.id;
+          try {
+            // Lấy DatasetDetailDto từ BE
+            const detail = await adminService.getDatasetDetail(dsId);
+            // Chuẩn C# DTO: detail.summary.recordingCount
+            const countFromDetail = detail?.summary?.recordingCount ?? detail?.summary?.totalRecordings;
+            
+            return {
+              ...ds,
+              realRecordingsCount: countFromDetail !== undefined ? countFromDetail : (ds.recordingCount || 0)
+            };
+          } catch (e) {
+            return { ...ds, realRecordingsCount: ds.recordingCount || 0 };
+          }
+        })
+      );
+
+      setAllDatasets(itemsWithDetails);
+    } catch (err) {
+      console.error("Lỗi lấy danh sách dataset:", err);
+      toast.error("Không thể lấy danh sách bộ dữ liệu Dataset!");
+    } finally {
+      setLoadingDatasets(false);
+    }
+  };
+
+  // 1. NÚT 1: TẠO DATASET NHÁP (Mảng string cho CreateDatasetRequest.RecordingIds)
+  const handleCreateDatasetSubmit = async (e) => {
+    e.preventDefault();
+    if (!datasetForm.datasetName.trim()) {
+      toast.error("Vui lòng nhập tên Dataset!");
+      return;
+    }
+
+    if (selectedRecordingIds.length === 0) {
+      toast.error("Vui lòng chọn ít nhất 1 bản ghi âm đã duyệt để đưa vào Dataset!");
+      return;
+    }
+
+    try {
+      // DTO C# quy định RecordingIds là List<string>
+      const formattedIds = selectedRecordingIds.map((id) => String(id));
+
+      await adminService.createDataset({
+        datasetName: datasetForm.datasetName.trim(),
+        version: datasetForm.version || "v1",
+        description: datasetForm.description || "",
+        recordingIds: formattedIds
+      });
+
+      toast.success(`Tạo Dataset nháp "${datasetForm.datasetName}" thành công!`);
+      setIsCreateModalOpen(false);
+      setDatasetForm({ datasetName: "", version: "v1", description: "" });
+    } catch (err) {
+      console.error("Lỗi tạo dataset:", err?.response?.data || err);
+      const apiMsg = err?.response?.data?.message || err?.response?.data?.title || "Tạo Dataset nháp thất bại!";
+      toast.error(apiMsg);
+    }
+  };
+
+  // 2. NÚT 2: PHÁT HÀNH DATASET (RELEASE)
+  const handleOpenReleaseModal = () => {
+    setIsReleaseModalOpen(true);
+    fetchDatasetsList();
+  };
+
+  const handleExecuteRelease = async (datasetId) => {
+    try {
+      await adminService.releaseDataset(datasetId);
+      toast.success("Phát hành Dataset thành công!");
+      fetchDatasetsList();
+    } catch (err) {
+      console.error("Lỗi phát hành dataset:", err);
+      toast.error("Phát hành thất bại! Có thể bộ dữ liệu còn thiếu các biến thể câu.");
+    }
+  };
+
+  // 3. NÚT 3: TẢI DATASET VỀ MÁY TÍNH
+  const handleOpenDownloadModal = () => {
+    setIsDownloadModalOpen(true);
+    fetchDatasetsList();
+  };
+
+  const handleDownloadZipFile = async (datasetId) => {
+    try {
+      const blob = await adminService.exportDatasetZip(datasetId);
       const url = window.URL.createObjectURL(new Blob([blob]));
       const link = document.createElement("a");
       link.href = url;
@@ -309,9 +456,13 @@ export default function AdminRecordings() {
       link.click();
       link.parentNode.removeChild(link);
       window.URL.revokeObjectURL(url);
+      
+      // LƯU LẠI ID ĐÃ TẢI VÀ TỰ ĐỘNG ẨN KHỎI GIAO DIỆN
+      setDownloadedDatasetIds((prev) => [...prev, String(datasetId)]);
+      toast.success("Đã bắt đầu tải xuống file .ZIP!");
     } catch (err) {
       console.error("Lỗi tải dataset:", err);
-      alert("Không thể tải tập dữ liệu dataset! Vui lòng kiểm tra lại phía Server Backend.");
+      toast.error("Không thể tải file .ZIP! Vui lòng đảm bảo Dataset đã được phát hành.");
     }
   };
 
@@ -321,7 +472,7 @@ export default function AdminRecordings() {
       const res = await adminService.getAudioUrl(recording.rawId);
       finalAudioUrl = res?.url || res || recording.audioUrl;
     } catch (e) {
-      console.warn("Không lấy được URL audio riêng từ API, dùng fallback:", e);
+      console.warn("Không lấy được URL audio riêng từ API:", e);
     }
 
     setPlayingRecording({
@@ -330,6 +481,7 @@ export default function AdminRecordings() {
     });
     setIsPlaying(true);
     setCurrentTime(0);
+    setSmoothPercent(0);
   };
 
   const togglePlayAudio = () => {
@@ -343,9 +495,18 @@ export default function AdminRecordings() {
     }
   };
 
+  // LỌC CÁC DATASET ĐÃ PHÁT HÀNH NHƯNG CHƯA TẢI VỀ
+  const releasedDatasetsToDownload = useMemo(() => {
+    return allDatasets.filter((ds) => {
+      const isReleased = ds.status === "Released" || ds.status === 1;
+      const idStr = String(ds.datasetId || ds.id);
+      return isReleased && !downloadedDatasetIds.includes(idStr);
+    });
+  }, [allDatasets, downloadedDatasetIds]);
+
   return (
     <div className="w-full h-full flex flex-col justify-between text-left font-sans p-1 overflow-hidden transition-colors relative">
-      {/* Filter Bar + Nút Tải Dataset */}
+      {/* Filter Bar + 3 Nút Thao Tác Dataset */}
       <div className="shrink-0 space-y-2">
         <div className="bg-white dark:bg-[#1C1D22] rounded-2xl border border-[#E5E2D8] dark:border-gray-800 p-2.5 shadow-[0_1px_3px_rgba(16,17,20,0.04)] flex flex-col md:flex-row gap-2.5 justify-between items-center transition-colors">
           <div className="w-full md:w-auto flex-1 max-w-xl">
@@ -407,9 +568,27 @@ export default function AdminRecordings() {
             </div>
 
             <button
-              onClick={handleExportDataset}
-              style={{ backgroundColor: ADMIN_ACCENT }}
-              className="px-3.5 py-2 text-white rounded-xl type-button flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer shadow-[0_4px_12px_rgba(22,163,74,0.25)] whitespace-nowrap"
+              onClick={handleOpenCreateModal}
+              style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 10px 24px ${ADMIN_ACCENT}40` }}
+              className="px-3.5 py-2 text-white rounded-xl type-button flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer whitespace-nowrap"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Tạo Dataset</span>
+            </button>
+
+            <button
+              onClick={handleOpenReleaseModal}
+              style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 10px 24px ${ADMIN_ACCENT}40` }}
+              className="px-3.5 py-2 text-white rounded-xl type-button flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer whitespace-nowrap"
+            >
+              <Send className="w-4 h-4" />
+              <span>Phát hành Dataset</span>
+            </button>
+
+            <button
+              onClick={handleOpenDownloadModal}
+              style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 10px 24px ${ADMIN_ACCENT}40` }}
+              className="px-3.5 py-2 text-white rounded-xl type-button flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer whitespace-nowrap"
             >
               <Download className="w-4 h-4" />
               <span>Tải Dataset chuẩn (.ZIP)</span>
@@ -494,7 +673,6 @@ export default function AdminRecordings() {
                           {r.speaker}
                         </td>
 
-                        {/* Cột Phản hồi - Sửa chuẩn ngữ pháp 1 reviewer vs N reviewers */}
                         <td className="px-2 text-center align-middle">
                           <button
                             type="button"
@@ -517,7 +695,6 @@ export default function AdminRecordings() {
                           </button>
                         </td>
 
-                        {/* Nút Nghe */}
                         <td className="px-1.5 text-center align-middle">
                           <button
                             type="button"
@@ -530,7 +707,6 @@ export default function AdminRecordings() {
                           </button>
                         </td>
 
-                        {/* Trạng thái */}
                         <td className="px-2 text-center align-middle whitespace-nowrap w-[125px]">
                           {status === "Approved" && (
                             <span
@@ -607,7 +783,7 @@ export default function AdminRecordings() {
       {/* MODAL 1: NGHE BẢN GHI ÂM */}
       {playingRecording && (
         <div className="fixed inset-0 z-50 bg-[#16171C]/55 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#1C1D22] rounded-[24px] border border-[#E5E2D8] dark:border-gray-800 shadow-[0_20px_50px_rgba(16,17,20,0.25)] max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-150">
+          <div className="bg-white dark:bg-[#1C1D22] rounded-[24px] border border-[#E5E2D8] dark:border-gray-800 shadow-[0_20px_50px_rgba(16,17,20,0.25)] max-w-md w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div 
               style={{ backgroundColor: ADMIN_ACCENT }} 
               className="h-1.5 w-full shrink-0" 
@@ -618,17 +794,17 @@ export default function AdminRecordings() {
                 ref={audioRef}
                 src={playingRecording.audioUrl}
                 autoPlay={isPlaying}
-                onTimeUpdate={() => {
-                  if (audioRef.current) {
-                    setCurrentTime(audioRef.current.currentTime);
-                  }
-                }}
                 onLoadedMetadata={() => {
                   if (audioRef.current) {
-                    setDuration(audioRef.current.duration || playingRecording.durationSec);
+                    const dur = audioRef.current.duration || playingRecording.durationSec;
+                    setDuration(dur);
                   }
                 }}
-                onEnded={() => setIsPlaying(false)}
+                onEnded={() => {
+                  setIsPlaying(false);
+                  setSmoothPercent(0);
+                  setCurrentTime(0);
+                }}
               />
             )}
 
@@ -673,20 +849,23 @@ export default function AdminRecordings() {
                     const newTime = (clickX / rect.width) * duration;
                     audioRef.current.currentTime = newTime;
                     setCurrentTime(newTime);
+                    setSmoothPercent((newTime / duration) * 100);
                   }}
                 >
                   <div 
-                    className="h-full rounded-full transition-all duration-75" 
+                    className="h-full rounded-full" 
                     style={{ 
                       backgroundColor: ADMIN_ACCENT,
-                      width: `${duration ? (currentTime / duration) * 100 : 0}%` 
+                      width: `${smoothPercent}%`,
+                      willChange: "width"
                     }} 
                   />
                   <div 
-                    className="w-3 h-3 bg-white dark:bg-gray-200 border-2 rounded-full shadow-xs absolute -translate-x-1/2 cursor-pointer" 
+                    className="w-3.5 h-3.5 bg-white dark:bg-gray-100 border-2 rounded-full shadow-md absolute -translate-x-1/2 cursor-pointer transition-transform hover:scale-125" 
                     style={{ 
                       borderColor: ADMIN_ACCENT,
-                      left: `${duration ? (currentTime / duration) * 100 : 0}%` 
+                      left: `${smoothPercent}%`,
+                      willChange: "left"
                     }} 
                   />
                 </div>
@@ -739,7 +918,7 @@ export default function AdminRecordings() {
 
         return (
           <div className="fixed inset-0 z-50 bg-[#16171C]/55 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-[#1C1D22] rounded-[24px] border border-[#E5E2D8] dark:border-gray-800 shadow-[0_20px_50px_rgba(16,17,20,0.25)] max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-150 text-left">
+            <div className="bg-white dark:bg-[#1C1D22] rounded-[24px] border border-[#E5E2D8] dark:border-gray-800 shadow-[0_20px_50px_rgba(16,17,20,0.25)] max-w-md w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200 text-left">
               <div 
                 style={{ backgroundColor: topBorderBg }} 
                 className="h-1.5 w-full shrink-0" 
@@ -862,6 +1041,334 @@ export default function AdminRecordings() {
           </div>
         );
       })()}
+
+      {/* MODAL MỚI 1: TẠO DATASET NHÁP */}
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 z-50 bg-[#16171C]/55 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#1C1D22] rounded-[24px] border border-[#E5E2D8] dark:border-gray-800 shadow-[0_20px_50px_rgba(16,17,20,0.25)] max-w-xl w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200 text-left flex flex-col max-h-[90vh]">
+            <div style={{ backgroundColor: ADMIN_ACCENT }} className="h-1.5 w-full shrink-0" />
+            
+            <form onSubmit={handleCreateDatasetSubmit} className="p-6 space-y-4 flex-1 overflow-y-auto">
+              <div className="flex items-center justify-between border-b border-[#E5E2D8] dark:border-gray-800 pb-3">
+                <h3 className="type-section text-[#16171C] dark:text-gray-100">
+                  Tạo Dataset nháp mới
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setIsCreateModalOpen(false)}
+                  className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#F0EEE6] dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4 text-[#6E7078]" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
+                    Tên Dataset <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ví dụ: CodeSwitching_Dataset_2026"
+                    value={datasetForm.datasetName}
+                    onChange={(e) => setDatasetForm({ ...datasetForm, datasetName: e.target.value })}
+                    className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none transition-all font-sans placeholder:text-[#9A9CA3]"
+                    onFocus={(e) => {
+                      e.target.style.borderColor = ADMIN_ACCENT;
+                      e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = '';
+                      e.target.style.boxShadow = 'none';
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
+                    Phiên bản <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="v1, v2..."
+                    value={datasetForm.version}
+                    onChange={(e) => setDatasetForm({ ...datasetForm, version: e.target.value })}
+                    className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none transition-all font-sans placeholder:text-[#9A9CA3]"
+                    onFocus={(e) => {
+                      e.target.style.borderColor = ADMIN_ACCENT;
+                      e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = '';
+                      e.target.style.boxShadow = 'none';
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
+                  Mô tả bộ dữ liệu
+                </label>
+                <textarea
+                  rows="2"
+                  placeholder="Nhập ghi chú hoặc mô tả ngắn..."
+                  value={datasetForm.description}
+                  onChange={(e) => setDatasetForm({ ...datasetForm, description: e.target.value })}
+                  className="w-full px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none transition-all font-sans placeholder:text-[#9A9CA3] resize-none"
+                  onFocus={(e) => {
+                    e.target.style.borderColor = ADMIN_ACCENT;
+                    e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '';
+                    e.target.style.boxShadow = 'none';
+                  }}
+                />
+              </div>
+
+              {/* PHẦN LỰA CHỌN BẢN GHI ÂM ĐÃ DUYỆT */}
+              <div className="space-y-2.5 pt-2 border-t border-[#E5E2D8] dark:border-gray-800">
+                <div className="flex items-center justify-between">
+                  <label className="block type-label text-[#2B2C31] dark:text-gray-200">
+                    Bản ghi âm đã duyệt ({selectedRecordingIds.length}/{approvedRecordings.length})
+                  </label>
+                </div>
+
+                <div className="max-h-56 overflow-y-auto border border-[#E5E2D8] dark:border-gray-700 bg-[#F7F5EF] dark:bg-[#25272E] rounded-xl p-2.5 space-y-2">
+                  {approvedRecordings.length > 0 ? (
+                    approvedRecordings.map((rec) => {
+                      const recIdStr = String(rec.rawId);
+                      const isChecked = selectedRecordingIds.includes(recIdStr);
+
+                      return (
+                        <label
+                          key={rec.id}
+                          style={isChecked ? { borderColor: ADMIN_ACCENT } : {}}
+                          className={`flex items-start justify-between p-2.5 rounded-xl type-ui transition-all border cursor-pointer ${
+                            isChecked
+                              ? "bg-white dark:bg-[#1C1D22] shadow-xs font-bold text-[#16171C] dark:text-white"
+                              : "bg-white/70 dark:bg-[#1C1D22]/50 border-[#E5E2D8] dark:border-gray-700 hover:bg-white text-[#6E7078] dark:text-gray-300"
+                          }`}
+                        >
+                          <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedRecordingIds([...selectedRecordingIds, recIdStr]);
+                                } else {
+                                  setSelectedRecordingIds(selectedRecordingIds.filter((id) => id !== recIdStr));
+                                }
+                              }}
+                              style={{ accentColor: ADMIN_ACCENT }}
+                              className="rounded focus:ring-0 cursor-pointer shrink-0 mt-0.5"
+                            />
+                            <div className="flex flex-col min-w-0 pr-2">
+                              <span className="truncate leading-tight font-bold text-[#16171C] dark:text-gray-100">
+                                {cleanLanguageTags(rec.content)}
+                              </span>
+                              <span className="type-caption text-[#6E7078] dark:text-gray-400 truncate mt-0.5">
+                                Speaker: <strong className="text-[#16171C] dark:text-gray-200">{rec.speaker}</strong> · {formatDurationText(rec.durationSec)}
+                              </span>
+                            </div>
+                          </div>
+                        </label>
+                      );
+                    })
+                  ) : (
+                    <div className="p-4 text-center type-ui text-[#6E7078] dark:text-gray-400">
+                      Chưa có bản ghi âm "Đã duyệt" nào.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateModalOpen(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 type-button text-[#6E7078] dark:text-gray-300 hover:bg-[#F7F5EF] dark:hover:bg-[#25272E] cursor-pointer transition-colors"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 10px 24px ${ADMIN_ACCENT}40` }}
+                  className="flex-1 py-2.5 text-white rounded-xl type-button hover:opacity-90 active:scale-[0.99] cursor-pointer transition-all font-bold"
+                >
+                  Tạo nháp ({selectedRecordingIds.length})
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL MỚI 2: PHÁT HÀNH DATASET */}
+      {isReleaseModalOpen && (
+        <div className="fixed inset-0 z-50 bg-[#16171C]/55 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#1C1D22] rounded-[24px] border border-[#E5E2D8] dark:border-gray-800 shadow-[0_20px_50px_rgba(16,17,20,0.25)] max-w-2xl w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200 text-left flex flex-col max-h-[85vh]">
+            <div style={{ backgroundColor: ADMIN_ACCENT }} className="h-1.5 w-full shrink-0" />
+            
+            <div className="p-6 space-y-4 flex-1 overflow-y-auto">
+              <div className="flex items-center justify-between border-b border-[#E5E2D8] dark:border-gray-800 pb-3">
+                <h3 className="type-section text-[#16171C] dark:text-gray-100">
+                  Phát hành Dataset
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setIsReleaseModalOpen(false)}
+                  className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#F0EEE6] dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4 text-[#6E7078]" />
+                </button>
+              </div>
+
+              {loadingDatasets ? (
+                <div className="py-8 text-center text-[#9A9CA3]">Đang tải danh sách Dataset...</div>
+              ) : (
+                <div className="space-y-3">
+                  {allDatasets.filter(ds => ds.status !== "Released" && ds.status !== 1).length > 0 ? (
+                    allDatasets.filter(ds => ds.status !== "Released" && ds.status !== 1).map((ds) => {
+                      const id = ds.datasetId || ds.id;
+                      const recCount = ds.realRecordingsCount !== undefined ? ds.realRecordingsCount : (ds.recordingCount || 0);
+
+                      return (
+                        <div
+                          key={id}
+                          className="p-4 border border-[#E5E2D8] dark:border-gray-700 rounded-2xl bg-[#F7F5EF] dark:bg-[#25272E] flex items-center justify-between"
+                        >
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-[#16171C] dark:text-gray-100">
+                                {ds.datasetName} ({ds.version})
+                              </span>
+                              {/* BADGE "Bản nháp" SỬ DỤNG STYLE CỦA CHIP "Chờ duyệt" */}
+                              <span
+                                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full type-caption font-label border whitespace-nowrap"
+                                style={{
+                                  backgroundColor: CHIP_WARNING_BG,
+                                  borderColor: CHIP_WARNING_BORDER,
+                                  color: CHIP_WARNING_TEXT
+                                }}
+                              >
+                                <Clock className="w-3 h-3 shrink-0" style={{ color: CHIP_WARNING_TEXT }} /> Bản nháp
+                              </span>
+                            </div>
+
+                            <div className="type-caption text-[#6E7078] dark:text-gray-400 font-medium">
+                              Số lượng bản ghi âm: <strong className="text-[#16171C] dark:text-gray-200">{recCount}</strong> bản
+                            </div>
+                          </div>
+
+                          {/* NÚT "Phát hành ngay" SỬ DỤNG KÍCH THƯỚC VÀ STYLE Y CHANG NÚT "Tải file .ZIP" */}
+                          <button
+                            type="button"
+                            onClick={() => handleExecuteRelease(id)}
+                            style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 10px 24px ${ADMIN_ACCENT}40` }}
+                            className="px-4 py-2 text-white font-bold rounded-xl hover:opacity-90 transition-all cursor-pointer shadow-sm flex items-center gap-1.5 shrink-0"
+                          >
+                            <Send className="w-4 h-4" />
+                            <span>Phát hành ngay</span>
+                          </button>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="py-8 text-center text-[#9A9CA3]">
+                      Không có Dataset nháp nào cần phát hành.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL MỚI 3: TẢI DATASET ĐÃ PHÁT HÀNH (.ZIP) */}
+      {isDownloadModalOpen && (
+        <div className="fixed inset-0 z-50 bg-[#16171C]/55 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#1C1D22] rounded-[24px] border border-[#E5E2D8] dark:border-gray-800 shadow-[0_20px_50px_rgba(16,17,20,0.25)] max-w-2xl w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200 text-left flex flex-col max-h-[85vh]">
+            <div style={{ backgroundColor: ADMIN_ACCENT }} className="h-1.5 w-full shrink-0" />
+            
+            <div className="p-6 space-y-4 flex-1 overflow-y-auto">
+              <div className="flex items-center justify-between border-b border-[#E5E2D8] dark:border-gray-800 pb-3">
+                <h3 className="type-section text-[#16171C] dark:text-gray-100">
+                  Danh sách Dataset đã phát hành & Tải file .ZIP
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setIsDownloadModalOpen(false)}
+                  className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#F0EEE6] dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4 text-[#6E7078]" />
+                </button>
+              </div>
+
+              {loadingDatasets ? (
+                <div className="py-8 text-center text-[#9A9CA3]">Đang tải danh sách Dataset...</div>
+              ) : (
+                <div className="space-y-3">
+                  {releasedDatasetsToDownload.length > 0 ? (
+                    releasedDatasetsToDownload.map((ds) => {
+                      const id = ds.datasetId || ds.id;
+                      const recCount = ds.realRecordingsCount !== undefined ? ds.realRecordingsCount : (ds.recordingCount || 0);
+
+                      return (
+                        <div
+                          key={id}
+                          className="p-4 border border-[#E5E2D8] dark:border-gray-700 rounded-2xl bg-[#F7F5EF] dark:bg-[#25272E] flex items-center justify-between"
+                        >
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-[#16171C] dark:text-gray-100">
+                                {ds.datasetName} ({ds.version})
+                              </span>
+                              {/* BADGE "Đã phát hành" SỬ DỤNG STYLE CỦA CHIP "Đã duyệt" */}
+                              <span
+                                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full type-caption font-label border whitespace-nowrap"
+                                style={{
+                                  backgroundColor: CHIP_SUCCESS_BG,
+                                  borderColor: CHIP_SUCCESS_BORDER,
+                                  color: CHIP_SUCCESS_TEXT
+                                }}
+                              >
+                                <CheckCircle2 className="w-3 h-3 shrink-0" style={{ color: CHIP_SUCCESS_TEXT }} /> Đã phát hành
+                              </span>
+                            </div>
+                            <div className="type-caption text-[#6E7078] dark:text-gray-400 font-medium">
+                              Số lượng bản thu: <strong className="text-[#16171C] dark:text-gray-200">{recCount}</strong> bản ghi
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadZipFile(id)}
+                            style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 10px 24px ${ADMIN_ACCENT}40` }}
+                            className="px-4 py-2 text-white font-bold rounded-xl hover:opacity-90 transition-all cursor-pointer shadow-sm flex items-center gap-1.5 shrink-0"
+                          >
+                            <Download className="w-4 h-4" />
+                            <span>Tải file .ZIP</span>
+                          </button>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="py-8 text-center text-[#9A9CA3]">
+                      Chưa có Dataset nào được phát hành (hoặc tất cả đã được tải về).
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
