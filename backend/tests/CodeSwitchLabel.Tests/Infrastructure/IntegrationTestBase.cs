@@ -308,6 +308,8 @@ public abstract class IntegrationTestBase : IAsyncLifetime
             .Returns((string key) => $"http://localhost:9000/recordings/{key}");
         mockStorage.Setup(s => s.GetObjectKey(It.IsAny<string>()))
             .Returns("test.wav");
+        mockStorage.Setup(s => s.OpenReadAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(() => Task.FromResult<Stream>(new MemoryStream([0x52, 0x49, 0x46, 0x46])));
 
         services.AddSingleton(mockStorage.Object);
 

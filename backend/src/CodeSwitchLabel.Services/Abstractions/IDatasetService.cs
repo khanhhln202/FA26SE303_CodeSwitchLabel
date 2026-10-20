@@ -13,5 +13,6 @@ public interface IDatasetService
         long datasetId, ReleaseDatasetRequest request, long releasedById, CancellationToken ct = default);
     Task<DatasetDto> ArchiveAsync(long datasetId, CancellationToken ct = default);
     Task DeleteAsync(long datasetId, CancellationToken ct = default);
-    Task<DatasetFileDto> DownloadAsync(long datasetId, CancellationToken ct = default);
+    Task<DatasetFileDto> DownloadAsync(
+        long datasetId, bool includeAudio = true, CancellationToken ct = default);
 }

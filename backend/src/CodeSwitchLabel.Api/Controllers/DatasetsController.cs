@@ -71,14 +71,19 @@ public class DatasetsController(IDatasetService datasets) : ControllerBase
         return NoContent();
     }
 
-    /// <summary>Tải dataset đã phát hành (ZIP gồm manifest.json + metadata.csv, link nghe 15 phút).</summary>
+    /// <summary>Tải dataset đã phát hành (ZIP gồm manifest.json, metadata.csv và audio/ nếu includeAudio=true).</summary>
+    /// <remarks>
+    /// `?includeAudio=true` (mặc định): đóng gói cả file ghi âm vào thư mục `audio/`.
+    /// `?includeAudio=false`: chỉ lấy metadata kèm link nghe tạm 15 phút.
+    /// </remarks>
     [HttpGet("{id:long}/download")]
     [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> Download(long id, CancellationToken ct)
+    public async Task<IActionResult> Download(
+        long id, [FromQuery] bool includeAudio = true, CancellationToken ct = default)
     {
-        var file = await datasets.DownloadAsync(id, ct);
+        var file = await datasets.DownloadAsync(id, includeAudio, ct);
         return File(file.Content, file.ContentType, file.FileName);
     }
 }
