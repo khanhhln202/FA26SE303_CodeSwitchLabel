@@ -242,19 +242,15 @@ public class ReviewerStatsService(
                             ? RecordingStatus.QcFailed
                             : RecordingStatus.PendingReview,
                 pair.LastReviewedAt,
-                // Bản CHƯA chốt thì chỉ lộ lượt của chính người đang xem; chốt rồi mới lộ đủ.
-                //
-                // Đây là luật duyệt mù (review.default_blind): ba người duyệt độc lập, không ai
-                // biết phiếu của ai trước khi chốt. Trước đây chưa chốt thì giấu sạch, kể cả
-                // phiếu của chính mình — nên người vừa bấm duyệt xong mở lịch sử ra thấy trống
-                // trơn. Phiếu của chính mình thì mình đã biết rồi, lộ lại không rò rỉ gì.
+                // Lịch sử chỉ hiện cặp mà người xem ĐÃ có phiếu (query lọc ReviewerId ở trên),
+                // nên sau khi đã bỏ phiếu thì được xem đủ phiếu của cả hai bản — kể cả khi
+                // cặp chưa chốt. Màn hình duyệt đang hoạt động vẫn mù hoàn toàn; chỗ này chỉ
+                // là lịch sử sau khi phiếu của mình đã ghi.
                 //
                 // Giữ đủ lượt của CẢ HAI bản, mỗi lượt kèm recordingId: gom theo số vòng rồi
                 // lấy một dòng sẽ làm lượt vòng 1 của bản vi bị lượt vòng 1 của bản cs nuốt mất.
                 [.. both
-                    .SelectMany(r => r.Status is RecordingStatus.Approved or RecordingStatus.Rejected
-                        ? r.Reviews.AsEnumerable()
-                        : r.Reviews.Where(v => v.ReviewerId == reviewerId))
+                    .SelectMany(r => r.Reviews.AsEnumerable())
                     .OrderBy(v => v.RecordingId)
                     .ThenBy(v => v.ReviewRound)
                     .Select(v => new HistoryReviewDto(
