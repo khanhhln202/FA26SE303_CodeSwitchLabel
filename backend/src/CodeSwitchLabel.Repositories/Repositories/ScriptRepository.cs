@@ -47,7 +47,7 @@ public interface IScriptRepository
     /// </summary>
     Task<bool> IsRecordedByOtherAsync(string scriptId, long speakerId, CancellationToken ct = default);
 
-    /// <summary>Gọi hàm fn_generate_script_id của database để lấy mã đúng chuẩn s_ + 9 chữ số.</summary>
+    /// <summary>Gọi hàm fn_generate_script_id của database để lấy mã đúng chuẩn s_ + 9 hoặc 12 chữ số.</summary>
     Task<string> GenerateIdAsync(
         int enWordCount, ScriptDomain domain, ScriptRelation relation, CancellationToken ct = default);
 
