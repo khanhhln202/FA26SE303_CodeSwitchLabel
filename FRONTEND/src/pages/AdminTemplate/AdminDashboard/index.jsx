@@ -59,7 +59,7 @@ export default function AdminDashboard() {
       if (recordingsRes.status === "fulfilled" && recordingsRes.value) {
         const rawList = recordingsRes.value.items || recordingsRes.value || [];
         
-        // Gọi lấy chi tiết reviews cho từng recording để tính đúng trạng thái & lý do từ chối
+        // Đọc trực tiếp thuộc tính status từ Backend RecordingDto
         const fullRecordings = await Promise.all(
           rawList.map(async (r) => {
             const recId = r.recordingId || r.id;
@@ -74,21 +74,21 @@ export default function AdminDashboard() {
               reviews = Array.isArray(r.reviewers) ? r.reviewers : [];
             }
 
-            // Thuật toán tính trạng thái chuẩn từ danh sách reviews
-            const approvedCount = reviews.filter((rev) => rev.status === "Approved" || rev.status === "Accepted").length;
-            const rejectedCount = reviews.filter((rev) => rev.status === "Rejected" || rev.status === "Discarded").length;
-            const hasPending = reviews.some((rev) => rev.status === "Pending" || rev.status === "PendingReview");
+            // Lấy trực tiếp status chuẩn từ BE DTO
+            const rawStatus = String(r.status || r.state || "").trim();
+            let mappedStatus = "Pending";
 
-            let calculatedStatus = "Pending";
-            if (rejectedCount >= 2 || (rejectedCount > 0 && approvedCount === 0)) {
-              calculatedStatus = "Rejected";
-            } else if (approvedCount > 0 && approvedCount >= rejectedCount && !hasPending) {
-              calculatedStatus = "Approved";
+            if (["Approved", "Accepted", "1"].includes(rawStatus)) {
+              mappedStatus = "Approved";
+            } else if (["Rejected", "Discarded", "QcFailed", "2", "3"].includes(rawStatus)) {
+              mappedStatus = "Rejected";
+            } else {
+              mappedStatus = "Pending";
             }
 
             return {
               ...r,
-              status: calculatedStatus,
+              status: mappedStatus,
               reviewers: reviews
             };
           })

@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { toast } from "sonner";
-import { Search, Download, CheckCircle2, XCircle, Play, Pause, Headphones, Filter, Eye, Clock, X, AlertCircle, Plus, Send } from "lucide-react";
+import { Search, Download, CheckCircle2, XCircle, Play, Pause, Headphones, Filter, Eye, Clock, X, AlertCircle, Plus, Send, Trash2 } from "lucide-react";
 import Pagination from "../../../components/Pagination/Pagination";
 import {
   ADMIN_ACCENT,
@@ -34,24 +34,29 @@ const formatDurationText = (sec) => {
   return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
 };
 
-const calculateRecordingStatus = (reviewers = []) => {
+// Hàm map trực tiếp status từ BE RecordingDto sang trạng thái UI chuẩn xác 100%
+const parseBeRecordingStatus = (statusFromBe, reviewers = []) => {
+  if (statusFromBe !== undefined && statusFromBe !== null && statusFromBe !== "") {
+    const str = String(statusFromBe).trim();
+    
+    // 1. Nhóm Đã duyệt
+    if (["Approved", "Accepted", "1"].includes(str)) return "Approved";
+    
+    // 2. Nhóm Từ chối (bao gồm trượt QC tự động, bị từ chối, bị loại audio/cặp câu)
+    if (["Rejected", "Discarded", "QcFailed", "2", "3"].includes(str)) return "Rejected";
+    
+    // 3. Nhóm Chờ duyệt
+    if (["Pending", "PendingReview", "0"].includes(str)) return "Pending";
+  }
+
+  // Fallback chỉ dùng khi BE trả về null/undefined
   if (!Array.isArray(reviewers) || !reviewers.length) return "Pending";
-
-  const approvedCount = reviewers.filter(
-    (rev) => rev?.status === "Approved" || rev?.status === "Accepted"
-  ).length;
-
-  const rejectedCount = reviewers.filter(
-    (rev) => rev?.status === "Rejected"
-  ).length;
-
-  const hasPending = reviewers.some(
-    (rev) => rev?.status === "Pending" || rev?.status === "PendingReview"
-  );
+  const approvedCount = reviewers.filter((rev) => rev?.status === "Approved" || rev?.status === "Accepted").length;
+  const rejectedCount = reviewers.filter((rev) => rev?.status === "Rejected").length;
 
   if (rejectedCount > 0 && approvedCount === 0) return "Rejected";
   if (rejectedCount >= 2) return "Rejected";
-  if (approvedCount > 0 && approvedCount >= rejectedCount && !hasPending) return "Approved";
+  if (approvedCount > 0 && approvedCount >= rejectedCount) return "Approved";
 
   return "Pending";
 };
@@ -70,7 +75,7 @@ const cleanLanguageTags = (str) => {
     .replace(/\[en\]/gi, " ")
     .replace(/\[\/vi\]/gi, " ")
     .replace(/\[\/en\]/gi, " ")
-    .replace(/\s+/g, " ")
+    .replace(/\s+/g, " ") // Chuẩn hóa khoảng trắng thừa
     .trim();
 };
 
@@ -213,6 +218,9 @@ export default function AdminRecordings() {
           const sId = r.scriptId || r.textId;
           const scriptInfo = scriptMap[sId] || {};
 
+          // Sử dụng trực tiếp trường status từ RecordingDto của Backend
+          const finalStatus = parseBeRecordingStatus(r.status, reviews);
+
           return {
             id: recId || "",
             rawId: recId || "",
@@ -222,6 +230,7 @@ export default function AdminRecordings() {
             topic: r.domain || r.topic || "Công nghệ thông tin",
             speaker: userMap[r.speakerId] || (r.speakerId ? `User #${r.speakerId}` : "Chưa xác định"),
             reviewers: reviews,
+            status: finalStatus,
             durationSec: r.durationSec || 0,
             audioUrl: r.audioUrl || r.fileUrl || "",
             createdAt: r.recordedAt ? new Date(r.recordedAt).toLocaleDateString("vi-VN") : ""
@@ -266,10 +275,9 @@ export default function AdminRecordings() {
   }, [isPlaying, duration]);
 
   const approvedRecordings = useMemo(() => {
-    return recordings.filter((r) => calculateRecordingStatus(r.reviewers) === "Approved");
+    return recordings.filter((r) => r.status === "Approved");
   }, [recordings]);
 
-  // ĐÃ SỬA: Không tự động chọn tất cả bản ghi đã duyệt nữa, để mặc định là mảng rỗng []
   const handleOpenCreateModal = () => {
     setSelectedRecordingIds([]);
     setIsCreateModalOpen(true);
@@ -321,9 +329,7 @@ export default function AdminRecordings() {
     const keywords = searchTerm.trim().toLowerCase().split(/\s+/).filter(Boolean);
 
     return recordings.filter((r) => {
-      const recStatus = calculateRecordingStatus(r.reviewers);
-
-      const matchStatus = statusFilter === "all" || recStatus === statusFilter;
+      const matchStatus = statusFilter === "all" || r.status === statusFilter;
       if (!matchStatus) return false;
 
       if (keywords.length === 0) return true;
@@ -353,7 +359,6 @@ export default function AdminRecordings() {
     return Math.max(0, pageSize - paginatedRecordings.length);
   }, [paginatedRecordings.length, pageSize]);
 
-  // HÀM FETCH BỘ DATASET: ĐỌC ĐÚNG DatasetDetailDto -> DatasetDto (Summary.recordingCount)
   const fetchDatasetsList = async () => {
     setLoadingDatasets(true);
     try {
@@ -364,9 +369,7 @@ export default function AdminRecordings() {
         items.map(async (ds) => {
           const dsId = ds.datasetId || ds.id;
           try {
-            // Lấy DatasetDetailDto từ BE
             const detail = await adminService.getDatasetDetail(dsId);
-            // Chuẩn C# DTO: detail.summary.recordingCount
             const countFromDetail = detail?.summary?.recordingCount ?? detail?.summary?.totalRecordings;
             
             return {
@@ -388,7 +391,6 @@ export default function AdminRecordings() {
     }
   };
 
-  // 1. NÚT 1: TẠO DATASET NHÁP (Mảng string cho CreateDatasetRequest.RecordingIds)
   const handleCreateDatasetSubmit = async (e) => {
     e.preventDefault();
     if (!datasetForm.datasetName.trim()) {
@@ -402,7 +404,6 @@ export default function AdminRecordings() {
     }
 
     try {
-      // DTO C# quy định RecordingIds là List<string>
       const formattedIds = selectedRecordingIds.map((id) => String(id));
 
       await adminService.createDataset({
@@ -422,30 +423,50 @@ export default function AdminRecordings() {
     }
   };
 
-  // 2. NÚT 2: PHÁT HÀNH DATASET (RELEASE)
   const handleOpenReleaseModal = () => {
     setIsReleaseModalOpen(true);
     fetchDatasetsList();
   };
 
+  // PHÁT HÀNH DATASET
   const handleExecuteRelease = async (datasetId) => {
     try {
       await adminService.releaseDataset(datasetId);
       toast.success("Phát hành Dataset thành công!");
-      fetchDatasetsList();
+      
+      // Lập tức cập nhật state xóa bộ dữ liệu đã phát hành thành công khỏi danh sách nháp
+      setAllDatasets((prev) =>
+        prev.filter((item) => String(item.datasetId || item.id) !== String(datasetId))
+      );
     } catch (err) {
-      console.error("Lỗi phát hành dataset:", err);
-      toast.error("Phát hành thất bại! Có thể bộ dữ liệu còn thiếu các biến thể câu.");
+      console.error("Lỗi phát hành dataset:", err?.response?.data || err);
+      const apiMsg = err?.response?.data?.detail || err?.response?.data?.title || err?.response?.data?.message || "Phát hành thất bại! Có thể bộ dữ liệu còn thiếu các biến thể câu.";
+      toast.error(apiMsg);
     }
   };
 
-  // 3. NÚT 3: TẢI DATASET VỀ MÁY TÍNH
+  // XÓA BẢN NHÁP DATASET
+  const handleDeleteDraftDataset = async (datasetId) => {
+    try {
+      await adminService.deleteDataset(datasetId);
+      toast.success("Đã xóa bản nháp Dataset thành công!");
+      
+      // Cập nhật lại UI lập tức
+      setAllDatasets((prev) =>
+        prev.filter((item) => String(item.datasetId || item.id) !== String(datasetId))
+      );
+    } catch (err) {
+      console.error("Lỗi xóa dataset nháp:", err);
+      toast.error("Không thể xóa bản nháp Dataset!");
+    }
+  };
+
   const handleOpenDownloadModal = () => {
     setIsDownloadModalOpen(true);
     fetchDatasetsList();
   };
 
-  const handleDownloadZipFile = async (datasetId) => {
+  const handleDownloadZipFile = async (datasetId, dsObject = null) => {
     try {
       const blob = await adminService.exportDatasetZip(datasetId);
       const url = window.URL.createObjectURL(new Blob([blob]));
@@ -457,9 +478,13 @@ export default function AdminRecordings() {
       link.parentNode.removeChild(link);
       window.URL.revokeObjectURL(url);
       
-      // LƯU LẠI ID ĐÃ TẢI VÀ TỰ ĐỘNG ẨN KHỎI GIAO DIỆN
-      setDownloadedDatasetIds((prev) => [...prev, String(datasetId)]);
-      toast.success("Đã bắt đầu tải xuống file .ZIP!");
+      // Đã cập nhật: Thêm cả datasetId và id của dsObject vào state để ẩn 100% chính xác khỏi UI
+      const idToHide = [String(datasetId)];
+      if (dsObject?.id) idToHide.push(String(dsObject.id));
+      if (dsObject?.datasetId) idToHide.push(String(dsObject.datasetId));
+
+      setDownloadedDatasetIds((prev) => [...prev, ...idToHide]);
+      toast.success("Đã bắt đầu tải xuống file .ZIP đầy đủ bản thu âm!");
     } catch (err) {
       console.error("Lỗi tải dataset:", err);
       toast.error("Không thể tải file .ZIP! Vui lòng đảm bảo Dataset đã được phát hành.");
@@ -495,12 +520,19 @@ export default function AdminRecordings() {
     }
   };
 
-  // LỌC CÁC DATASET ĐÃ PHÁT HÀNH NHƯNG CHƯA TẢI VỀ
   const releasedDatasetsToDownload = useMemo(() => {
     return allDatasets.filter((ds) => {
       const isReleased = ds.status === "Released" || ds.status === 1;
-      const idStr = String(ds.datasetId || ds.id);
-      return isReleased && !downloadedDatasetIds.includes(idStr);
+      const dsIdStr = String(ds.datasetId || "");
+      const idStr = String(ds.id || "");
+      const rawIdStr = String(ds.datasetId || ds.id || "");
+
+      const isDownloaded = 
+        downloadedDatasetIds.includes(rawIdStr) || 
+        (dsIdStr && downloadedDatasetIds.includes(dsIdStr)) ||
+        (idStr && downloadedDatasetIds.includes(idStr));
+
+      return isReleased && !isDownloaded;
     });
   }, [allDatasets, downloadedDatasetIds]);
 
@@ -561,7 +593,7 @@ export default function AdminRecordings() {
                 }}
               >
                 <option value="all" className="bg-white dark:bg-[#25272E]">Tất cả trạng thái</option>
-                <option value="Approved" className="bg-white dark:bg-[#25272E]">Đã phê duyệt</option>
+                <option value="Approved" className="bg-white dark:bg-[#25272E]">Đã duyệt</option>
                 <option value="Pending" className="bg-white dark:bg-[#25272E]">Chờ duyệt</option>
                 <option value="Rejected" className="bg-white dark:bg-[#25272E]">Từ chối</option>
               </select>
@@ -618,9 +650,7 @@ export default function AdminRecordings() {
                   {paginatedRecordings.map((r, index) => {
                     const stt = (currentPage - 1) * pageSize + index + 1;
                     const style = getCatStyle(r.topic);
-                    const status = calculateRecordingStatus(r.reviewers);
-                    const totalRev = (r.reviewers || []).length;
-                    const rejectedRevCount = (r.reviewers || []).filter((rev) => rev?.status === "Rejected").length;
+                    const status = r.status;
 
                     return (
                       <tr key={r.id} className="hover:bg-[#F7F5EF]/70 dark:hover:bg-[#25272E]/50 transition-colors h-11">
@@ -673,23 +703,15 @@ export default function AdminRecordings() {
                           {r.speaker}
                         </td>
 
+                        {/* NÚT XEM PHẢN HỒI CỐ ĐỊNH DỄ NHÌN */}
                         <td className="px-2 text-center align-middle">
                           <button
                             type="button"
                             onClick={() => handleOpenReviewersModal(r)}
                             className="inline-flex items-center justify-center gap-1.5 px-3 py-0.5 rounded-full type-caption font-label border bg-[#F7F5EF] dark:bg-[#25272E] border-[#E5E2D8] dark:border-gray-700 hover:bg-[#E5E2D8] dark:hover:bg-gray-700 transition-all cursor-pointer mx-auto"
                           >
-                            <span
-                              style={{
-                                color: rejectedRevCount > 0 ? CHIP_DANGER_TEXT : undefined
-                              }}
-                              className={rejectedRevCount > 0 ? "font-bold" : "text-[#6E7078] dark:text-gray-300"}
-                            >
-                              {totalRev > 0
-                                ? (rejectedRevCount > 0 
-                                    ? `${rejectedRevCount}/${totalRev} từ chối` 
-                                    : (totalRev === 1 ? `1 reviewer` : `${totalRev} reviewers`))
-                                : "Xem phản hồi"}
+                            <span className="text-[#6E7078] dark:text-gray-300 font-medium">
+                              Xem phản hồi
                             </span>
                             <Eye className="w-3 h-3 text-[#9A9CA3] dark:text-gray-400 shrink-0" />
                           </button>
@@ -900,7 +922,7 @@ export default function AdminRecordings() {
         const total = revList.length;
         const approvedCount = revList.filter(r => r?.status === "Approved" || r?.status === "Accepted").length;
         const rejectedCount = revList.filter(r => r?.status === "Rejected").length;
-        const finalStatus = calculateRecordingStatus(revList);
+        const finalStatus = selectedReviewersList.status;
 
         const topBorderBg =
           finalStatus === "Approved"
@@ -1129,7 +1151,7 @@ export default function AdminRecordings() {
                 />
               </div>
 
-              {/* PHẦN LỰA CHỌN BẢN GHI ÂM ĐÃ DUYỆT */}
+              {/* PHẦN LỰA CHỌN BẢN GHI ÂM ĐÃ DUYỆT - ĐỒNG BỘ 100% STYLE FONT GIỐNG TABLE BÊN NGOÀI */}
               <div className="space-y-2.5 pt-2 border-t border-[#E5E2D8] dark:border-gray-800">
                 <div className="flex items-center justify-between">
                   <label className="block type-label text-[#2B2C31] dark:text-gray-200">
@@ -1149,8 +1171,8 @@ export default function AdminRecordings() {
                           style={isChecked ? { borderColor: ADMIN_ACCENT } : {}}
                           className={`flex items-start justify-between p-2.5 rounded-xl type-ui transition-all border cursor-pointer ${
                             isChecked
-                              ? "bg-white dark:bg-[#1C1D22] shadow-xs font-bold text-[#16171C] dark:text-white"
-                              : "bg-white/70 dark:bg-[#1C1D22]/50 border-[#E5E2D8] dark:border-gray-700 hover:bg-white text-[#6E7078] dark:text-gray-300"
+                              ? "bg-white dark:bg-[#1C1D22] shadow-xs text-[#16171C] dark:text-white"
+                              : "bg-white/70 dark:bg-[#1C1D22]/50 border-[#E5E2D8] dark:border-gray-700 hover:bg-white text-[#16171C] dark:text-gray-200"
                           }`}
                         >
                           <div className="flex items-start gap-2.5 min-w-0 flex-1">
@@ -1165,13 +1187,36 @@ export default function AdminRecordings() {
                                 }
                               }}
                               style={{ accentColor: ADMIN_ACCENT }}
-                              className="rounded focus:ring-0 cursor-pointer shrink-0 mt-0.5"
+                              className="rounded focus:ring-0 cursor-pointer shrink-0 mt-1"
                             />
-                            <div className="flex flex-col min-w-0 pr-2">
-                              <span className="truncate leading-tight font-bold text-[#16171C] dark:text-gray-100">
-                                {cleanLanguageTags(rec.content)}
-                              </span>
-                              <span className="type-caption text-[#6E7078] dark:text-gray-400 truncate mt-0.5">
+                            <div className="flex flex-col min-w-0 pr-2 space-y-0.5 w-full">
+                              {/* CÂU VI-EN */}
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span 
+                                  style={{ background: `${ADMIN_ACCENT}1A`, color: ADMIN_ACCENT }}
+                                  className="w-11 shrink-0 rounded text-center text-caption leading-4 font-label"
+                                >
+                                  VI-EN
+                                </span>
+                                <p className="truncate type-ui text-[#16171C] dark:text-gray-100">
+                                  <HighlightCsText rawText={rec.content} />
+                                </p>
+                              </div>
+
+                              {/* CÂU VI */}
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span 
+                                  style={{ background: '#F0EEE6', color: '#6E7078' }}
+                                  className="w-11 shrink-0 rounded text-center text-caption leading-4 font-label dark:bg-[#25272E] dark:text-gray-400"
+                                >
+                                  VI
+                                </span>
+                                <p className="truncate type-ui text-[#16171C] dark:text-gray-300">
+                                  {cleanLanguageTags(rec.contentVietnamese || rec.content)}
+                                </p>
+                              </div>
+
+                              <span className="type-caption text-[#6E7078] dark:text-gray-400 truncate pt-0.5 block">
                                 Speaker: <strong className="text-[#16171C] dark:text-gray-200">{rec.speaker}</strong> · {formatDurationText(rec.durationSec)}
                               </span>
                             </div>
@@ -1247,7 +1292,6 @@ export default function AdminRecordings() {
                               <span className="font-bold text-[#16171C] dark:text-gray-100">
                                 {ds.datasetName} ({ds.version})
                               </span>
-                              {/* BADGE "Bản nháp" SỬ DỤNG STYLE CỦA CHIP "Chờ duyệt" */}
                               <span
                                 className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full type-caption font-label border whitespace-nowrap"
                                 style={{
@@ -1265,16 +1309,28 @@ export default function AdminRecordings() {
                             </div>
                           </div>
 
-                          {/* NÚT "Phát hành ngay" SỬ DỤNG KÍCH THƯỚC VÀ STYLE Y CHANG NÚT "Tải file .ZIP" */}
-                          <button
-                            type="button"
-                            onClick={() => handleExecuteRelease(id)}
-                            style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 10px 24px ${ADMIN_ACCENT}40` }}
-                            className="px-4 py-2 text-white font-bold rounded-xl hover:opacity-90 transition-all cursor-pointer shadow-sm flex items-center gap-1.5 shrink-0"
-                          >
-                            <Send className="w-4 h-4" />
-                            <span>Phát hành ngay</span>
-                          </button>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {/* NÚT PHÁT HÀNH */}
+                            <button
+                              type="button"
+                              onClick={() => handleExecuteRelease(id)}
+                              style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 10px 24px ${ADMIN_ACCENT}40` }}
+                              className="px-4 py-2 text-white font-bold rounded-xl hover:opacity-90 transition-all cursor-pointer shadow-sm flex items-center gap-1.5"
+                            >
+                              <Send className="w-4 h-4" />
+                              <span>Phát hành ngay</span>
+                            </button>
+
+                            {/* NÚT XÓA BẢN NHÁP NẰM BÊN PHẢI NÚT PHÁT HÀNH NGAY */}
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteDraftDataset(id)}
+                              title="Xóa bản nháp này"
+                              className="w-9 h-9 rounded-lg flex items-center justify-center text-[#6E7078] dark:text-gray-400 hover:text-[#C63B3B] dark:hover:text-[#E55353] hover:bg-[#FDEAEA] dark:hover:bg-[#C63B3B]/20 transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
                       );
                     })
@@ -1329,7 +1385,6 @@ export default function AdminRecordings() {
                               <span className="font-bold text-[#16171C] dark:text-gray-100">
                                 {ds.datasetName} ({ds.version})
                               </span>
-                              {/* BADGE "Đã phát hành" SỬ DỤNG STYLE CỦA CHIP "Đã duyệt" */}
                               <span
                                 className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full type-caption font-label border whitespace-nowrap"
                                 style={{
@@ -1348,7 +1403,7 @@ export default function AdminRecordings() {
 
                           <button
                             type="button"
-                            onClick={() => handleDownloadZipFile(id)}
+                            onClick={() => handleDownloadZipFile(id, ds)}
                             style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 10px 24px ${ADMIN_ACCENT}40` }}
                             className="px-4 py-2 text-white font-bold rounded-xl hover:opacity-90 transition-all cursor-pointer shadow-sm flex items-center gap-1.5 shrink-0"
                           >
