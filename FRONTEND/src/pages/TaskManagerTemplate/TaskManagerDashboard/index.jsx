@@ -54,8 +54,11 @@ export default function TaskManagerDashboard() {
         }
       });
 
-      // Kiểm tra xem task đã được phân công hay chưa
-      const isTaskAssigned = (t) => {
+      // Kiểm tra xem task đã được phân công VÀ đã được gán vào đợt (ở trang TaskManagerManagement) hay chưa
+      const isTaskAssignedInCampaign = (t) => {
+        const hasCampaign = Boolean(t.campaignId);
+        if (!hasCampaign) return false;
+
         if (t.assignedToUserId || t.assigneeName || t.assigneeId) return true;
         if (Array.isArray(t.assignedUsers) && t.assignedUsers.length > 0) return true;
         if (Array.isArray(t.assignees) && t.assignees.length > 0) return true;
@@ -74,9 +77,9 @@ export default function TaskManagerDashboard() {
         return rawType === "review" || rawType === "reviewer" || rawType === "editing" || rawType === "1" || rawType.includes("review");
       });
 
-      // Đếm số lượng nhiệm vụ đã phân công
-      const assignedSpeakers = speakerItems.filter(isTaskAssigned).length;
-      const assignedReviewers = reviewerItems.filter(isTaskAssigned).length;
+      // Đếm số lượng nhiệm vụ đã phân công (Chỉ đếm các nhiệm vụ thuộc Campaign/Đợt VÀ có người thực hiện)
+      const assignedSpeakers = speakerItems.filter(isTaskAssignedInCampaign).length;
+      const assignedReviewers = reviewerItems.filter(isTaskAssignedInCampaign).length;
 
       // Đếm số lượng nhiệm vụ theo Chủ đề chính xác
       let tech = 0;
