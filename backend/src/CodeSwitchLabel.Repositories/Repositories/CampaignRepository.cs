@@ -53,8 +53,15 @@ public class CampaignRepository(CodeSwitchLabelDbContext db) : ICampaignReposito
 
     public void Remove(Campaign campaign) => db.Campaigns.Remove(campaign);
 
+    /// <summary>
+    /// Khoá dòng campaign thật sự (<c>FOR UPDATE</c>) để các thao tác create/update/delete
+    /// và tạo task thu âm idempotent không race nhau. Dùng <c>SingleOrDefault</c> vì SQL thô
+    /// đã lọc theo khoá chính; EF không đọc được WHERE trong câu thô nên <c>First</c> sẽ cảnh báo.
+    /// </summary>
     public Task<Campaign?> GetForUpdateAsync(long campaignId, CancellationToken ct = default) =>
-        db.Campaigns.FirstOrDefaultAsync(c => c.CampaignId == campaignId, ct);
+        db.Campaigns
+            .FromSqlInterpolated($"SELECT * FROM campaign WHERE campaign_id = {campaignId} FOR UPDATE")
+            .SingleOrDefaultAsync(ct);
 
     public Task<Campaign?> GetAsync(long campaignId, CancellationToken ct = default) =>
         db.Campaigns.AsNoTracking().FirstOrDefaultAsync(c => c.CampaignId == campaignId, ct);
