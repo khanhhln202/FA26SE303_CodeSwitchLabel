@@ -135,9 +135,11 @@ public class CampaignRepository(CodeSwitchLabelDbContext db) : ICampaignReposito
 
     public async Task RefreshStatusAsync(long campaignId, CancellationToken ct = default)
     {
+        // TEAM_020: cùng câu FOR UPDATE với GetForUpdateAsync — dùng SingleOrDefault
+        // vì SQL thô đã lọc theo khoá chính (First cảnh báo EF).
         var campaign = await db.Campaigns
             .FromSqlInterpolated($"SELECT * FROM campaign WHERE campaign_id = {campaignId} FOR UPDATE")
-            .FirstOrDefaultAsync(ct);
+            .SingleOrDefaultAsync(ct);
 
         if (campaign is null) return;
 

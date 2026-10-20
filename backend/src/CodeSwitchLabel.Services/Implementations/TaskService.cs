@@ -1058,9 +1058,21 @@ public class TaskService(
         return quotas;
     }
 
-    /// <summary>Chỉ tiêu mỗi người phải đạt khi task có n người nhận. Luôn ít nhất 1.</summary>
-    private static int PerPersonQuota(int targetQty, int assigneeCount) =>
-        assigneeCount <= 1 ? targetQty : Math.Max(1, (int)Math.Ceiling(targetQty / (double)assigneeCount));
+    /// <summary>
+    /// TEAM_020: quota hiển thị cho lượt giao cũ chưa có target_qty (dữ liệu trước V12).
+    /// Lấy đúng phần của người ở vị trí <paramref name="index"/> trong mảng đã sắp xếp
+    /// (cùng thứ tự <see cref="SplitQuota"/> dùng khi chia), để tổng các phần hiển thị
+    /// đúng bằng chỉ tiêu task. Min 1 cho dữ liệu cũ bất thường (target &lt; số người),
+    /// cùng công thức backfill V12.
+    /// </summary>
+    private static int SplitQuotaAt(int targetQty, int count, int index)
+    {
+        if (count <= 0) return targetQty;
+
+        if (index < 0 || index >= count) index = 0;
+        var quotas = SplitQuota(targetQty, count);
+        return Math.Max(1, quotas[index]);
+    }
 
     /// <summary>
     /// TEAM_018: task duyệt trong đợt nhận việc qua đường tự đẩy lúc Speaker nộp, nên hàng chờ
@@ -1163,10 +1175,12 @@ public class TaskService(
             var mine = await tasks.GetAssigneeDoneAsync(row.TaskId, row.TaskType, ct);
             var nop = await tasks.GetAssigneeSubmittedAsync(row.TaskId, row.TaskType, ct);
 
-            // V12: quota nằm trên lượt giao. Dữ liệu cũ chưa có quota thì chia đều để
-            // không hiển thị chỉ tiêu của cả nhóm như mục tiêu của một người.
+            // V12: quota nằm trên lượt giao. Dữ liệu cũ chưa có quota thì lấy đúng phần
+            // của người này trong phép chia (cùng thứ tự Assignees đã sắp xếp), để tổng
+            // hiển thị đúng bằng chỉ tiêu task.
+            var myIndex = row.Assignees.ToList().FindIndex(a => a.UserId == speakerId);
             var myTarget = row.Assignees.FirstOrDefault(a => a.UserId == speakerId)?.TargetQty
-                           ?? PerPersonQuota(row.TargetQty, row.Assignees.Count);
+                           ?? SplitQuotaAt(row.TargetQty, row.Assignees.Count, myIndex);
 
             active.Add(row.ToSpeakerActiveTask(
                 now, mine.GetValueOrDefault(speakerId), nop.GetValueOrDefault(speakerId), myTarget));

@@ -457,8 +457,18 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
                     mine.Count,
                     // Mỗi người chỉ mang quota của mình, không cộng cả chỉ tiêu của nhóm.
                     // Lượt giao cũ chưa có quota thì chia đều để số liệu không nhảy về 0.
-                    mine.Sum(r => r.Assignees.First(a => a.UserId == u.UserId).TargetQty
-                        ?? DefaultShare(r.TargetQty, r.Assignees.Count)),
+                    mine.Sum(r =>
+                    {
+                        var mineRow = r.Assignees.First(a => a.UserId == u.UserId);
+                        if (mineRow.TargetQty.HasValue) return mineRow.TargetQty.Value;
+
+                        // TEAM_020: lượt giao cũ chưa có quota — lấy đúng phần của người
+                        // này trong phép chia (cùng thứ tự Assignees đã sắp xếp), để tổng
+                        // hiển thị đúng bằng chỉ tiêu task. Min 1 cho dữ liệu cũ bất thường.
+                        var idx = r.Assignees.ToList().FindIndex(a => a.UserId == u.UserId);
+                        var quotas = SplitQuota(r.TargetQty, r.Assignees.Count);
+                        return quotas[idx < 0 ? 0 : idx];
+                    }),
                     mine.Sum(r => r.Done),
                     mine.Count(r => r.Deadline != null && r.Deadline < now));
             })
@@ -810,9 +820,26 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
 
     public Task<int> SaveChangesAsync(CancellationToken ct = default) => db.SaveChangesAsync(ct);
 
-    /// <summary>Quota hiển thị cho lượt giao cũ chưa có target_qty (dữ liệu trước V12).</summary>
-    private static int DefaultShare(int targetQty, int assigneeCount) =>
-        assigneeCount <= 1 ? targetQty : Math.Max(1, (targetQty + assigneeCount - 1) / assigneeCount);
+    /// <summary>
+    /// TEAM_020: quota hiển thị cho lượt giao cũ chưa có target_qty (dữ liệu trước V12).
+    /// Chia "phần nguyên + dư" (cùng công thức backfill V12 và SplitQuota bên service):
+    /// tổng các phần đúng bằng chỉ tiêu task. Min 1 cho dữ liệu cũ bất thường.
+    /// </summary>
+    private static int[] SplitQuota(int targetQty, int assigneeCount)
+    {
+        if (assigneeCount <= 0) return [];
+
+        var baseQty = targetQty / assigneeCount;
+        var remainder = targetQty % assigneeCount;
+        var quotas = new int[assigneeCount];
+
+        for (var i = 0; i < assigneeCount; i++)
+        {
+            quotas[i] = Math.Max(1, baseQty + (i < remainder ? 1 : 0));
+        }
+
+        return quotas;
+    }
 
     /// <summary>
     /// Chiếu task sang TaskRow, gồm cả người đang nhận và các con số tiến độ.
