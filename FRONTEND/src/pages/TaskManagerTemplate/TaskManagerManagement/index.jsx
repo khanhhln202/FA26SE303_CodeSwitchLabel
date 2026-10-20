@@ -1049,73 +1049,32 @@ export default function TaskManagerManagement() {
                   {targetUserList.length > 0 ? (
                     targetUserList.map((u) => {
                       const isChecked = assignFormData.assignedUsers.includes(u.name);
-                      const hasPreferenceReason = currentSelectedTask?.role === "Speaker" && 
-                                                  u.performanceReason && 
-                                                  (u.performanceTag === "GOOD" || u.performanceTag === "BAD");
 
                       return (
                         <label 
                           key={u.id} 
                           style={isChecked ? { borderColor: TASK_MANAGER_ACCENT } : {}}
-                          className={`flex items-start justify-between p-2.5 rounded-xl type-ui transition-all border cursor-pointer ${
+                          className={`flex items-center justify-between p-2.5 rounded-xl type-ui transition-all border cursor-pointer ${
                             isChecked 
                               ? "bg-white dark:bg-[#1C1D22] shadow-xs font-bold text-[#16171C] dark:text-white" 
                               : "bg-white/70 dark:bg-[#1C1D22]/50 border-[#E5E2D8] dark:border-gray-700 hover:bg-white text-[#6E7078] dark:text-gray-300"
                           }`}
                         >
-                          <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
                             <input
                               type="checkbox"
                               checked={isChecked}
                               onChange={() => handleUserCheckboxToggle(u.name)}
                               style={{ accentColor: TASK_MANAGER_ACCENT }}
-                              className="rounded focus:ring-0 cursor-pointer shrink-0 mt-0.5"
+                              className="rounded focus:ring-0 cursor-pointer shrink-0"
                             />
                             <div className="flex flex-col min-w-0 pr-1">
                               <span className="truncate leading-tight font-bold">{u.name}</span>
                               <span className="type-caption text-[#6E7078] dark:text-gray-400 truncate">
                                 {u.email}
                               </span>
-                              
-                              {hasPreferenceReason && (
-                                <span className="type-meta font-medium mt-0.5 text-[#6E7078] dark:text-gray-400 line-clamp-1">
-                                  Lý do: {u.performanceReason}
-                                </span>
-                              )}
                             </div>
                           </div>
-
-                          {currentSelectedTask?.role === "Speaker" && (
-                            <div className="flex items-center gap-1 shrink-0 ml-1 mt-0.5">
-                              {u.performanceTag === "GOOD" && (
-                                <span 
-                                  style={{
-                                    backgroundColor: CHIP_SUCCESS_BG,
-                                    borderColor: CHIP_SUCCESS_BORDER,
-                                    color: CHIP_SUCCESS_TEXT
-                                  }}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md type-caption font-bold border"
-                                >
-                                  <Award className="w-3 h-3 shrink-0" />
-                                  <span>Ưu tiên</span>
-                                </span>
-                              )}
-
-                              {u.performanceTag === "BAD" && (
-                                <span 
-                                  style={{
-                                    backgroundColor: "rgba(243, 114, 127, 0.15)",
-                                    borderColor: "rgba(243, 114, 127, 0.4)",
-                                    color: DANGER
-                                  }}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md type-caption font-bold border"
-                                >
-                                  <AlertCircle className="w-3 h-3 shrink-0" />
-                                  <span>Hạn chế</span>
-                                </span>
-                              )}
-                            </div>
-                          )}
                         </label>
                       );
                     })
@@ -1270,73 +1229,32 @@ export default function TaskManagerManagement() {
                       <div className="max-h-52 overflow-y-auto border border-[#E5E2D8] dark:border-gray-700 bg-[#F7F5EF] dark:bg-[#25272E] rounded-xl p-2.5 space-y-2">
                         {userList.map((u) => {
                           const isChecked = editTaskFormData.assignedUserIds.includes(Number(u.id));
-                          const hasPreferenceReason = editTaskFormData.role === "Speaker" && 
-                                                      u.performanceReason && 
-                                                      (u.performanceTag === "GOOD" || u.performanceTag === "BAD");
 
                           return (
                             <label 
                               key={u.id}
                               style={isChecked ? { borderColor: TASK_MANAGER_ACCENT } : {}}
-                              className={`flex items-start justify-between p-2.5 rounded-xl type-ui transition-all border cursor-pointer ${
+                              className={`flex items-center justify-between p-2.5 rounded-xl type-ui transition-all border cursor-pointer ${
                                 isChecked 
                                   ? "bg-white dark:bg-[#1C1D22] shadow-xs font-bold text-[#16171C] dark:text-white" 
                                   : "bg-white/70 dark:bg-[#1C1D22]/50 border-[#E5E2D8] dark:border-gray-700 hover:bg-white text-[#6E7078] dark:text-gray-300"
                               }`}
                             >
-                              <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                              <div className="flex items-center gap-2.5 min-w-0 flex-1">
                                 <input
                                   type="checkbox"
                                   checked={isChecked}
                                   onChange={() => handleToggleUserInEditTask(Number(u.id))}
                                   style={{ accentColor: TASK_MANAGER_ACCENT }}
-                                  className="rounded focus:ring-0 cursor-pointer shrink-0 mt-0.5"
+                                  className="rounded focus:ring-0 cursor-pointer shrink-0"
                                 />
                                 <div className="flex flex-col min-w-0 pr-1">
                                   <span className="truncate leading-tight font-bold">{u.name}</span>
                                   <span className="type-caption text-[#6E7078] dark:text-gray-400 truncate">
                                     {u.email}
                                   </span>
-
-                                  {hasPreferenceReason && (
-                                    <span className="type-meta font-medium mt-0.5 text-[#6E7078] dark:text-gray-400 line-clamp-1">
-                                      Lý do: {u.performanceReason}
-                                    </span>
-                                  )}
                                 </div>
                               </div>
-
-                              {editTaskFormData.role === "Speaker" && (
-                                <div className="flex items-center gap-1 shrink-0 ml-1 mt-0.5">
-                                  {u.performanceTag === "GOOD" && (
-                                    <span 
-                                      style={{
-                                        backgroundColor: CHIP_SUCCESS_BG,
-                                        borderColor: CHIP_SUCCESS_BORDER,
-                                        color: CHIP_SUCCESS_TEXT
-                                      }}
-                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md type-caption font-bold border"
-                                    >
-                                      <Award className="w-3 h-3 shrink-0" />
-                                      <span>Ưu tiên</span>
-                                    </span>
-                                  )}
-
-                                  {u.performanceTag === "BAD" && (
-                                    <span 
-                                      style={{
-                                        backgroundColor: "rgba(243, 114, 127, 0.15)",
-                                        borderColor: "rgba(243, 114, 127, 0.4)",
-                                        color: DANGER
-                                      }}
-                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md type-caption font-bold border"
-                                    >
-                                      <AlertCircle className="w-3 h-3 shrink-0" />
-                                      <span>Hạn chế</span>
-                                    </span>
-                                  )}
-                                </div>
-                              )}
                             </label>
                           );
                         })}

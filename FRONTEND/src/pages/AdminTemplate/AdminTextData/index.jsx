@@ -341,7 +341,7 @@ export default function AdminTextData() {
   }, [filteredTexts, currentPage, pageSize]);
 
   return (
-    <div className="max-w-6xl mx-auto h-full flex flex-col justify-between text-left font-sans p-1 overflow-hidden relative transition-colors">
+    <div className="w-full h-full flex flex-col justify-between text-left font-sans p-1 overflow-hidden transition-colors relative">
       
       {/* Toolbar & Filter Bar + Nút Thêm Văn Bản */}
       <div className="shrink-0 space-y-2">
