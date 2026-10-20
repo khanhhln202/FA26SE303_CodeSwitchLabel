@@ -1,6 +1,7 @@
 using CodeSwitchLabel.Repositories.Entities;
 using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Services.Abstractions;
+using CodeSwitchLabel.Services.Common;
 using CodeSwitchLabel.Services.Dtos;
 using CodeSwitchLabel.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -77,12 +78,14 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
     }
 
     private Task<SubmitReviewResult> DuyetAsync(
-        string recordingId, long reviewerId, long taskId, int vong, CancellationToken ct) =>
+        string recordingId, long reviewerId, long taskId, int vong, CancellationToken ct,
+        ReviewDecision quyetDinh = ReviewDecision.Approved) =>
         ReviewService.SubmitAsync(recordingId, reviewerId, new SubmitReviewRequest
         {
-            Decision = ReviewDecision.Approved,
+            Decision = quyetDinh,
             ExpectedRound = vong,
-            TaskId = taskId
+            TaskId = taskId,
+            RejectionReasonCodes = quyetDinh == ReviewDecision.Rejected ? ["background_noise"] : []
         }, ct);
 
     /// <summary>
@@ -120,14 +123,17 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
         // Mấu chốt: lô vẫn còn chờ, vì hai người kia chưa bỏ phiếu.
         Assert.Equal(TaskRecordingStatus.Queued, await TrangThaiLoAsync(task.TaskId, recording.RecordingId, ct));
 
-        var vong2 = await DuyetAsync(recording.RecordingId, rv2.UserId, task.TaskId, 2, ct);
+        // Phiếu thứ hai NGƯỢC phiếu đầu: 1-1 thì chưa bên nào quá bán, nên mới có vòng ba.
+        var vong2 = await DuyetAsync(
+            recording.RecordingId, rv2.UserId, task.TaskId, 2, ct, ReviewDecision.Rejected);
         Assert.Equal(2, vong2.Round);
+        Assert.False(vong2.IsFinal);
         Assert.Equal(TaskRecordingStatus.Queued, await TrangThaiLoAsync(task.TaskId, recording.RecordingId, ct));
 
         var vong3 = await DuyetAsync(recording.RecordingId, rv3.UserId, task.TaskId, 3, ct);
 
         Assert.Equal(3, vong3.Round);
-        Assert.True(vong3.IsFinal, "Đủ ba lượt thì trigger phải chốt bản ghi.");
+        Assert.True(vong3.IsFinal, "Hai phiếu đạt trên ba vòng là quá bán, trigger phải chốt.");
         Assert.Equal(RecordingStatus.Approved, vong3.RecordingStatus);
 
         // Hết người duyệt được và bản ghi đã chốt — giờ lô mới xong với bản ghi này.
@@ -162,6 +168,58 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
 
         Assert.False(ketQua.IsFinal);
         Assert.Equal(TaskRecordingStatus.Reviewed, await TrangThaiLoAsync(task.TaskId, recording.RecordingId, ct));
+    }
+
+    /// <summary>
+    /// Hai phiếu giống nhau trên ba vòng là quá bán — chốt NGAY, không bắt người đọc chờ lượt
+    /// thứ ba vốn không lật được kết quả. Lô cũng xong theo, và lượt thứ ba bị từ chối.
+    /// </summary>
+    [Fact]
+    public async Task HaiPhieuTuChoi_ChotTruotNgay_KhongChoLuotThuBa()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var dau = Dau();
+
+        var (manager, campaign) = await TaoDotAsync(dau, ct);
+        var speaker = await CreateUserAsync($"sp-{dau}@test.local", RoleName.Speaker);
+        var rv1 = await CreateUserAsync($"rv1-{dau}@test.local", RoleName.Reviewer);
+        var rv2 = await CreateUserAsync($"rv2-{dau}@test.local", RoleName.Reviewer);
+        var rv3 = await CreateUserAsync($"rv3-{dau}@test.local", RoleName.Reviewer);
+
+        var script = await CreateValidatedScriptAsync(
+            $"[vi]Tối nay bên kỹ thuật sẽ [en]update{dau} [vi]máy chủ.",
+            $"[vi]Tối nay bên kỹ thuật sẽ cập nhật máy chủ {dau}.",
+            ScriptDomain.ItTechnology, speaker.UserId);
+
+        var recording = await CreateRecordingAsync(
+            script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
+
+        var task = await TaoLoDuyetAsync(
+            campaign.CampaignId, manager.UserId, recording.RecordingId,
+            [rv1.UserId, rv2.UserId, rv3.UserId], 1, ct);
+
+        var vong1 = await DuyetAsync(
+            recording.RecordingId, rv1.UserId, task.TaskId, 1, ct, ReviewDecision.Rejected);
+        Assert.False(vong1.IsFinal);
+
+        var vong2 = await DuyetAsync(
+            recording.RecordingId, rv2.UserId, task.TaskId, 2, ct, ReviewDecision.Rejected);
+
+        Assert.True(vong2.IsFinal, "Hai phiếu từ chối trên ba vòng là quá bán.");
+        Assert.Equal(RecordingStatus.Rejected, vong2.RecordingStatus);
+
+        // Lô hết việc với bản ghi này, dù người thứ ba chưa bỏ phiếu. Là Skipped chứ không
+        // phải Reviewed vì bản ghi bị LOẠI: lượt duyệt của nó không còn đóng góp cho chỉ tiêu
+        // của lô nữa (TEAM_010, yêu cầu 4.2 — chỉ tiêu phải tụt khi bản ghi bị loại).
+        Assert.Equal(TaskRecordingStatus.Skipped, await TrangThaiLoAsync(task.TaskId, recording.RecordingId, ct));
+
+        // Mỗi request thật có DbContext riêng, còn test dùng chung một cái — không xoá bộ nhớ
+        // theo dõi thì service đọc lại đúng thực thể cũ và không thấy trạng thái trigger vừa ghi.
+        Db.ChangeTracker.Clear();
+
+        var muon = await Assert.ThrowsAsync<ConflictException>(
+            () => DuyetAsync(recording.RecordingId, rv3.UserId, task.TaskId, 3, ct, ReviewDecision.Approved));
+        Assert.Equal("recording_not_reviewable", muon.Code);
     }
 
     /// <summary>

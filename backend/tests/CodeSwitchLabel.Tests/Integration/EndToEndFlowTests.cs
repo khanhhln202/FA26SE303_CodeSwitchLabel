@@ -13,7 +13,7 @@ namespace CodeSwitchLabel.Tests.Integration;
 /// <summary>
 /// Chạy trọn chuỗi nghiệp vụ qua API thật (WebApplicationFactory + PostgreSQL Testcontainer):
 /// Admin nhập file câu → duyệt nội dung → chiến dịch → Task Manager phân task → Speaker ghi âm
-/// → ba Reviewer duyệt đa số → task tự hoàn thành. Kèm nhánh QC trượt và luật phân task.
+/// → Reviewer duyệt tới khi quá bán → task tự hoàn thành. Kèm nhánh QC trượt và luật phân task.
 /// </summary>
 [Collection("Database")]
 [Trait("Category", "Integration")]
@@ -93,10 +93,11 @@ public sealed class EndToEndFlowTests : ApiTestBase
             Assert.Equal(0, summary.GetProperty("progress").GetProperty("done").GetInt32());
         }
 
-        // 6) Ba Reviewer duyệt mỗi bản một lượt — duyệt mù, lượt thứ ba chốt theo đa số.
+        // 6) Duyệt mù từng lượt. Cần 3 lượt nên HAI phiếu đạt đã là quá bán: bản ghi chốt
+        //    ngay ở lượt thứ hai, lượt thứ ba không còn chỗ.
         foreach (var recordingId in new[] { csRecordingId, viRecordingId })
         {
-            foreach (var token in new[] { reviewer1, reviewer2, reviewer3 })
+            foreach (var token in new[] { reviewer1, reviewer2 })
             {
                 using var open = await ReadJsonAsync(await GetAsync($"/api/reviewer/recordings/{recordingId}", token));
                 var round = open.RootElement.GetProperty("round").GetInt32();
@@ -107,12 +108,16 @@ public sealed class EndToEndFlowTests : ApiTestBase
 
                 using var result = await ReadJsonAsync(submit);
 
-                if (round == 3)
+                if (round == 2)
                 {
                     Assert.True(result.RootElement.GetProperty("isFinal").GetBoolean());
                     Assert.Equal("Approved", result.RootElement.GetProperty("recordingStatus").GetString());
                 }
             }
+
+            var muon = await PostAsync($"/api/recordings/{recordingId}/reviews",
+                new { decision = "Approved", expectedRound = 3 }, reviewer3);
+            Assert.Equal(HttpStatusCode.Conflict, muon.StatusCode);
         }
 
         // 7) Cả hai bản duyệt đạt → mục cặp câu hoàn thành → task tự chuyển Completed.

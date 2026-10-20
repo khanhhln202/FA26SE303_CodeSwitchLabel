@@ -1401,8 +1401,10 @@ CREATE TRIGGER trg_dataset_recording_immutable
 -- [ERD] after independent reviews, final status = majority decision (reads review.rounds_required from config)
 CREATE OR REPLACE FUNCTION fn_review_majority_status() RETURNS trigger AS $$ DECLARE
     v_rounds_required INT;
+    v_majority        INT;
     v_total           INT;
     v_approved        INT;
+    v_rejected        INT;
     v_final           recording_status;
 BEGIN
     SELECT COALESCE(NULLIF(config_value, '')::int, 3)
@@ -1414,36 +1416,52 @@ BEGIN
         v_rounds_required := 3;
     END IF;
 
+    v_majority := (v_rounds_required / 2) + 1;
+
     SELECT COUNT(*), COUNT(*) FILTER (WHERE decision = 'approved')
       INTO v_total, v_approved
       FROM review WHERE recording_id = NEW.recording_id;
 
-    IF v_total >= v_rounds_required THEN
-        v_final := CASE WHEN v_approved >= (v_rounds_required / 2) + 1 THEN 'approved' ELSE 'rejected' END;
-        UPDATE recording SET status = v_final
-         WHERE recording_id = NEW.recording_id AND status = 'pending_review';
+    v_rejected := v_total - v_approved;
 
-        -- TEAM_007: Chỉ khi đa số từ chối bản ghi VÀ có lý do thuộc nhóm 'content' mới trả câu về pending_validation
-        IF v_final = 'rejected' THEN
-            IF EXISTS (
-                SELECT 1
-                  FROM review_rejection_reason rrr
-                  JOIN rejection_reason rr ON rr.reason_id = rrr.reason_id
-                  JOIN review rv ON rv.review_id = rrr.review_id
-                 WHERE rv.recording_id = NEW.recording_id
-                   AND rr.category = 'content'
-            ) THEN
-                UPDATE script SET status = 'pending_validation'
-                 WHERE script_id = (SELECT script_id FROM recording WHERE recording_id = NEW.recording_id)
-                   AND status = 'validated';
+    -- Chốt NGAY khi một bên đã quá bán: những lượt còn lại không lật được kết quả nữa,
+    -- nên bắt người đọc chờ thêm chỉ làm chậm việc thu lại. Trước đây phải đủ
+    -- v_rounds_required lượt mới chốt, nên bản bị hai người từ chối vẫn nằm "chờ duyệt".
+    IF v_approved >= v_majority THEN
+        v_final := 'approved';
+    ELSIF v_rejected >= v_majority THEN
+        v_final := 'rejected';
+    ELSIF v_total >= v_rounds_required THEN
+        -- Chỉ xảy ra khi số vòng là số CHẴN và hai bên hoà (2-2 khi cần 4 lượt):
+        -- không đủ phiếu đạt thì trượt, đúng như nhánh cũ.
+        v_final := 'rejected';
+    ELSE
+        RETURN NEW;
+    END IF;
 
-                -- TEAM_010: câu quay về bước duyệt nội dung thì không còn là mục công việc
-                -- nữa. Trước đây trigger để nguyên task_script ở 'pending' nên task treo
-                -- vĩnh viễn, không bao giờ đạt chỉ tiêu.
-                UPDATE task_script SET status = 'rejected'
-                 WHERE script_id = (SELECT script_id FROM recording WHERE recording_id = NEW.recording_id)
-                   AND status = 'pending';
-            END IF;
+    UPDATE recording SET status = v_final
+     WHERE recording_id = NEW.recording_id AND status = 'pending_review';
+
+    -- TEAM_007: Chỉ khi đa số từ chối bản ghi VÀ có lý do thuộc nhóm 'content' mới trả câu về pending_validation
+    IF v_final = 'rejected' THEN
+        IF EXISTS (
+            SELECT 1
+              FROM review_rejection_reason rrr
+              JOIN rejection_reason rr ON rr.reason_id = rrr.reason_id
+              JOIN review rv ON rv.review_id = rrr.review_id
+             WHERE rv.recording_id = NEW.recording_id
+               AND rr.category = 'content'
+        ) THEN
+            UPDATE script SET status = 'pending_validation'
+             WHERE script_id = (SELECT script_id FROM recording WHERE recording_id = NEW.recording_id)
+               AND status = 'validated';
+
+            -- TEAM_010: câu quay về bước duyệt nội dung thì không còn là mục công việc
+            -- nữa. Trước đây trigger để nguyên task_script ở 'pending' nên task treo
+            -- vĩnh viễn, không bao giờ đạt chỉ tiêu.
+            UPDATE task_script SET status = 'rejected'
+             WHERE script_id = (SELECT script_id FROM recording WHERE recording_id = NEW.recording_id)
+               AND status = 'pending';
         END IF;
     END IF;
 
