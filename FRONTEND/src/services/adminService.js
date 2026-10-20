@@ -75,7 +75,6 @@ export const adminService = {
     return res.data;
   },
   deleteText: async (id) => {
-    // Gọi trực tiếp HTTP DELETE /api/scripts/{id} để xóa cứng câu ở trạng thái Chờ duyệt
     const res = await httpClient.delete(`/api/scripts/${id}`);
     return res.data;
   },
@@ -115,6 +114,11 @@ export const adminService = {
     const res = await httpClient.post(`/api/datasets/${id}/archive`);
     return res.data;
   },
+  deleteDataset: async (id) => {
+    // Gọi DELETE /api/datasets/{id} để xóa dataset nháp
+    const res = await httpClient.delete(`/api/datasets/${id}`);
+    return res.data;
+  },
   exportDatasetZip: async (datasetId) => {
     let targetId = datasetId;
 
@@ -130,7 +134,12 @@ export const adminService = {
       throw new Error("Chưa có Dataset nào được khởi tạo hoặc phát hành trên hệ thống!");
     }
 
+    // Đã bổ sung params includeAudio và includeRecordings để BE đóng gói cả thư mục âm thanh vào .ZIP
     const res = await httpClient.get(`/api/datasets/${targetId}/download`, {
+      params: { 
+        includeAudio: true,
+        includeRecordings: true
+      },
       responseType: "blob"
     });
     return res.data;
