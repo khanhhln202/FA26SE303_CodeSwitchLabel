@@ -35,13 +35,23 @@ public record TaskRow(
     int TotalItems);
 
 /// <summary>TEAM_010: một người đang nhận task. Trước đây TaskRow chỉ giữ một người đầu tiên.</summary>
-public record TaskAssigneeRow(long UserId, string FullName);
+/// <param name="TargetQty">Quota riêng của người này; null = lượt giao cũ chưa có quota.</param>
+public record TaskAssigneeRow(long UserId, string FullName, int? TargetQty = null);
 
 public record AssigneeSummaryRow(
     long UserId, string FullName, RoleName Role, int ActiveTasks, int TotalTarget, int TotalDone, int OverdueTasks);
 
 /// <summary>Một người giao được việc, kèm khối lượng đang gánh để chia việc cho đều.</summary>
-public record AssignableUserRow(long UserId, string FullName, RoleName Role, int ActiveTasks, int TotalTarget, decimal? ApprovalRatePct, int OverdueTasks);
+public record AssignableUserRow(
+    long UserId,
+    string FullName,
+    RoleName Role,
+    int ActiveTasks,
+    int TotalTarget,
+    decimal? ApprovalRatePct,
+    int OverdueTasks,
+    string Email = "",
+    string? Phone = null);
 
 public interface ITaskRepository
 {
@@ -88,6 +98,12 @@ public interface ITaskRepository
     /// Gồm cả task đã đủ chỉ tiêu — TEAM_016: người nhận vẫn duyệt thêm được, KPI không chặn.
     /// </summary>
     Task<List<long>> GetReviewTaskIdsForCampaignAsync(long campaignId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Task thu âm duy nhất còn sống của một chiến dịch. Dùng cho luồng
+    /// POST /api/campaigns/{id}/recording-task (idempotent).
+    /// </summary>
+    Task<WorkTask?> GetRecordingTaskForCampaignAsync(long campaignId, CancellationToken ct = default);
 
     /// <summary>TEAM_012: <paramref name="sort"/> rỗng (Field = null) là thứ tự mặc định.</summary>
     Task<(IReadOnlyList<TaskRow> Items, int Total)> SearchAsync(
@@ -255,6 +271,15 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
             .OrderBy(t => t.TaskId)
             .Select(t => t.TaskId)
             .ToListAsync(ct);
+
+    public Task<WorkTask?> GetRecordingTaskForCampaignAsync(
+        long campaignId, CancellationToken ct = default) =>
+        db.WorkTasks
+            .Where(t => t.CampaignId == campaignId &&
+                        t.TaskType == TaskType.Recording &&
+                        t.Status != WorkTaskStatus.Cancelled)
+            .OrderBy(t => t.TaskId)
+            .FirstOrDefaultAsync(ct);
 
     public async Task<(IReadOnlyList<TaskRow> Items, int Total)> SearchAsync(
         TaskType? type, WorkTaskStatus? status, long? assigneeId, ScriptDomain? domain, bool? overdue,
@@ -430,9 +455,20 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
                 return new AssigneeSummaryRow(
                     u.UserId, u.FullName, u.RoleName,
                     mine.Count,
-                    // Chỉ tiêu là của cả nhóm nên mỗi người mang về đúng một phần chỉ tiêu
-                    // của task — cộng dồn theo task chứ KHÔNG nhân với số người cùng nhận.
-                    mine.Sum(r => r.TargetQty),
+                    // Mỗi người chỉ mang quota của mình, không cộng cả chỉ tiêu của nhóm.
+                    // Lượt giao cũ chưa có quota thì chia đều để số liệu không nhảy về 0.
+                    mine.Sum(r =>
+                    {
+                        var mineRow = r.Assignees.First(a => a.UserId == u.UserId);
+                        if (mineRow.TargetQty.HasValue) return mineRow.TargetQty.Value;
+
+                        // TEAM_020: lượt giao cũ chưa có quota — lấy đúng phần của người
+                        // này trong phép chia (cùng thứ tự Assignees đã sắp xếp), để tổng
+                        // hiển thị đúng bằng chỉ tiêu task. Min 1 cho dữ liệu cũ bất thường.
+                        var idx = r.Assignees.ToList().FindIndex(a => a.UserId == u.UserId);
+                        var quotas = SplitQuota(r.TargetQty, r.Assignees.Count);
+                        return quotas[idx < 0 ? 0 : idx];
+                    }),
                     mine.Sum(r => r.Done),
                     mine.Count(r => r.Deadline != null && r.Deadline < now));
             })
@@ -507,6 +543,8 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
             {
                 u.UserId,
                 u.FullName,
+                u.Email,
+                u.Phone,
                 Role = u.Role.RoleName,
                 ActiveTasks = db.TaskAssignments.Count(a =>
                     a.UserId == u.UserId &&
@@ -517,7 +555,8 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
                         a.UserId == u.UserId &&
                         a.AssignmentStatus == AssignmentStatus.Active &&
                         (a.Task.Status == WorkTaskStatus.InProgress))
-                    .Sum(a => (int?)a.Task.TargetQty) ?? 0,
+                    // Quota riêng đã có từ V12; task cũ chưa backfill thì tạm tính cả task.
+                    .Sum(a => (int?)(a.TargetQty ?? a.Task.TargetQty)) ?? 0,
                 OverdueTasks = db.TaskAssignments.Count(a =>
                     a.UserId == u.UserId &&
                     a.AssignmentStatus == AssignmentStatus.Active &&
@@ -537,7 +576,8 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
             .ThenBy(u => u.ActiveTasks)
             .ThenBy(u => u.FullName)
             .Select(u => new AssignableUserRow(
-                u.UserId, u.FullName, u.Role, u.ActiveTasks, u.TotalTarget, u.ApprovalRatePct, u.OverdueTasks))];
+                u.UserId, u.FullName, u.Role, u.ActiveTasks, u.TotalTarget,
+                u.ApprovalRatePct, u.OverdueTasks, u.Email, u.Phone))];
     }
 
     public Task<bool> IsActiveTaskOfAsync(
@@ -781,6 +821,27 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
     public Task<int> SaveChangesAsync(CancellationToken ct = default) => db.SaveChangesAsync(ct);
 
     /// <summary>
+    /// TEAM_020: quota hiển thị cho lượt giao cũ chưa có target_qty (dữ liệu trước V12).
+    /// Chia "phần nguyên + dư" (cùng công thức backfill V12 và SplitQuota bên service):
+    /// tổng các phần đúng bằng chỉ tiêu task. Min 1 cho dữ liệu cũ bất thường.
+    /// </summary>
+    private static int[] SplitQuota(int targetQty, int assigneeCount)
+    {
+        if (assigneeCount <= 0) return [];
+
+        var baseQty = targetQty / assigneeCount;
+        var remainder = targetQty % assigneeCount;
+        var quotas = new int[assigneeCount];
+
+        for (var i = 0; i < assigneeCount; i++)
+        {
+            quotas[i] = Math.Max(1, baseQty + (i < remainder ? 1 : 0));
+        }
+
+        return quotas;
+    }
+
+    /// <summary>
     /// Chiếu task sang TaskRow, gồm cả người đang nhận và các con số tiến độ.
     /// Task thu âm đếm theo CẶP CÂU, task duyệt đếm theo bản ghi.
     /// </summary>
@@ -802,7 +863,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
             t.Assignments
                 .Where(a => a.AssignmentStatus == AssignmentStatus.Active)
                 .OrderBy(a => a.User.FullName)
-                .Select(a => new TaskAssigneeRow(a.UserId, a.User.FullName))
+                .Select(a => new TaskAssigneeRow(a.UserId, a.User.FullName, a.TargetQty))
                 .ToList(),
             t.TaskType == TaskType.Recording
                 ? db.Recordings.Count(r => r.TaskId == t.TaskId && r.Status != RecordingStatus.QcFailed)

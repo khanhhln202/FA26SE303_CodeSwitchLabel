@@ -164,14 +164,16 @@ public static partial class DatabaseSeeder
                 TaskId = recordingTask.TaskId,
                 UserId = ids.Speaker,
                 AssignedAt = now,
-                AssignmentStatus = AssignmentStatus.Active
+                AssignmentStatus = AssignmentStatus.Active,
+                TargetQty = recordingTask.TargetQty
             },
             new TaskAssignment
             {
                 TaskId = reviewTask.TaskId,
                 UserId = ids.Reviewer,
                 AssignedAt = now,
-                AssignmentStatus = AssignmentStatus.Active
+                AssignmentStatus = AssignmentStatus.Active,
+                TargetQty = reviewTask.TargetQty
             });
 
         await db.SaveChangesAsync(ct);

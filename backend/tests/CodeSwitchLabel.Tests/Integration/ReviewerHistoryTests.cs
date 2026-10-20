@@ -12,8 +12,8 @@ namespace CodeSwitchLabel.Tests.Integration;
 /// <summary>
 /// Lịch sử duyệt của Reviewer: mỗi dòng lịch sử bản ghi là MỘT CẶP (như lịch sử ghi âm
 /// của Speaker) — gom hai biến thể trước khi cắt trang, `myDecision` gộp "có lượt từ chối
-/// là từ chối", và `reviews` giữ luật duyệt mù: bản chưa chốt chỉ lộ lượt của chính người
-/// đang xem, chốt rồi mới lộ đủ ba lượt. Lịch sử duyệt câu
+/// là từ chối". Sau khi người xem đã bỏ phiếu, lịch sử lộ đủ phiếu của cả hai bên kể cả
+/// khi cặp chưa chốt; màn hình duyệt đang hoạt động vẫn là duyệt mù. Lịch sử duyệt câu
 /// thêm người gửi, cặp từ Anh-Việt và lý do khi lượt của mình là Từ chối.
 /// </summary>
 [Collection("Database")]
@@ -132,7 +132,7 @@ public sealed class ReviewerHistoryTests : IntegrationTestBase
         // cs đã chốt Rejected, vi còn chờ — trạng thái cặp theo bản đã chốt.
         Assert.Equal(RecordingStatus.Rejected, item.RecordingStatus);
 
-        // Bản cs đã chốt nên lộ đủ ba lượt; bản vi còn chờ nên chỉ lộ lượt của chính tôi.
+        // Bản cs đã chốt nên có đủ ba lượt; bản vi mới chỉ có lượt của tôi.
         Assert.Equal(4, item.Reviews.Count);
         Assert.Equal(new[] { 1, 2, 3, 1 }, item.Reviews.Select(r => r.Round).ToArray());
         Assert.Equal(
@@ -150,12 +150,12 @@ public sealed class ReviewerHistoryTests : IntegrationTestBase
     }
 
     /// <summary>
-    /// Luật duyệt mù: bản chưa chốt thì người duyệt KHÔNG thấy phiếu của người khác, chỉ thấy
-    /// phiếu của chính mình. Biết trước phiếu của người đi trước là hỏng tính độc lập của lượt
-    /// duyệt còn lại.
+    /// Lịch sử chỉ hiện cặp mà người xem đã có phiếu, và khi đã có phiếu rồi thì được xem
+    /// đủ phiếu của cả hai bên kể cả khi cặp chưa chốt. Màn hình duyệt đang hoạt động
+    /// vẫn mù; lịch sử không phải chỗ để giấu phiếu của chính mình.
     /// </summary>
     [Fact]
-    public async Task BanChuaChot_KhongLoPhieuCuaNguoiKhac()
+    public async Task BanChuaChot_DaCoPhieuMinh_LoDuPhieuCuaCaHaiBen()
     {
         var ct = TestContext.Current.CancellationToken;
         var speaker = await CreateUserAsync(NewUniqueEmail("mu"), RoleName.Speaker);
@@ -186,9 +186,9 @@ public sealed class ReviewerHistoryTests : IntegrationTestBase
 
         var item = Assert.Single(page.Items, i => i.ScriptId == script.ScriptId);
 
-        var luot = Assert.Single(item.Reviews);
-        Assert.Equal("Phiếu của tôi", luot.Reason);
-        Assert.Equal(1, luot.Round);
+        Assert.Equal(2, item.Reviews.Count);
+        Assert.Contains(item.Reviews, v => v.Reason == "Phiếu của tôi" && v.Round == 1);
+        Assert.Contains(item.Reviews, v => v.Reason == "Phiếu của người khác" && v.Round == 2);
     }
 
     [Fact]

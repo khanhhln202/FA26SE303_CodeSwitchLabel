@@ -195,7 +195,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         {
             e.ToTable("script");
             e.HasKey(x => x.ScriptId);
-            e.Property(x => x.ScriptId).HasMaxLength(11).ValueGeneratedNever();
+            e.Property(x => x.ScriptId).HasMaxLength(16).ValueGeneratedNever();
 
             e.HasOne(x => x.Creator).WithMany().HasForeignKey(x => x.CreatedBy);
             e.HasOne(x => x.ImportBatch).WithMany(i => i.Scripts).HasForeignKey(x => x.ImportBatchId);
@@ -205,7 +205,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         {
             e.ToTable("script_word");
             e.HasKey(x => new { x.ScriptId, x.WordPosition });
-            e.Property(x => x.ScriptId).HasMaxLength(11);
+            e.Property(x => x.ScriptId).HasMaxLength(16);
             e.Property(x => x.EnWord).HasMaxLength(100);
             e.Property(x => x.ViWord).HasMaxLength(100);
 
@@ -224,7 +224,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         {
             e.ToTable("script_review");
             e.HasKey(x => x.ScriptReviewId);
-            e.Property(x => x.ScriptId).HasMaxLength(11);
+            e.Property(x => x.ScriptId).HasMaxLength(16);
 
             e.HasOne(x => x.Script).WithMany(s => s.Reviews).HasForeignKey(x => x.ScriptId);
             e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId);
@@ -260,7 +260,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         {
             e.ToTable("script_proposal");
             e.HasKey(x => x.ProposalId);
-            e.Property(x => x.ScriptId).HasMaxLength(11);
+            e.Property(x => x.ScriptId).HasMaxLength(16);
 
             // Lời giải Anh–Việt của bản sửa giữ nguyên dạng JSONB như lược đồ.
             e.Property(x => x.ProposedAlignment).HasColumnType("jsonb");
@@ -332,7 +332,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         {
             e.ToTable("task_script");
             e.HasKey(x => new { x.TaskId, x.ScriptId });
-            e.Property(x => x.ScriptId).HasMaxLength(11);
+            e.Property(x => x.ScriptId).HasMaxLength(16);
 
             e.HasOne(x => x.Task).WithMany(t => t.TaskScripts).HasForeignKey(x => x.TaskId);
             e.HasOne(x => x.Script).WithMany(s => s.TaskScripts).HasForeignKey(x => x.ScriptId);
@@ -342,7 +342,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         {
             e.ToTable("task_recording");
             e.HasKey(x => new { x.TaskId, x.RecordingId });
-            e.Property(x => x.RecordingId).HasMaxLength(20);
+            e.Property(x => x.RecordingId).HasMaxLength(32);
 
             e.HasOne(x => x.Task).WithMany(t => t.TaskRecordings).HasForeignKey(x => x.TaskId);
             e.HasOne(x => x.Recording).WithMany(r => r.TaskRecordings).HasForeignKey(x => x.RecordingId);
@@ -355,8 +355,8 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         {
             e.ToTable("recording");
             e.HasKey(x => x.RecordingId);
-            e.Property(x => x.RecordingId).HasMaxLength(20).ValueGeneratedNever();
-            e.Property(x => x.ScriptId).HasMaxLength(11);
+            e.Property(x => x.RecordingId).HasMaxLength(32).ValueGeneratedNever();
+            e.Property(x => x.ScriptId).HasMaxLength(16);
             e.Property(x => x.CloudLink).HasMaxLength(1024);
             e.Property(x => x.AudioFormat).HasMaxLength(10);
             e.Property(x => x.DurationSec).HasPrecision(8, 2);
@@ -387,7 +387,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         {
             e.ToTable("review");
             e.HasKey(x => x.ReviewId);
-            e.Property(x => x.RecordingId).HasMaxLength(20);
+            e.Property(x => x.RecordingId).HasMaxLength(32);
 
             e.HasOne(x => x.Recording).WithMany(r => r.Reviews).HasForeignKey(x => x.RecordingId);
             e.HasOne(x => x.Reviewer).WithMany().HasForeignKey(x => x.ReviewerId);
@@ -424,7 +424,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.ToTable("audit_log");
             e.HasKey(x => new { x.AuditId, x.ChangedAt });
             e.Property(x => x.EntityType).HasMaxLength(50);
-            e.Property(x => x.EntityId).HasMaxLength(20);
+            e.Property(x => x.EntityId).HasMaxLength(32);
             e.Property(x => x.OldValue).HasColumnType("jsonb");
             e.Property(x => x.NewValue).HasColumnType("jsonb");
         });
@@ -444,7 +444,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         {
             e.ToTable("dataset_recording");
             e.HasKey(x => new { x.DatasetId, x.RecordingId });
-            e.Property(x => x.RecordingId).HasMaxLength(20);
+            e.Property(x => x.RecordingId).HasMaxLength(32);
 
             e.HasOne(x => x.Dataset).WithMany(d => d.Recordings).HasForeignKey(x => x.DatasetId);
             e.HasOne(x => x.Recording).WithMany(r => r.DatasetRecordings).HasForeignKey(x => x.RecordingId);

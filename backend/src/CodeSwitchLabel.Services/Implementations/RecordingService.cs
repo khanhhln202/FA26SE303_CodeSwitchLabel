@@ -75,7 +75,7 @@ public class RecordingService(
 
             var take = await NextTakeAsync(command, ct);
 
-            // Mã bản ghi do database sinh: r_cs_/r_vi_ + 9 chữ số của cặp câu, thu lại thì thêm _tN.
+            // Mã bản ghi do database sinh: r_cs_/r_vi_ + 9 hoặc 12 chữ số của cặp câu, thu lại thì thêm _tN.
             var recordingId = await recordings.GenerateIdAsync(
                 command.ScriptId, command.SentenceVariant, take, ct);
 

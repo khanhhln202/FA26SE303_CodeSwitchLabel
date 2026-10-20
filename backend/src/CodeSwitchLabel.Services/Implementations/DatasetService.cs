@@ -9,13 +9,15 @@ using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Common;
 using CodeSwitchLabel.Services.Dtos;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace CodeSwitchLabel.Services.Implementations;
 
 public class DatasetService(
     CodeSwitchLabelDbContext db,
     IObjectStorage storage,
-    TimeProvider clock) : IDatasetService
+    TimeProvider clock,
+    ILogger<DatasetService> logger) : IDatasetService
 {
     public async Task<CreateDatasetResult> CreateAsync(
         CreateDatasetRequest request, long createdById, CancellationToken ct = default)
@@ -245,7 +247,8 @@ public class DatasetService(
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task<DatasetFileDto> DownloadAsync(long datasetId, CancellationToken ct = default)
+    public async Task<DatasetFileDto> DownloadAsync(
+        long datasetId, bool includeAudio = true, CancellationToken ct = default)
     {
         var dataset = await db.Datasets.AsNoTracking()
             .FirstOrDefaultAsync(d => d.DatasetId == datasetId, ct)
@@ -263,42 +266,48 @@ public class DatasetService(
             .OrderBy(dr => dr.Recording.ScriptId).ThenBy(dr => dr.Recording.RecordingId)
             .ToListAsync(ct);
 
-        // Manifest: mỗi bản ghi kèm câu đối chiếu và link nghe tạm (15 phút).
-        // File âm thanh gốc nằm ở kho S3/MinIO — ZIP này mang link, không đóng gói nhị phân,
-        // để file tải về nhẹ và link luôn mới.
-        var manifest = new List<object>();
-        var csv = new StringBuilder();
-        csv.AppendLine("recording_id,script_id,variant,speaker_id,duration_sec,audio_url");
-
-        foreach (var dr in rows)
-        {
-            var r = dr.Recording;
-            string? url = null;
-            try
-            {
-                var key = storage.GetObjectKey(r.CloudLink);
-                if (key is not null) url = (await storage.GetDownloadUrlAsync(key, ct)).Url;
-            }
-            catch { /* thiếu link thì manifest vẫn có metadata */ }
-
-            manifest.Add(new
-            {
-                recordingId = r.RecordingId,
-                scriptId = r.ScriptId,
-                variant = r.SentenceVariant.ToString(),
-                speakerId = r.SpeakerId,
-                csContent = r.Script.CsContent,
-                viContent = r.Script.ViContent,
-                durationSec = r.DurationSec,
-                audioUrl = url
-            });
-
-            csv.AppendLine($"{r.RecordingId},{r.ScriptId},{r.SentenceVariant},{r.SpeakerId},{r.DurationSec},{url}");
-        }
-
         using var stream = new MemoryStream();
         using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
         {
+            // Manifest: mỗi bản ghi kèm câu đối chiếu, file audio trong ZIP và link nghe tạm.
+            // Audio gốc nằm ở kho S3/MinIO; khi includeAudio = true thì đóng gói luôn file nhị phân
+            // vào audio/ để bản tải về dùng được ngay, không phụ thuộc link hết hạn sau 15 phút.
+            var manifest = new List<object>();
+            var csv = new StringBuilder();
+            csv.AppendLine("recording_id,script_id,variant,speaker_id,duration_sec,audio_file,audio_url");
+
+            foreach (var dr in rows)
+            {
+                var r = dr.Recording;
+                var key = storage.GetObjectKey(r.CloudLink);
+
+                string? url = null;
+                if (key is not null)
+                {
+                    try { url = (await storage.GetDownloadUrlAsync(key, ct)).Url; }
+                    catch { /* thiếu link thì manifest vẫn có metadata */ }
+                }
+
+                var audioFile = includeAudio && key is not null
+                    ? await TryAddAudioAsync(zip, r.RecordingId, key, ct)
+                    : null;
+
+                manifest.Add(new
+                {
+                    recordingId = r.RecordingId,
+                    scriptId = r.ScriptId,
+                    variant = r.SentenceVariant.ToString(),
+                    speakerId = r.SpeakerId,
+                    csContent = r.Script.CsContent,
+                    viContent = r.Script.ViContent,
+                    durationSec = r.DurationSec,
+                    audioFile,
+                    audioUrl = url
+                });
+
+                csv.AppendLine($"{r.RecordingId},{r.ScriptId},{r.SentenceVariant},{r.SpeakerId},{r.DurationSec},{audioFile},{url}");
+            }
+
             var manifestEntry = zip.CreateEntry("manifest.json");
             await using (var entry = manifestEntry.Open())
             {
@@ -326,6 +335,41 @@ public class DatasetService(
     }
 
     // ----------------------------------------------------------------- nội bộ
+
+    /// <summary>
+    /// Chép một file audio từ kho vào ZIP. Lỗi một file thì bỏ file đó, vẫn giữ dòng metadata
+    /// để dataset không hỏng hoàn toàn vì một object thiếu.
+    /// </summary>
+    private async Task<string?> TryAddAudioAsync(
+        ZipArchive zip, string recordingId, string key, CancellationToken ct)
+    {
+        var ext = Path.GetExtension(key);
+        if (string.IsNullOrWhiteSpace(ext)) ext = ".wav";
+
+        var entryName = $"audio/{recordingId}{ext}";
+
+        try
+        {
+            // Đọc xong mới tạo entry: lỗi giữa chừng sẽ không để lại file cụt trong ZIP.
+            await using var source = await storage.OpenReadAsync(key, ct);
+            using var buffer = new MemoryStream();
+            await source.CopyToAsync(buffer, ct);
+
+            var entry = zip.CreateEntry(entryName, CompressionLevel.Fastest);
+            await using var target = entry.Open();
+            buffer.Position = 0;
+            await buffer.CopyToAsync(target, ct);
+
+            return entryName;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex,
+                "Không đóng gói được audio {RecordingId} ({Key}) vào dataset; bỏ file, giữ metadata.",
+                recordingId, key);
+            return null;
+        }
+    }
 
     private async Task<List<DatasetMissingPairDto>> MissingPairsAsync(long datasetId, CancellationToken ct)
     {

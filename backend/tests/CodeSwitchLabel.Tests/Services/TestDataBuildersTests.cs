@@ -58,7 +58,7 @@ public sealed class TestDataBuildersTests
         // Arrange + Act
         var recording = new RecordingBuilder().WithScriptId("s_111000001").Build();
 
-        // Assert — mã phải đúng CHECK ck_recording_id_format: r_cs_ + 9 chữ số.
+        // Assert — mã phải đúng CHECK ck_recording_id_format: r_cs_ + 9 hoặc 12 chữ số.
         Assert.StartsWith("r_cs_", recording.RecordingId);
         Assert.Equal($"s3://recordings/{recording.RecordingId}.wav", recording.CloudLink);
     }

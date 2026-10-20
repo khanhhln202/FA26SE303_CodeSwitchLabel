@@ -116,6 +116,13 @@ public interface ICampaignService
     /// <summary>Gỡ task khỏi chiến dịch (detach, giữ lại task).</summary>
     Task<TaskDetailDto> DetachTaskAsync(
         long campaignId, long taskId, long? callerId, bool isAdmin, CancellationToken ct = default);
+
+    /// <summary>
+    /// Lấy task thu âm duy nhất của chiến dịch; chưa có thì tạo với chỉ tiêu bằng cả chiến dịch.
+    /// Idempotent và có thể tự lấp cặp câu đã duyệt nội dung.
+    /// </summary>
+    Task<TaskDetailDto> GetOrCreateRecordingTaskAsync(
+        long campaignId, bool autoFill, long callerId, bool isAdmin, CancellationToken ct = default);
 }
 
 public record SystemConfigDto(

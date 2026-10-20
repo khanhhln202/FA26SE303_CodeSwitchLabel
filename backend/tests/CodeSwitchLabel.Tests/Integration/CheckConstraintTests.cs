@@ -117,7 +117,7 @@ public class CheckConstraintTests : IntegrationTestBase
         {
             var script = new Script
             {
-                ScriptId = "invalid_id", // Doesn't match ^s_[0-9]{9}$
+                ScriptId = "invalid_id", // Doesn't match ^s_([0-9]{9}|[0-9]{12})$
                 CsContent = "[vi]Test [en]content",
                 ViContent = "[vi]Test nội dung",
                 Status = ScriptStatus.PendingValidation,
@@ -141,7 +141,7 @@ public class CheckConstraintTests : IntegrationTestBase
         {
             var script = new Script
             {
-                ScriptId = "s_111111111", // Valid format: s_ + 9 digits
+                ScriptId = "s_111111111", // Valid legacy format: s_ + 9 digits (12-digit also valid)
                 CsContent = "[vi]Test [en]content",
                 ViContent = "[vi]Test nội dung",
                 Status = ScriptStatus.PendingValidation,
@@ -197,7 +197,7 @@ public class CheckConstraintTests : IntegrationTestBase
 
             var recording = new Recording
             {
-                RecordingId = "invalid_id", // Doesn't match ^r_(cs|vi)_[0-9]{9}(_t([2-9]|[1-9][0-9]+))?$
+                RecordingId = "invalid_id", // Doesn't match ^r_(cs|vi)_([0-9]{9}|[0-9]{12})(_t([2-9]|[1-9][0-9]+))?$
                 SentenceVariant = SentenceVariant.CodeSwitching,
                 ScriptId = script.ScriptId,
                 SpeakerId = SpeakerUserId,

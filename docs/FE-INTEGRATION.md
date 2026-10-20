@@ -743,7 +743,7 @@ Task chưa giao cho ai thì không được cướp câu của người khác �
 | Xoá cứng câu chờ duyệt | `DELETE /api/scripts/{id}` — chỉ `PendingValidation`; `409 script_not_pending` nếu đã duyệt, `409 script_already_recorded` nếu đã có bản ghi âm |
 | Ngừng dùng câu (xoá mềm) | `POST /api/scripts/{id}/deactivate` — `PendingValidation`/`Validated` → `Deactivated`; chặn nếu đã có bản ghi âm |
 | Khôi phục câu đã loại/ngừng dùng | `POST /api/scripts/{id}/reactivate` — `Rejected`/`Deactivated` về `PendingValidation` |
-| Dataset | `POST /api/datasets` (gom bản duyệt đạt theo `recordingIds` và/hoặc `campaignIds`), `GET /api/datasets`, `GET /api/datasets/{id}` (kèm `missingPairs`), `POST /api/datasets/{id}/release`, `POST /api/datasets/{id}/archive`, `GET /api/datasets/{id}/download` (ZIP `manifest.json` + `metadata.csv`, link nghe 15 phút) |
+| Dataset | `POST /api/datasets` (gom bản duyệt đạt theo `recordingIds` và/hoặc `campaignIds`), `GET /api/datasets`, `GET /api/datasets/{id}` (kèm `missingPairs`), `POST /api/datasets/{id}/release`, `POST /api/datasets/{id}/archive`, `GET /api/datasets/{id}/download` (ZIP `manifest.json` + `metadata.csv` + `audio/{recordingId}.wav`; `?includeAudio=false` để chỉ lấy metadata, vẫn kèm link nghe 15 phút) |
 | Bản ghi | `GET /api/recordings` — lọc tuỳ chọn: `status`, `scriptId`, `speakerId`, `page`, `pageSize`. Nghe: `GET /api/recordings/{id}/audio-url` |
 | Cấu hình | `GET /api/admin/config`, `PUT /api/admin/config/{key}` `{ "value": "30" }` |
 | Danh mục lý do | `GET /api/rejection-reasons?activeOnly=false`, `GET /api/script-error-reasons?activeOnly=false` |
@@ -1018,15 +1018,7 @@ Ai đã code theo bản API trước ngày 22/09/2026 thì cần sửa:
 | `GET /api/reviewer/history/recordings` một dòng = một **lượt duyệt**, chỉ có một câu | Mỗi dòng là một **CẶP** như lịch sử của Speaker: `csText`/`viText` (còn nhãn), `csRecordingId`/`viRecordingId`, `csAudioUrl`/`viAudioUrl` (thật, hết hạn 15 phút), `reviews: [{round, decision, reason}]` (chỉ khi bản đã chốt; `reason` ưu tiên bình luận, trống thì ghép mô tả mã lý do từ chối). `myDecision` gộp cả cặp — có lượt từ chối là `Rejected`; `recordingStatus` là trạng thái của cặp. Phân trang theo **cặp**, `total` là số cặp. `?sort=status` bỏ — nhận `reviewedAt`, `decision`, `scriptId` |
 | `GET /api/reviewer/history/contributions` thiếu người gửi, lý do, cặp từ Anh-Việt | Thêm `alignment` (từ tiếng Anh - nghĩa tiếng Việt), `speakerId`/`speakerName`, và khi lượt là Từ chối thì `reason` (mô tả lỗi) + `comment`. Mỗi câu đề xuất chỉ **một lượt duyệt** nên mỗi câu tối đa một dòng |
 
-## 10. Chưa có — backend đang làm
-
-| Chức năng | Ảnh hưởng tới màn hình |
-|---|---|
-| Nhúng file âm thanh nhị phân vào ZIP dataset | File tải về hiện chỉ có `manifest.json` + `metadata.csv` với link nghe 15 phút — tải audio qua link |
-
-Giao diện cho các phần này cứ làm trước; khi backend xong sẽ cập nhật mục này và Swagger.
-
-## 11. Sinh kiểu TypeScript từ Swagger
+## 10. Sinh kiểu TypeScript từ Swagger
 
 Đừng gõ tay kiểu dữ liệu. Lấy file hợp đồng:
 

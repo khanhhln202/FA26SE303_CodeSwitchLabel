@@ -21,8 +21,10 @@ public class ImportBatch
 
 /// <summary>
 /// Một CẶP CÂU: bản chen tiếng Anh và bản thuần Việt tương đương.
-/// Khoá chính là chuỗi có nghĩa s_ + 9 chữ số, do hàm fn_generate_script_id của database sinh ra:
-/// chữ số 1 = số từ tiếng Anh, chữ số 2 = chủ đề, chữ số 3 = quan hệ Anh–Việt, 6 chữ số cuối = số thứ tự.
+/// Khoá chính là chuỗi có nghĩa, do hàm fn_generate_script_id của database sinh ra:
+/// s_ + 9 chữ số cũ hoặc s_ + 12 chữ số mới (3 chữ số nghĩa + 9 chữ số thứ tự).
+/// Chữ số 1 = số từ tiếng Anh, chữ số 2 = chủ đề, chữ số 3 = quan hệ Anh–Việt;
+/// 9 chữ số cuối là bộ đếm tuần tự của tổ hợp đó (câu có > 2 từ tiếng Anh dùng bộ đếm chung).
 /// </summary>
 public class Script
 {

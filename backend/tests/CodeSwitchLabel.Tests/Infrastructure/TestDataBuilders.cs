@@ -229,7 +229,7 @@ public static class TestDataBuilders
 
         public Recording Build()
         {
-            // Mã phải đúng định dạng ck_recording_id_format: r_cs_/r_vi_ + 9 chữ số của script.
+            // Mã phải đúng định dạng ck_recording_id_format: r_cs_/r_vi_ + 9 hoặc 12 chữ số của script.
             var recordingId = _recordingId
                 ?? (_variant == SentenceVariant.CodeSwitching ? "r_cs_" : "r_vi_") + _scriptId[2..];
 

@@ -11,6 +11,13 @@ public interface ITaskService
 
     Task<TaskDetailDto> GetAsync(long taskId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Lấy (hoặc tạo idempotent) task thu âm duy nhất của chiến dịch, chỉ tiêu bằng cả chiến dịch.
+    /// <paramref name="autoFill"/> tự lấp cặp câu đã duyệt nội dung cho tới khi đủ chỉ tiêu.
+    /// </summary>
+    Task<TaskDetailDto> GetOrCreateRecordingTaskAsync(
+        long campaignId, bool autoFill, long callerId, bool isAdmin, CancellationToken ct = default);
+
     Task<TaskDetailDto> UpdateAsync(
         long taskId, UpdateTaskRequest request, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false);
@@ -29,6 +36,14 @@ public interface ITaskService
     /// </summary>
     Task<TaskDetailDto> AssignAsync(
         long taskId, long[] userIds, CancellationToken ct = default,
+        long? callerId = null, bool isAdmin = false);
+
+    /// <summary>
+    /// Thay toàn bộ người nhận đang hoạt động bằng danh sách mới, kèm quota từng người.
+    /// Ô quota trống được chia đều phần chỉ tiêu còn lại.
+    /// </summary>
+    Task<TaskDetailDto> SetAssignmentsAsync(
+        long taskId, SetTaskAssignmentsRequest request, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false);
 
     /// <summary>TEAM_010: gỡ một người khỏi task, giữ lịch sử lượt giao.</summary>
