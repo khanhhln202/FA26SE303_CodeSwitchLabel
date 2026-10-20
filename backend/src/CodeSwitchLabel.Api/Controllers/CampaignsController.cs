@@ -61,6 +61,26 @@ public class CampaignsController(ICampaignService campaignService) : ControllerB
         return Ok(await campaignService.SearchAsync(request, userId, userRole, ct));
     }
 
+    /// <summary>
+    /// Lấy task thu âm duy nhất của chiến dịch; nếu chưa có thì tạo mới với chỉ tiêu bằng cả chiến dịch.
+    /// </summary>
+    /// <remarks>
+    /// Idempotent: gọi lại nhiều lần vẫn trả về đúng một task thu âm. Chỉ tiêu của task bằng
+    /// `targetQty` của chiến dịch, hạn là cuối ngày `endDate` theo giờ Việt Nam.
+    ///
+    /// `autoFill=true` (mặc định) tự lấp các cặp câu đã duyệt nội dung cho tới khi đủ chỉ tiêu
+    /// hoặc hết câu phù hợp; `autoFill=false` chỉ tạo task rỗng để Task Manager tự thêm mục.
+    /// </remarks>
+    [HttpPost("{id:long}/recording-task")]
+    [ProducesResponseType(typeof(TaskDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ActionResult<TaskDetailDto>> GetOrCreateRecordingTask(
+        long id, [FromQuery] bool autoFill = true, CancellationToken ct = default)
+        => Ok(await campaignService.GetOrCreateRecordingTaskAsync(
+            id, autoFill, User.GetUserId(), User.IsInRole("Admin"), ct));
+
     /// <summary>Chi tiết một chiến dịch.</summary>
     [HttpGet("{id:long}")]
     [ProducesResponseType(typeof(CampaignDto), StatusCodes.Status200OK)]

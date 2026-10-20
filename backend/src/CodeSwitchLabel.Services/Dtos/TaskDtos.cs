@@ -91,6 +91,30 @@ public record AssignTaskRequest
     public List<long> UserIds { get; init; } = [];
 }
 
+/// <summary>
+/// Một người nhận trong danh sách giao việc. Để trống <see cref="TargetQty"/> thì backend
+/// chia đều phần chỉ tiêu còn lại; gửi số thì đó là quota riêng của người này.
+/// </summary>
+public record AssignmentQuotaRequest
+{
+    [Range(1, long.MaxValue, ErrorMessage = "Người nhận không hợp lệ.")]
+    public long UserId { get; init; }
+
+    [Range(1, 100_000, ErrorMessage = "Chỉ tiêu mỗi người phải từ 1 đến 100000.")]
+    public int? TargetQty { get; init; }
+}
+
+/// <summary>
+/// Thay toàn bộ danh sách người nhận đang hoạt động của task bằng danh sách mới, kèm quota.
+/// Người không còn trong danh sách chuyển sang `reassigned` (giữ lịch sử), người mới được thêm.
+/// </summary>
+public record SetTaskAssignmentsRequest
+{
+    [Required(ErrorMessage = "Phải chọn ít nhất một người nhận.")]
+    [MinLength(1, ErrorMessage = "Phải chọn ít nhất một người nhận.")]
+    public List<AssignmentQuotaRequest> Assignments { get; init; } = [];
+}
+
 /// <param name="Unit">Đơn vị của chỉ tiêu: cặp câu hay bản ghi.</param>
 /// <param name="Done">Task thu âm: số cặp câu đã đủ hai bản duyệt đạt. Task duyệt: số bản ghi đã duyệt.</param>
 /// <param name="Submitted">Task thu âm: số bản ghi đã nộp, không tính bản trượt QC. Task duyệt: số lượt đã duyệt.</param>
@@ -127,7 +151,8 @@ public record AttachTaskRequest
 }
 
 /// <summary>TEAM_010: một người đang nhận task. Trước đây chỉ có một assigneeId/assigneeName.</summary>
-public record TaskAssigneeDto(long UserId, string FullName);
+/// <param name="TargetQty">Chỉ tiêu riêng của người này; null với lượt giao cũ chưa có quota.</param>
+public record TaskAssigneeDto(long UserId, string FullName, int? TargetQty);
 
 /// <param name="CanDelete">Task rảnh (chưa gắn đợt, chưa có ai nhận, chưa có mục) thì xoá cứng được.</param>
 /// <param name="DeleteBlockedReason">Vì sao không xoá được — tiếng Việt để frontend hiện thẳng cho người dùng.</param>
@@ -147,7 +172,12 @@ public record TaskListItemDto(
     string? DeleteBlockedReason);
 
 public record TaskAssignmentDto(
-    long AssignmentId, long UserId, string FullName, AssignmentStatus Status, DateTimeOffset AssignedAt);
+    long AssignmentId,
+    long UserId,
+    string FullName,
+    int? TargetQty,
+    AssignmentStatus Status,
+    DateTimeOffset AssignedAt);
 
 /// <param name="Id">script_id với task thu âm, recording_id với task duyệt.</param>
 public record TaskItemDto(string Id, string Status, string? Preview, DateTimeOffset IncludedAt);
@@ -186,7 +216,7 @@ public record AssigneeSummaryDto(
     int OverdueTasks);
 
 /// <param name="TaskTitle">Tên nhiệm vụ (task.description) — cùng nghĩa với `taskTitle` ở lịch sử ghi âm.</param>
-/// <param name="MyProgress">TEAM_010: tiến độ của riêng người đang xem.</param>
+/// <param name="MyProgress">TEAM_010: tiến độ của riêng người đang xem, tính trên quota của người đó.</param>
 /// <param name="TeamProgress">TEAM_010: tiến độ của cả nhóm người nhận task.</param>
 /// <param name="Assignees">TEAM_010: ai cùng nhận task này.</param>
 public record SpeakerActiveTaskDto(

@@ -136,7 +136,8 @@ public class TasksController(ITaskService taskService) : ControllerBase
     /// Trước đây giao là điều phối lại: lượt giao cũ chuyển sang `reassigned`.
     ///
     /// Chỉ tiêu là của CẢ NHÓM: task chỉ tiêu 100 giao cho 3 người vẫn là 100 câu,
-    /// mỗi người khoảng 34. Người đã có mặt trong `userIds` bị bỏ qua chứ không báo lỗi.
+    /// backend chia quota lần lượt 34/33/33. Người đã có mặt trong `userIds` bị bỏ qua
+    /// chứ không báo lỗi, nhưng quota của cả nhóm được chia lại khi có người mới.
     ///
     /// TEAM_013: giao task không còn làm đổi trạng thái nữa — task đã là `InProgress` ngay từ
     /// lúc tạo. Trạng thái chỉ đổi khi đạt chỉ tiêu, khi bị huỷ, hoặc khi Task Manager bấm tay.
@@ -149,6 +150,25 @@ public class TasksController(ITaskService taskService) : ControllerBase
     public async Task<ActionResult<TaskDetailDto>> Assign(
         long id, [FromBody] AssignTaskRequest request, CancellationToken ct)
         => Ok(await taskService.AssignAsync(id, [.. request.UserIds], ct, User.GetUserId(), User.IsInRole("Admin")));
+
+    /// <summary>Thay toàn bộ người nhận đang hoạt động và đặt quota từng người.</summary>
+    /// <remarks>
+    /// Body: `{ "assignments": [{ "userId": 6, "targetQty": 30 }, { "userId": 7 }] }`.
+    /// Người không còn trong danh sách chuyển sang `reassigned` (giữ lịch sử); người mới được thêm.
+    ///
+    /// `targetQty` để trống thì backend chia đều phần chỉ tiêu còn lại sau khi trừ các quota
+    /// đã gửi. Tổng quota không được vượt chỉ tiêu task, mỗi người ít nhất 1. Với task thu âm
+    /// và task duyệt ngoài đợt, tổng quota cũng không được vượt số mục người nhận làm được.
+    /// </remarks>
+    [HttpPut("{id:long}/assignments")]
+    [ProducesResponseType(typeof(TaskDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ActionResult<TaskDetailDto>> SetAssignments(
+        long id, [FromBody] SetTaskAssignmentsRequest request, CancellationToken ct)
+        => Ok(await taskService.SetAssignmentsAsync(
+            id, request, ct, User.GetUserId(), User.IsInRole("Admin")));
 
     /// <summary>TEAM_010: gỡ một người khỏi task.</summary>
     /// <remarks>
@@ -209,11 +229,9 @@ public class TasksController(ITaskService taskService) : ControllerBase
 
     /// <summary>Những người giao được một loại task, kèm khối lượng đang nhận.</summary>
     /// <remarks>
-    /// Dùng cho ô chọn người nhận khi giao task. Chỉ trả người **đang hoạt động** và **đúng vai**:
-    /// task thu âm là Speaker, task duyệt là Reviewer. Kèm số task và tổng chỉ tiêu đang chạy để chia việc cho đều —
-    /// mỗi cặp câu chỉ một người đọc, nên chia lệch là dữ liệu lệch.
-    ///
-    /// Chỉ trả tên và vai, không lộ email, số điện thoại hay hồ sơ cá nhân.
+    /// Chỉ trả người **đang hoạt động** và **đúng vai**:
+    /// task thu âm là Speaker, task duyệt là Reviewer. Kèm số task, tổng quota đang chạy,
+    /// email và số điện thoại để bảng phân công rộng hiển thị đủ cột.
     /// </remarks>
     [HttpGet("assignable-users")]
     [ProducesResponseType(typeof(IReadOnlyList<AssignableUserDto>), StatusCodes.Status200OK)]

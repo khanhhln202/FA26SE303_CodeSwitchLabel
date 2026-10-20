@@ -86,6 +86,12 @@ public class TaskAssignment
     public DateTimeOffset AssignedAt { get; set; }
     public AssignmentStatus AssignmentStatus { get; set; }
 
+    /// <summary>
+    /// Chỉ tiêu riêng của người nhận trong task. NULL = lượt giao cũ chưa có quota;
+    /// khi đọc tiến độ thì chia đều <see cref="WorkTask.TargetQty"/> cho số người nhận.
+    /// </summary>
+    public int? TargetQty { get; set; }
+
     public WorkTask Task { get; set; } = null!;
     public AppUser User { get; set; } = null!;
 }

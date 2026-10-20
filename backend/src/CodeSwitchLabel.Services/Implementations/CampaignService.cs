@@ -169,6 +169,11 @@ public class CampaignService(
         long campaignId, long taskId, long? callerId, bool isAdmin, CancellationToken ct = default)
         => tasks.DetachAsync(campaignId, taskId, ct, callerId, isAdmin);
 
+    /// <summary>Task thu âm duy nhất của chiến dịch, tạo nếu chưa có.</summary>
+    public Task<TaskDetailDto> GetOrCreateRecordingTaskAsync(
+        long campaignId, bool autoFill, long callerId, bool isAdmin, CancellationToken ct = default)
+        => tasks.GetOrCreateRecordingTaskAsync(campaignId, autoFill, callerId, isAdmin, ct);
+
     private static void EnsureCampaignOwner(Campaign campaign, long? callerId, bool isAdmin)
     {
         if (!callerId.HasValue || isAdmin) return;
