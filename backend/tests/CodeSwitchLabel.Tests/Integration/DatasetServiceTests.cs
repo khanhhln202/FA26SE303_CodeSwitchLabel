@@ -245,4 +245,54 @@ public sealed class DatasetServiceTests : IntegrationTestBase
 
         Assert.Equal(DatasetStatus.Archived, archived.Status);
     }
+
+    [Fact]
+    public async Task TaoDataset_KhongCoBanDuyetDat_ThiBaoLoi()
+    {
+        var (_, cs, _) = await CreateApprovedPairAsync();
+
+        // cs còn pending_review: không được tạo dataset rỗng rồi báo thành công.
+        var request = await NewRequest(recordingIds: [cs]);
+
+        var loi = await Assert.ThrowsAsync<UnprocessableException>(
+            () => _datasets.CreateAsync(request, AdminUserId, TestContext.Current.CancellationToken));
+
+        Assert.Equal("dataset_no_approved_recordings", loi.Code);
+    }
+
+    [Fact]
+    public async Task Xoa_DatasetNhap_XoaDuocCaBanGhiLienKet()
+    {
+        var (_, cs, vi) = await CreateApprovedPairAsync();
+        await MarkApprovedAsync(cs);
+        await MarkApprovedAsync(vi);
+
+        var request = await NewRequest(recordingIds: [cs, vi]);
+        var dataset = (await _datasets.CreateAsync(request, AdminUserId, TestContext.Current.CancellationToken)).Dataset;
+
+        await _datasets.DeleteAsync(dataset.DatasetId, TestContext.Current.CancellationToken);
+
+        Assert.False(await Db.Datasets.AnyAsync(
+            d => d.DatasetId == dataset.DatasetId, TestContext.Current.CancellationToken));
+        Assert.False(await Db.DatasetRecordings.AnyAsync(
+            dr => dr.DatasetId == dataset.DatasetId, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Xoa_DatasetDaPhatHanh_ThiBiChan()
+    {
+        var (_, cs, vi) = await CreateApprovedPairAsync();
+        await MarkApprovedAsync(cs);
+        await MarkApprovedAsync(vi);
+
+        var request = await NewRequest(recordingIds: [cs, vi]);
+        var dataset = (await _datasets.CreateAsync(request, AdminUserId, TestContext.Current.CancellationToken)).Dataset;
+        await _datasets.ReleaseAsync(
+            dataset.DatasetId, new ReleaseDatasetRequest(), AdminUserId, TestContext.Current.CancellationToken);
+
+        var loi = await Assert.ThrowsAsync<ConflictException>(
+            () => _datasets.DeleteAsync(dataset.DatasetId, TestContext.Current.CancellationToken));
+
+        Assert.Equal("dataset_not_draft", loi.Code);
+    }
 }

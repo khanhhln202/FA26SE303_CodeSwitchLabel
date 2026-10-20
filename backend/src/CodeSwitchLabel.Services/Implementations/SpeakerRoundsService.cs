@@ -5,6 +5,7 @@ using CodeSwitchLabel.Repositories.Storage;
 using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Common;
 using CodeSwitchLabel.Services.Dtos;
+using CodeSwitchLabel.Services.Reviews;
 using Microsoft.EntityFrameworkCore;
 
 namespace CodeSwitchLabel.Services.Implementations;
@@ -12,6 +13,7 @@ namespace CodeSwitchLabel.Services.Implementations;
 public class SpeakerRoundsService(
     CodeSwitchLabelDbContext db,
     IObjectStorage storage,
+    ISystemConfigService config,
     TimeProvider clock) : ISpeakerRoundsService
 {
     public async Task<SpeakerRoundDto?> GetCurrentAsync(long speakerId, CancellationToken ct = default)
@@ -94,9 +96,24 @@ public class SpeakerRoundsService(
             .Take(Math.Clamp(top, 1, 50))
             .ToListAsync(ct);
 
+        // Chỉ tiêu riêng từng người: tổng chỉ tiêu các nhiệm vụ thu âm họ đang nhận trong đợt.
+        var chiTieuRieng = await db.TaskAssignments.AsNoTracking()
+            .Where(a => a.AssignmentStatus == AssignmentStatus.Active)
+            .Where(a => a.Task.CampaignId == campaignId && a.Task.TaskType == TaskType.Recording)
+            .GroupBy(a => a.UserId)
+            .Select(g => new { UserId = g.Key, Target = g.Sum(x => x.Task.TargetQty) })
+            .ToDictionaryAsync(x => x.UserId, x => x.Target, ct);
+
         return new LeaderboardDto(chiTieu, daChia,
-            [.. rows.Select((x, i) => new LeaderboardEntryDto(
-                i + 1, x.SpeakerId, x.FullName, x.Submitted, x.SpeakerId == speakerId))]);
+            [.. rows.Select((x, i) =>
+            {
+                var target = chiTieuRieng.GetValueOrDefault(x.SpeakerId);
+
+                return new LeaderboardEntryDto(
+                    i + 1, x.SpeakerId, x.FullName, x.Submitted, x.SpeakerId == speakerId,
+                    target,
+                    target > 0 ? Math.Min(x.Submitted, target) : x.Submitted);
+            })]);
     }
 
     public async Task<SpeakerRoundDto> RegisterAsync(
@@ -180,8 +197,13 @@ public class SpeakerRoundsService(
         var q = db.Recordings.AsNoTracking()
             .Include(r => r.Script)
             .Include(r => r.Task)
-            .Include(r => r.Reviews)
+            .Include(r => r.Reviews).ThenInclude(v => v.RejectionReasons).ThenInclude(rr => rr.Reason)
             .Where(r => r.SpeakerId == speakerId);
+
+        // Cùng tham số mà ReviewService và trigger trg_review_majority đọc, nên "x/3" ở đây
+        // không thể lệch với số vòng thật.
+        var soVongCan = await config.GetIntAsync(
+            ConfigKeys.ReviewRoundsRequired, ReviewRules.DefaultRoundsRequired, ct);
 
         if (query.Status.HasValue) q = q.Where(r => r.Status == query.Status.Value);
         if (query.TaskId.HasValue) q = q.Where(r => r.TaskId == query.TaskId.Value);
@@ -271,15 +293,22 @@ public class SpeakerRoundsService(
                             ? RecordingStatus.QcFailed
                             : RecordingStatus.PendingReview,
                 takes.Max(r => r.RecordedAt),
-                // Giống GET /api/recordings/{id}/reviews: chỉ hiện lượt duyệt khi bản đã chốt.
-                // Hai bản có thể chốt ở hai trạng thái khác nhau, nên mỗi lượt tính một lần.
+                // Hiện lượt duyệt NGAY, không chờ bản ghi chốt: người đọc cần biết đã có ai
+                // xem bản của mình chưa. Trước đây chỉ hiện khi đã chốt nên bản đang ở 1/3
+                // trả về mảng rỗng, nhìn như chưa ai duyệt.
+                //
+                // Giữ đủ lượt của CẢ HAI bản, mỗi lượt kèm recordingId. Bản cũ gom theo số
+                // vòng rồi lấy một dòng, nên lượt vòng 1 của bản vi bị lượt vòng 1 của bản cs
+                // nuốt mất — hai bản là hai cuộc duyệt riêng, không phải một.
                 [.. takes
-                    .Where(r => r.Status is RecordingStatus.Approved or RecordingStatus.Rejected)
                     .SelectMany(r => r.Reviews)
-                    .GroupBy(v => v.ReviewRound)
-                    .Select(g => g.First())
-                    .OrderBy(v => v.ReviewRound)
-                    .Select(v => new HistoryReviewDto(v.ReviewRound, v.Decision.ToString(), v.Comment))]));
+                    .OrderBy(v => v.RecordingId)
+                    .ThenBy(v => v.ReviewRound)
+                    .Select(v => new HistoryReviewDto(
+                        v.ReviewRound, v.Decision.ToString(), ReviewDisplay.ReasonOf(v),
+                        v.RecordingId, v.ReviewedAt))],
+                takes.Length > 0 ? takes.Min(r => r.Reviews.Count) : 0,
+                soVongCan));
         }
 
         return new PagedResult<SpeakerRecordingHistoryDto>(items, query.Page, query.PageSize, total);
@@ -303,6 +332,7 @@ public class SpeakerRoundsService(
         var q = db.Scripts.AsNoTracking()
             .Include(s => s.Words)
             .Include(s => s.Reviews).ThenInclude(r => r.ErrorReason)
+            .Include(s => s.Reviews).ThenInclude(r => r.User)
             .Where(s => s.CreatedBy == speakerId);
 
         if (!string.IsNullOrWhiteSpace(query.Search))
@@ -360,7 +390,16 @@ public class SpeakerRoundsService(
             })],
             s.CreatedAt,
             s.Status,
-            [.. s.Reviews.Select(r => new HistoryReviewDto(0, r.Action.ToString(), r.Comment))])).ToList();
+            // Một câu chỉ một lượt duyệt. Vài câu cũ còn hai lượt từ trước khi siết luật,
+            // nên lấy lượt mới nhất thay vì giả định chỉ có một dòng.
+            s.Reviews
+                .OrderByDescending(r => r.ReviewedAt)
+                .ThenByDescending(r => r.ScriptReviewId)
+                .Select(r => new ContributionReviewDto(
+                    r.ScriptReviewId, r.Action.ToString(), r.UserId, r.User.FullName,
+                    r.ErrorReason?.ReasonCode, r.ErrorReason?.Description,
+                    r.Comment, r.ReviewedAt))
+                .FirstOrDefault())).ToList();
 
         return new PagedResult<SpeakerContributionHistoryDto>(items, query.Page, query.PageSize, total);
     }

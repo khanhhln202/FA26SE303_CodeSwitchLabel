@@ -79,6 +79,16 @@ public class DatasetService(
             }
         }
 
+        // Có chọn bản ghi mà không nhận được bản nào (thường do bản ghi chưa đủ lượt duyệt)
+        // thì báo lỗi rõ ràng, thay vì tạo một dataset nháp rỗng mà admin tưởng là thành công.
+        if (wanted.Count > 0 && accepted.Count == 0)
+        {
+            var reasons = string.Join("; ", skipped.Take(5).Select(s => $"{s.Id}: {s.Reason}"));
+            throw new UnprocessableException(
+                "dataset_no_approved_recordings",
+                $"Không có bản ghi nào đã duyệt đạt trong lựa chọn. {reasons}");
+        }
+
         var now = clock.GetUtcNow();
         var dataset = new Dataset
         {
@@ -209,6 +219,30 @@ public class DatasetService(
         await db.SaveChangesAsync(ct);
 
         return ToDto(dataset);
+    }
+
+    /// <summary>Xoá cứng dataset nháp. Chỉ nháp mới xoá được — bản đã phát hành/lưu trữ phải giữ dấu vết.</summary>
+    public async Task DeleteAsync(long datasetId, CancellationToken ct = default)
+    {
+        var dataset = await db.Datasets.FirstOrDefaultAsync(d => d.DatasetId == datasetId, ct)
+            ?? throw new NotFoundException("dataset_not_found", $"Không tìm thấy dataset #{datasetId}.");
+
+        if (dataset.Status != DatasetStatus.Draft)
+        {
+            throw new ConflictException(
+                "dataset_not_draft",
+                $"Chỉ xoá được dataset nháp. Dataset #{datasetId} đang ở trạng thái {dataset.Status}.");
+        }
+
+        // Xoá các dòng con trước trong cùng SaveChanges. Trigger chặn sửa dataset_recording
+        // đọc trạng thái dataset, nên xoá lúc dataset vẫn còn là Draft là chắc chắn hợp lệ.
+        var links = await db.DatasetRecordings
+            .Where(dr => dr.DatasetId == datasetId)
+            .ToListAsync(ct);
+
+        db.DatasetRecordings.RemoveRange(links);
+        db.Datasets.Remove(dataset);
+        await db.SaveChangesAsync(ct);
     }
 
     public async Task<DatasetFileDto> DownloadAsync(long datasetId, CancellationToken ct = default)

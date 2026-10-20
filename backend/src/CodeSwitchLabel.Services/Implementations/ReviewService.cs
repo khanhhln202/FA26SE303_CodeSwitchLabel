@@ -8,6 +8,7 @@ using CodeSwitchLabel.Services.Common;
 using CodeSwitchLabel.Services.Dtos;
 using CodeSwitchLabel.Services.Reviews;
 using CodeSwitchLabel.Services.WorkTasks;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 
 namespace CodeSwitchLabel.Services.Implementations;
@@ -214,7 +215,7 @@ public class ReviewService(
         var roundsRequired = await RoundsRequiredAsync(ct);
 
         // Lỗi ném ra ở bất kỳ đâu bên dưới → transaction bị huỷ khi thoát khối, không ghi gì cả.
-        await using var transaction = await reviews.BeginTransactionAsync(ct);
+        await using var transaction = await BeginTransactionIfNeededAsync(ct);
 
         var recording = await reviews.LockRecordingAsync(recordingId, ct)
                         ?? throw new NotFoundException(
@@ -277,20 +278,32 @@ public class ReviewService(
 
         reviews.Add(review);
 
-        if (taskRecording is not null)
-        {
-            taskRecording.Status = TaskRecordingStatus.Reviewed;
-        }
-
         await reviews.SaveChangesAsync(ct);
 
         // KHÔNG tự đặt trạng thái bản ghi: trigger trg_review_majority của database vừa làm việc đó
         // nếu đã đủ lượt. Đọc lại để biết kết quả — thực thể đang theo dõi vẫn giữ giá trị cũ.
         var status = await reviews.GetRecordingStatusAsync(recordingId, ct);
 
+        // Lô chỉ coi là XONG với bản ghi này khi không còn ai trong lô duyệt được nữa — mọi
+        // người nhận lô đã bỏ phiếu, hoặc bản ghi đã chốt.
+        //
+        // Trước đây đánh 'reviewed' ngay lượt đầu. Lô giao cho một người thì không sao, nhưng
+        // lô giao cho ba người thì người thứ hai gửi kèm taskId sẽ bị GetQueuedTaskRecordingAsync
+        // chặn, nên bản ghi mắc kẹt ở 1/3 và không bao giờ chốt — trong khi danh sách của chính
+        // lô đó vẫn liệt kê bản ghi là duyệt được. Đồng thời tiến độ lô đếm số dòng 'reviewed'
+        // nên lô bị tính đủ chỉ tiêu và tự chuyển 'completed' khi mới có phiếu vòng 1.
+        if (taskRecording is not null &&
+            (status != RecordingStatus.PendingReview ||
+             !await reviews.HasEligibleReviewerLeftAsync(
+                 taskRecording.TaskId, recordingId, recording.SpeakerId, ct)))
+        {
+            taskRecording.Status = TaskRecordingStatus.Reviewed;
+            await reviews.SaveChangesAsync(ct);
+        }
+
         await taskTracker.OnReviewSubmittedAsync(recording, status, taskRecording?.TaskId, ct);
 
-        await transaction.CommitAsync(ct);
+        if (transaction is not null) await transaction.CommitAsync(ct);
 
         return new SubmitReviewResult(
             review.ReviewId, round, roundsRequired, previous.Count + 1,
@@ -306,7 +319,7 @@ public class ReviewService(
                 "rejection_reason_required", "Bỏ audio thì phải chọn ít nhất một lý do.");
         }
 
-        await using var transaction = await reviews.BeginTransactionAsync(ct);
+        await using var transaction = await BeginTransactionIfNeededAsync(ct);
 
         var recording = await reviews.LockRecordingAsync(recordingId, ct)
                         ?? throw new NotFoundException(
@@ -345,7 +358,7 @@ public class ReviewService(
 
         await taskTracker.OnRecordingReturnedAsync(recording, taskRecording?.TaskId, ct);
 
-        await transaction.CommitAsync(ct);
+        if (transaction is not null) await transaction.CommitAsync(ct);
 
         return new RejectAudioResult(recordingId, recording.ScriptId, recording.SpeakerId, recording.Status);
     }
@@ -359,7 +372,7 @@ public class ReviewService(
                 "rejection_reason_required", "Xoá cặp câu thì phải chọn ít nhất một lý do.");
         }
 
-        await using var transaction = await reviews.BeginTransactionAsync(ct);
+        await using var transaction = await BeginTransactionIfNeededAsync(ct);
 
         var recording = await reviews.LockRecordingAsync(recordingId, ct)
                         ?? throw new NotFoundException(
@@ -387,7 +400,7 @@ public class ReviewService(
 
         await taskTracker.OnPairDiscardedAsync(recording.ScriptId, ct);
 
-        await transaction.CommitAsync(ct);
+        if (transaction is not null) await transaction.CommitAsync(ct);
 
         return new DiscardPairResult(recordingId, recording.ScriptId, script.Status, removed);
     }
@@ -577,6 +590,24 @@ public class ReviewService(
         }
 
         return variants;
+    }
+
+    /// <summary>
+    /// Mở transaction riêng, trừ khi caller đã ở trong một transaction (test tích hợp giữ
+    /// transaction ambient để rollback). EF không cho transaction lồng nhau trên cùng
+    /// connection nên trường hợp đó dùng luôn ambient — cùng cách ScriptProposalService.
+    /// </summary>
+    private async Task<IDbContextTransaction?> BeginTransactionIfNeededAsync(CancellationToken ct)
+    {
+        try
+        {
+            return await reviews.BeginTransactionAsync(ct);
+        }
+        catch (InvalidOperationException ex)
+            when (ex.Message.Contains("already in a transaction", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
     }
 
     /// <summary>Câu của bản ghi này, tuỳ biến thể: cs đọc câu chen, vi đọc câu thuần Việt.</summary>
