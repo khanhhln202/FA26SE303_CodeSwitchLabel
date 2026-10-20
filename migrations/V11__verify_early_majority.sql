@@ -16,8 +16,11 @@ DECLARE
     v_rv1      BIGINT;
     v_rv2      BIGINT;
     v_rv3      BIGINT;
-    v_script   TEXT := 's_999000001';
-    v_rec      TEXT := 'r_cs_999000001';
+    -- Mã câu mã hoá sẵn ba thứ (ck_script_id_word_digit / ck_script_id_domain_digit):
+    --   chữ số 1 = số từ tiếng Anh (1), chữ số 2 = chủ đề (1 = it_technology),
+    --   chữ số 3 = quan hệ Anh-Việt (1 = dịch thẳng). Dãy 999xxx để không đụng số thật.
+    v_script   TEXT := 's_111999001';
+    v_rec      TEXT := 'r_cs_111999001';
     v_status   recording_status;
     v_rounds   INT;
 BEGIN
