@@ -12,7 +12,8 @@ namespace CodeSwitchLabel.Tests.Integration;
 /// <summary>
 /// Lịch sử duyệt của Reviewer: mỗi dòng lịch sử bản ghi là MỘT CẶP (như lịch sử ghi âm
 /// của Speaker) — gom hai biến thể trước khi cắt trang, `myDecision` gộp "có lượt từ chối
-/// là từ chối", và `reviews` chỉ lộ khi bản đã chốt (luật duyệt mù). Lịch sử duyệt câu
+/// là từ chối", và `reviews` giữ luật duyệt mù: bản chưa chốt chỉ lộ lượt của chính người
+/// đang xem, chốt rồi mới lộ đủ ba lượt. Lịch sử duyệt câu
 /// thêm người gửi, cặp từ Anh-Việt và lý do khi lượt của mình là Từ chối.
 /// </summary>
 [Collection("Database")]
@@ -64,8 +65,13 @@ public sealed class ReviewerHistoryTests : IntegrationTestBase
         Assert.Equal(4.5m, item.DurationSec);
         Assert.Equal("Approved", item.MyDecision);
         Assert.Equal(RecordingStatus.PendingReview, item.RecordingStatus);
-        // Chưa bản nào chốt — luật duyệt mù: không lộ phiếu nào, kể cả của mình.
-        Assert.Empty(item.Reviews);
+
+        // Chưa bản nào chốt nên chỉ thấy phiếu của CHÍNH MÌNH — mỗi bản một lượt.
+        Assert.Equal(2, item.Reviews.Count);
+        Assert.Equal([cs.RecordingId, vi.RecordingId], item.Reviews.Select(r => r.RecordingId).ToArray());
+        Assert.All(item.Reviews, r => Assert.Equal("Approved", r.Decision));
+        Assert.Equal(1, item.ReviewedRounds);
+        Assert.Equal(3, item.RoundsRequired);
     }
 
     [Fact]
@@ -126,9 +132,14 @@ public sealed class ReviewerHistoryTests : IntegrationTestBase
         // cs đã chốt Rejected, vi còn chờ — trạng thái cặp theo bản đã chốt.
         Assert.Equal(RecordingStatus.Rejected, item.RecordingStatus);
 
-        Assert.Equal(3, item.Reviews.Count);
-        Assert.Equal(new[] { 1, 2, 3 }, item.Reviews.Select(r => r.Round).ToArray());
-        Assert.All(item.Reviews, r => Assert.Equal("Rejected", r.Decision));
+        // Bản cs đã chốt nên lộ đủ ba lượt; bản vi còn chờ nên chỉ lộ lượt của chính tôi.
+        Assert.Equal(4, item.Reviews.Count);
+        Assert.Equal(new[] { 1, 2, 3, 1 }, item.Reviews.Select(r => r.Round).ToArray());
+        Assert.Equal(
+            [cs.RecordingId, cs.RecordingId, cs.RecordingId, vi.RecordingId],
+            item.Reviews.Select(r => r.RecordingId).ToArray());
+        Assert.All(item.Reviews.Take(3), r => Assert.Equal("Rejected", r.Decision));
+        Assert.Equal("Approved", item.Reviews[3].Decision);
 
         // Lượt của tôi: không bình luận nên lý do lấy từ mô tả mã lý do.
         Assert.Equal(backgroundNoise.Description ?? backgroundNoise.ReasonCode, item.Reviews[0].Reason);
@@ -136,6 +147,48 @@ public sealed class ReviewerHistoryTests : IntegrationTestBase
         Assert.Equal("Tiếng ồn lớn, nghe rõ tiếng quạt.", item.Reviews[1].Reason);
         // Không bình luận, không mã lý do thì để trống thay vì bịa.
         Assert.Null(item.Reviews[2].Reason);
+    }
+
+    /// <summary>
+    /// Luật duyệt mù: bản chưa chốt thì người duyệt KHÔNG thấy phiếu của người khác, chỉ thấy
+    /// phiếu của chính mình. Biết trước phiếu của người đi trước là hỏng tính độc lập của lượt
+    /// duyệt còn lại.
+    /// </summary>
+    [Fact]
+    public async Task BanChuaChot_KhongLoPhieuCuaNguoiKhac()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var speaker = await CreateUserAsync(NewUniqueEmail("mu"), RoleName.Speaker);
+        var nguoiKhac = await CreateUserWithBuilderAsync(RoleName.Reviewer, fullName: "Người duyệt khác");
+
+        var script = await CreateScriptAsync(
+            "[vi]Nhớ [en]backup [vi]dữ liệu trước nhé.", "[vi]Nhớ sao lưu dữ liệu trước nhé.",
+            ScriptDomain.ItTechnology, AdminUserId);
+
+        var cs = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
+
+        Db.Reviews.Add(new TestDataBuilders.ReviewBuilder()
+            .WithRecordingId(cs.RecordingId).WithReviewerId(ReviewerUserId).WithRound(1)
+            .WithComment("Phiếu của tôi").Build());
+        Db.Reviews.Add(new TestDataBuilders.ReviewBuilder()
+            .WithRecordingId(cs.RecordingId).WithReviewerId(nguoiKhac.UserId).WithRound(2)
+            .WithComment("Phiếu của người khác").Build());
+        await Db.SaveChangesAsync(ct);
+
+        // Hai phiếu ĐẠT là quá bán trên ba vòng, nên bản ghi đã chốt — đưa về lại chờ duyệt
+        // để dựng đúng tình huống "chưa chốt mà đã có phiếu của người khác".
+        await Db.Entry(cs).ReloadAsync(ct);
+        cs.Status = RecordingStatus.PendingReview;
+        await Db.SaveChangesAsync(ct);
+
+        var page = await _stats.GetHistoryAsync(
+            ReviewerUserId, new ReviewerHistoryQuery { PageSize = 50 }, ct);
+
+        var item = Assert.Single(page.Items, i => i.ScriptId == script.ScriptId);
+
+        var luot = Assert.Single(item.Reviews);
+        Assert.Equal("Phiếu của tôi", luot.Reason);
+        Assert.Equal(1, luot.Round);
     }
 
     [Fact]

@@ -49,7 +49,9 @@ public record ReviewerHistoryItemDto(
     string MyDecision,
     RecordingStatus RecordingStatus,
     DateTimeOffset ReviewedAt,
-    IReadOnlyList<HistoryReviewDto> Reviews);
+    IReadOnlyList<HistoryReviewDto> Reviews,
+    int ReviewedRounds,
+    int RoundsRequired);
 
 public record ReviewerHistoryQuery : PageRequest
 {

@@ -11,7 +11,8 @@ namespace CodeSwitchLabel.Services.Implementations;
 
 public class ReviewerStatsService(
     CodeSwitchLabelDbContext db,
-    IObjectStorage storage) : IReviewerStatsService
+    IObjectStorage storage,
+    ISystemConfigService config) : IReviewerStatsService
 {
     public async Task<ReviewerTotalsDto> GetTotalsAsync(long reviewerId, CancellationToken ct = default)
     {
@@ -183,6 +184,10 @@ public class ReviewerStatsService(
 
         var pageScripts = page.Select(x => x.ScriptId).ToList();
 
+        // Cùng tham số mà ReviewService và trigger trg_review_majority đọc.
+        var soVongCan = await config.GetIntAsync(
+            ConfigKeys.ReviewRoundsRequired, ReviewRules.DefaultRoundsRequired, ct);
+
         // Kéo MỌI lần thu của các cặp trong trang — cả hai biến thể lẫn các bản cũ để chọn bản
         // mới nhất — kèm lượt duyệt và lý do từ chối của từng lượt.
         var rows = await db.Recordings.AsNoTracking()
@@ -237,15 +242,26 @@ public class ReviewerStatsService(
                             ? RecordingStatus.QcFailed
                             : RecordingStatus.PendingReview,
                 pair.LastReviewedAt,
-                // Giống GET /api/recordings/{id}/reviews: chỉ hiện lượt duyệt khi bản đã chốt.
+                // Bản CHƯA chốt thì chỉ lộ lượt của chính người đang xem; chốt rồi mới lộ đủ.
+                //
+                // Đây là luật duyệt mù (review.default_blind): ba người duyệt độc lập, không ai
+                // biết phiếu của ai trước khi chốt. Trước đây chưa chốt thì giấu sạch, kể cả
+                // phiếu của chính mình — nên người vừa bấm duyệt xong mở lịch sử ra thấy trống
+                // trơn. Phiếu của chính mình thì mình đã biết rồi, lộ lại không rò rỉ gì.
+                //
+                // Giữ đủ lượt của CẢ HAI bản, mỗi lượt kèm recordingId: gom theo số vòng rồi
+                // lấy một dòng sẽ làm lượt vòng 1 của bản vi bị lượt vòng 1 của bản cs nuốt mất.
                 [.. both
-                    .Where(r => r.Status is RecordingStatus.Approved or RecordingStatus.Rejected)
-                    .SelectMany(r => r.Reviews)
-                    .GroupBy(v => v.ReviewRound)
-                    .Select(g => g.First())
-                    .OrderBy(v => v.ReviewRound)
+                    .SelectMany(r => r.Status is RecordingStatus.Approved or RecordingStatus.Rejected
+                        ? r.Reviews.AsEnumerable()
+                        : r.Reviews.Where(v => v.ReviewerId == reviewerId))
+                    .OrderBy(v => v.RecordingId)
+                    .ThenBy(v => v.ReviewRound)
                     .Select(v => new HistoryReviewDto(
-                        v.ReviewRound, v.Decision.ToString(), ReviewDisplay.ReasonOf(v)))]));
+                        v.ReviewRound, v.Decision.ToString(), ReviewDisplay.ReasonOf(v),
+                        v.RecordingId, v.ReviewedAt))],
+                both.Length > 0 ? both.Min(r => r.Reviews.Count) : 0,
+                soVongCan));
         }
 
         return new PagedResult<ReviewerHistoryItemDto>(items, query.Page, query.PageSize, total);
