@@ -44,11 +44,29 @@ public class ReviewRulesTests
     }
 
     [Fact]
-    public void ChuaDuLuot_ChuaChot()
+    public void ChuaBenNaoQuaBan_ChuaChot()
     {
         // Arrange + Act + Assert
         Assert.Null(ReviewRules.Outcome([Ok], Required));
         Assert.Null(ReviewRules.Outcome([Ok, No], Required));
+    }
+
+    /// <summary>
+    /// Quá bán là chốt, không chờ cho đủ lượt. Hai phiếu giống nhau trên ba vòng thì lượt
+    /// thứ ba không lật được kết quả, mà để bản ghi nằm "chờ duyệt" thì người đọc không
+    /// biết đường thu lại.
+    /// </summary>
+    [Theory]
+    [InlineData(Ok, Ok, RecordingStatus.Approved)]
+    [InlineData(No, No, RecordingStatus.Rejected)]
+    public void QuaBanSom_ChotNgayKhiChuaDuLuot(
+        ReviewDecision a, ReviewDecision b, RecordingStatus mongDoi)
+    {
+        // Arrange + Act
+        var outcome = ReviewRules.Outcome([a, b], Required);
+
+        // Assert
+        Assert.Equal(mongDoi, outcome);
     }
 
     [Theory]
@@ -100,22 +118,35 @@ public class ReviewRulesTests
         Assert.Throws<ArgumentOutOfRangeException>(Act);
     }
 
+    /// <summary>
+    /// Ngưỡng quá bán đi theo cấu hình: cần 4 hoặc 5 lượt thì ba phiếu đạt đã là quá bán,
+    /// cần 7 lượt thì chưa.
+    /// </summary>
     [Theory]
-    [InlineData(5)]
-    [InlineData(4)]
-    public void Outcome_VoiSoLuotCauHinhLa_TheoDungNguongDo(int roundsRequired)
+    [InlineData(4, RecordingStatus.Approved)]
+    [InlineData(5, RecordingStatus.Approved)]
+    [InlineData(7, null)]
+    public void Outcome_NguongQuaBan_DiTheoSoVongCauHinh(int roundsRequired, RecordingStatus? mongDoi)
     {
-        // Arrange — đủ lượt theo đúng cấu hình truyền vào thì chốt, thiếu thì chờ.
+        // Arrange
         var decisions = new[] { Ok, Ok, Ok };
 
         // Act
         var outcome = ReviewRules.Outcome(decisions, roundsRequired);
 
         // Assert
-        if (roundsRequired <= decisions.Length)
-            Assert.NotNull(outcome);
-        else
-            Assert.Null(outcome);
+        Assert.Equal(mongDoi, outcome);
+    }
+
+    /// <summary>Số vòng chẵn mà hoà thì trượt — không đủ phiếu đạt nghĩa là không đạt.</summary>
+    [Fact]
+    public void SoVongChan_HoaPhieu_ThiTruot()
+    {
+        // Arrange + Act
+        var outcome = ReviewRules.Outcome([Ok, Ok, No, No], 4);
+
+        // Assert
+        Assert.Equal(RecordingStatus.Rejected, outcome);
     }
 
     // ----------------------------------------------- vì sao chưa duyệt được

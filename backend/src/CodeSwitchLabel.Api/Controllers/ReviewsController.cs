@@ -45,6 +45,17 @@ public class ReviewsController(IReviewService reviewService, IReviewerStatsServi
     /// <remarks>
     /// Dùng cho màn hình "task duyệt của tôi": thấy cả task một lượt thay vì bấm `next` từng bản.
     ///
+    /// **Một dòng là MỘT BẢN GHI, không phải một cặp câu.** Mỗi cặp câu có hai bản thu — bản đọc
+    /// câu chen tiếng Anh (`CodeSwitching`) và bản đọc câu thuần Việt tương đương
+    /// (`PureVietnamese`) — nên một cặp câu cho ra **hai dòng** cùng `scriptId`, khác
+    /// `sentenceVariant`, `scriptText` và `durationSec`. Đó không phải dòng trùng: hai bản là hai
+    /// file âm thanh riêng, mỗi bản cần đủ `roundsRequired` lượt duyệt của riêng nó, và duyệt là
+    /// gọi `POST /api/reviewer/recordings/{id}/review` cho TỪNG bản.
+    ///
+    /// Muốn hiện mỗi cặp một thẻ thì gom các dòng theo `scriptId`; `sibling` cho biết dòng này đi
+    /// cặp với bản nào, còn `myReviewDone` / `blocker` / `reviewsDone` thì mỗi dòng mang riêng vì
+    /// hai bản có thể ở hai tình trạng khác nhau.
+    ///
     /// TEAM_016: task đã đủ chỉ tiêu (Completed) vẫn duyệt tiếp được — KPI không chặn.
     /// Chỉ task đã huỷ (Cancelled) mới khoá: các dòng khi đó có `canReview: false` và
     /// nộp duyệt trả 403 `task_not_reviewable`.
