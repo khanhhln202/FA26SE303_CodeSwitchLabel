@@ -3,6 +3,11 @@ using CodeSwitchLabel.Repositories.Enums;
 namespace CodeSwitchLabel.Services.Dtos;
 
 /// <summary>Một "Đợt" ở FE = một chiến dịch ở BE, kèm tiến độ của chính người đọc.</summary>
+/// <param name="Target">
+/// Chỉ tiêu riêng của người đọc: tổng quota trên các lượt giao task thu âm còn hiệu lực
+/// trong đợt — không phải <c>campaign.TargetQty</c>. 0 nghĩa là chưa nhận nhiệm vụ nào.
+/// </param>
+/// <param name="Submitted">Số bản đã nộp thật trong đợt; có thể vượt <paramref name="Target"/>.</param>
 public record SpeakerRoundDto(
     long CampaignId,
     string Name,
@@ -34,14 +39,15 @@ public record UpcomingRoundDto(
 /// </summary>
 /// <param name="Submitted">Số bản đã nộp trong đợt — số thật, dùng để xếp hạng.</param>
 /// <param name="TargetQty">
-/// Chỉ tiêu riêng của người này trong đợt: tổng chỉ tiêu các nhiệm vụ thu âm họ đang nhận.
-/// Task nhiều người nhận thì mỗi người lấy trọn chỉ tiêu của task — đó là mục tiêu của
-/// nhiệm vụ, không chia nhỏ theo đầu người. 0 nghĩa là chưa nhận nhiệm vụ nào trong đợt.
+/// Chỉ tiêu riêng của người này trong đợt: tổng quota trên các lượt giao task thu âm họ đang
+/// nhận. Task giao nhiều người thì mỗi người nhận quota của mình (chia đều khi giao); lượt
+/// giao cũ chưa có quota thì chia theo số người nhận, cùng quy tắc với API tiến độ Speaker.
+/// 0 nghĩa là chưa nhận nhiệm vụ nào trong đợt.
 /// </param>
 /// <param name="SubmittedCapped">
-/// <paramref name="Submitted"/> nhưng không vượt <paramref name="TargetQty"/> — dùng vẽ thanh
-/// tiến độ. Hệ thống cho thu tiếp sau khi đạt chỉ tiêu nên số thật vượt mốc là bình thường;
-/// xếp hạng vẫn tính trên số thật để người làm nhiều hơn không bị tụt hạng oan.
+/// <paramref name="Submitted"/> nhưng không vượt <paramref name="TargetQty"/> — dùng hiển thị
+/// tiến độ (ví dụ "15/100"). Hệ thống cho thu tiếp sau khi đạt chỉ tiêu nên số thật vượt mốc
+/// là bình thường; xếp hạng vẫn tính trên số thật để người làm nhiều hơn không bị tụt hạng oan.
 /// </param>
 public record LeaderboardEntryDto(
     int Rank, long UserId, string Name, int Submitted, bool IsMe, int TargetQty, int SubmittedCapped);

@@ -1075,7 +1075,7 @@ public class TaskService(
     /// đúng bằng chỉ tiêu task. Min 1 cho dữ liệu cũ bất thường (target &lt; số người),
     /// cùng công thức backfill V12.
     /// </summary>
-    private static int SplitQuotaAt(int targetQty, int count, int index)
+    internal static int SplitQuotaAt(int targetQty, int count, int index)
     {
         if (count <= 0) return targetQty;
 

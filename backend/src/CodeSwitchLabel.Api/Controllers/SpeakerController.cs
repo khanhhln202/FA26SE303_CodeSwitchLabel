@@ -98,7 +98,12 @@ public class SpeakerController(
     public async Task<ActionResult<SpeakerProgressDto>> Progress(CancellationToken ct)
         => Ok(await taskService.GetSpeakerProgressAsync(User.GetUserId(), ct));
 
-    /// <summary>Đợt đang tham gia (chiến dịch của task thu âm đang giao). 204 = chưa tham gia đợt nào.</summary>
+    /// <summary>
+    /// Đợt đang tham gia (chiến dịch của task thu âm đang giao). 204 = chưa tham gia đợt nào.
+    /// <c>target</c> là chỉ tiêu RIÊNG của người gọi — tổng quota trên các lượt giao task thu âm
+    /// trong đợt, không phải chỉ tiêu cả chiến dịch. <c>submitted</c> là số bản đã nộp thật và
+    /// có thể vượt <c>target</c>.
+    /// </summary>
     [HttpGet("rounds/current")]
     [ProducesResponseType(typeof(SpeakerRoundDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -114,7 +119,11 @@ public class SpeakerController(
     public async Task<ActionResult<IEnumerable<UpcomingRoundDto>>> UpcomingRounds(CancellationToken ct)
         => Ok(await roundsService.GetUpcomingAsync(User.GetUserId(), ct));
 
-    /// <summary>Bảng xếp hạng của một đợt, xếp theo số bản đã nộp (không tính bản trượt kiểm tra tự động).</summary>
+    /// <summary>
+    /// Bảng xếp hạng của một đợt, xếp theo số bản đã nộp (không tính bản trượt kiểm tra tự động).
+    /// Mỗi dòng kèm <c>targetQty</c> — quota riêng của người đó trên các lượt giao trong đợt,
+    /// 0 nếu không còn nhiệm vụ — và <c>submittedCapped</c> để vẽ tiến độ.
+    /// </summary>
     [HttpGet("rounds/{campaignId:long}/leaderboard")]
     [ProducesResponseType(typeof(LeaderboardDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]

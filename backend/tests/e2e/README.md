@@ -9,7 +9,7 @@ kịch bản này cần cả hệ thống đang chạy.
 
 | File | Nội dung | Số bước |
 |---|---|---|
-| `01-core-flows.e2e.mjs` | Luồng chính: nhập kho câu, duyệt câu, thu âm hai biến thể, ba lượt duyệt mù, giao việc, task duyệt | 83 |
+| `01-core-flows.e2e.mjs` | Luồng chính: nhập kho câu, duyệt câu, thu âm hai biến thể, duyệt mù tới khi đủ đa số (tối đa ba lượt), giao việc, task duyệt | 83 |
 | `02-users.e2e.mjs` | Quản lý người dùng: mật khẩu tạm, đổi mật khẩu, khoá và đổi vai có hiệu lực ngay | 47 |
 | `03-demo-scenario.e2e.mjs` | Đúng kịch bản trong `docs/demo-test-api.html`, kèm câu truy vấn kiểm tra dữ liệu đã lưu và các trường hợp file lỗi | 53 |
 | `04-import-task-record.e2e.mjs` | Kịch bản trình bày: nhập câu → duyệt → phân task → ghi âm. Tự tạo dữ liệu riêng nên **chạy lại bao nhiêu lần cũng được** | 12 |

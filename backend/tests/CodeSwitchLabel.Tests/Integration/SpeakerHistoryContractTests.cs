@@ -248,9 +248,9 @@ public sealed class SpeakerHistoryContractTests(DatabaseFixture fixture) : Integ
     // ------------------------------------------------------------------ chỉ tiêu riêng
 
     /// <summary>
-    /// Mỗi dòng xếp hạng mang chỉ tiêu RIÊNG của người đó: tổng chỉ tiêu các nhiệm vụ thu âm
-    /// họ đang nhận trong đợt. Task nhiều người nhận thì mỗi người lấy trọn chỉ tiêu của task —
-    /// đó là mục tiêu của nhiệm vụ, không chia theo đầu người.
+    /// Mỗi dòng xếp hạng mang chỉ tiêu RIÊNG của người đó: tổng quota trên các lượt giao task
+    /// thu âm họ đang nhận trong đợt. Cùng một task giao nhiều người thì mỗi người nhận quota
+    /// của mình, không lấy chỉ tiêu chung của task.
     ///
     /// Số đã nộp vẫn là số THẬT (hệ thống cho thu vượt chỉ tiêu, xem WorkAfterTargetTests);
     /// bản đã chặn ở mốc nằm riêng ở `submittedCapped` để giao diện không vẽ "4/3".
@@ -271,27 +271,29 @@ public sealed class SpeakerHistoryContractTests(DatabaseFixture fixture) : Integ
         campaign.AssignedTo = manager.UserId;
         await Db.SaveChangesAsync(ct);
 
-        // Hai task cùng giao cho người thứ nhất: chỉ tiêu riêng của họ là 1 + 2 = 3.
+        // Người thứ nhất nhận hai task: quota 1 + 2 = 3.
         var taskA = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 1,
             manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
-        var taskB = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 2,
+        var taskB = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 3,
             manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
 
         var vuot = await CreateUserAsync($"sp-vuot-{dau}@test.local", RoleName.Speaker);
         var duoi = await CreateUserAsync($"sp-duoi-{dau}@test.local", RoleName.Speaker);
         var khongNhan = await CreateUserAsync($"sp-khong-{dau}@test.local", RoleName.Speaker);
 
-        foreach (var (task, user) in new[]
+        foreach (var (task, user, quota) in new[]
                  {
-                     (taskA, vuot), (taskB, vuot),
-                     // Người thứ hai nhận chung taskB với người thứ nhất: cả hai đều lấy trọn 2.
-                     (taskB, duoi)
+                     (taskA, vuot, 1),
+                     // Task B chia cho hai người với quota khác nhau: 2 và 1.
+                     (taskB, vuot, 2),
+                     (taskB, duoi, 1)
                  })
         {
             Db.TaskAssignments.Add(new TaskAssignment
             {
                 TaskId = task.TaskId,
                 UserId = user.UserId,
+                TargetQty = quota,
                 AssignmentStatus = AssignmentStatus.Active,
                 AssignedAt = DateTimeOffset.UtcNow
             });
@@ -303,13 +305,19 @@ public sealed class SpeakerHistoryContractTests(DatabaseFixture fixture) : Integ
 
         var bang = await Rounds.GetLeaderboardAsync(campaign.CampaignId, vuot.UserId, 10, ct);
 
+        // Thứ hạng theo số đã nộp THẬT: 4 > 2 > 1, không theo số đã chặn ở quota.
+        Assert.Equal(vuot.UserId, bang.Items[0].UserId);
+        Assert.Equal(1, bang.Items[0].Rank);
+        Assert.Equal(khongNhan.UserId, bang.Items[1].UserId);
+        Assert.Equal(duoi.UserId, bang.Items[2].UserId);
+
         var dongVuot = Assert.Single(bang.Items, i => i.UserId == vuot.UserId);
         Assert.Equal(3, dongVuot.TargetQty);
         Assert.Equal(4, dongVuot.Submitted);
         Assert.Equal(3, dongVuot.SubmittedCapped);
 
         var dongDuoi = Assert.Single(bang.Items, i => i.UserId == duoi.UserId);
-        Assert.Equal(2, dongDuoi.TargetQty);
+        Assert.Equal(1, dongDuoi.TargetQty);
         Assert.Equal(1, dongDuoi.Submitted);
         Assert.Equal(1, dongDuoi.SubmittedCapped);
 
@@ -321,7 +329,63 @@ public sealed class SpeakerHistoryContractTests(DatabaseFixture fixture) : Integ
 
         // Mốc cả đợt không đổi: tổng chỉ tiêu đợt và tổng chỉ tiêu nhiệm vụ đã chia.
         Assert.Equal(2000, bang.CampaignTargetQty);
-        Assert.Equal(3, bang.AllocatedTargetQty);
+        Assert.Equal(4, bang.AllocatedTargetQty);
+    }
+
+    /// <summary>
+    /// Trang chủ lấy `target` từ tổng quota cá nhân trên các task trong đợt, không lấy
+    /// `campaign.targetQty` (2000). Lượt giao cũ chưa có quota vẫn chia theo số người nhận,
+    /// đúng quy tắc của API tiến độ Speaker.
+    /// </summary>
+    [Fact]
+    public async Task DotHienTai_ChiTieuLaTongQuotaCaNhan_KhongPhaiChiTieuChienDich()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var dau = Dau();
+
+        var manager = await CreateUserAsync($"tm-dot-{dau}@test.local", RoleName.TaskManager);
+        var campaign = await CreateCampaignAsync($"Đợt trang chủ {dau}", 2000,
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), manager.UserId);
+        campaign.AssignedTo = manager.UserId;
+        await Db.SaveChangesAsync(ct);
+
+        var taskA = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 4,
+            manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
+        var taskB = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 6,
+            manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
+        // Task cũ: chưa có quota trên lượt giao, phải chia đều theo số người nhận.
+        var taskC = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 3,
+            manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
+
+        var toi = await CreateUserAsync($"sp-dot-{dau}@test.local", RoleName.Speaker, $"A {dau}");
+        var nguoiKhac = await CreateUserAsync($"sp-dot-k-{dau}@test.local", RoleName.Speaker, $"B {dau}");
+
+        foreach (var (task, user, quota) in new (WorkTask, AppUser, int?)[]
+                 {
+                     (taskA, toi, 3), (taskA, nguoiKhac, 1),
+                     (taskB, toi, 6),
+                     (taskC, toi, null), (taskC, nguoiKhac, null)
+                 })
+        {
+            Db.TaskAssignments.Add(new TaskAssignment
+            {
+                TaskId = task.TaskId,
+                UserId = user.UserId,
+                TargetQty = quota,
+                AssignmentStatus = AssignmentStatus.Active,
+                AssignedAt = DateTimeOffset.UtcNow
+            });
+        }
+
+        await Db.SaveChangesAsync(ct);
+
+        var dot = await Rounds.GetCurrentAsync(toi.UserId, ct);
+
+        Assert.NotNull(dot);
+        // 3 + 6 + 2 (phần chia của task cũ) — không phải 2000 của cả chiến dịch.
+        Assert.Equal(11, dot.Target);
+        Assert.Equal(0, dot.Submitted);
     }
 
     /// <summary>Nộp <paramref name="soBan"/> bản ghi của một người vào một task.</summary>
