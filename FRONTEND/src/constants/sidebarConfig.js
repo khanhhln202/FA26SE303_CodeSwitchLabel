@@ -127,14 +127,6 @@ export const SIDEBAR_CONFIG = {
     items: [
       { name: "Trang chủ", to: "/task-manager", icon: Home, end: true },
       { name: "Bảng điều khiển", to: "/task-manager/dashboard", icon: LayoutDashboard },
-      {
-        name: "Phân loại nhiệm vụ",
-        icon: FolderKanban,
-        children: [
-          { to: "/task-manager/speaker-tasks", label: "Speaker", icon: User },
-          { to: "/task-manager/reviewer-tasks", label: "Reviewer", icon: User },
-        ],
-      },
       { name: "Quản lý nhiệm vụ", to: "/task-manager/management", icon: ListTodo },
     ],
     promo: null,

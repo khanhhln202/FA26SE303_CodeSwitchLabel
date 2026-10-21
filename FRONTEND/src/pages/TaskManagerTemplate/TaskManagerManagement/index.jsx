@@ -178,18 +178,18 @@ export default function TaskManagerManagement() {
   });
 
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
-  const [editingAssignment, setEditingAssignment] = useState(null);
   const [allAdminUsers, setAllAdminUsers] = useState([]);
-  const [speakerTasksList, setSpeakerTasksList] = useState([]);
-  const [reviewerTasksList, setReviewerTasksList] = useState([]);
 
+  // Form tạo nhiệm vụ mới
   const [assignFormData, setAssignFormData] = useState({
     selectedBatchId: "",
-    selectedUniqueKey: "",
+    taskTitle: "",
+    targetRole: "Speaker", // Speaker hoặc Reviewer
     assignedUsers: []
   });
 
   const [viewingAssignedTask, setViewingAssignedTask] = useState(null);
+  const [userTargets, setUserTargets] = useState({});
   const [deletingBatch, setDeletingBatch] = useState(null);
 
   const [isEditTaskModalOpen, setIsEditTaskModalOpen] = useState(false);
@@ -309,7 +309,6 @@ export default function TaskManagerManagement() {
 
         const actualTarget = t.progress?.targetQty ?? 10;
 
-        // Id người đang nhận để tick/bỏ checkbox — so theo tên là dính người trùng tên.
         const rawAssigneesForIds = Array.isArray(t.assignees) && t.assignees.length > 0
           ? t.assignees
           : (Array.isArray(t.assignments) ? t.assignments : []);
@@ -350,9 +349,6 @@ export default function TaskManagerManagement() {
         }
       });
       setBatchMapping(mapping);
-
-      setSpeakerTasksList(mappedTasks.filter((t) => t.role === "Speaker"));
-      setReviewerTasksList(mappedTasks.filter((t) => t.role === "Reviewer"));
     } catch (error) {
       console.error("Lỗi khi kết nối API:", error);
     }
@@ -376,89 +372,30 @@ export default function TaskManagerManagement() {
     return allAdminUsers.filter(u => u.role === "Reviewer" && u.status === "Active");
   }, [allAdminUsers]);
 
-  const allTasksOptions = useMemo(() => [
-    ...speakerTasksList.map(t => ({ 
-      ...t, 
-      role: "Speaker", 
-      uniqueKey: `Speaker-${t.id}`,
-      label: `[Speaker] ${t.title}` 
-    })),
-    ...reviewerTasksList.map(t => ({ 
-      ...t, 
-      role: "Reviewer", 
-      uniqueKey: `Reviewer-${t.id}`,
-      label: `[Reviewer] ${t.title}` 
-    }))
-  ], [speakerTasksList, reviewerTasksList]);
-
   const assignModalSelectedBatch = useMemo(() => {
     return batches.find(b => Number(b.id) === Number(assignFormData.selectedBatchId)) || batches[0] || null;
   }, [batches, assignFormData.selectedBatchId]);
 
-  const filteredTasksForAssignModal = useMemo(() => {
-    if (!assignModalSelectedBatch) return allTasksOptions;
-    return allTasksOptions.filter(t => !t.topic || t.topic === assignModalSelectedBatch.topic);
-  }, [allTasksOptions, assignModalSelectedBatch]);
-
-  const currentSelectedTask = useMemo(() => {
-    return filteredTasksForAssignModal.find(t => t.uniqueKey === assignFormData.selectedUniqueKey) || filteredTasksForAssignModal[0];
-  }, [assignFormData.selectedUniqueKey, filteredTasksForAssignModal]);
-
+  // Lấy danh sách người dùng tương ứng với vai trò được chọn trong Modal
   const targetUserList = useMemo(() => {
-    return currentSelectedTask?.role === "Speaker" ? activeSpeakers : activeReviewers;
-  }, [currentSelectedTask, activeSpeakers, activeReviewers]);
+    return assignFormData.targetRole === "Speaker" ? activeSpeakers : activeReviewers;
+  }, [assignFormData.targetRole, activeSpeakers, activeReviewers]);
 
   const handleOpenAssignModal = () => {
     if (batches.length === 0) {
-      toast.error("Vui lòng tạo đợt trước khi thực hiện phân công nhiệm vụ!");
+      toast.error("Vui lòng tạo đợt trước khi thực hiện tạo nhiệm vụ!");
       return;
     }
 
-    setEditingAssignment(null);
     const initialBatch = batches.find(b => Number(b.id) === Number(selectedBatchId)) || batches[0] || null;
-    const initialBatchTopic = initialBatch?.topic;
-    const availableTasks = initialBatchTopic 
-      ? allTasksOptions.filter(t => !t.topic || t.topic === initialBatchTopic) 
-      : allTasksOptions;
-
-    const defaultTask = availableTasks[0] || allTasksOptions[0];
-
-    const currentTaskInState = assignTasks.find(t => Number(t.id) === Number(defaultTask?.id));
-    const currentAssignedUsers = currentTaskInState ? currentTaskInState.assignedUsers : (defaultTask?.assignedUsers || []);
 
     setAssignFormData({
       selectedBatchId: initialBatch ? initialBatch.id : "",
-      selectedUniqueKey: defaultTask ? defaultTask.uniqueKey : "",
-      assignedUsers: currentAssignedUsers
+      taskTitle: "",
+      targetRole: "Speaker",
+      assignedUsers: []
     });
     setIsAssignModalOpen(true);
-  };
-
-  const handleBatchChangeInAssignModal = (newBatchId) => {
-    const nextBatch = batches.find(b => Number(b.id) === Number(newBatchId));
-    const nextAvailableTasks = nextBatch 
-      ? allTasksOptions.filter(t => !t.topic || t.topic === nextBatch.topic)
-      : allTasksOptions;
-    
-    const defaultNextTask = nextAvailableTasks[0];
-    const currentTaskInState = assignTasks.find(t => Number(t.id) === Number(defaultNextTask?.id));
-
-    setAssignFormData({
-      selectedBatchId: newBatchId,
-      selectedUniqueKey: defaultNextTask ? defaultNextTask.uniqueKey : "",
-      assignedUsers: currentTaskInState ? currentTaskInState.assignedUsers : (defaultNextTask?.assignedUsers || [])
-    });
-  };
-
-  const handleTaskChangeInAssignModal = (newUniqueKey) => {
-    const newSelectedTask = filteredTasksForAssignModal.find(t => t.uniqueKey === newUniqueKey);
-    const currentTaskInState = assignTasks.find(t => Number(t.id) === Number(newSelectedTask?.id));
-
-    setAssignFormData(prev => ({
-      ...prev,
-      selectedUniqueKey: newUniqueKey,
-      assignedUsers: currentTaskInState ? currentTaskInState.assignedUsers : (newSelectedTask?.assignedUsers || [])
-    }));
   };
 
   const handleUserCheckboxToggle = (userName) => {
@@ -475,44 +412,57 @@ export default function TaskManagerManagement() {
   const handleSubmitAssignForm = async (e) => {
     e.preventDefault();
 
+    if (!assignFormData.taskTitle.trim()) {
+      toast.error("Vui lòng nhập tên nhiệm vụ!");
+      return;
+    }
+
     try {
-      const taskObj = currentSelectedTask;
       const targetBatchId = Number(assignFormData.selectedBatchId);
-      const taskId = Number(taskObj?.id || taskObj?.taskId);
+      const batchObj = batches.find(b => Number(b.id) === targetBatchId);
 
-      if (!taskId || isNaN(targetBatchId)) {
-        toast.error("Vui lòng chọn đợt và nhiệm vụ hợp lệ!");
-        return;
+      const domainMap = {
+        "Công nghệ thông tin": "ItTechnology",
+        "Giáo dục": "Education",
+        "Hội thoại hàng ngày": "DailyLife"
+      };
+
+      const selectedDomainCode = domainMap[batchObj?.topic] || "ItTechnology";
+      const isSpeaker = assignFormData.targetRole === "Speaker";
+
+      // 1. Tạo Task mới trực tiếp
+      const newCreatedTask = await taskService.createTask({
+        title: assignFormData.taskTitle.trim(),
+        description: assignFormData.taskTitle.trim(),
+        taskType: isSpeaker ? "Recording" : "Review",
+        domain: selectedDomainCode,
+        topic: batchObj?.topic || "Công nghệ thông tin",
+        campaignId: targetBatchId,
+        targetQty: 10
+      });
+
+      const taskId = Number(newCreatedTask?.summary?.taskId || newCreatedTask?.taskId || newCreatedTask?.id);
+
+      // 2. Gắn task vào đợt nếu chưa gắn
+      if (taskId && targetBatchId) {
+        await taskService.attachTaskToCampaign(taskId, targetBatchId).catch(() => {});
       }
 
-      await taskService.attachTaskToCampaign(taskId, targetBatchId);
-
-      try {
-        await taskService.addTaskItems(taskId, {
-          autoFill: {
-            count: taskObj.targetQty || 10,
-            domain: assignModalSelectedBatch?.topic === "Công nghệ thông tin" ? "ItTechnology" : 
-                    assignModalSelectedBatch?.topic === "Giáo dục" ? "Education" : "DailyLife"
-          }
-        });
-      } catch (itemErr) {
-        console.warn("AutoFill items warning:", itemErr);
-      }
-
+      // 3. Lắng nghe/phân công danh sách user được tick
       const selectedUsers = targetUserList.filter(u => assignFormData.assignedUsers.includes(u.name));
       const userIdsToAssign = selectedUsers.map(u => Number(u.id)).filter(Boolean);
 
-      if (userIdsToAssign.length > 0) {
-        await taskService.assignTask(taskId, userIdsToAssign);
+      if (taskId && userIdsToAssign.length > 0) {
+        await taskService.assignTask(taskId, userIdsToAssign).catch(() => {});
       }
 
-      toast.success(`Đã phân công nhiệm vụ "${taskObj.title}" vào đợt thành công!`);
+      toast.success(`Đã tạo và phân công nhiệm vụ "${assignFormData.taskTitle}" thành công!`);
       setIsAssignModalOpen(false);
 
       await loadDataFromApi();
     } catch (err) {
-      console.error("Lỗi khi phân công nhiệm vụ vào đợt:", err?.response?.data || err);
-      const msg = err?.response?.data?.title || err?.response?.data?.message || "Phân công thất bại!";
+      console.error("Lỗi khi tạo nhiệm vụ:", err?.response?.data || err);
+      const msg = err?.response?.data?.title || err?.response?.data?.message || "Tạo nhiệm vụ thất bại!";
       toast.error(msg);
     }
   };
@@ -714,7 +664,6 @@ export default function TaskManagerManagement() {
       const currentIds = (editingTask.assignedUserIds || []).map(Number);
       const selectedIds = (editTaskFormData.assignedUserIds || []).map(Number).filter(id => roleUserIds.has(id));
 
-      // API phân công chỉ THÊM người, không tự bỏ — người bị bỏ tick phải gọi gỡ riêng.
       for (const userId of currentIds.filter(id => roleUserIds.has(id) && !selectedIds.includes(id))) {
         await taskService.unassignTask(editingTask.id, userId);
       }
@@ -807,6 +756,58 @@ export default function TaskManagerManagement() {
   const selectedBatchObj = batches.find((b) => Number(b.id) === Number(selectedBatchId)) || null;
   const targetModalBatchObj = batches.find((b) => Number(b.id) === Number(modalTargetBatchId)) || selectedBatchObj;
 
+  // Tính toán mục tiêu số câu chia đều cho mỗi nhiệm vụ trong đợt
+  const calculatedTargetPerTask = useMemo(() => {
+    if (!selectedBatchObj) return 0;
+    const totalBatchTarget = Number(selectedBatchObj.target || 2000);
+    const taskCount = currentTasks.length;
+
+    if (taskCount === 0) return totalBatchTarget;
+
+    const dividedTarget = totalBatchTarget / taskCount;
+
+    // Kiểm tra nếu chia ra số thập phân
+    if (!Number.isInteger(dividedTarget)) {
+      toast.error(
+        `Lỗi mục tiêu đợt (${totalBatchTarget} câu) chia cho ${taskCount} nhiệm vụ ra số thập phân (${dividedTarget.toFixed(2)})!`,
+        { id: "divided-target-error" }
+      );
+      return Math.floor(dividedTarget);
+    }
+
+    return dividedTarget;
+  }, [selectedBatchObj, currentTasks.length]);
+
+  // Hàm mở Modal Xem Phân Công: Lấy mục tiêu của chính nhiệm vụ này chia cho số người tham gia
+  const handleOpenViewingTaskModal = (task) => {
+    setViewingAssignedTask(task);
+    
+    const userCount = task.assignedUsers ? task.assignedUsers.length : 0;
+    // Đã sửa: Sử dụng calculatedTargetPerTask (mục tiêu của nhiệm vụ = 500) thay vì chia sai theo mục tiêu đợt
+    const defaultUserTarget = userCount > 0 ? Math.floor(calculatedTargetPerTask / userCount) : 0;
+
+    setUserTargets(prev => {
+      const updated = { ...prev };
+      if (task.assignedUsers) {
+        task.assignedUsers.forEach((userName) => {
+          // Chỉ đặt mặc định nếu chưa từng được chỉnh sửa thủ công
+          if (updated[userName] === undefined) {
+            updated[userName] = defaultUserTarget;
+          }
+        });
+      }
+      return updated;
+    });
+  };
+
+  const handleUserTargetChange = (userName, value) => {
+    const numValue = Math.max(0, parseInt(value, 10) || 0);
+    setUserTargets(prev => ({
+      ...prev,
+      [userName]: numValue
+    }));
+  };
+
   return (
     <div className="w-full h-full flex flex-col gap-3.5 text-left font-sans p-1 overflow-y-auto relative transition-colors">
 
@@ -888,7 +889,7 @@ export default function TaskManagerManagement() {
 
                 <div>
                   <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
-                    Mục tiêu (Số câu)
+                    Mục tiêu
                   </label>
                   <input
                     type="number"
@@ -946,7 +947,7 @@ export default function TaskManagerManagement() {
         </div>
       )}
 
-      {/* MODAL PHÂN CÔNG NHIỆM VỤ MỚI */}
+      {/* MODAL TẠO NHIỆM VỤ MỚI */}
       {isAssignModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#16171C]/55 backdrop-blur-xs" onClick={() => setIsAssignModalOpen(false)}>
           <div 
@@ -957,7 +958,7 @@ export default function TaskManagerManagement() {
             <form onSubmit={handleSubmitAssignForm} className="p-6 space-y-4">
               <div className="flex items-center justify-between border-b border-[#E5E2D8] dark:border-gray-800 pb-3">
                 <h3 className="type-section truncate text-[#16171C] dark:text-gray-100">
-                  Phân công nhiệm vụ mới
+                  Tạo nhiệm vụ mới
                 </h3>
                 <button 
                   type="button"
@@ -975,7 +976,7 @@ export default function TaskManagerManagement() {
                 <div className="relative flex items-center">
                   <select
                     value={assignFormData.selectedBatchId}
-                    onChange={(e) => handleBatchChangeInAssignModal(e.target.value)}
+                    onChange={(e) => setAssignFormData({ ...assignFormData, selectedBatchId: e.target.value })}
                     className="w-full h-11 appearance-none border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl type-body outline-none font-bold transition-all font-sans truncate pl-3.5 pr-8 py-2.5 cursor-pointer"
                     onFocus={(e) => {
                       e.target.style.borderColor = TASK_MANAGER_ACCENT;
@@ -997,15 +998,35 @@ export default function TaskManagerManagement() {
               </div>
               
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block type-label text-[#2B2C31] dark:text-gray-200">
-                    Chọn nhiệm vụ (Thuộc chủ đề: {assignModalSelectedBatch?.topic || "Tất cả"})
-                  </label>
-                </div>
+                <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
+                  Tên nhiệm vụ
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Nhập tên nhiệm vụ..."
+                  value={assignFormData.taskTitle}
+                  onChange={(e) => setAssignFormData({ ...assignFormData, taskTitle: e.target.value })}
+                  className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none font-medium transition-all font-sans placeholder:text-[#9A9CA3]"
+                  onFocus={(e) => {
+                    e.target.style.borderColor = TASK_MANAGER_ACCENT;
+                    e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '';
+                    e.target.style.boxShadow = 'none';
+                  }}
+                />
+              </div>
+
+              <div>
+                <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
+                  Phân công nhiệm vụ cho
+                </label>
                 <div className="relative flex items-center">
                   <select
-                    value={assignFormData.selectedUniqueKey}
-                    onChange={(e) => handleTaskChangeInAssignModal(e.target.value)}
+                    value={assignFormData.targetRole}
+                    onChange={(e) => setAssignFormData({ ...assignFormData, targetRole: e.target.value, assignedUsers: [] })}
                     className="w-full h-11 appearance-none border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl type-body outline-none font-bold transition-all font-sans truncate pl-3.5 pr-8 py-2.5 cursor-pointer"
                     onFocus={(e) => {
                       e.target.style.borderColor = TASK_MANAGER_ACCENT;
@@ -1016,17 +1037,8 @@ export default function TaskManagerManagement() {
                       e.target.style.boxShadow = 'none';
                     }}
                   >
-                    {filteredTasksForAssignModal.length > 0 ? (
-                      filteredTasksForAssignModal.map((t) => (
-                        <option key={t.uniqueKey} value={t.uniqueKey} className="bg-white text-[#16171C] dark:bg-[#1C1D22] dark:text-white">
-                          {t.label}
-                        </option>
-                      ))
-                    ) : (
-                      <option value="" disabled className="bg-white text-[#16171C] dark:bg-[#1C1D22] dark:text-white">
-                        Không có nhiệm vụ nào thuộc chủ đề {assignModalSelectedBatch?.topic}
-                      </option>
-                    )}
+                    <option value="Speaker" className="bg-white text-[#16171C] dark:bg-[#1C1D22] dark:text-white">Speaker</option>
+                    <option value="Reviewer" className="bg-white text-[#16171C] dark:bg-[#1C1D22] dark:text-white">Reviewer</option>
                   </select>
                   <ChevronDown className="w-4 h-4 absolute right-3 pointer-events-none text-[#9A9CA3]" />
                 </div>
@@ -1035,13 +1047,13 @@ export default function TaskManagerManagement() {
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="block type-label text-[#2B2C31] dark:text-gray-200">
-                    {currentSelectedTask?.role} đang hoạt động
+                    Danh sách {assignFormData.targetRole} tham gia
                   </label>
                   <span 
-                    style={{ backgroundColor: currentSelectedTask?.role === "Speaker" ? SPEAKER_ACCENT : REVIEWER_ACCENT }}
+                    style={{ backgroundColor: assignFormData.targetRole === "Speaker" ? SPEAKER_ACCENT : REVIEWER_ACCENT }}
                     className="type-caption text-white px-2 py-0.5 rounded-md font-bold"
                   >
-                    {currentSelectedTask?.role}
+                    {assignFormData.targetRole}
                   </span>
                 </div>
 
@@ -1080,7 +1092,7 @@ export default function TaskManagerManagement() {
                     })
                   ) : (
                     <div className="p-3 text-center type-ui text-[#6E7078] dark:text-gray-400">
-                      Không có {currentSelectedTask?.role} nào đang hoạt động (Active).
+                      Không có {assignFormData.targetRole} nào đang hoạt động.
                     </div>
                   )}
                 </div>
@@ -1096,11 +1108,10 @@ export default function TaskManagerManagement() {
                 </button>
                 <button
                   type="submit"
-                  disabled={filteredTasksForAssignModal.length === 0}
                   style={{ backgroundColor: TASK_MANAGER_ACCENT, boxShadow: `0 10px 24px ${TASK_MANAGER_ACCENT}40` }}
-                  className="flex-1 py-2.5 text-white rounded-xl type-button hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 py-2.5 text-white rounded-xl type-button hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer font-bold"
                 >
-                  Lưu phân công
+                  Tạo nhiệm vụ
                 </button>
               </div>
             </form>
@@ -1332,7 +1343,7 @@ export default function TaskManagerManagement() {
       {viewingAssignedTask && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#16171C]/55 backdrop-blur-xs" onClick={() => setViewingAssignedTask(null)}>
           <div 
-            className="rounded-[24px] w-full max-w-md shadow-[0_20px_50px_rgba(16,17,20,0.25)] overflow-hidden border border-[#E5E2D8] dark:border-gray-800 bg-white dark:bg-[#1C1D22] animate-in fade-in zoom-in-95 duration-200" 
+            className="rounded-[24px] w-full max-w-lg shadow-[0_20px_50px_rgba(16,17,20,0.25)] overflow-hidden border border-[#E5E2D8] dark:border-gray-800 bg-white dark:bg-[#1C1D22] animate-in fade-in zoom-in-95 duration-200" 
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ backgroundColor: TASK_MANAGER_ACCENT }} className="h-1.5 w-full shrink-0" />
@@ -1372,12 +1383,33 @@ export default function TaskManagerManagement() {
                         </div>
                         <span className="font-bold">{userName}</span>
                       </div>
-                      <span 
-                        style={{ backgroundColor: viewingAssignedTask.role === "Speaker" ? SPEAKER_ACCENT : REVIEWER_ACCENT }}
-                        className="type-caption text-white px-2.5 py-0.5 rounded-md font-bold"
-                      >
-                        {viewingAssignedTask.role || "Thực hiện"}
-                      </span>
+
+                      {/* KHU VỰC BÊN PHẢI: BADGE + Ô NHẬP MỤC TIÊU SỐ CÂU */}
+                      <div className="flex items-center gap-2">
+                        <span 
+                          style={{ backgroundColor: viewingAssignedTask.role === "Speaker" ? SPEAKER_ACCENT : REVIEWER_ACCENT }}
+                          className="type-caption text-white px-2.5 py-1 rounded-md font-bold"
+                        >
+                          {viewingAssignedTask.role || "Thực hiện"}
+                        </span>
+
+                        {/* Ô nhập chỉ tiêu số câu nằm ở cạnh bên phải badge Speaker/Reviewer */}
+                        <div className="flex items-center gap-1 bg-white dark:bg-[#1C1D22] border border-[#E5E2D8] dark:border-gray-700 rounded-lg px-2 py-0.5">
+                          <input
+                            type="number"
+                            min="0"
+                            value={
+                              userTargets[userName] ?? 
+                              (viewingAssignedTask.assignedUsers.length > 0 
+                                ? Math.floor(calculatedTargetPerTask / viewingAssignedTask.assignedUsers.length) 
+                                : 0)
+                            }
+                            onChange={(e) => handleUserTargetChange(userName, e.target.value)}
+                            className="w-16 h-6 text-center font-bold type-caption text-[#16171C] dark:text-white bg-transparent outline-none font-sans"
+                          />
+                          <span className="type-caption text-[#6E7078] dark:text-gray-400 font-medium">câu</span>
+                        </div>
+                      </div>
                     </div>
                   ))
                 ) : (
@@ -1517,7 +1549,7 @@ export default function TaskManagerManagement() {
 
                       <div className="flex items-center gap-1 font-medium text-[#16171C] dark:text-gray-300">
                         <Target className="w-3 h-3 text-blue-500 shrink-0" />
-                        <span>Mục tiêu: <strong className="text-[#16171C] dark:text-white font-bold">{batch.target || 2000}</strong> câu</span>
+                        <span>Mục tiêu đợt: <strong className="text-[#16171C] dark:text-white font-bold">{batch.target || 2000}</strong> câu</span>
                       </div>
 
                       <div className="flex items-center gap-1 font-medium text-[#16171C] dark:text-gray-300">
@@ -1610,7 +1642,7 @@ export default function TaskManagerManagement() {
                 className="inline-flex items-center gap-1.5 py-2 px-3.5 type-button text-white rounded-xl hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer whitespace-nowrap"
               >
                 <UserCheck className="w-4 h-4" />
-                <span>Phân công</span>
+                <span>Tạo nhiệm vụ</span>
               </button>
             </div>
           </div>
@@ -1618,24 +1650,22 @@ export default function TaskManagerManagement() {
           {/* BẢNG CHUẨN */}
           <div className="rounded-2xl border border-[#E5E2D8] dark:border-gray-800 bg-white dark:bg-[#1C1D22] shadow-[0_1px_3px_rgba(16,17,20,0.04)] overflow-hidden flex-1 flex flex-col">
             <div className="overflow-x-auto flex-1">
-              <table className="w-full text-left type-ui min-w-[1050px]">
+              <table className="w-full text-left type-ui min-w-[850px]">
                 <thead>
                   <tr className="border-b border-[#E5E2D8] dark:border-gray-800 text-[#9A9CA3] dark:text-gray-400 type-label h-8 bg-[#F7F5EF] dark:bg-[#25272E]">
                     <th className="py-2 px-3 text-center w-[50px]">STT</th>
-                    <th className="py-2 px-3 min-w-[180px]">Nhiệm vụ</th>
-                    <th className="py-2 px-3 text-center w-[90px]">Vai trò</th>
-                    <th className="py-2 px-3 text-center w-[180px]">Người được phân công</th>
-                    <th className="py-2 px-3 text-center w-[110px] whitespace-nowrap">Mục tiêu</th>
-                    <th className="py-2 px-3 text-center w-[120px]">Ngày tạo</th>
-                    <th className="py-2 px-3 text-center w-[120px]">Hạn chót</th>
+                    <th className="py-2 px-3 min-w-[200px]">Nhiệm vụ</th>
+                    <th className="py-2 px-3 text-center w-[100px]">Vai trò</th>
+                    <th className="py-2 px-3 text-center w-[200px]">Người được phân công</th>
+                    <th className="py-2 px-3 text-center w-[150px] whitespace-nowrap">Mục tiêu (Số câu)</th>
                     <th className="py-2 px-3 text-center w-[130px]">Trạng thái</th>
-                    <th className="py-2 px-3 text-center w-[90px]">Thao tác</th>
+                    <th className="py-2 px-3 text-center w-[100px]">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#F0EEE6] dark:divide-gray-800">
                   {!selectedBatchObj || filteredTasks.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-12 text-center text-[#9A9CA3] dark:text-gray-500 type-ui">
+                      <td colSpan={7} className="py-12 text-center text-[#9A9CA3] dark:text-gray-500 type-ui">
                         {!selectedBatchObj 
                           ? "Hãy chọn hoặc tạo một đợt để xem danh sách nhiệm vụ." 
                           : `Không tìm thấy nhiệm vụ nào trong ${selectedBatchObj.campaignName || selectedBatchObj.name}.`}
@@ -1685,7 +1715,7 @@ export default function TaskManagerManagement() {
                           <td className="py-2 px-3 text-center whitespace-nowrap">
                             <button
                               type="button"
-                              onClick={() => setViewingAssignedTask(task)}
+                              onClick={() => handleOpenViewingTaskModal(task)}
                               className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-xl bg-[#F7F5EF] dark:bg-[#25272E] hover:bg-[#E5E2D8] dark:hover:bg-gray-700 text-[#16171C] dark:text-gray-200 type-meta font-label border border-[#E5E2D8] dark:border-gray-700 transition-colors cursor-pointer"
                             >
                               <Eye className="w-3.5 h-3.5 text-[#6E7078] dark:text-gray-400 shrink-0" />
@@ -1693,17 +1723,9 @@ export default function TaskManagerManagement() {
                             </button>
                           </td>
 
-                          {/* CỘT MỤC TIÊU SỐ CÂU */}
+                          {/* CỘT MỤC TIÊU SỐ CÂU (TỰ ĐỘNG CHIA ĐỀU CÓ KIỂM TRA LỖI) */}
                           <td className="py-2 px-3 text-center font-bold text-[#16171C] dark:text-white whitespace-nowrap font-sans">
-                            {task.targetQty || 10} câu
-                          </td>
-
-                          <td className="py-2 px-3 text-center font-semibold text-[#16171C] dark:text-white whitespace-nowrap font-sans">
-                            {task.createdAt || "---"}
-                          </td>
-
-                          <td className="py-2 px-3 text-center font-semibold text-[#16171C] dark:text-white whitespace-nowrap font-sans">
-                            {task.deadline || "---"}
+                            {calculatedTargetPerTask} câu
                           </td>
                           
                           {/* BADGE TRẠNG THÁI */}
