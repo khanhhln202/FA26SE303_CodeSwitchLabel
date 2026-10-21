@@ -1,0 +1,22 @@
+flowchart LR
+  subgraph Users
+    SP[Speaker]; RV[Reviewer]; TM[Task Manager]; AD[Admin]
+  end
+  subgraph Vercel
+    FE["React 19 SPA (Vite, TanStack Query)"]
+  end
+  subgraph AzureVM["Azure VM (Docker Compose)"]
+    CADDY["Caddy 2 (TLS, Let's Encrypt)"]
+    API["ASP.NET Core API (.NET 10)<br/>Api -> Services -> Repositories"]
+    FFMPEG["ffmpeg / ffprobe<br/>normalize 16 kHz mono WAV + auto-QC"]
+    DB[("PostgreSQL 16<br/>triggers, queue, views")]
+    S3[("MinIO (S3-compatible)<br/>WAV files, dataset files")]
+  end
+  GH["GitHub + GitHub Actions<br/>CI build/test, deploy.sh"]
+  Users --> FE
+  FE -- "HTTPS /api (JWT)" --> CADDY --> API
+  API -- "EF Core / Npgsql" --> DB
+  API -- "AWSSDK.S3 (signed URLs)" --> S3
+  API --> FFMPEG
+  FE -. "audio via signed URL (15 min)" .-> S3
+  GH -- "deploy on push to main" --> AzureVM

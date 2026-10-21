@@ -121,6 +121,15 @@ public class CodeSwitchTextTests
         Assert.Equal(expected, tokens);
     }
 
+    [Theory]
+    [InlineData("[vi]Em  nên [en]SCAN [vi]tài liệu.", "em nên scan tài liệu.")]
+    [InlineData("  [vi]Em nên [en]scan [vi]tài liệu.  ", "em nên scan tài liệu.")]
+    [InlineData("Em NÊN scan tài liệu.", "em nên scan tài liệu.")] // dữ liệu cũ thiếu nhãn
+    public void ComparisonKey_BoNhanGopKhoangTrangVaHaChuThuong(string input, string expected)
+    {
+        Assert.Equal(expected, CodeSwitchText.ComparisonKey(input));
+    }
+
     [Fact]
     public void Parse_CauBatDauBangNhanEn_VanNhanDienDuoc()
     {

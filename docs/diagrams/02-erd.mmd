@@ -1,0 +1,145 @@
+erDiagram
+  ROLE ||--o{ APP_USER : has
+  APP_USER ||--o| SPEAKER_PROFILE : "0..1"
+  APP_USER ||--o{ USER_DOMAIN : qualified_for
+  APP_USER ||--o{ AUDIT_LOG : acts
+  APP_USER ||--o{ SYSTEM_CONFIG : updates
+  APP_USER ||--o{ IMPORT_BATCH : imports
+  IMPORT_BATCH ||--o{ SCRIPT : contains
+  SCRIPT ||--o{ SCRIPT_WORD : alignment
+  SCRIPT ||--o{ SCRIPT_REVIEW : reviewed_by
+  SCRIPT_ERROR_REASON ||--o{ SCRIPT_REVIEW : reason
+  SCRIPT ||--o{ SCRIPT_PROPOSAL : proposed_on
+  SCRIPT_ERROR_REASON ||--o{ SCRIPT_PROPOSAL : reason
+  SCRIPT ||--o{ SCRIPT_QUEUE : queued_as
+  CAMPAIGN ||--o{ TASK : groups
+  CAMPAIGN ||--o{ CAMPAIGN_REGISTRATION : joined_by
+  APP_USER ||--o{ CAMPAIGN_REGISTRATION : registers
+  TASK ||--o{ TASK_ASSIGNMENT : assigned
+  APP_USER ||--o{ TASK_ASSIGNMENT : receives
+  TASK ||--o{ TASK_SCRIPT : includes
+  SCRIPT ||--o{ TASK_SCRIPT : in
+  TASK ||--o{ TASK_RECORDING : queues
+  RECORDING ||--o{ TASK_RECORDING : in
+  TASK ||--o{ SCRIPT_QUEUE : batch
+  SCRIPT ||--o{ RECORDING : recorded_as
+  APP_USER ||--o{ RECORDING : speaks
+  RECORDING ||--o{ REVIEW : receives
+  APP_USER ||--o{ REVIEW : reviews
+  REVIEW ||--o{ REVIEW_REJECTION_REASON : cites
+  REJECTION_REASON ||--o{ REVIEW_REJECTION_REASON : used
+  DATASET ||--o{ DATASET_RECORDING : includes
+  RECORDING ||--o{ DATASET_RECORDING : in
+
+  ROLE {
+    smallint role_id PK
+    string role_name UK
+  }
+  APP_USER {
+    bigint user_id PK
+    smallint role_id FK
+    string email UK
+    enum status
+  }
+  SPEAKER_PROFILE {
+    bigint user_id PK
+    smallint birth_year
+    numeric english_level
+    enum occupation
+  }
+  USER_DOMAIN {
+    bigint user_id PK
+    enum domain PK
+  }
+  SCRIPT {
+    string script_id PK
+    text cs_content
+    text vi_content
+    enum status
+    enum domain
+    int en_word_count
+  }
+  SCRIPT_WORD {
+    string script_id PK
+    smallint word_position PK
+    string en_word
+    string vi_word
+    enum relation
+  }
+  SCRIPT_REVIEW {
+    bigint script_review_id PK
+    string script_id FK
+    bigint user_id FK
+    enum action
+  }
+  SCRIPT_PROPOSAL {
+    bigint proposal_id PK
+    string script_id FK
+    enum kind
+    enum status
+  }
+  SCRIPT_QUEUE {
+    bigint queue_id PK
+    string script_id FK
+    enum stage
+    enum state
+    bigint claimed_by FK
+    timestamptz enqueued_at
+  }
+  CAMPAIGN {
+    bigint campaign_id PK
+    enum domain
+    int target_qty
+    enum status
+    bigint assigned_to FK
+  }
+  TASK {
+    bigint task_id PK
+    bigint campaign_id FK
+    enum task_type
+    int target_qty
+    timestamptz deadline
+    enum status
+  }
+  TASK_ASSIGNMENT {
+    bigint assignment_id PK
+    bigint task_id FK
+    bigint user_id FK
+    enum assignment_status
+    int target_qty
+  }
+  RECORDING {
+    string recording_id PK
+    string script_id FK
+    bigint speaker_id FK
+    enum sentence_variant
+    enum status
+    numeric duration_sec
+    jsonb qc_metrics
+  }
+  REVIEW {
+    bigint review_id PK
+    string recording_id FK
+    bigint reviewer_id FK
+    smallint review_round
+    enum decision
+  }
+  REJECTION_REASON {
+    smallint reason_id PK
+    enum category
+  }
+  DATASET {
+    bigint dataset_id PK
+    string dataset_name
+    string version
+    enum status
+  }
+  SYSTEM_CONFIG {
+    smallint config_id PK
+    string config_key UK
+  }
+  AUDIT_LOG {
+    bigint audit_id PK
+    string entity_type
+    enum action
+  }

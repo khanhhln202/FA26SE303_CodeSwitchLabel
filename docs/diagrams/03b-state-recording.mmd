@@ -1,0 +1,8 @@
+stateDiagram-v2
+  [*] --> qc_failed: upload fails auto-QC
+  [*] --> pending_review: upload passes auto-QC
+  pending_review --> approved: 2 matching approve votes (of 3)
+  pending_review --> rejected: 2 matching reject votes, or reject-audio
+  qc_failed --> [*]: speaker re-records (new take _tN)
+  rejected --> [*]: script requeued, same speaker re-records
+  approved --> [*]: eligible for dataset

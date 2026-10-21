@@ -934,7 +934,10 @@ public class TaskService(
         return await LoadDetailAsync(taskId, ct);
     }
 
-    /// <summary>Chia quota cho danh sách giao việc: số gửi kèm được giữ, ô trống chia đều phần còn lại.</summary>
+    /// <summary>
+    /// Chia quota cho danh sách giao việc: số gửi kèm được giữ, ô trống chia đều phần còn lại.
+    /// Không còn ô trống thì tổng các quota phải đúng bằng chỉ tiêu task.
+    /// </summary>
     private static int[] ResolveAssignmentQuotas(
         int targetQty, IReadOnlyList<AssignmentQuotaRequest> assignments)
     {
@@ -955,6 +958,13 @@ public class TaskService(
         var autoCount = assignments.Count(a => !a.TargetQty.HasValue);
         if (autoCount == 0)
         {
+            if (explicitSum != targetQty)
+            {
+                throw new UnprocessableException(
+                    "assignment_quota_not_equal_target",
+                    $"Tổng quota đã đặt là {explicitSum}, phải bằng đúng chỉ tiêu {targetQty} của task.");
+            }
+
             return [.. assignments.Select(a => a.TargetQty!.Value)];
         }
 

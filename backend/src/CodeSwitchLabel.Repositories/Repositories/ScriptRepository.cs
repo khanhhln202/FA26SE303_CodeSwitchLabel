@@ -22,8 +22,16 @@ public interface IScriptRepository
     /// </summary>
     Task<bool> HasAcceptedReviewAsync(string scriptId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Câu đã có trong kho chưa, so theo khoá chuẩn hoá: bỏ nhãn ngôn ngữ, gộp khoảng
+    /// trắng, không phân biệt hoa thường.
+    /// </summary>
     Task<bool> ContentExistsAsync(string csContent, CancellationToken ct = default);
 
+    /// <summary>
+    /// Lọc các khoá <see cref="CodeSwitchText.ComparisonKey"/> đã có câu tương ứng trong kho.
+    /// Trả về chính các khoá đã khớp, không phải nội dung gốc.
+    /// </summary>
     Task<HashSet<string>> FindExistingContentsAsync(IEnumerable<string> csContents, CancellationToken ct = default);
 
     Task<ImportBatch?> GetBatchAsync(long batchId, CancellationToken ct = default);
@@ -144,29 +152,31 @@ public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
             r => r.ScriptId == scriptId &&
                  (r.Action == ScriptReviewAction.Accepted || r.Action == ScriptReviewAction.Edited), ct);
 
-    public Task<bool> ContentExistsAsync(string csContent, CancellationToken ct = default) =>
-        db.Scripts.AsNoTracking().AnyAsync(s => s.CsContent == csContent, ct);
+    public async Task<bool> ContentExistsAsync(string csContent, CancellationToken ct = default) =>
+        (await FindExistingContentsAsync([csContent], ct)).Count > 0;
 
     public async Task<HashSet<string>> FindExistingContentsAsync(
         IEnumerable<string> csContents, CancellationToken ct = default)
     {
-        var distinct = csContents.Distinct().ToArray();
-        if (distinct.Length == 0) return [];
+        var wanted = csContents
+            .Select(CodeSwitchText.ComparisonKey)
+            .ToHashSet(StringComparer.Ordinal);
 
-        // Chia nhỏ mệnh đề IN để tránh vượt giới hạn tham số Postgres với batch lớn.
-        const int chunkSize = 1000;
+        if (wanted.Count == 0) return [];
+
+        // ponytail: database chỉ có unique index md5(cs_content) khớp CHÍNH XÁC, nên chuẩn
+        // hoá phải làm trong bộ nhớ. Khi kho lớn tới mức quét cả bảng thành vấn đề, thêm cột
+        // sinh normalized_content + index rồi đẩy phép so xuống SQL; API này giữ nguyên.
+        var rows = await db.Scripts.AsNoTracking()
+            .Select(s => s.CsContent)
+            .ToListAsync(ct);
+
         var found = new HashSet<string>(StringComparer.Ordinal);
 
-        for (var i = 0; i < distinct.Length; i += chunkSize)
+        foreach (var row in rows)
         {
-            var chunk = distinct.Skip(i).Take(chunkSize).ToArray();
-
-            var rows = await db.Scripts.AsNoTracking()
-                .Where(s => chunk.Contains(s.CsContent))
-                .Select(s => s.CsContent)
-                .ToListAsync(ct);
-
-            foreach (var row in rows) found.Add(row);
+            var key = CodeSwitchText.ComparisonKey(row);
+            if (wanted.Contains(key)) found.Add(key);
         }
 
         return found;

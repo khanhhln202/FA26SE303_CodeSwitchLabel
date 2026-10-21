@@ -133,9 +133,14 @@ public class ScriptService(
         repository.AddBatch(batch);
         await repository.SaveChangesAsync(ct);
 
-        // Dedupe trong file + so với DB bằng một câu truy vấn duy nhất (đã chia chunk trong repo).
-        var trimmedCs = items.Select(i => (i.CsTranscript ?? string.Empty).Trim()).Distinct().ToArray();
-        var existing = await repository.FindExistingContentsAsync(trimmedCs, ct);
+        // Dedupe trong file + so với DB theo khoá chuẩn hoá (bỏ nhãn, gộp khoảng trắng,
+        // hạ chữ thường). Gom khoá trước nên 10.000 dòng biến thể chỉ tốn một lượt tra.
+        var keys = items
+            .Select(i => CodeSwitchText.ComparisonKey(i.CsTranscript ?? string.Empty))
+            .Where(k => k.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var existing = await repository.FindExistingContentsAsync(keys, ct);
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
         var skipped = new List<ImportSkippedDto>();
@@ -156,18 +161,15 @@ public class ScriptService(
                     throw new UnprocessableException("empty_content", "Thiếu câu chen tiếng Anh hoặc câu thuần Việt.");
                 }
 
-                if (!seen.Add(cs))
-                {
-                    throw ConflictException.DuplicateContent();
-                }
+                var (wordCount, enWordCount) = ScriptPairRules.ValidatePair(cs, ve);
+                var key = CodeSwitchText.ComparisonKey(cs);
 
-                if (existing.Contains(cs))
+                if (!seen.Add(key) || existing.Contains(key))
                 {
                     throw ConflictException.DuplicateContent();
                 }
 
                 var domain = ParseDomain(item.Domain);
-                var (wordCount, enWordCount) = ScriptPairRules.ValidatePair(cs, ve);
                 var words = ScriptPairRules.BuildWords(item.Alignment ?? [], enWordCount);
                 var relation = ScriptPairRules.RelationOf(words);
                 var scriptId = await repository.GenerateIdAsync(enWordCount, domain, relation, ct);
