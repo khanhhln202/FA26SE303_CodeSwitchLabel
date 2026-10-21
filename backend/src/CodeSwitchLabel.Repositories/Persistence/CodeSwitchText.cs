@@ -62,6 +62,20 @@ public static class CodeSwitchText
         return CollapseSpaces(builder.ToString());
     }
 
+    /// <summary>
+    /// Khoá so trùng: bỏ nhãn, gộp khoảng trắng, hạ chữ thường. Dữ liệu cũ thiếu nhãn
+    /// vẫn so được thay vì ném lỗi định dạng.
+    /// </summary>
+    public static string ComparisonKey(string tagged)
+    {
+        string plain;
+
+        try { plain = Strip(tagged); }
+        catch (FormatException) { plain = CollapseSpaces(tagged ?? string.Empty); }
+
+        return plain.ToLowerInvariant();
+    }
+
     /// <summary>Tổng số từ của câu, tính trên bản đã bỏ nhãn.</summary>
     public static int CountWords(string tagged) => Tokenize(Strip(tagged)).Length;
 

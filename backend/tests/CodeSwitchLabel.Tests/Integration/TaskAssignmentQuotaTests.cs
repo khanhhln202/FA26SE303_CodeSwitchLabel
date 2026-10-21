@@ -1,4 +1,5 @@
 using CodeSwitchLabel.Repositories.Enums;
+using CodeSwitchLabel.Services.Common;
 using CodeSwitchLabel.Services.Dtos;
 using CodeSwitchLabel.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -124,6 +125,94 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
 
         Assert.Equal([3, 3, 4], quotas);
         Assert.Equal(10, quotas.Sum());
+    }
+
+    [Fact]
+    public async Task SetAssignments_DatDuQuotaNhungTongKhacChiTieu_BaoLoi()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var task = await CreateTaskAsync(CampaignId, TaskType.Review, 10, ManagerUserId);
+        var reviewers = new[]
+        {
+            await CreateUserWithBuilderAsync(RoleName.Reviewer, fullName: "Reviewer G"),
+            await CreateUserWithBuilderAsync(RoleName.Reviewer, fullName: "Reviewer H")
+        };
+
+        // Thiếu 1: tổng 9 nhưng chỉ tiêu 10.
+        var thieu = await Assert.ThrowsAsync<UnprocessableException>(() =>
+            TaskService.SetAssignmentsAsync(
+                task.TaskId,
+                new SetTaskAssignmentsRequest
+                {
+                    Assignments =
+                    [
+                        new AssignmentQuotaRequest { UserId = reviewers[0].UserId, TargetQty = 4 },
+                        new AssignmentQuotaRequest { UserId = reviewers[1].UserId, TargetQty = 5 }
+                    ]
+                },
+                ct, ManagerUserId, isAdmin: false));
+
+        Assert.Equal("assignment_quota_not_equal_target", thieu.Code);
+
+        // Thừa 1: tổng 11, vượt chỉ tiêu.
+        var thua = await Assert.ThrowsAsync<UnprocessableException>(() =>
+            TaskService.SetAssignmentsAsync(
+                task.TaskId,
+                new SetTaskAssignmentsRequest
+                {
+                    Assignments =
+                    [
+                        new AssignmentQuotaRequest { UserId = reviewers[0].UserId, TargetQty = 4 },
+                        new AssignmentQuotaRequest { UserId = reviewers[1].UserId, TargetQty = 7 }
+                    ]
+                },
+                ct, ManagerUserId, isAdmin: false));
+
+        Assert.Equal("assignment_quota_exceeds_target", thua.Code);
+    }
+
+    [Fact]
+    public async Task Assign_TaskThuAm_MoiSpeakerNhanQuotaRieng()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var scriptIds = new List<string>();
+
+        for (var i = 0; i < 4; i++)
+        {
+            var script = await CreateValidatedScriptAsync(
+                $"[vi]Em nên [en]scan{i} [vi]tài liệu này.",
+                $"[vi]Em nên quét tài liệu này {i}.",
+                ScriptDomain.ItTechnology, AdminUserId);
+
+            scriptIds.Add(script.ScriptId);
+        }
+
+        var created = await TaskService.CreateAsync(new CreateTaskRequest
+        {
+            CampaignId = CampaignId,
+            TaskType = TaskType.Recording,
+            Description = "Quota riêng cho Speaker",
+            TargetQty = 4,
+            Deadline = DateTimeOffset.UtcNow.AddDays(7)
+        }, ManagerUserId, ct);
+
+        await TaskService.AddItemsAsync(
+            created.Summary.TaskId,
+            new AddTaskItemsRequest { Ids = scriptIds },
+            ct, ManagerUserId, isAdmin: false);
+
+        var speakers = new[]
+        {
+            await CreateUserWithBuilderAsync(RoleName.Speaker, fullName: "Speaker Q1"),
+            await CreateUserWithBuilderAsync(RoleName.Speaker, fullName: "Speaker Q2")
+        };
+
+        var detail = await TaskService.AssignAsync(
+            created.Summary.TaskId, [speakers[0].UserId, speakers[1].UserId],
+            ct, ManagerUserId, isAdmin: false);
+
+        Assert.Equal(2, QuotaOf(detail, speakers[0].UserId));
+        Assert.Equal(2, QuotaOf(detail, speakers[1].UserId));
     }
 
     private static int? QuotaOf(TaskDetailDto detail, long userId) =>

@@ -108,6 +108,25 @@ public class ScriptRepositoryTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task ContentExistsAsync_IgnoresCaseAndWhitespace()
+    {
+        // Arrange
+        await CreateScriptAsync(
+            "[vi]Em nên [en]scan [vi]tài liệu này.",
+            "[vi]Em nên quét tài liệu này.",
+            ScriptDomain.ItTechnology,
+            AdminUserId);
+
+        // Act — khác hoa/thường và gộp nhiều khoảng trắng.
+        var exists = await Scripts.ContentExistsAsync(
+            "  [vi]EM NÊN [en]SCAN [vi]TÀI   LIỆU NÀY.  ",
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(exists);
+    }
+
+    [Fact]
     public async Task ContentExistsAsync_ReturnsFalse_WhenContentDoesNotExist()
     {
         // Act

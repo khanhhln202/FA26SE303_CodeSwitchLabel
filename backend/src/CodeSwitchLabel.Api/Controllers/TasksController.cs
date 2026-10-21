@@ -157,8 +157,9 @@ public class TasksController(ITaskService taskService) : ControllerBase
     /// Người không còn trong danh sách chuyển sang `reassigned` (giữ lịch sử); người mới được thêm.
     ///
     /// `targetQty` để trống thì backend chia đều phần chỉ tiêu còn lại sau khi trừ các quota
-    /// đã gửi. Tổng quota không được vượt chỉ tiêu task, mỗi người ít nhất 1. Với task thu âm
-    /// và task duyệt ngoài đợt, tổng quota cũng không được vượt số mục người nhận làm được.
+    /// đã gửi; điền đủ tất cả thì tổng phải bằng đúng chỉ tiêu task. Mỗi người ít nhất 1.
+    /// Với task thu âm và task duyệt ngoài đợt, tổng quota cũng không được vượt số mục người
+    /// nhận làm được.
     /// </remarks>
     [HttpPut("{id:long}/assignments")]
     [ProducesResponseType(typeof(TaskDetailDto), StatusCodes.Status200OK)]
