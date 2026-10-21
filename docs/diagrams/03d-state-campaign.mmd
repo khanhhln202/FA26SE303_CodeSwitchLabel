@@ -1,0 +1,6 @@
+stateDiagram-v2
+  [*] --> open: campaign created, no tasks
+  open --> in_progress: first task added
+  in_progress --> completed: all tasks completed
+  completed --> in_progress: a task reopens
+  in_progress --> open: all tasks detached/deleted
