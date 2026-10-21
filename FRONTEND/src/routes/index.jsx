@@ -162,14 +162,6 @@ const routes = [
         element: lazy(() => import("../pages/TaskManagerTemplate/TaskManagerDashboard/index")),
       },
       {
-        path: "speaker-tasks",
-        element: lazy(() => import("../pages/TaskManagerTemplate/TaskManagerSpeakerTasks/index")),
-      },
-      {
-        path: "reviewer-tasks",
-        element: lazy(() => import("../pages/TaskManagerTemplate/TaskManagerReviewerTasks/index")),
-      },
-      {
         path: "management",
         element: lazy(() => import("../pages/TaskManagerTemplate/TaskManagerManagement/index")),
       },
