@@ -362,13 +362,15 @@ CREATE UNIQUE INDEX uq_task_assignment_active_user
 CREATE INDEX idx_task_assignment_user ON task_assignment (user_id);
 
 CREATE TABLE task_script (
-    task_id     BIGINT NOT NULL REFERENCES task(task_id) ON DELETE CASCADE,
-    script_id   VARCHAR(16) NOT NULL REFERENCES script(script_id),
-    status      task_script_status NOT NULL DEFAULT 'pending',
-    included_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    task_id         BIGINT NOT NULL REFERENCES task(task_id) ON DELETE CASCADE,
+    script_id       VARCHAR(16) NOT NULL REFERENCES script(script_id),
+    assignee_user_id BIGINT REFERENCES app_user(user_id),   -- TEAM_021: người nhận câu này (Recording), NULL = chưa gán / task duyệt
+    status          task_script_status NOT NULL DEFAULT 'pending',
+    included_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (task_id, script_id)
 );
 CREATE INDEX idx_task_script_script ON task_script (script_id);
+CREATE INDEX idx_task_script_assignee ON task_script (assignee_user_id);
 
 -- TEAM_010 — HÀNG ĐỢI CHUNG cho mọi câu văn bản (yêu cầu 2.1).
 --
@@ -1251,10 +1253,22 @@ BEGIN
                  ELSE EXISTS (SELECT 1 FROM task_script ts
                                WHERE ts.script_id = q.script_id
                                  AND ts.task_id = p_task_id
-                                 AND ts.status = 'pending')
+                                 AND ts.status = 'pending'
+                                 -- TEAM_021: chỉ phát cặp đã gán cho đúng Speaker;
+                                 -- NULL là mục cũ chưa gán nên giữ hành vi cũ.
+                                 AND (ts.assignee_user_id IS NULL OR ts.assignee_user_id = p_user_id))
                END
            )
-     ORDER BY q.enqueued_at, q.queue_id
+     -- TEAM_021: cặp đã gán cho Speaker khác thì không phát cho người này, kể cả
+       -- khi gọi không kèm task_id. Mục cũ assignee_user_id NULL vẫn dùng chung.
+       AND (
+            q.stage <> 'recording'
+            OR NOT EXISTS (SELECT 1 FROM task_script ts
+                            WHERE ts.script_id = q.script_id
+                              AND ts.assignee_user_id IS NOT NULL
+                              AND ts.assignee_user_id <> p_user_id)
+           )
+      ORDER BY q.enqueued_at, q.queue_id
      FOR UPDATE OF q SKIP LOCKED
      LIMIT 1;
 

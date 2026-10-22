@@ -1,7 +1,9 @@
 using CodeSwitchLabel.Repositories.Enums;
+using CodeSwitchLabel.Repositories.Repositories;
 using CodeSwitchLabel.Services.Common;
 using CodeSwitchLabel.Services.Dtos;
 using CodeSwitchLabel.Tests.Infrastructure;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -14,6 +16,9 @@ namespace CodeSwitchLabel.Tests.Integration;
 [Trait("Category", "Integration")]
 public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
 {
+    private IScriptQueueRepository Queue =>
+        Scope.ServiceProvider.GetRequiredService<IScriptQueueRepository>();
+
     public TaskAssignmentQuotaTests(DatabaseFixture fixture) : base(fixture)
     {
     }
@@ -213,6 +218,188 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
 
         Assert.Equal(2, QuotaOf(detail, speakers[0].UserId));
         Assert.Equal(2, QuotaOf(detail, speakers[1].UserId));
+    }
+
+    [Fact]
+    public async Task CreateRecording_WithAssignees_10Target3Speakers_4_3_3_AndQueueIsolation()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var scriptIds = new List<string>();
+        for (var i = 0; i < 10; i++)
+        {
+            var s = await CreateValidatedScriptAsync(
+                $"[vi]Em [en]test{i} [vi]câu này.", $"[vi]Em câu này {i}.", ScriptDomain.ItTechnology, AdminUserId);
+            scriptIds.Add(s.ScriptId);
+        }
+        var speakers = new[]
+        {
+            await CreateUserWithBuilderAsync(RoleName.Speaker, fullName: "Sp A"),
+            await CreateUserWithBuilderAsync(RoleName.Speaker, fullName: "Sp B"),
+            await CreateUserWithBuilderAsync(RoleName.Speaker, fullName: "Sp C")
+        };
+
+        var detail = await TaskService.CreateAsync(new CreateTaskRequest
+        {
+            CampaignId = CampaignId,
+            TaskType = TaskType.Recording,
+            Description = "Ghi âm 10 cặp 3 người",
+            TargetQty = 10,
+            Deadline = DateTimeOffset.UtcNow.AddDays(7),
+            AssigneeUserIds = [speakers[0].UserId, speakers[1].UserId, speakers[2].UserId]
+        }, ManagerUserId, ct);
+
+        Assert.Equal(10, detail.Summary.Progress.TargetQty);
+        Assert.Equal(3, detail.Assignments.Count(a => a.Status == AssignmentStatus.Active));
+        Assert.Equal(4, QuotaOf(detail, speakers[0].UserId));
+        Assert.Equal(3, QuotaOf(detail, speakers[1].UserId));
+        Assert.Equal(3, QuotaOf(detail, speakers[2].UserId));
+
+        var items = await Db.TaskScripts
+            .Where(ts => ts.TaskId == detail.Summary.TaskId)
+            .ToListAsync(ct);
+        Assert.Equal(10, items.Count);
+        Assert.Equal(4, items.Count(i => i.AssigneeUserId == speakers[0].UserId));
+        Assert.Equal(3, items.Count(i => i.AssigneeUserId == speakers[1].UserId));
+        Assert.Equal(3, items.Count(i => i.AssigneeUserId == speakers[2].UserId));
+    }
+
+    [Fact]
+    public async Task CreateReview_WithAssignees_10Target3Reviewers_4_3_3_EmptyQueue()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var reviewers = new[]
+        {
+            await CreateUserWithBuilderAsync(RoleName.Reviewer, fullName: "Rv A"),
+            await CreateUserWithBuilderAsync(RoleName.Reviewer, fullName: "Rv B"),
+            await CreateUserWithBuilderAsync(RoleName.Reviewer, fullName: "Rv C")
+        };
+        var detail = await TaskService.CreateAsync(new CreateTaskRequest
+        {
+            CampaignId = CampaignId,
+            TaskType = TaskType.Review,
+            Description = "Duyệt 10 bản ghi 3 người",
+            TargetQty = 10,
+            Deadline = DateTimeOffset.UtcNow.AddDays(7),
+            AssigneeUserIds = [reviewers[0].UserId, reviewers[1].UserId, reviewers[2].UserId]
+        }, ManagerUserId, ct);
+
+        Assert.Equal(3, detail.Assignments.Count(a => a.Status == AssignmentStatus.Active));
+        Assert.Equal(4, QuotaOf(detail, reviewers[0].UserId));
+        Assert.Equal(3, QuotaOf(detail, reviewers[1].UserId));
+        Assert.Equal(3, QuotaOf(detail, reviewers[2].UserId));
+    }
+
+    [Fact]
+    public async Task CreateRecording_InsufficientPairs_ThrowsNotEnoughPairs()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        for (var i = 0; i < 2; i++)
+        {
+            await CreateValidatedScriptAsync(
+                $"[vi]Em [en]p{i} [vi]t.", $"[vi]Em t {i}.", ScriptDomain.ItTechnology, AdminUserId);
+        }
+        var speaker = await CreateUserWithBuilderAsync(RoleName.Speaker, fullName: "Sp Only");
+
+        var ex = await Assert.ThrowsAsync<UnprocessableException>(() =>
+            TaskService.CreateAsync(new CreateTaskRequest
+            {
+                CampaignId = CampaignId,
+                TaskType = TaskType.Recording,
+                TargetQty = 10,
+                Deadline = DateTimeOffset.UtcNow.AddDays(7),
+                AssigneeUserIds = [speaker.UserId]
+            }, ManagerUserId, ct));
+        Assert.Equal("recording_not_enough_pairs", ex.Code);
+    }
+
+    [Fact]
+    public async Task CreateTask_TargetBelowAssigneeCount_Throws()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var speaker = await CreateUserWithBuilderAsync(RoleName.Speaker, fullName: "Sp Only2");
+        var speaker2 = await CreateUserWithBuilderAsync(RoleName.Speaker, fullName: "Sp Only3");
+
+        var ex = await Assert.ThrowsAsync<UnprocessableException>(() =>
+            TaskService.CreateAsync(new CreateTaskRequest
+            {
+                CampaignId = CampaignId,
+                TaskType = TaskType.Recording,
+                TargetQty = 1,
+                Deadline = DateTimeOffset.UtcNow.AddDays(7),
+                AssigneeUserIds = [speaker.UserId, speaker2.UserId]
+            }, ManagerUserId, ct));
+        Assert.Equal("target_less_than_assignees", ex.Code);
+    }
+
+    [Fact]
+    public async Task CreateTask_InvalidMember_RoleMismatch_Throws()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var reviewer = await CreateUserWithBuilderAsync(RoleName.Reviewer, fullName: "Rv Bad");
+        var ex = await Assert.ThrowsAsync<UnprocessableException>(() =>
+            TaskService.CreateAsync(new CreateTaskRequest
+            {
+                CampaignId = CampaignId,
+                TaskType = TaskType.Recording,
+                TargetQty = 5,
+                Deadline = DateTimeOffset.UtcNow.AddDays(7),
+                AssigneeUserIds = [reviewer.UserId]
+            }, ManagerUserId, ct));
+        Assert.Equal("assignee_role_mismatch", ex.Code);
+    }
+
+    [Fact]
+    public async Task EditRecording_AssigneeChanged_StartedPairsStay_InProgressPairsBlocked()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var scriptIds = new List<string>();
+        for (var i = 0; i < 4; i++)
+        {
+            var s = await CreateValidatedScriptAsync(
+                $"[vi]Em [en]e{i} [vi]t.", $"[vi]Em t {i}.", ScriptDomain.ItTechnology, AdminUserId);
+            scriptIds.Add(s.ScriptId);
+        }
+        var speakers = new[]
+        {
+            await CreateUserWithBuilderAsync(RoleName.Speaker, fullName: "Sp A"),
+            await CreateUserWithBuilderAsync(RoleName.Speaker, fullName: "Sp B")
+        };
+
+        var task = await TaskService.CreateAsync(new CreateTaskRequest
+        {
+            CampaignId = CampaignId,
+            TaskType = TaskType.Recording,
+            TargetQty = 4,
+            Deadline = DateTimeOffset.UtcNow.AddDays(7),
+            AssigneeUserIds = [speakers[0].UserId, speakers[1].UserId]
+        }, ManagerUserId, ct);
+
+        await TaskService.AddItemsAsync(
+            task.Summary.TaskId, new AddTaskItemsRequest { Ids = scriptIds }, ct, ManagerUserId, isAdmin: false);
+
+        await Queue.ClaimNextAsync(speakers[0].UserId, QueueStage.Recording, task.Summary.TaskId, ct);
+
+        await Assert.ThrowsAsync<ConflictException>(() =>
+            TaskService.SetAssignmentsAsync(task.Summary.TaskId, new SetTaskAssignmentsRequest
+            {
+                Assignments = [new AssignmentQuotaRequest { UserId = speakers[1].UserId }]
+            }, ct, ManagerUserId, isAdmin: false));
+    }
+
+    [Fact]
+    public async Task Legacy_NoSelection_KeepsCurrentFlow()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var result = await TaskService.CreateAsync(new CreateTaskRequest
+        {
+            CampaignId = CampaignId,
+            TaskType = TaskType.Review,
+            Description = "Legacy no assignee",
+            TargetQty = 5,
+            Deadline = DateTimeOffset.UtcNow.AddDays(7)
+        }, ManagerUserId, ct);
+        Assert.Empty(result.Assignments);
+        Assert.Equal(5, result.Summary.Progress.TargetQty);
     }
 
     private static int? QuotaOf(TaskDetailDto detail, long userId) =>

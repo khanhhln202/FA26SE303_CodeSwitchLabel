@@ -136,6 +136,18 @@ public static partial class DatabaseSeeder
     private static async Task EnsureIncrementalTablesAsync(
         CodeSwitchLabelDbContext db, Microsoft.Extensions.Logging.ILogger? logger, CancellationToken ct)
     {
+        // V12 added per-assignee quotas. Existing local volumes do not rerun the
+        // bootstrap SQL, so keep this additive and safe to run on every startup.
+        await db.Database.ExecuteSqlRawAsync(
+            "ALTER TABLE task_assignment ADD COLUMN IF NOT EXISTS target_qty INT", ct);
+
+        // V14: cặp câu trong task thu âm có thể chỉ định đúng Speaker. Thêm cột/index
+        // cho volume cũ; V15 thay hàm claim là bước triển khai riêng trong migrations/.
+        await db.Database.ExecuteSqlRawAsync(
+            "ALTER TABLE task_script ADD COLUMN IF NOT EXISTS assignee_user_id BIGINT REFERENCES app_user(user_id)", ct);
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE INDEX IF NOT EXISTS idx_task_script_assignee ON task_script (assignee_user_id)", ct);
+
         var hasRegistration = await db.Database
             .SqlQuery<bool>($"""SELECT to_regclass('public.campaign_registration') IS NOT NULL AS "Value" """)
             .SingleAsync(ct);

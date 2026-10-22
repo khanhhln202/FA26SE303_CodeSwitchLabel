@@ -20,7 +20,7 @@ Luồng dữ liệu cốt lõi:
 Mọi câu văn bản (nhập file · đóng góp · báo lỗi) → HÀNG ĐỜI CHUNG (FIFO)
   → Task Manager chia lô (~100 câu/người) → 1 lượt duyệt của người được giao lô
   → validated → HÀNG ĐỢI GHI ÂM (FIFO) → Speaker thu 2 bản cs + vi
-  → mỗi bản chờ 3 lượt duyệt mù → đa số 2/3 → approved | rejected
+  → mỗi bản duyệt mù tối đa 3 lượt → chốt ngay khi một bên đủ 2 phiếu → approved | rejected
   → lý do nhóm "content" kéo cặp câu về hàng đợi duyệt văn bản
   → cả cs và vi đạt → cặp câu XONG
 ```
@@ -64,7 +64,7 @@ FA26SE303_CodeSwitchLabel/
 │   ├── src/CodeSwitchLabel.Repositories/ # entity, DbContext, Storage/S3
 │   └── tests/
 │       ├── CodeSwitchLabel.Tests/ # xunit.v3 unit + integration (Testcontainers): Api/, Integration/, Infrastructure/, Services/
-│       └── e2e/*.e2e.mjs          # 01-core, 02-users, 03-demo, 04-import-task-record (+ README)
+│       └── e2e/*.e2e.mjs          # 01-core, 02-users, 03-demo, 04-import-task-record, 05-proposals (+ README)
 ├── FRONTEND/                     # Vite SPA (React 19), deploy Vercel
 │   ├── src/ App.jsx, main.jsx, routes/, pages/*, components/*, services/*, hooks/*, lib/*, utils/*
 │   └── README.md
@@ -72,8 +72,9 @@ FA26SE303_CodeSwitchLabel/
 │   ├── codeswitchlabel.sql       # LƯỢC ĐỒ — nguồn sự thật duy nhất, không dùng EF migration
 │   ├── FE-INTEGRATION.md         # hợp đồng API cho frontend
 │   ├── Requirement.txt           # yêu cầu 4 actor + mẫu input_text.json
+│   ├── diagrams/                 # sơ đồ kiến trúc, ERD, trạng thái, luồng nghiệp vụ (Mermaid)
 │   └── demo-test-api.html
-├── migrations/                   # V2..V8 + file verify (tách task khỏi campaign, hàng đợi văn bản, đa người nhận, trạng thái ba giá trị)
+├── migrations/                   # V2..V15 (task độc lập, hàng đợi văn bản, đề xuất câu, quota, phân câu theo người nhận, hàng đợi ghi âm có người nhận)
 ├── deploy/                       # prod: docker-compose.prod.yml, Caddyfile, deploy.sh, .env.example, README.md
 ├── demo/                         # input_text_demo.json + demo-live-import.json (7 câu, 3 câu lỗi cố ý) + wav/m4a mẫu + test-them/
 └── .github/workflows/            # backend.yml (CI build + test), deploy.yml (tự động lên máy chủ)
@@ -81,7 +82,7 @@ FA26SE303_CodeSwitchLabel/
 
 Tài liệu chi tiết:
 
-- Backend: [`backend/README.md`](backend/README.md) — vòng đời, luật duyệt 3 phiếu, giao việc, tài khoản, lệnh hay dùng
+- Backend: [`backend/README.md`](backend/README.md) — vòng đời, luật duyệt tối đa 3 phiếu, giao việc, tài khoản, lệnh hay dùng
 - Deploy prod (Azure + Caddy + HTTPS): [`deploy/README.md`](deploy/README.md)
 - Kiểm thử đầu–cuối: [`backend/tests/e2e/README.md`](backend/tests/e2e/README.md)
 - Hợp đồng API cho FE: [`docs/FE-INTEGRATION.md`](docs/FE-INTEGRATION.md)
@@ -169,15 +170,15 @@ Mật khẩu dev ở `backend/src/CodeSwitchLabel.Api/appsettings.Development.js
 | `speaker1@codeswitchlabel.local` | Speaker | 6 |
 | `speaker2@codeswitchlabel.local` | Speaker | 7 |
 
-Cần 3 reviewer vì **mỗi bản ghi cần 3 lượt duyệt của 3 người khác nhau**.
+Cần 3 reviewer vì **mỗi bản ghi cần tối đa 3 lượt duyệt của 3 người khác nhau** — chốt ngay khi một bên đủ 2 phiếu, nên lượt thứ ba chỉ cần khi hai phiếu đầu lệch nhau.
 
 Luồng chính (7 bước):
 
-1. `admin`: `POST /api/scripts/import` file JSON theo mẫu `docs/Requirement.txt` → mã mới dạng `s_211000016`, trạng thái `PendingValidation`
+1. `admin`: `POST /api/scripts/import` file JSON theo mẫu `docs/Requirement.txt` → mã mới dạng `s_211000000016`, trạng thái `PendingValidation`
 2. `speaker1`: `POST /api/scripts/{id}/review` `{ "action": "Accepted" }` → `Validated`
 3. `GET /api/speaker/scripts/next` → cặp câu kèm cả 2 biến thể
 4. `POST /api/recordings` 2 lần (`CodeSwitching` rồi `PureVietnamese`)
-5. `reviewer`, `reviewer2`, `reviewer3` mỗi người `POST /api/recordings/{id}/reviews` 1 lần — lượt thứ 3 trả `isFinal = true`
+5. `reviewer`, `reviewer2` mỗi người `POST /api/recordings/{id}/reviews` 1 lần — lượt thứ 2 (đủ 2 phiếu đạt) trả `isFinal = true` và chốt luôn; `reviewer3` chỉ cần khi hai phiếu đầu lệch nhau
 6. `manager`: tạo task thu âm target 1, tự lấp mục, giao cho `speaker2` → đủ 2 bản đạt thì task tự `Completed`
 7. `admin`: `GET /api/admin/dashboard` xem tổng hợp
 
@@ -188,14 +189,16 @@ Luồng chính (7 bước):
   - **Giữ chỗ bằng `fn_queue_claim_next`** — đọc hàng và ghi chủ nằm trong cùng một transaction, dùng `FOR UPDATE SKIP LOCKED`. Đây là chốt chặn "hai người không được cùng nhận một câu": nếu làm bằng EF thì khoảng giữa SELECT và UPDATE là lúc trống để người khác chen vào.
   - Claim có hạn (`queue.claim_ttl_minutes`, mặc định 30). Người mở câu rồi đóng tab không giữ câu vĩnh viễn.
 - **Duyệt văn bản chỉ MỘT lượt**, và chỉ người Task Manager giao câu đó trong lô mới được duyệt (`text_review.batch_size`, mặc định 100 câu/người).
-- **Mã câu có nghĩa** do DB sinh (`fn_generate_script_id`): `s_211000001` = số từ EN + domain + quan hệ Anh–Việt + số thứ tự. CHECK constraint chặn mã sai ý nghĩa.
+- **Mã câu có nghĩa** do DB sinh (`fn_generate_script_id`): `s_211000000001` = 3 chữ số nghĩa (số từ EN + domain + quan hệ Anh–Việt) + 9 chữ số thứ tự. CHECK constraint chặn mã sai ý nghĩa. ID cũ 9 chữ số (`s_211000001`) vẫn hợp lệ; frontend coi ID là chuỗi mờ, đừng cắt theo độ dài.
 - **Mỗi cặp cần 2 bản ghi âm**: `r_cs_…` + `r_vi_…` (`_t2` khi thu lại). Trigger `trg_recording_single_speaker` bắt 1 cặp chỉ 1 người đọc (cùng giọng/buổi) — **kể cả sau khi bản ghi bị loại**, nên câu quay lại hàng đợi thu lại với chính người đọc cũ.
-- **Duyệt mù 3 lượt của 3 người khác nhau, chốt đa số 2/3** bởi trigger `trg_review_majority`. Từ chối bắt buộc ≥1 lý do; lý do nhóm `content` kéo cặp câu về `pending_validation`. **Trạng thái do DATABASE chốt, code chỉ ghi lượt rồi đọc lại.** Trong vòng duyệt **không có kiểm tra tự động nào** — auto-QC chỉ chạy lúc nộp bản ghi.
+- **Duyệt mù tối đa 3 lượt của 3 người khác nhau, chốt ngay khi một bên đủ 2 phiếu** bởi trigger `trg_review_majority`. Lượt thứ ba chỉ cần khi hai phiếu đầu lệch nhau; hoà ở số vòng chẵn thì tính là trượt. Từ chối bắt buộc ≥1 lý do; lý do nhóm `content` kéo cặp câu về `pending_validation`. **Trạng thái do DATABASE chốt, code chỉ ghi lượt rồi đọc lại.** Trong vòng duyệt **không có kiểm tra tự động nào** — auto-QC chỉ chạy lúc nộp bản ghi.
 - **Đề xuất câu (yêu cầu 2.5)**: Speaker báo lỗi (kèm lý do lỗi) hoặc gửi bản sửa cho một câu đã duyệt nội dung nhưng **chưa có bản ghi âm** — đề xuất vào thẳng hàng chờ Reviewer. Trong lúc chờ, câu **bị rút khỏi hàng đợi ghi âm** (`dropped`) nên không ai thu nhầm nội dung cũ; Reviewer chốt xong (duyệt kèm bản chốt, hoặc từ chối kèm lý do) câu **tự quay lại hàng đợi ghi âm**. Mỗi câu tối đa một đề xuất chờ; duyệt đề xuất sửa ghi thêm một lượt `Edited` vào lịch sử câu. Ba bất biến này do trigger database giữ (`fn_script_proposal_guard` / `_sync` / `_close_on_script`), không chỉ ở service.
-- **Task**: `Draft → Open → InProgress → Completed (+Cancelled)`, tự tính lại từ số liệu thật. Task thu âm đếm theo cặp (cả cs+vi đạt mới tính), task duyệt đếm theo bản ghi. Bản ghi **chờ duyệt** của một đợt **tự vào hàng chờ mọi task duyệt chưa huỷ của đợt** ngay lúc Speaker nộp (kể cả task đã đủ chỉ tiêu) — Reviewer được giao việc từ lúc tạo đợt vẫn có việc ngay, Task Manager không phải "Thêm mục" lần nữa.
-- **Một task giao cho NHIỀU người.** `target_qty` là của **cả nhóm**, không nhân theo số người (nên quota đợt vẫn cộng đúng một lần). Mỗi người thấy **tiến độ của chính mình** (`myProgress`) lẫn của cả nhóm (`teamProgress`). Ràng buộc còn lại: cùng một người không được nhận trùng một task.
+- **Task**: `InProgress → Completed (+Cancelled)`, tự tính lại từ số liệu thật. Task thu âm đếm theo cặp (cả cs+vi đạt mới tính), task duyệt đếm theo bản ghi. Bản ghi **chờ duyệt** của một đợt **tự vào hàng chờ mọi task duyệt chưa huỷ của đợt** ngay lúc Speaker nộp (kể cả task đã đủ chỉ tiêu) — Reviewer được giao việc từ lúc tạo đợt vẫn có việc ngay, Task Manager không phải "Thêm mục" lần nữa.
+- **Một task giao cho NHIỀU người.** `task.target_qty` là chỉ tiêu của **cả nhóm**, không nhân theo số người; mỗi lượt giao giữ **quota riêng** trong `task_assignment.target_qty`, tổng quota bằng đúng chỉ tiêu task. Giao không kèm quota thì backend chia phần nguyên + dư (100 cho 3 người = 34/33/33); sửa cả bảng phân công bằng `PUT /api/tasks/{id}/assignments`. Mỗi người thấy **tiến độ của chính mình** (`myProgress`, tính trên quota của mình) lẫn của cả nhóm (`teamProgress`). Ràng buộc còn lại: cùng một người không được nhận trùng một task.
+- **Có thể giao người nhận ngay khi tạo task** bằng `assigneeUserIds` trong `POST /api/tasks`. Với task thu âm, backend chia các cặp câu hợp lệ theo chủ đề cho từng Speaker theo quota; task duyệt chỉ tạo phân công Reviewer. Cần đủ cặp câu chưa gán cho task thu âm, nếu không API trả `422 recording_not_enough_pairs`.
+- **Chỉ tiêu trên trang chủ Speaker là của riêng người đọc.** `target` của `GET /api/speaker/rounds/current` và `targetQty` trong bảng xếp hạng là tổng quota các lượt giao trong đợt, **không phải** `campaign.target_qty`; số đã nộp vẫn là số thật và có thể vượt mốc.
 - **Chỉ tiêu tụt thì task tự mở lại.** Bản ghi bị từ chối → mục câu lùi `Completed → Pending`, mục duyệt `Reviewed → Skipped`; `TaskStateMachine` tính lại và kéo task rời `Completed`. Trước đây chỉ tiêu không bao giờ tụt nên task treo ở "Hoàn thành" dù người nhận chưa làm đủ.
-- **Không dùng EF migration** — sửa lược đồ thì sửa `docs/codeswitchlabel.sql` trước, rồi sửa `DbContext` cho khớp.
+- **Không dùng EF migration** — sửa lược đồ thì sửa `docs/codeswitchlabel.sql` trước, rồi sửa `DbContext` cho khớp. Migration triển khai mới nhất là V15, bổ sung hàm `fn_queue_claim_next` cho hàng đợi ghi âm tôn trọng `task_script.assignee_user_id` và giữ lại V14 (`task_script.assignee_user_id`) cho database đã tồn tại.
 
 ## Cấu hình (Configuration)
 
@@ -243,7 +246,7 @@ docker compose -f deploy/docker-compose.prod.yml logs -f api
 
 ## Giới hạn đã biết (Known limitations)
 
-- **Ba lượt duyệt đều là của người**, chốt đa số 2/3; **không có phiếu của hệ thống**. Một thời có dự định thêm lượt kiểm tra tự động ở vòng duyệt nhưng đã bỏ: auto-QC chạy lúc nộp và bản trượt thì `qc_failed` — không bao giờ tới vòng duyệt, nên lượt đó không bao giờ có tác dụng. `review.rounds_required` giữ bằng **3**.
+- **Ba lượt duyệt đều là của người**, chốt ngay khi một bên đủ đa số (2/3); **không có phiếu của hệ thống**. Một thời có dự định thêm lượt kiểm tra tự động ở vòng duyệt nhưng đã bỏ: auto-QC chạy lúc nộp và bản trượt thì `qc_failed` — không bao giờ tới vòng duyệt, nên lượt đó không bao giờ có tác dụng. `review.rounds_required` giữ bằng **3**.
 - **Ngưỡng thời lượng 1–30s là đề xuất của nhóm backend**, chưa được duyệt chính thức; hệ thống chưa đo khoảng lặng đầu/cuối.
 - **Chưa có hệ thống nhắc nhở tự động** (ghi là "yêu cầu 3.3" nhưng `docs/Requirement.txt` không có mục này) — không có bảng `notification`, không có background service. Mọi số liệu để nhắc (`deadline`, `hoursRemaining`, `isOverdue`, `overdueTasks`) backend đã trả sẵn, nên khi nào thật sự cần thì làm bằng một endpoint + một con badge là đủ, không cần bảng riêng.
 - **Trạng thái task: máy tính, người chốt.** Trạng thái tự tính lại từ số liệu thật sau mỗi việc xảy ra (đạt chỉ tiêu → `Completed`, chưa đạt → `InProgress`), chỉ còn ba giá trị (`InProgress`/`Completed`/`Cancelled`). Task Manager đổi tay được qua `PATCH /api/tasks/{id}` với `status` — `InProgress` mở lại task đã xong, `Completed` chốt sớm, `Cancelled` dừng hẳn (y hệt nút Huỷ) — và giá trị bấm tay được giữ tới khi có việc thật (đổi chỉ tiêu, nộp bản ghi, duyệt). Trạng thái đợt thì **không bấm tay**: nó là hàm của task (`Open`/`InProgress`/`Completed`). Ghi là "yêu cầu 4.1" ở `README.md` cũ nhưng `Requirement.txt` cũng không có.
@@ -252,12 +255,9 @@ docker compose -f deploy/docker-compose.prod.yml logs -f api
 
 ### Việc chưa làm ở frontend
 
-Backend đã đổi hợp đồng API (TEAM_010) — phần lớn frontend đã theo kịp, còn hai chỗ:
+Ba lỗi cũ đã sửa: giao task giờ gửi `{ userIds: [...] }` và hiện lỗi thật, dashboard đọc `assignees[]` khi đếm "Đã phân công", màn Thu âm đọc `myProgress`. Màn Reviewer dùng API thật qua `services/reviewerApi.js`; chỉ `Profile` còn đọc mock trong `FRONTEND/src/mocks/reviewer/`.
 
-- **Giao task hỏng và báo thành công.** `services/taskService.js` gửi `{ userId }` trong khi API đòi `{ userIds: [...] }` → 400; `TaskManagerManagement/index.jsx` nuốt lỗi bằng `.catch(console.warn)` rồi vẫn hiện "Đã phân công thành công". Sửa khoảng 5 dòng.
-- **Thẻ "Đã phân công" trên dashboard đếm sai.** `TaskManagerDashboard/index.jsx` lọc theo `assigneeName` / `assigneeId` / `campaignId` — các trường người nhận cũ đã bỏ, DTO nay là `assignees[]`; task đã giao người nhưng chưa gắn đợt bị bỏ sót, task gắn đợt nhưng chưa giao ai lại bị tính là đã giao.
-
-Màn Reviewer giờ chia hai nửa: 4 màn dùng API thật qua `services/reviewerApi.js` (`ReviewTask`, `ReviewDashboard`, `ReviewRecording`, `ReviewHistoryContribution`), 3 màn còn đọc mocks trong `FRONTEND/src/mocks/reviewer/*` (`Profile`, `ReviewHistoryRecording`, `ReviewContribution`). **Ba nút xử lý của yêu cầu 2.4 vẫn chưa có giao diện** (API đã có: `/reviews`, `/reject-audio`, `/discard-pair`) — nối API thì xoá mocks, giữ prototype thì xoá `reviewerApi.js`, đừng giữ cả hai. Chi tiết hợp đồng: [`docs/FE-INTEGRATION.md`](docs/FE-INTEGRATION.md).
+**Ba nút xử lý của yêu cầu 2.4 vẫn chưa có giao diện** (API đã có: `/reviews`, `/reject-audio`, `/discard-pair`) — đây là phần còn thiếu duy nhất; mock `Profile` không liên quan. Chi tiết hợp đồng: [`docs/FE-INTEGRATION.md`](docs/FE-INTEGRATION.md).
 
 ## Đóng góp (Contributing)
 

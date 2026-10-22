@@ -336,6 +336,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
 
             e.HasOne(x => x.Task).WithMany(t => t.TaskScripts).HasForeignKey(x => x.TaskId);
             e.HasOne(x => x.Script).WithMany(s => s.TaskScripts).HasForeignKey(x => x.ScriptId);
+            e.HasOne(x => x.AssigneeUser).WithMany().HasForeignKey(x => x.AssigneeUserId);
         });
 
         modelBuilder.Entity<TaskRecording>(e =>

@@ -30,6 +30,9 @@ public record CreateTaskRequest
     /// <summary>Gửi kèm múi giờ nào cũng được; backend đổi sang UTC trước khi lưu.</summary>
     [Required(ErrorMessage = "Phải đặt hạn hoàn thành.")]
     public DateTimeOffset? Deadline { get; init; }
+
+    /// <summary>TEAM_021: thành viên nhận task ngay lúc tạo (tùy chọn). Không chọn thì giữ luồng hiện tại.</summary>
+    public List<long>? AssigneeUserIds { get; init; }
 }
 
 /// <summary>Trường nào để trống thì giữ nguyên.</summary>
@@ -180,7 +183,13 @@ public record TaskAssignmentDto(
     DateTimeOffset AssignedAt);
 
 /// <param name="Id">script_id với task thu âm, recording_id với task duyệt.</param>
-public record TaskItemDto(string Id, string Status, string? Preview, DateTimeOffset IncludedAt);
+/// <param name="AssigneeUserId">TEAM_021: Speaker được gán cặp câu này; null = chưa gán hoặc task duyệt.</param>
+public record TaskItemDto(
+    string Id,
+    string Status,
+    string? Preview,
+    DateTimeOffset IncludedAt,
+    long? AssigneeUserId = null);
 
 /// <param name="Assignments">Toàn bộ lịch sử giao việc, kể cả các lượt đã chuyển cho người khác.</param>
 public record TaskDetailDto(

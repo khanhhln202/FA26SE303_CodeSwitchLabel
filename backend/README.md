@@ -109,7 +109,7 @@ Mật khẩu ở `appsettings.Development.json`, khoá `Seed:DefaultPassword`. H
 | `speaker1@codeswitchlabel.local` | Speaker | 6 |
 | `speaker2@codeswitchlabel.local` | Speaker | 7 |
 
-Ba Reviewer vì **mỗi bản ghi cần đủ ba lượt duyệt của ba người khác nhau**.
+Ba Reviewer để phủ trường hợp hai phiếu đầu lệch nhau: mỗi bản ghi duyệt mù **tối đa ba lượt của ba người khác nhau**, nhưng chốt ngay khi một bên đủ 2 phiếu.
 
 `POST /api/auth/login` → chép `accessToken` → bấm **Authorize** → dán vào. Không cần gõ chữ `Bearer`.
 
@@ -123,15 +123,17 @@ Ba Reviewer vì **mỗi bản ghi cần đủ ba lượt duyệt của ba ngư�
 | `vi_content` | Câu thuần Việt tương đương: `[vi]Em nên quét tài liệu này.` |
 | `alignment` | JSON ánh xạ từng từ: `scan → quét`. Cột này nhóm thêm vào lược đồ để dữ liệu của cô không mất sau khi nhập |
 
-**Mã câu có nghĩa**, do hàm `fn_generate_script_id` của database sinh:
+**Mã câu có nghĩa**, do hàm `fn_generate_script_id` của database sinh — 12 chữ số sau `s_`:
 
 ```
-s_ 2 1 1 000001
-   │ │ │ └──── số thứ tự, tăng dần
+s_ 2 1 1 000000001
+   │ │ │ └──── 9 chữ số thứ tự, tăng dần
    │ │ └────── quan hệ Anh–Việt: 1 dịch trực tiếp, 2 danh từ riêng
    │ └──────── chủ đề: 1 IT, 2 giáo dục, 3 đời sống
    └────────── số từ tiếng Anh trong câu (1..9)
 ```
+
+ID cũ 9 chữ số (`s_211000001`) vẫn hợp lệ và không bị đổi; frontend coi ID là chuỗi mờ.
 
 Ràng buộc CHECK dưới database bắt hai chữ số đầu phải khớp `en_word_count` và `domain`, nên
 **không thể ghi một mã sai ý nghĩa**, kể cả bằng SQL tay.
@@ -139,9 +141,9 @@ Ràng buộc CHECK dưới database bắt hai chữ số đầu phải khớp `e
 **Mỗi cặp câu cần hai bản ghi âm**, mã suy ra từ mã câu:
 
 ```
-r_cs_211000001      đọc câu chen tiếng Anh
-r_vi_211000001      đọc câu thuần Việt
-r_cs_211000001_t2   thu lại lần hai
+r_cs_211000000001      đọc câu chen tiếng Anh
+r_vi_211000000001      đọc câu thuần Việt
+r_cs_211000000001_t2   thu lại lần hai
 ```
 
 **Một cặp câu chỉ một người đọc.** Trigger `trg_recording_single_speaker` chặn người thứ hai,
@@ -154,7 +156,7 @@ Admin nhập input_text.json  →  script: pending_validation
         │
         │  Speaker/Reviewer duyệt nội dung (Review Text)
         ▼
-    validated  ──►  Speaker thu 2 bản: cs + vi  ──►  mỗi bản chờ 3 lượt duyệt mù
+    validated  ──►  Speaker thu 2 bản: cs + vi  ──►  mỗi bản duyệt mù tối đa 3 lượt
         ▲                                                      │
         │                                                      ▼
         └──── lý do nhóm "content" ◄──── đa số từ chối ──► rejected
@@ -165,10 +167,12 @@ Admin nhập input_text.json  →  script: pending_validation
 
 ## Luật duyệt
 
-- **Ba lượt duyệt độc lập của ba người khác nhau.** `UNIQUE(recording_id, reviewer_id)` chặn một
+- **Tối đa ba lượt duyệt độc lập của ba người khác nhau.** `UNIQUE(recording_id, reviewer_id)` chặn một
   người duyệt hai lần; `UNIQUE(recording_id, review_round)` chặn hai người cùng ghi một vòng.
-- **Mọi lượt đều duyệt mù.** Reviewer không thấy ý kiến người khác, kể cả khi gọi API lịch sử.
-- **Đủ ba lượt thì trigger `trg_review_majority` chốt theo đa số** — ít nhất 2/3 phiếu.
+- **Mọi lượt đều duyệt mù.** Reviewer không thấy ý kiến người khác trên màn hình duyệt; lịch sử của
+  chính họ thì mở đủ phiếu sau khi họ đã bỏ phiếu (xem `docs/FE-INTEGRATION.md`).
+- **Trigger `trg_review_majority` chốt ngay khi một bên đủ đa số** `(n/2)+1` — với 3 lượt là 2 phiếu.
+  Lượt thứ ba chỉ còn cần khi hai phiếu đầu lệch nhau; hoà ở số vòng chẵn thì tính là trượt.
 - **Từ chối bắt buộc ít nhất một lý do**; duyệt đạt thì không được kèm lý do.
 - **Lý do thuộc nhóm `content`** kéo cả cặp câu về `pending_validation`: lỗi nằm ở văn bản
   chứ không phải ở giọng đọc. Trigger `trg_review_majority` làm việc này, trong hàm
@@ -206,7 +210,7 @@ Speaker **báo lỗi** hoặc **đề xuất sửa** một câu đã duyệt n�
 — đề xuất vào thẳng hàng chờ của Reviewer (`script_proposal`), không cần giao việc:
 
 ```http
-POST /api/speaker/scripts/s_211000001/proposals     (Speaker)
+POST /api/speaker/scripts/s_211000000001/proposals     (Speaker)
      { "kind": "Report", "errorReasonCode": "mismatch", "comment": "…" }
      { "kind": "Edit", "proposedCsContent": "…", "proposedViContent": "…", "proposedAlignment": [ … ] }
 GET  /api/reviewer/proposals                        (Reviewer) — lọc ?kind=&domain=&keyword=, FIFO cũ nhất trước
@@ -248,7 +252,20 @@ Task mới tạo ra đã là `InProgress` — không còn `Draft`/`Open` (TEAM_0
 - **Một task giao cho NHIỀU người** (TEAM_010): `POST /api/tasks/{id}/assign` nhận
   `{ "userIds": [6, 7] }` và giao **thêm**, không đuổi người đang nhận. Index
   `uq_task_assignment_active_user` chặn giao trùng một người; gỡ người ra thì lượt giao chuyển
-  `reassigned`, không bị xoá. `target_qty` là của cả nhóm, không nhân theo số người nhận.
+  `reassigned`, không bị xoá.
+- **Quota nằm trên từng lượt giao** (V12): `task.target_qty` là chỉ tiêu cả nhóm, còn
+  `task_assignment.target_qty` là quota riêng của người nhận, tổng phải bằng đúng chỉ tiêu task.
+  Giao không kèm quota thì backend chia phần nguyên + dư (100 cho 3 người = 34/33/33);
+  `PUT /api/tasks/{id}/assignments` thay cả bảng phân công và đặt quota từng người. Speaker thấy
+  `myProgress` tính trên quota của mình, `teamProgress` trên chỉ tiêu task; trang chủ và bảng xếp
+  hạng đợt cũng dùng quota cá nhân.
+- **Có thể giao người nhận ngay khi tạo task** (TEAM_021): thêm `assigneeUserIds` vào `POST /api/tasks`.
+  Danh sách được loại trùng; người nhận phải đang hoạt động và đúng vai trò (Speaker cho thu âm,
+  Reviewer cho duyệt). Quota được chia đều, phần dư ưu tiên người đứng trước. Với task thu âm,
+  backend lấy đủ số cặp `Validated` chưa nằm trong task nào theo chủ đề rồi gán từng cặp cho từng
+  Speaker (`task_script.assignee_user_id`); không đủ cặp thì trả `422 recording_not_enough_pairs`
+  và không tạo task. Bỏ trường hoặc gửi mảng rỗng để tạo task chưa có người nhận như trước.
+  Lược đồ gốc đã có cột `assignee_user_id` qua V14; database triển khai cũ cần áp `migrations/V14__task_script_assignee.sql` và `migrations/V15__recording_queue_assignee.sql` cho hàm hàng đợi mới.
 - **Trạng thái task tự tính lại** từ số liệu thật sau mỗi việc xảy ra (đạt chỉ tiêu →
   `Completed`, chưa đạt → `InProgress`); chỉ còn ba giá trị (`InProgress`/`Completed`/`Cancelled`).
   **TEAM_016**: `Completed` KHÔNG khoá công việc — người nhận còn lượt giao Active vẫn thu/duyệt
@@ -289,12 +306,13 @@ Task mới tạo ra đã là `InProgress` — không còn `Draft`/`Open` (TEAM_0
 ## Thử luồng chính
 
 1. Đăng nhập `admin`, `POST /api/scripts/import`, chọn file JSON theo mẫu `docs/Requirement.txt`.
-   Kết quả trả mã mới dạng `s_211000016`, trạng thái **PendingValidation**.
+   Kết quả trả mã mới dạng `s_211000000016`, trạng thái **PendingValidation**.
 2. Đăng nhập `speaker1`, `POST /api/scripts/{id}/review` với `{ "action": "Accepted" }` → **Validated**.
 3. `GET /api/speaker/scripts/next` → cặp câu kèm `remainingVariants` là cả hai biến thể.
 4. `POST /api/recordings` hai lần, `sentenceVariant` lần lượt là `CodeSwitching` và `PureVietnamese`.
-5. Đăng nhập `reviewer`, `reviewer2`, `reviewer3`, mỗi người `POST /api/recordings/{id}/reviews`
-   một lần. Lượt thứ ba trả `isFinal = true` kèm trạng thái do trigger chốt.
+5. Đăng nhập `reviewer`, `reviewer2`, mỗi người `POST /api/recordings/{id}/reviews` một lần.
+   Lượt thứ hai (đủ 2 phiếu đạt) trả `isFinal = true` kèm trạng thái do trigger chốt;
+   `reviewer3` chỉ cần khi hai phiếu đầu lệch nhau.
 6. Đăng nhập `manager`, tạo task thu âm chỉ tiêu 1, tự lấp mục, giao cho `speaker2`.
    Khi cặp câu đủ hai bản đạt, task tự chuyển **Completed**.
 7. Đăng nhập `admin`, `GET /api/admin/dashboard` để xem số tổng hợp.

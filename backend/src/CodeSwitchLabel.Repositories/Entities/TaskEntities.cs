@@ -100,11 +100,16 @@ public class TaskScript
 {
     public long TaskId { get; set; }
     public string ScriptId { get; set; } = string.Empty;
+
+    /// <summary>TEAM_021: người nhận câu này (Recording), NULL = chưa gán / task duyệt.</summary>
+    public long? AssigneeUserId { get; set; }
+
     public TaskScriptStatus Status { get; set; }
     public DateTimeOffset IncludedAt { get; set; }
 
     public WorkTask Task { get; set; } = null!;
     public Script Script { get; set; } = null!;
+    public AppUser? AssigneeUser { get; set; }
 }
 
 public class TaskRecording

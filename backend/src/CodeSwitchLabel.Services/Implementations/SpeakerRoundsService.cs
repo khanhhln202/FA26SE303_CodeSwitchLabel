@@ -96,13 +96,8 @@ public class SpeakerRoundsService(
             .Take(Math.Clamp(top, 1, 50))
             .ToListAsync(ct);
 
-        // Chỉ tiêu riêng từng người: tổng chỉ tiêu các nhiệm vụ thu âm họ đang nhận trong đợt.
-        var chiTieuRieng = await db.TaskAssignments.AsNoTracking()
-            .Where(a => a.AssignmentStatus == AssignmentStatus.Active)
-            .Where(a => a.Task.CampaignId == campaignId && a.Task.TaskType == TaskType.Recording)
-            .GroupBy(a => a.UserId)
-            .Select(g => new { UserId = g.Key, Target = g.Sum(x => x.Task.TargetQty) })
-            .ToDictionaryAsync(x => x.UserId, x => x.Target, ct);
+        // Chỉ tiêu riêng từng người: quota trên từng lượt giao, không phải chỉ tiêu cả task.
+        var chiTieuRieng = await PersonalTargetsAsync(campaignId, ct);
 
         return new LeaderboardDto(chiTieu, daChia,
             [.. rows.Select((x, i) =>
@@ -479,6 +474,9 @@ public class SpeakerRoundsService(
 
         var topic = await DominantTopicAsync(campaignId, ct);
 
+        // Trang chủ hiện tiến độ của chính người đọc, nên chỉ tiêu cũng phải là quota cá nhân.
+        var target = (await PersonalTargetsAsync(campaignId, ct)).GetValueOrDefault(speakerId);
+
         return new SpeakerRoundDto(
             campaign.CampaignId,
             campaign.CampaignName,
@@ -488,11 +486,46 @@ public class SpeakerRoundsService(
             campaign.EndDate,
             HumanizeDays((campaign.EndDate.ToDateTime(TimeOnly.MinValue) - today.ToDateTime(TimeOnly.MinValue)).Days),
             Math.Max(speakersInCampaign, registered),
-            campaign.TargetQty,
+            target,
             submitted,
             approved,
             pending,
             isRegistered);
+    }
+
+    /// <summary>
+    /// Chỉ tiêu riêng của từng người trong đợt: cộng quota trên các lượt giao task thu âm
+    /// còn hiệu lực. Dùng đúng quy tắc của API tiến độ Speaker — lượt giao cũ chưa có quota
+    /// thì chia theo vị trí trong danh sách người nhận (sắp theo tên) để hai màn hình khớp nhau.
+    /// </summary>
+    private async Task<Dictionary<long, int>> PersonalTargetsAsync(
+        long campaignId, CancellationToken ct)
+    {
+        var assignments = await db.TaskAssignments.AsNoTracking()
+            .Where(a => a.AssignmentStatus == AssignmentStatus.Active)
+            .Where(a => a.Task.Status != WorkTaskStatus.Cancelled)
+            .Where(a => a.Task.CampaignId == campaignId && a.Task.TaskType == TaskType.Recording)
+            .Select(a => new
+            {
+                a.UserId,
+                a.TargetQty,
+                TaskTargetQty = a.Task.TargetQty,
+                Assignees = a.Task.Assignments
+                    .Where(x => x.AssignmentStatus == AssignmentStatus.Active)
+                    .OrderBy(x => x.User.FullName)
+                    .Select(x => new { x.UserId, x.TargetQty })
+                    .ToList()
+            })
+            .ToListAsync(ct);
+
+        return assignments
+            .GroupBy(a => a.UserId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Sum(a => a.TargetQty ?? TaskService.SplitQuotaAt(
+                    a.TaskTargetQty,
+                    a.Assignees.Count,
+                    a.Assignees.FindIndex(x => x.UserId == g.Key))));
     }
 
     private async Task<string?> DominantTopicAsync(long campaignId, CancellationToken ct)

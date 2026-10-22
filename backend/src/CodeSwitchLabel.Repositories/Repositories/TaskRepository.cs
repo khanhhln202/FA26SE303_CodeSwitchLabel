@@ -135,6 +135,21 @@ public interface ITaskRepository
     Task<List<AssigneeSummaryRow>> GetAssigneeSummaryAsync(DateTimeOffset now, CancellationToken ct = default);
 
     Task<List<TaskScript>> GetScriptItemsAsync(long taskId, CancellationToken ct = default);
+
+    /// <summary>
+    /// TEAM_021: mục task_script có theo dõi thay đổi, để đổi người nhận câu khi
+    /// sửa bảng phân công. Không include Script vì chỉ cần cột assignee/status.
+    /// </summary>
+    Task<List<TaskScript>> GetScriptItemsTrackedAsync(long taskId, CancellationToken ct = default);
+
+    /// <summary>
+    /// TEAM_021: các cặp câu đã bắt đầu làm — mục không còn Pending, đã có bản ghi
+    /// (không tính bản trượt QC), hoặc đang bị giữ trong hàng đợi ghi âm còn hiệu lực.
+    /// Cặp đã bắt đầu thì không được đổi người nhận khi sửa phân công.
+    /// </summary>
+    Task<HashSet<string>> GetStartedScriptIdsAsync(
+        long taskId, DateTimeOffset now, CancellationToken ct = default);
+
     Task<List<TaskRecording>> GetRecordingItemsAsync(long taskId, CancellationToken ct = default);
     Task<TaskScript?> GetScriptItemAsync(long taskId, string scriptId, CancellationToken ct = default);
     Task<TaskRecording?> GetRecordingItemAsync(long taskId, string recordingId, CancellationToken ct = default);
@@ -191,6 +206,10 @@ public interface ITaskRepository
     Task<List<string>> FindRecordingCandidatesAsync(
         long taskId, long[] assigneeIds, long? speakerId, int count,
         int roundsRequired, CancellationToken ct = default);
+
+    /// <summary>TEAM_021: lấy ID các câu validated chưa nằm trong task nào, theo chủ đề, giới hạn count.</summary>
+    Task<List<string>> GetAvailableScriptIdsByDomainAsync(
+        ScriptDomain domain, int count, CancellationToken ct = default);
 
     /// <summary>Mục còn chờ trong task mà người này KHÔNG làm được nữa.</summary>
     Task<List<string>> GetBlockedItemIdsAsync(
@@ -484,6 +503,35 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
             .OrderBy(ts => ts.IncludedAt).ThenBy(ts => ts.ScriptId)
             .ToListAsync(ct);
 
+    public Task<List<TaskScript>> GetScriptItemsTrackedAsync(long taskId, CancellationToken ct = default) =>
+        db.TaskScripts
+            .Where(ts => ts.TaskId == taskId)
+            .OrderBy(ts => ts.IncludedAt).ThenBy(ts => ts.ScriptId)
+            .ToListAsync(ct);
+
+    public async Task<HashSet<string>> GetStartedScriptIdsAsync(
+        long taskId, DateTimeOffset now, CancellationToken ct = default)
+    {
+        // Mục đã hoàn thành / bị loại, cặp đã có bản ghi thật (bỏ qua bản trượt QC),
+        // hoặc đang có người giữ trong hàng đợi ghi âm. Ba dấu hiệu này độc lập:
+        // mục còn Pending vẫn có thể đã có bản ghi chờ duyệt hoặc đang được thu.
+        var rows = await db.TaskScripts
+            .AsNoTracking()
+            .Where(ts => ts.TaskId == taskId)
+            .Where(ts => ts.Status != TaskScriptStatus.Pending
+                         || ts.Script.Recordings.Any(r => r.Status != RecordingStatus.QcFailed)
+                         || db.ScriptQueue.Any(q =>
+                             q.ScriptId == ts.ScriptId
+                             && q.Stage == QueueStage.Recording
+                             && q.State == QueueState.Claimed
+                             && q.ClaimExpiresAt != null
+                             && q.ClaimExpiresAt > now))
+            .Select(ts => ts.ScriptId)
+            .ToListAsync(ct);
+
+        return [.. rows];
+    }
+
     public Task<List<TaskRecording>> GetRecordingItemsAsync(long taskId, CancellationToken ct = default) =>
         db.TaskRecordings
             .AsNoTracking()
@@ -747,6 +795,29 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
             .OrderBy(r => r.RecordedAt)
             .Select(r => r.RecordingId)
             .Take(count)
+            .ToListAsync(ct);
+    }
+
+    public Task<List<string>> GetAvailableScriptIdsByDomainAsync(
+        ScriptDomain domain, int count, CancellationToken ct = default)
+    {
+        // Lock candidates until the caller commits task_script rows. SKIP LOCKED
+        // lets concurrent task creation take the next available scripts instead.
+        return db.Scripts
+            .FromSqlInterpolated($"""
+                SELECT s.*
+                  FROM script s
+                 WHERE s.status = 'validated'
+                   AND s.domain = {domain}
+                   AND NOT EXISTS (
+                       SELECT 1 FROM task_script ts WHERE ts.script_id = s.script_id
+                   )
+                 ORDER BY s.script_id
+                 FOR UPDATE OF s SKIP LOCKED
+                 LIMIT {count}
+                """)
+            .AsNoTracking()
+            .Select(s => s.ScriptId)
             .ToListAsync(ct);
     }
 
