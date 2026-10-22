@@ -50,11 +50,18 @@ const formatDateToVN = (dateStr) => {
   return `${day}/${month}/${year}`;
 };
 
-// Helper format ngày ISO (yyyy-mm-dd)
+// Helper format ngày ISO (yyyy-mm-dd) - Giữ nguyên chuỗi gốc không bị lệch múi giờ
 const formatDateToISO = (dateStr) => {
   if (!dateStr) return "";
-  if (dateStr.includes("-")) return dateStr.split("T")[0];
-  const parts = dateStr.split("/");
+  const clean = String(dateStr).trim();
+  
+  // Nếu dạng YYYY-MM-DD... cắt trực tiếp lấy YYYY-MM-DD
+  if (clean.includes("-")) {
+    return clean.split("T")[0];
+  }
+  
+  // Nếu dạng DD/MM/YYYY
+  const parts = clean.split("/");
   if (parts.length === 3) {
     const [day, month, year] = parts;
     return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
@@ -230,6 +237,8 @@ export default function TaskManagerManagement() {
             topic: mapDomainToTopicVN(c.domain || c.topic),
             startDate: formatDateToVN(c.startDate || todayIso),
             endDate: formatDateToVN(c.endDate || todayIso),
+            rawStartDateIso: c.startDate ? formatDateToISO(c.startDate) : todayIso,
+            rawEndDateIso: c.endDate ? formatDateToISO(c.endDate) : todayIso,
             status: c.status || "Draft",
             assignedSpeakers: [],
             assignedReviewers: []
@@ -273,28 +282,34 @@ export default function TaskManagerManagement() {
         const isSpeaker = rawType === "recording" || rawType === "speaker" || rawType === "0";
 
         let usersList = [];
+        const userTargetsMap = {};
+
+        const assignmentsArr = Array.isArray(t.assignments) && t.assignments.length > 0 
+          ? t.assignments 
+          : (Array.isArray(t.assignees) ? t.assignees : []);
         
-        if (Array.isArray(t.assignees) && t.assignees.length > 0) {
-          usersList = t.assignees.map(u => {
-            if (typeof u === "string") return u;
-            if (u.fullName) return u.fullName;
-            if (u.userName) return u.userName;
-            if (u.name) return u.name;
-            const rawUid = String(u.userId || u.id || "");
-            const found = combinedUsers.find(cu => String(cu.id) === rawUid);
-            return found ? found.name : (rawUid ? `User ${rawUid}` : "");
-          }).filter(Boolean);
-        } else if (Array.isArray(t.assignments) && t.assignments.length > 0) {
-          usersList = t.assignments.map(u => {
-            if (typeof u === "string") return u;
-            if (u.fullName) return u.fullName;
-            if (u.userFullName) return u.userFullName;
-            if (u.userName) return u.userName;
-            if (u.name) return u.name;
-            const rawUid = String(u.userId || u.id || "");
-            const found = combinedUsers.find(cu => String(cu.id) === rawUid);
-            return found ? found.name : (rawUid ? `User ${rawUid}` : "");
-          }).filter(Boolean);
+        if (assignmentsArr.length > 0) {
+          assignmentsArr.forEach(u => {
+            let uName = "";
+            let uId = null;
+            if (typeof u === "string") {
+              uName = u;
+            } else if (u && typeof u === "object") {
+              uId = Number(u.userId || u.id);
+              uName = u.fullName || u.userFullName || u.userName || u.name;
+              if (!uName && uId) {
+                const found = combinedUsers.find(cu => Number(cu.id) === uId);
+                uName = found ? found.name : `User ${uId}`;
+              }
+            }
+
+            if (uName) {
+              usersList.push(uName);
+              if (u && typeof u === "object" && (u.targetQty || u.quota || u.target)) {
+                userTargetsMap[uName] = Number(u.targetQty || u.quota || u.target);
+              }
+            }
+          });
         } else if (Array.isArray(t.assignedUsers) && t.assignedUsers.length > 0) {
           usersList = t.assignedUsers.map(u => typeof u === "string" ? u : u.fullName || u.userName || u.name);
         } else if (t.assigneeName) {
@@ -307,7 +322,7 @@ export default function TaskManagerManagement() {
           }
         }
 
-        const actualTarget = t.progress?.targetQty ?? 10;
+        const actualTarget = t.targetQty ?? t.progress?.targetQty ?? 10;
 
         const rawAssigneesForIds = Array.isArray(t.assignees) && t.assignees.length > 0
           ? t.assignees
@@ -325,6 +340,7 @@ export default function TaskManagerManagement() {
           topic: mapDomainToTopicVN(t.domain || t.topic || t.categoryName),
           targetQty: Number(actualTarget),
           assignedUsers: usersList,
+          assignedUserTargets: userTargetsMap,
           assignedUserIds,
           assignedToUserId: t.assignedToUserId || t.assigneeId,
           createdAt: formatDateToVN(t.createdAt || t.createdDate),
@@ -372,11 +388,6 @@ export default function TaskManagerManagement() {
     return allAdminUsers.filter(u => u.role === "Reviewer" && u.status === "Active");
   }, [allAdminUsers]);
 
-  const assignModalSelectedBatch = useMemo(() => {
-    return batches.find(b => Number(b.id) === Number(assignFormData.selectedBatchId)) || batches[0] || null;
-  }, [batches, assignFormData.selectedBatchId]);
-
-  // Lấy danh sách người dùng tương ứng với vai trò được chọn trong Modal
   const targetUserList = useMemo(() => {
     return assignFormData.targetRole === "Speaker" ? activeSpeakers : activeReviewers;
   }, [assignFormData.targetRole, activeSpeakers, activeReviewers]);
@@ -409,6 +420,33 @@ export default function TaskManagerManagement() {
     });
   };
 
+  const currentTasks = useMemo(() => {
+    if (!selectedBatchId) return assignTasks;
+    return assignTasks.filter((t) => Number(t.campaignId) === Number(selectedBatchId));
+  }, [assignTasks, selectedBatchId]);
+
+  const selectedBatchObj = batches.find((b) => Number(b.id) === Number(selectedBatchId)) || null;
+
+  const calculatedTargetPerTask = useMemo(() => {
+    if (!selectedBatchObj) return 0;
+    const totalBatchTarget = Number(selectedBatchObj.target || 2000);
+    const taskCount = currentTasks.length;
+
+    if (taskCount === 0) return totalBatchTarget;
+
+    const dividedTarget = totalBatchTarget / taskCount;
+
+    if (!Number.isInteger(dividedTarget)) {
+      toast.error(
+        `Lỗi mục tiêu đợt (${totalBatchTarget} câu) chia cho ${taskCount} nhiệm vụ ra số thập phân (${dividedTarget.toFixed(2)})!`,
+        { id: "divided-target-error" }
+      );
+      return Math.floor(dividedTarget);
+    }
+
+    return dividedTarget;
+  }, [selectedBatchObj, currentTasks.length]);
+
   const handleSubmitAssignForm = async (e) => {
     e.preventDefault();
 
@@ -421,6 +459,11 @@ export default function TaskManagerManagement() {
       const targetBatchId = Number(assignFormData.selectedBatchId);
       const batchObj = batches.find(b => Number(b.id) === targetBatchId);
 
+      if (!batchObj) {
+        toast.error("Vui lòng chọn đợt hợp lệ!");
+        return;
+      }
+
       const domainMap = {
         "Công nghệ thông tin": "ItTechnology",
         "Giáo dục": "Education",
@@ -430,39 +473,74 @@ export default function TaskManagerManagement() {
       const selectedDomainCode = domainMap[batchObj?.topic] || "ItTechnology";
       const isSpeaker = assignFormData.targetRole === "Speaker";
 
-      // 1. Tạo Task mới trực tiếp
-      const newCreatedTask = await taskService.createTask({
+      // 1. Lấy ngày kết thúc ISO
+      let endDateClean = formatDateToISO(batchObj.rawEndDateIso || batchObj.endDate);
+      if (!endDateClean && batchObj.endDate && batchObj.endDate.includes("/")) {
+        const [d, m, y] = batchObj.endDate.split("/");
+        endDateClean = `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+      }
+
+      // 2. TÍNH LẠI CHỈ TIÊU CHIA ĐỀU CHO CẢ TASK CŨ LẪN TASK MỚI
+      const tasksInTargetBatch = assignTasks.filter(t => Number(t.campaignId) === targetBatchId);
+      const batchTarget = Number(batchObj.target || 2000);
+      const newTaskCount = tasksInTargetBatch.length + 1;
+      const targetPerTask = Math.floor(batchTarget / newTaskCount);
+
+      // 3. CẬP NHẬT LẠI TARGETQTY CHO CÁC TASK CŨ
+      if (tasksInTargetBatch.length > 0 && typeof taskService.updateTask === "function") {
+        await Promise.all(
+          tasksInTargetBatch.map(existingTask => 
+            taskService.updateTask(existingTask.id, {
+              targetQty: targetPerTask
+            }).catch(err => console.warn(`Lỗi hạ targetQty task ${existingTask.id}:`, err))
+          )
+        );
+      }
+
+      // 4. Tạo Task mới với targetQty đã được chia đều
+      const payload = {
         title: assignFormData.taskTitle.trim(),
         description: assignFormData.taskTitle.trim(),
         taskType: isSpeaker ? "Recording" : "Review",
         domain: selectedDomainCode,
         topic: batchObj?.topic || "Công nghệ thông tin",
         campaignId: targetBatchId,
-        targetQty: 10
-      });
+        targetQty: targetPerTask,
+        deadline: endDateClean
+      };
 
+      const newCreatedTask = await taskService.createTask(payload);
       const taskId = Number(newCreatedTask?.summary?.taskId || newCreatedTask?.taskId || newCreatedTask?.id);
 
-      // 2. Gắn task vào đợt nếu chưa gắn
       if (taskId && targetBatchId) {
         await taskService.attachTaskToCampaign(taskId, targetBatchId).catch(() => {});
       }
 
-      // 3. Lắng nghe/phân công danh sách user được tick
       const selectedUsers = targetUserList.filter(u => assignFormData.assignedUsers.includes(u.name));
       const userIdsToAssign = selectedUsers.map(u => Number(u.id)).filter(Boolean);
 
       if (taskId && userIdsToAssign.length > 0) {
-        await taskService.assignTask(taskId, userIdsToAssign).catch(() => {});
+        await taskService.assignTask(taskId, userIdsToAssign).catch(err => console.warn("Lỗi assignTask:", err));
+        const targetPerUser = Math.floor(targetPerTask / userIdsToAssign.length);
+
+        // BỌC TRY-CATCH CHO NẠP CÂU TỰ ĐỘNG ĐỂ KHÔNG BỊ BÁO LỖI VƯỢT MỨC KHẢ DỤNG
+        try {
+          if (isSpeaker && typeof taskService.addTaskItems === "function") {
+            await taskService.addTaskItems(taskId, { autoFill: true, quantity: targetPerUser });
+          } else if (!isSpeaker && typeof taskService.addTextItems === "function") {
+            await taskService.addTextItems(taskId, { autoFill: true, quantity: targetPerUser });
+          }
+        } catch (itemsErr) {
+          console.warn("Chưa đủ câu mẫu khả dụng trên BE để nạp tự động:", itemsErr);
+        }
       }
 
-      toast.success(`Đã tạo và phân công nhiệm vụ "${assignFormData.taskTitle}" thành công!`);
+      toast.success(`Đã tạo và tự động chia lại chỉ tiêu (${targetPerTask} câu/nhiệm vụ) thành công!`);
       setIsAssignModalOpen(false);
-
       await loadDataFromApi();
     } catch (err) {
-      console.error("Lỗi khi tạo nhiệm vụ:", err?.response?.data || err);
-      const msg = err?.response?.data?.title || err?.response?.data?.message || "Tạo nhiệm vụ thất bại!";
+      console.error("Lỗi tạo nhiệm vụ:", err?.response?.data || err);
+      const msg = err?.response?.data?.title || err?.response?.data?.message || err?.message || "Tạo nhiệm vụ thất bại!";
       toast.error(msg);
     }
   };
@@ -534,8 +612,8 @@ export default function TaskManagerManagement() {
         "Hội thoại hàng ngày": "DailyLife"
       };
 
-      const startIso = `${cleanStart}T00:00:00Z`;
-      const endIso = `${cleanEnd}T23:59:59Z`;
+      const startIso = `${cleanStart}T00:00:00`;
+      const endIso = `${cleanEnd}T23:59:59`;
 
       const campaignPayload = {
         title: String(batchFormData.name).trim(),
@@ -568,7 +646,9 @@ export default function TaskManagerManagement() {
               target: Number(batchFormData.target),
               topic: batchFormData.topic,
               startDate: formatDateToVN(cleanStart),
-              endDate: formatDateToVN(cleanEnd)
+              endDate: formatDateToVN(cleanEnd),
+              rawStartDateIso: cleanStart,
+              rawEndDateIso: cleanEnd
             };
           }
           return b;
@@ -726,11 +806,6 @@ export default function TaskManagerManagement() {
     }
   };
 
-  const currentTasks = useMemo(() => {
-    if (!selectedBatchId) return assignTasks;
-    return assignTasks.filter((t) => Number(t.campaignId) === Number(selectedBatchId));
-  }, [assignTasks, selectedBatchId]);
-
   const handleSearchSubmit = (e) => {
     e.preventDefault();
     setSearchQuery(searchInput);
@@ -753,45 +828,22 @@ export default function TaskManagerManagement() {
     });
   }, [currentTasks, searchQuery, statusFilter]);
 
-  const selectedBatchObj = batches.find((b) => Number(b.id) === Number(selectedBatchId)) || null;
   const targetModalBatchObj = batches.find((b) => Number(b.id) === Number(modalTargetBatchId)) || selectedBatchObj;
 
-  // Tính toán mục tiêu số câu chia đều cho mỗi nhiệm vụ trong đợt
-  const calculatedTargetPerTask = useMemo(() => {
-    if (!selectedBatchObj) return 0;
-    const totalBatchTarget = Number(selectedBatchObj.target || 2000);
-    const taskCount = currentTasks.length;
-
-    if (taskCount === 0) return totalBatchTarget;
-
-    const dividedTarget = totalBatchTarget / taskCount;
-
-    // Kiểm tra nếu chia ra số thập phân
-    if (!Number.isInteger(dividedTarget)) {
-      toast.error(
-        `Lỗi mục tiêu đợt (${totalBatchTarget} câu) chia cho ${taskCount} nhiệm vụ ra số thập phân (${dividedTarget.toFixed(2)})!`,
-        { id: "divided-target-error" }
-      );
-      return Math.floor(dividedTarget);
-    }
-
-    return dividedTarget;
-  }, [selectedBatchObj, currentTasks.length]);
-
-  // Hàm mở Modal Xem Phân Công: Lấy mục tiêu của chính nhiệm vụ này chia cho số người tham gia
   const handleOpenViewingTaskModal = (task) => {
     setViewingAssignedTask(task);
     
     const userCount = task.assignedUsers ? task.assignedUsers.length : 0;
-    // Đã sửa: Sử dụng calculatedTargetPerTask (mục tiêu của nhiệm vụ = 500) thay vì chia sai theo mục tiêu đợt
-    const defaultUserTarget = userCount > 0 ? Math.floor(calculatedTargetPerTask / userCount) : 0;
+    const taskTarget = task.targetQty || calculatedTargetPerTask || 0;
+    const defaultUserTarget = userCount > 0 ? Math.floor(taskTarget / userCount) : 0;
 
     setUserTargets(prev => {
       const updated = { ...prev };
       if (task.assignedUsers) {
         task.assignedUsers.forEach((userName) => {
-          // Chỉ đặt mặc định nếu chưa từng được chỉnh sửa thủ công
-          if (updated[userName] === undefined) {
+          if (task.assignedUserTargets && task.assignedUserTargets[userName] !== undefined) {
+            updated[userName] = task.assignedUserTargets[userName];
+          } else if (updated[userName] === undefined) {
             updated[userName] = defaultUserTarget;
           }
         });
@@ -802,10 +854,65 @@ export default function TaskManagerManagement() {
 
   const handleUserTargetChange = (userName, value) => {
     const numValue = Math.max(0, parseInt(value, 10) || 0);
+
     setUserTargets(prev => ({
       ...prev,
       [userName]: numValue
     }));
+  };
+
+  const handleSaveUserTargets = async () => {
+    if (!viewingAssignedTask) return;
+
+    // 1. Tính chỉ tiêu yêu cầu của Task
+    const taskRequiredTarget = viewingAssignedTask.targetQty || calculatedTargetPerTask || 0;
+
+    // 2. Tính tổng chỉ tiêu hiện tại của các thành viên được chia
+    const currentTotalAllocated = (viewingAssignedTask.assignedUsers || []).reduce((sum, userName) => {
+      const val = userTargets[userName] ?? 0;
+      return sum + val;
+    }, 0);
+
+    // 3. RÀNG BUỘC THEO BACKEND: Bắt buộc tổng chỉ tiêu thành viên bằng chỉ tiêu nhiệm vụ
+    if (currentTotalAllocated !== taskRequiredTarget) {
+      toast.error(
+        `Lưu thất bại! Tổng số câu phân công cho các thành viên (${currentTotalAllocated} câu) phải bằng đúng chỉ tiêu nhiệm vụ (${taskRequiredTarget} câu).`
+      );
+      return;
+    }
+
+    try {
+      const assignmentsPayload = (viewingAssignedTask.assignedUsers || []).map(userName => {
+        const foundUser = allAdminUsers.find(u => u.name === userName);
+        const userId = foundUser ? Number(foundUser.id) : null;
+        const targetQty = userTargets[userName] ?? Math.floor(taskRequiredTarget / (viewingAssignedTask.assignedUsers.length || 1));
+
+        return {
+          userId,
+          targetQty
+        };
+      }).filter(a => a.userId !== null);
+
+      if (assignmentsPayload.length > 0 && typeof taskService.setAssignments === "function") {
+        await taskService.setAssignments(viewingAssignedTask.id, assignmentsPayload);
+      }
+
+      toast.success("Đã lưu chỉ tiêu phân công thành công!");
+      setViewingAssignedTask(null);
+      await loadDataFromApi();
+    } catch (err) {
+      console.error("Lỗi lưu chỉ tiêu phân công:", err?.response?.data || err);
+      const apiMsg = err?.response?.data?.title || err?.response?.data?.message || "";
+      
+      // Bắt trường hợp BE báo kho câu trống để hiển thị thông báo dịu hơn thay vì báo lỗi đỏ
+      if (apiMsg.includes("vượt quá 0") || apiMsg.includes("mục người nhận")) {
+        toast.warning("Đã lưu người thực hiện! (Chưa có câu ghi âm mẫu khả dụng trong kho của BE).");
+        setViewingAssignedTask(null);
+        await loadDataFromApi();
+      } else {
+        toast.error(apiMsg || "Lưu chỉ tiêu thất bại!");
+      }
+    }
   };
 
   return (
@@ -1384,7 +1491,6 @@ export default function TaskManagerManagement() {
                         <span className="font-bold">{userName}</span>
                       </div>
 
-                      {/* KHU VỰC BÊN PHẢI: BADGE + Ô NHẬP MỤC TIÊU SỐ CÂU */}
                       <div className="flex items-center gap-2">
                         <span 
                           style={{ backgroundColor: viewingAssignedTask.role === "Speaker" ? SPEAKER_ACCENT : REVIEWER_ACCENT }}
@@ -1393,7 +1499,6 @@ export default function TaskManagerManagement() {
                           {viewingAssignedTask.role || "Thực hiện"}
                         </span>
 
-                        {/* Ô nhập chỉ tiêu số câu nằm ở cạnh bên phải badge Speaker/Reviewer */}
                         <div className="flex items-center gap-1 bg-white dark:bg-[#1C1D22] border border-[#E5E2D8] dark:border-gray-700 rounded-lg px-2 py-0.5">
                           <input
                             type="number"
@@ -1401,7 +1506,7 @@ export default function TaskManagerManagement() {
                             value={
                               userTargets[userName] ?? 
                               (viewingAssignedTask.assignedUsers.length > 0 
-                                ? Math.floor(calculatedTargetPerTask / viewingAssignedTask.assignedUsers.length) 
+                                ? Math.floor((viewingAssignedTask.targetQty || calculatedTargetPerTask) / viewingAssignedTask.assignedUsers.length) 
                                 : 0)
                             }
                             onChange={(e) => handleUserTargetChange(userName, e.target.value)}
@@ -1418,14 +1523,21 @@ export default function TaskManagerManagement() {
               </div>
             </div>
 
-            <div className="p-4 border-t border-[#E5E2D8] dark:border-gray-800 text-right bg-[#F7F5EF]/50 dark:bg-[#25272E]/50">
+            <div className="p-4 border-t border-[#E5E2D8] dark:border-gray-800 flex gap-2.5 bg-[#F7F5EF]/50 dark:bg-[#25272E]/50">
               <button
                 type="button"
                 onClick={() => setViewingAssignedTask(null)}
-                style={{ backgroundColor: TASK_MANAGER_ACCENT }}
-                className="w-full py-2.5 text-white rounded-xl type-button hover:opacity-90 transition-opacity cursor-pointer shadow-sm text-center"
+                className="flex-1 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 type-button text-[#6E7078] dark:text-gray-300 hover:bg-[#F7F5EF] cursor-pointer"
               >
-                Đóng
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveUserTargets}
+                style={{ backgroundColor: TASK_MANAGER_ACCENT }}
+                className="flex-1 py-2.5 text-white rounded-xl type-button hover:opacity-90 transition-opacity cursor-pointer shadow-sm text-center font-bold"
+              >
+                Lưu & Đóng
               </button>
             </div>
           </div>
@@ -1723,12 +1835,10 @@ export default function TaskManagerManagement() {
                             </button>
                           </td>
 
-                          {/* CỘT MỤC TIÊU SỐ CÂU (TỰ ĐỘNG CHIA ĐỀU CÓ KIỂM TRA LỖI) */}
                           <td className="py-2 px-3 text-center font-bold text-[#16171C] dark:text-white whitespace-nowrap font-sans">
                             {calculatedTargetPerTask} câu
                           </td>
                           
-                          {/* BADGE TRẠNG THÁI */}
                           <td className="py-2 px-3 text-center whitespace-nowrap">
                             <div className="relative inline-block group">
                               <span
