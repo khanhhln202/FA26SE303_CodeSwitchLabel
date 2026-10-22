@@ -178,6 +178,22 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
     public async Task<ActionResult<ImportBatchDetailDto>> GetBatch(long batchId, CancellationToken ct)
         => Ok(await scriptService.GetBatchAsync(batchId, ct));
 
+    /// <summary>Chấp nhận hàng loạt câu đang chờ duyệt của một batch nhập.</summary>
+    /// <remarks>
+    /// Bodyless, chỉ Admin. Người gọi là người duyệt của từng lượt `Accepted`; dùng luồng duyệt
+    /// hiện có nên vẫn giữ chủ đề, hàng đợi, lịch sử duyệt và trạng thái câu.
+    /// Trả 200 kèm batchId, số câu đã duyệt và danh sách câu không được duyệt (lý do);
+    /// các câu đã duyệt KHÔNG bị rollback khi câu khác bị chặn.
+    /// Trả 404 batch_not_found nếu batch không tồn tại.
+    /// </remarks>
+    [HttpPost("import/batches/{batchId:long}/validate")]
+    [Authorize(Roles = "Admin")]
+    [ProducesResponseType(typeof(BatchValidateResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<BatchValidateResultDto>> ValidateBatch(
+        long batchId, CancellationToken ct)
+        => Ok(await scriptService.ValidateBatchAsync(batchId, User.GetUserId(), ct));
+
     /// <summary>Duyệt nội dung một cặp câu: chấp nhận, sửa, hoặc từ chối.</summary>
     /// <remarks>
     /// Đây là use case "Review Text". Mỗi lượt duyệt ghi thành một dòng lịch sử riêng.
