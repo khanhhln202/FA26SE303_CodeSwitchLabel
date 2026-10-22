@@ -49,4 +49,5 @@ src/
 
 - Root: [`../README.md`](../README.md) — quickstart full-stack, tài khoản demo, luồng thử 7 bước
 - Hợp đồng API: [`../docs/FE-INTEGRATION.md`](../docs/FE-INTEGRATION.md) — Swagger là nguồn sự thật
+- Tạo task có thể gửi `assigneeUserIds` để phân công Speaker/Reviewer ngay; quy tắc chia quota và lỗi API nằm trong mục TEAM_021 của hợp đồng API
 - Backend: [`../backend/README.md`](../backend/README.md)

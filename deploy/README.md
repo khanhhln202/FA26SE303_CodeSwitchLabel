@@ -271,8 +271,8 @@ Một lệnh duy nhất, chạy từ thư mục gốc của repo trên máy ch�
 docker exec csl-postgres psql -U csl -d codeswitchlabel -c "SELECT * FROM schema_migration ORDER BY applied_at;"
 ```
 
-Lần chạy đầu tiên bảng còn trống nên **V2 sẽ chạy lại**. Điều đó an toàn: file V2 idempotent
-(`IF EXISTS`, `CREATE OR REPLACE`, `DROP`+`CREATE` trong một transaction).
+Lần chạy đầu tiên bảng còn trống nên các migration sẽ chạy theo thứ tự phiên bản. Mỗi file tự quản lý
+transaction; nếu một file lỗi, script dừng và chỉ ghi nhận migration sau khi chạy thành công.
 
 Điều chỉnh được bằng biến môi trường:
 
@@ -297,7 +297,7 @@ chính nó.
 File âm thanh nằm trong volume `codeswitchlabel_minio-data`; sao lưu volume này cùng với database,
 vì mất file audio là mất dữ liệu nghiên cứu, không tạo lại được.
 
-### Cập nhật lược đồ khi có migration mới (ví dụ V2 task độc lập)
+### Cập nhật lược đồ khi có migration mới (ví dụ V15 hàm hàng đợi ghi âm)
 
 `docs/codeswitchlabel.sql` chỉ chạy **một lần** qua `/docker-entrypoint-initdb.d/` lúc volume
 `pg-data` còn trống. DB đã có dữ liệu **không** tự nhận lược đồ mới khi `up -d --build`,
@@ -313,31 +313,25 @@ tay khi cần (ví dụ muốn xem trước migration trước khi deploy).
 # 0. Trên máy deploy: sao lưu TRƯỚC khi chạm vào DB
 docker exec csl-postgres pg_dump -U csl codeswitchlabel | gzip > backup-$(date +%F)-preMigrate.sql.gz
 
-# 1. Trên máy deploy: kéo code mới (phải thấy file migration, ví dụ migrations/V2__*.sql)
+# 1. Trên máy deploy: kéo code mới (phải thấy file migration, ví dụ migrations/V15__recording_queue_assignee.sql)
 git pull
 ls -lh migrations/
 
-# 2. Áp migration — idempotent, chạy lại an toàn (single transaction, -v ON_ERROR_STOP=1)
-cat migrations/V2__task_independent_of_campaign.sql | docker exec -i csl-postgres psql -U csl -d codeswitchlabel -v ON_ERROR_STOP=1
+# 2. Ví dụ áp V15 thủ công — deploy.sh bình thường tự áp migration chưa chạy
+cat migrations/V15__recording_queue_assignee.sql | docker exec -i csl-postgres psql -U csl -d codeswitchlabel -v ON_ERROR_STOP=1
 
-# 3. Chạy file verify đi kèm — chạy trong transaction ROLLBACK nên không làm bẩn dữ liệu
-cat migrations/V2__verify_task_independent.sql | docker exec -i csl-postgres psql -U csl -d codeswitchlabel -v ON_ERROR_STOP=1
-# Kỳ vọng: NOTICE: ALL V2 CHECKS PASSED
+# 3. Kiểm tra cột và index đã có
+docker exec csl-postgres psql -U csl -d codeswitchlabel -c "SELECT column_name FROM information_schema.columns WHERE table_name='task_script' AND column_name='assignee_user_id';"
+docker exec csl-postgres psql -U csl -d codeswitchlabel -c "SELECT indexname FROM pg_indexes WHERE tablename='task_script' AND indexname='idx_task_script_assignee';"
 
-# 4. Kiểm nhanh: campaign_id phải nullable + FK SET NULL
-docker exec csl-postgres psql -U csl -d codeswitchlabel -c "SELECT column_name,is_nullable FROM information_schema.columns WHERE table_name='task' AND column_name='campaign_id';"
-docker exec csl-postgres psql -U csl -d codeswitchlabel -c "SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid='task'::regclass AND contype='f';"
-
-# 5. Ghi vào sổ để deploy.sh không chạy lại V2, rồi rebuild API
+# 4. Ghi vào sổ để deploy.sh không chạy lại V15, rồi rebuild API
 docker exec -i csl-postgres psql -U csl -d codeswitchlabel -v ON_ERROR_STOP=1 \
-  -c "INSERT INTO schema_migration (version, checksum, duration_ms) SELECT 'V2', '', 0 WHERE NOT EXISTS (SELECT 1 FROM schema_migration WHERE version='V2');"
+  -c "INSERT INTO schema_migration (version, checksum, duration_ms) SELECT 'V15', '', 0 WHERE NOT EXISTS (SELECT 1 FROM schema_migration WHERE version='V15');"
 docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build
 docker compose -f deploy/docker-compose.prod.yml logs -f api
 ```
 
-Rollback V2 (chạy tay trong transaction, xem cuối file migration): gắn lại hoặc xoá task
-`campaign_id IS NULL` trước, rồi `SET NOT NULL` + khôi phục function/view từ git history
-của `docs/codeswitchlabel.sql`.
+V15 thay hàm `fn_queue_claim_next` để tôn trọng `task_script.assignee_user_id`. Nếu phải rollback thủ công, dừng API trước rồi chạy lại migration V15 cũ; thao tác này làm mất phân công câu theo Speaker và hàng đợi ghi âm sẽ phát chung như cũ.
 
 ### Khôi phục database từ bản sao lưu (khi migration hoặc deploy hỏng)
 

@@ -20,6 +20,10 @@ màn hình nào gọi API nào theo thứ tự nào, cách xử lý đăng nhậ
 > Cập nhật 16/10/2026 — lịch sử duyệt trả về **cặp bản ghi** (hai câu, hai link nghe, quyết định
 > của tôi cho cả cặp) thay vì từng lượt rời; lịch sử câu đề xuất thêm người gửi, `alignment`
 > (cặp từ Anh–Việt) và lý do/bình luận khi bị từ chối.
+>
+> Cập nhật V15 — `POST /api/tasks` nhận `assigneeUserIds`; `PUT /api/tasks/{id}/assignments` gửi
+> cả danh sách người nhận mới; task thu âm có `assignee_user_id` trên từng `task_script`; hàng
+> đợi ghi âm (`fn_queue_claim_next`) chỉ phát cặp cho đúng Speaker hoặc mục cũ chưa gán.
 
 ---
 
@@ -724,7 +728,7 @@ giao) — các dòng có `canReview: false`, nộp duyệt vẫn trả 403 `task
 | Danh sách chiến dịch | `GET /api/campaigns` — lọc tuỳ chọn `status`, `page`, `pageSize`. Mỗi dòng kèm `allocatedTaskQty` (tổng chỉ tiêu đã chia cho các task), `taskCount`, `completedTaskCount`, `assignedTo` |
 | Chi tiết chiến dịch | `GET /api/campaigns/{id}` |
 | Danh sách task | `GET /api/tasks` — lọc tuỳ chọn: `taskType`, `status`, `assigneeId`, `overdue`, `page`, `pageSize`. Mỗi dòng kèm `campaignId`, `campaignName` |
-| Tạo task | `POST /api/tasks` `{ "campaignId": 2, "taskType": "Recording", "description": "…", "targetQty": 10, "deadline": "2026-09-30T17:00:00+07:00" }` — `campaignId` để trống/`null` = task độc lập |
+| Tạo task | `POST /api/tasks` `{ "campaignId": 2, "taskType": "Recording", "description": "…", "targetQty": 10, "deadline": "2026-09-30T17:00:00+07:00", "assigneeUserIds": [6, 7] }` — `campaignId` để trống/`null` = task độc lập; `assigneeUserIds` tuỳ chọn, bỏ qua hoặc `[]` để tạo chưa phân công |
 | Gắn/chuyển/gỡ chiến dịch | `PATCH /api/tasks/{id}/campaign` `{ "campaignId": 2 }` — `null` = gỡ về độc lập |
 | Gỡ task khỏi chiến dịch (giữ task) | `DELETE /api/campaigns/{id}/tasks/{taskId}` |
 | Xoá task | `DELETE /api/tasks/{id}` → 204 — task đã gỡ khỏi chiến dịch và chưa có dữ liệu nộp thật (lượt giao, hàng chờ xoá theo) |
@@ -733,6 +737,24 @@ giao) — các dòng có `canReview: false`, nộp duyệt vẫn trả 403 `task
 | Thêm mục chọn tay | `POST /api/tasks/{id}/items` `{ "ids": ["s_211000000001", "s_131000000002"] }` |
 | Thêm mục tự động | `POST /api/tasks/{id}/items` `{ "autoFill": { "count": 10, "domain": "ItTechnology" } }` — task duyệt thì dùng `"speakerId"` thay cho `"domain"` |
 | Gỡ mục | `DELETE /api/tasks/{id}/items/{itemId}` |
+
+### Giao người nhận khi tạo task (TEAM_021)
+
+`assigneeUserIds` chấp nhận danh sách ID người nhận ngay trong `POST /api/tasks`. Backend loại ID trùng,
+xác nhận tài khoản đang hoạt động và đúng vai trò (`Speaker` cho `Recording`, `Reviewer` cho `Review`),
+rồi chia `targetQty` đều; số dư được cộng cho những người đứng trước trong danh sách.
+
+- Với task `Recording`, backend lấy `targetQty` cặp câu `Validated` chưa thuộc task nào theo `domain`
+  (mặc định `ItTechnology`) và gán từng cặp cho một Speaker theo quota. Thiếu cặp thì trả
+  `422 recording_not_enough_pairs`; task không được tạo.
+- Với task `Review`, các thành viên được phân công và chia quota như trên. Mục bản ghi tiếp tục được
+  đưa vào hàng đợi theo luồng task duyệt hiện có.
+- Các lỗi đầu vào khác gồm `422 target_less_than_assignees`, `422 user_inactive`,
+  `422 assignee_role_mismatch`, và `404 user_not_found`.
+- Không truyền `assigneeUserIds` hoặc truyền mảng rỗng để giữ quy trình tạo task rồi phân công sau.
+
+Ví dụ: `"targetQty": 5, "assigneeUserIds": [6, 7]` chia quota `3` và `2`; với task thu âm,
+Speaker `6` được gán ba cặp câu đầu theo thứ tự ID, Speaker `7` nhận hai cặp tiếp theo.
 
 **Cặp câu nằm trong task khác vẫn còn chạy** thì `POST /api/tasks/{id}/items` **chuyển sang task
 mới** thay vì báo lỗi — miễn là cặp câu đó **chưa có bản ghi nào nộp** và task mới đã giao cho

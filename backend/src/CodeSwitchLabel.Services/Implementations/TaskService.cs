@@ -111,10 +111,53 @@ public class TaskService(
     public async Task<TaskDetailDto> CreateAsync(
         CreateTaskRequest request, long createdById, CancellationToken ct = default)
     {
+        // Keep task, assignments, and selected recording pairs atomic. The repository
+        // locks candidate script rows until commit so another create cannot pick them.
+        await using var transaction = await BeginTransactionIfNeededAsync(ct);
         var now = clock.GetUtcNow();
 
         var targetQty = request.TargetQty!.Value;
         var deadline = ToUtcFuture(request.Deadline!.Value, now);
+
+        // TEAM_021: phân công thành viên ngay lúc tạo (tùy chọn)
+        List<long> assigneeUserIds = request.AssigneeUserIds?.Distinct().ToList() ?? [];
+        int[]? assignmentQuotas = null;
+
+        if (assigneeUserIds.Count > 0)
+        {
+            // Chỉ tiêu phải >= số người nhận
+            if (targetQty < assigneeUserIds.Count)
+            {
+                throw new UnprocessableException(
+                    "target_less_than_assignees",
+                    $"Chỉ tiêu {targetQty} nhỏ hơn số người nhận {assigneeUserIds.Count}. Mỗi người nhận cần ít nhất 1 mục.");
+            }
+
+            // Chia quota: phần dư về người được chọn trước (cùng công thức SplitQuota)
+            assignmentQuotas = SplitQuota(targetQty, assigneeUserIds.Count);
+
+            // Xác thực từng thành viên
+            var requiredRole = request.TaskType == TaskType.Recording
+                ? RoleName.Speaker : RoleName.Reviewer;
+
+            foreach (var userId in assigneeUserIds)
+            {
+                var user = await tasks.GetUserWithRoleAsync(userId, ct)
+                    ?? throw new NotFoundException("user_not_found", $"Không tìm thấy tài khoản #{userId}.");
+
+                if (user.Status != UserStatus.Active)
+                {
+                    throw new UnprocessableException("user_inactive", $"Tài khoản {user.Email} đang bị vô hiệu hoá.");
+                }
+
+                if (user.Role.RoleName != requiredRole)
+                {
+                    throw new UnprocessableException(
+                        "assignee_role_mismatch",
+                        $"Task {request.TaskType} chỉ giao được cho {requiredRole}, còn {user.Email} là {user.Role.RoleName}.");
+                }
+            }
+        }
 
         // campaignId null = task độc lập (C1): bỏ qua mọi kiểm tra chiến dịch.
         // Trigger trg_task_campaign_window / trg_task_campaign_target / trg_task_creator_assigned
@@ -179,6 +222,23 @@ public class TaskService(
 
         var taskDomain = request.Domain ?? (campaign != null ? campaign.Domain : ScriptDomain.ItTechnology);
 
+        // TEAM_021: Recording lấy đủ cặp câu hợp lệ theo CHỦ ĐỀ ĐÃ CHỐT (có thể đến từ
+        // chiến dịch) trước khi tạo task. Thiếu cặp thì không tạo gì cả.
+        List<string>? recordingScriptIds = null;
+        if (assigneeUserIds.Count > 0 && request.TaskType == TaskType.Recording)
+        {
+            var availableIds = await tasks.GetAvailableScriptIdsByDomainAsync(taskDomain, targetQty, ct);
+
+            if (availableIds.Count < targetQty)
+            {
+                throw new UnprocessableException(
+                    "recording_not_enough_pairs",
+                    $"Kho chỉ còn {availableIds.Count} cặp câu hợp lệ cho chủ đề {taskDomain}, ít hơn chỉ tiêu {targetQty}. Không tạo task.");
+            }
+
+            recordingScriptIds = availableIds;
+        }
+
         var task = new WorkTask
         {
             CampaignId = request.CampaignId,
@@ -198,10 +258,54 @@ public class TaskService(
         tasks.Add(task);
         await SaveTasksAsync(ct);
 
+        // TEAM_021: tạo phân công cùng lúc với task
+        if (assigneeUserIds.Count > 0)
+        {
+            var scriptIndex = 0;
+            var scriptItems = new List<TaskScript>(recordingScriptIds?.Count ?? 0);
+
+            for (var i = 0; i < assigneeUserIds.Count; i++)
+            {
+                var userId = assigneeUserIds[i];
+
+                // Cộng ticks để thứ tự chọn được giữ nguyên khi đọc lại (ORDER BY assigned_at).
+                tasks.AddAssignment(new TaskAssignment
+                {
+                    TaskId = task.TaskId,
+                    UserId = userId,
+                    AssignedAt = now.AddTicks(i),
+                    AssignmentStatus = AssignmentStatus.Active,
+                    TargetQty = assignmentQuotas![i]
+                });
+
+                // Recording: gắn assignee_user_id cho từng mục task_script theo quota
+                if (recordingScriptIds is not null)
+                {
+                    for (var j = 0; j < assignmentQuotas[i] && scriptIndex < recordingScriptIds.Count; j++, scriptIndex++)
+                    {
+                        scriptItems.Add(new TaskScript
+                        {
+                            TaskId = task.TaskId,
+                            ScriptId = recordingScriptIds[scriptIndex],
+                            AssigneeUserId = userId,
+                            Status = TaskScriptStatus.Pending,
+                            IncludedAt = now
+                        });
+                    }
+                }
+            }
+
+            if (scriptItems.Count > 0) tasks.AddScriptItems(scriptItems);
+
+            await SaveTasksAsync(ct);
+        }
+
         // TEAM_013: đợt vừa nhận nhiệm vụ đầu tiên thì phải rời Open.
         if (campaign is not null) await campaigns.RefreshStatusAsync(campaign.CampaignId, ct);
 
-        return await LoadDetailAsync(task.TaskId, ct);
+        var detail = await LoadDetailAsync(task.TaskId, ct);
+        if (transaction is not null) await transaction.CommitAsync(ct);
+        return detail;
     }
 
     /// <summary>Gắn task vào chiến dịch (attach/move), hoặc gỡ ra (detach) khi campaignId = null.</summary>
@@ -812,10 +916,22 @@ public class TaskService(
             {
                 TaskId = taskId,
                 UserId = fresh[i].UserId,
-                AssignedAt = now,
+                AssignedAt = now.AddTicks(current.Count + i),
                 AssignmentStatus = AssignmentStatus.Active,
                 TargetQty = quotas[current.Count + i]
             });
+        }
+
+        // TEAM_021: task thu âm chia lại các cặp CHƯA bắt đầu theo quota mới.
+        // Cặp đã có bản ghi/đang thu giữ nguyên người nhận.
+        if (task.TaskType == TaskType.Recording)
+        {
+            var fillOrder = current
+                .Select((a, i) => (a.UserId, Quota: quotas[i]))
+                .Concat(fresh.Select((f, i) => (f.UserId, Quota: quotas[current.Count + i])))
+                .ToList();
+
+            await RedistributeRecordingScriptsAsync(taskId, fillOrder, ct);
         }
 
         await SaveTasksAsync(ct);
@@ -888,7 +1004,9 @@ public class TaskService(
             .ToList();
         var (workable, blocked) = await CountWorkableAsync(task, afterAssigning, null, ct);
 
-        if (RequiresItemsToAssign(task) && quotas.Sum() > workable)
+        // TEAM_021: task duyệt nhận việc qua đường tự đẩy, nên hàng chờ rỗng lúc sửa
+        // phân công không phải lỗi. Chỉ task thu âm mới phải đủ cặp câu đã gán.
+        if (task.TaskType == TaskType.Recording && quotas.Sum() > workable)
         {
             throw new UnprocessableException(
                 "target_exceeds_items",
@@ -898,6 +1016,18 @@ public class TaskService(
 
         var wanted = requested.Select(a => a.UserId).ToHashSet();
         var byUser = active.ToDictionary(a => a.UserId);
+
+        // TEAM_021: người bị gỡ mà còn cặp câu đang làm/đã có bản ghi thì không được gỡ.
+        if (task.TaskType == TaskType.Recording)
+        {
+            var removed = active
+                .Where(a => !wanted.Contains(a.UserId))
+                .Select(a => a.UserId)
+                .ToList();
+
+            await EnsureRecordingAssigneesHaveNoStartedPairsAsync(taskId, removed, ct);
+        }
+
         var now = clock.GetUtcNow();
         var quotaByUser = requested
             .Select((a, i) => new { a.UserId, TargetQty = quotas[i] })
@@ -915,16 +1045,28 @@ public class TaskService(
             }
         }
 
+        // Người mới được thêm theo đúng thứ tự trong request; cộng ticks để giữ thứ tự
+        // khi GetActiveAssignmentsAsync đọc lại bằng assigned_at.
+        var nextOrder = active.Count;
         foreach (var item in requested.Where(a => !byUser.ContainsKey(a.UserId)))
         {
             tasks.AddAssignment(new TaskAssignment
             {
                 TaskId = taskId,
                 UserId = item.UserId,
-                AssignedAt = now,
+                AssignedAt = now.AddTicks(nextOrder++),
                 AssignmentStatus = AssignmentStatus.Active,
                 TargetQty = quotaByUser[item.UserId]
             });
+        }
+
+        if (task.TaskType == TaskType.Recording)
+        {
+            var fillOrder = requested
+                .Select((a, i) => (a.UserId, Quota: quotas[i]))
+                .ToList();
+
+            await RedistributeRecordingScriptsAsync(taskId, fillOrder, ct);
         }
 
         await SaveTasksAsync(ct);
@@ -1028,6 +1170,12 @@ public class TaskService(
             }
         }
 
+        // TEAM_021: cặp câu đã bắt đầu (đang thu / đã có bản ghi / đã xong) không đổi chủ.
+        if (task.TaskType == TaskType.Recording)
+        {
+            await EnsureRecordingAssigneesHaveNoStartedPairsAsync(taskId, [userId], ct);
+        }
+
         mine.AssignmentStatus = AssignmentStatus.Reassigned;
 
         // Chia lại phần của người vừa rời đi cho những người còn lại, để tổng quota
@@ -1037,6 +1185,15 @@ public class TaskService(
         {
             var quotas = SplitQuota(task.TargetQty, remaining.Count);
             for (var i = 0; i < remaining.Count; i++) remaining[i].TargetQty = quotas[i];
+
+            if (task.TaskType == TaskType.Recording)
+            {
+                var fillOrder = remaining
+                    .Select((a, i) => (a.UserId, Quota: quotas[i]))
+                    .ToList();
+
+                await RedistributeRecordingScriptsAsync(taskId, fillOrder, ct);
+            }
         }
 
         await SaveTasksAsync(ct);
@@ -1045,6 +1202,90 @@ public class TaskService(
         if (transaction is not null) await transaction.CommitAsync(ct);
 
         return await LoadDetailAsync(taskId, ct);
+    }
+
+    /// <summary>
+    /// TEAM_021: chặn gỡ người nhận task thu âm khi người đó còn cặp câu đã bắt đầu.
+    /// Cặp đã có bản ghi hoặc đang được thu không thể chuyển sang người khác — chuyển
+    /// đi là mất dấu công việc và có thể làm sai lệch bản ghi đã nộp.
+    /// </summary>
+    private async Task EnsureRecordingAssigneesHaveNoStartedPairsAsync(
+        long taskId, IReadOnlyCollection<long> userIds, CancellationToken ct)
+    {
+        if (userIds.Count == 0) return;
+
+        var items = await tasks.GetScriptItemsTrackedAsync(taskId, ct);
+        var startedIds = await tasks.GetStartedScriptIdsAsync(taskId, clock.GetUtcNow(), ct);
+
+        var blocked = items
+            .Where(i => i.AssigneeUserId.HasValue
+                        && userIds.Contains(i.AssigneeUserId.Value)
+                        && startedIds.Contains(i.ScriptId))
+            .Select(i => i.ScriptId)
+            .Distinct()
+            .OrderBy(id => id)
+            .ToList();
+
+        if (blocked.Count == 0) return;
+
+        var preview = string.Join(", ", blocked.Take(5));
+        if (blocked.Count > 5) preview += ", …";
+
+        throw new ConflictException(
+            "assignee_has_in_progress_items",
+            $"Không gỡ được người nhận vì còn {blocked.Count} cặp câu đang làm hoặc đã có bản ghi ({preview}). " +
+            "Hoàn tất các cặp đó hoặc giữ nguyên người nhận.");
+    }
+
+    /// <summary>
+    /// TEAM_021: chia lại các cặp câu CHƯA bắt đầu của task thu âm theo danh sách người
+    /// nhận và quota mới. Cặp đã có bản ghi, đã xong hoặc đang bị giữ trong hàng đợi
+    /// giữ nguyên người nhận — dữ liệu đã làm không đổi chủ.
+    ///
+    /// Cặp thừa (task có nhiều mục hơn tổng quota, hoặc người cũ đã làm vượt quota)
+    /// vẫn được chia vòng tròn để không rơi về hàng đợi chung.
+    /// </summary>
+    private async Task RedistributeRecordingScriptsAsync(
+        long taskId, IReadOnlyList<(long UserId, int Quota)> assignments, CancellationToken ct)
+    {
+        var items = await tasks.GetScriptItemsTrackedAsync(taskId, ct);
+        if (items.Count == 0) return;
+
+        var startedIds = await tasks.GetStartedScriptIdsAsync(taskId, clock.GetUtcNow(), ct);
+
+        // Số cặp đã bắt đầu mà mỗi người đang giữ — phần này tính vào quota của họ.
+        var startedByUser = new Dictionary<long, int>();
+        foreach (var item in items)
+        {
+            if (!item.AssigneeUserId.HasValue || !startedIds.Contains(item.ScriptId)) continue;
+
+            startedByUser[item.AssigneeUserId.Value] =
+                startedByUser.GetValueOrDefault(item.AssigneeUserId.Value) + 1;
+        }
+
+        var pool = items
+            .Where(i => !startedIds.Contains(i.ScriptId))
+            .OrderBy(i => i.IncludedAt).ThenBy(i => i.ScriptId)
+            .ToList();
+
+        // Cặp chưa bắt đầu không còn thuộc về ai; chia lại từ đầu theo danh sách mới.
+        foreach (var item in pool) item.AssigneeUserId = null;
+
+        var next = 0;
+        foreach (var (userId, quota) in assignments)
+        {
+            var need = Math.Max(0, quota - startedByUser.GetValueOrDefault(userId));
+
+            for (var i = 0; i < need && next < pool.Count; i++)
+            {
+                pool[next++].AssigneeUserId = userId;
+            }
+        }
+
+        for (var i = 0; next < pool.Count && assignments.Count > 0; i++)
+        {
+            pool[next++].AssigneeUserId = assignments[i % assignments.Count].UserId;
+        }
     }
 
     /// <summary>
@@ -1569,7 +1810,7 @@ public class TaskService(
 
         IReadOnlyList<TaskItemDto> items = row.TaskType == TaskType.Recording
             ? [.. (await tasks.GetScriptItemsAsync(taskId, ct)).Select(i =>
-                new TaskItemDto(i.ScriptId, i.Status.ToString(), Preview(i.Script.CsContent), i.IncludedAt))]
+                new TaskItemDto(i.ScriptId, i.Status.ToString(), Preview(i.Script.CsContent), i.IncludedAt, i.AssigneeUserId))]
             : [.. (await tasks.GetRecordingItemsAsync(taskId, ct)).Select(i =>
                 new TaskItemDto(
                     i.RecordingId,
