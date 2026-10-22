@@ -18,13 +18,13 @@ apiClient.interceptors.request.use((config) => {
 });
 
 export const taskService = {
-  // 1. Overview
+  // Overview
   getOverview: async () => {
     const res = await apiClient.get('/api/task-manager/overview');
     return res.data;
   },
 
-  // 2. Campaigns (Chiến dịch / Đợt)
+  // Campaigns
   getCampaigns: async (params) => {
     const res = await apiClient.get('/api/campaigns', { params });
     return res.data;
@@ -50,13 +50,12 @@ export const taskService = {
     return res.data;
   },
 
-  // Gỡ Task khỏi Đợt
   detachTaskFromCampaign: async (campaignId, taskId) => {
     const res = await apiClient.delete(`/api/campaigns/${campaignId}/tasks/${taskId}`);
     return res.data;
   },
 
-  // 3. Tasks (Nhiệm vụ)
+  // Tasks
   getTasks: async (params) => {
     const res = await apiClient.get('/api/tasks', { params });
     return res.data;
@@ -77,12 +76,19 @@ export const taskService = {
     return res.data;
   },
 
+  // Nạp items/câu vào Task cho Speaker/Reviewer
   addTaskItems: async (id, data) => {
+    // data có thể là { autoFill: true, quantity: 833 } hoặc mảng items
     const res = await apiClient.post(`/api/tasks/${id}/items`, data);
     return res.data;
   },
 
-  // SỬA HÀM ASSIGN TASK: Gửi cả dạng mảng lẫn đơn lẻ chuẩn RESTful
+  addTextItems: async (id, data) => {
+    // Nạp text items cho Reviewer
+    const res = await apiClient.post(`/api/tasks/${id}/text-items`, data);
+    return res.data;
+  },
+
   assignTask: async (id, userIds) => {
     const idsArray = Array.isArray(userIds) ? userIds.map(Number) : [Number(userIds)];
     const payload = {
@@ -94,7 +100,13 @@ export const taskService = {
     return res.data;
   },
 
-  // Gỡ một người khỏi nhiệm vụ (bỏ phân công — API assign chỉ thêm, không tự bỏ)
+  // API lưu danh sách phân công kèm Quota/TargetQty từng user
+  setAssignments: async (id, assignments) => {
+    // assignments dạng: [{ userId: 1, targetQty: 833 }, { userId: 2, targetQty: 833 }]
+    const res = await apiClient.put(`/api/tasks/${id}/assignments`, { assignments });
+    return res.data;
+  },
+
   unassignTask: async (id, userId) => {
     const res = await apiClient.delete(`/api/tasks/${id}/assign/${Number(userId)}`);
     return res.data;
@@ -110,7 +122,6 @@ export const taskService = {
     return res.data;
   },
 
-  // Gắn Task vào Chiến dịch
   attachTaskToCampaign: async (taskId, campaignId) => {
     const res = await apiClient.patch(`/api/tasks/${Number(taskId)}/campaign`, { 
       campaignId: Number(campaignId) 
