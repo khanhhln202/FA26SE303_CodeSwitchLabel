@@ -294,6 +294,43 @@ public class ScriptService(
         return new ImportBatchDetailDto(batch.BatchId, batch.FileName, batch.ScriptCount, batch.ImportedBy, batch.CreatedAt, scriptIds);
     }
 
+    /// <summary>TEAM_022: Accept pending scripts in an imported batch.</summary>
+    /// <remarks>
+    /// The calling Admin is recorded as reviewer for each Accepted review. Reuses ReviewAsync
+    /// so domain qualification, queue assignment, review history, and script status rules apply.
+    /// Per-script failures are returned while processing continues for the rest of the batch.
+    /// </remarks>
+    public async Task<BatchValidateResultDto> ValidateBatchAsync(
+        long batchId, long reviewerId, CancellationToken ct = default)
+    {
+        if (await repository.GetBatchAsync(batchId, ct) is null)
+        {
+            throw new NotFoundException("batch_not_found", $"Batch #{batchId} not found.");
+        }
+
+        var scriptIds = await repository.GetScriptIdsByBatchAsync(batchId, ct);
+        var accepted = 0;
+        var failures = new List<BatchValidateScriptOutcomeDto>();
+
+        foreach (var scriptId in scriptIds)
+        {
+            try
+            {
+                await ReviewAsync(scriptId, reviewerId,
+                    new ReviewScriptRequest { Action = ScriptReviewAction.Accepted }, ct);
+                accepted++;
+            }
+            catch (AppException ex)
+            {
+                // ReviewAsync can throw after adding an unsaved review; discard it before continuing.
+                repository.ClearTracked();
+                failures.Add(new BatchValidateScriptOutcomeDto(scriptId, ex.Code, ex.Message));
+            }
+        }
+
+        return new BatchValidateResultDto(batchId, accepted, failures);
+    }
+
     private static string SanitizeFileName(string fileName)
     {
         var name = Path.GetFileName(fileName ?? string.Empty).Trim();
