@@ -55,12 +55,10 @@ const formatDateToISO = (dateStr) => {
   if (!dateStr) return "";
   const clean = String(dateStr).trim();
   
-  // Nếu dạng YYYY-MM-DD... cắt trực tiếp lấy YYYY-MM-DD
   if (clean.includes("-")) {
     return clean.split("T")[0];
   }
   
-  // Nếu dạng DD/MM/YYYY
   const parts = clean.split("/");
   if (parts.length === 3) {
     const [day, month, year] = parts;
@@ -332,8 +330,8 @@ export default function TaskManagerManagement() {
           .filter(Boolean);
 
         return {
-          id: t.taskId || t.id,
-          taskId: t.taskId || t.id,
+          id: Number(t.taskId || t.id),
+          taskId: Number(t.taskId || t.id),
           title: t.title || t.description || "Nhiệm vụ",
           role: isSpeaker ? "Speaker" : "Reviewer",
           campaignId: Number(t.campaignId),
@@ -437,10 +435,6 @@ export default function TaskManagerManagement() {
     const dividedTarget = totalBatchTarget / taskCount;
 
     if (!Number.isInteger(dividedTarget)) {
-      toast.error(
-        `Lỗi mục tiêu đợt (${totalBatchTarget} câu) chia cho ${taskCount} nhiệm vụ ra số thập phân (${dividedTarget.toFixed(2)})!`,
-        { id: "divided-target-error" }
-      );
       return Math.floor(dividedTarget);
     }
 
@@ -473,20 +467,17 @@ export default function TaskManagerManagement() {
       const selectedDomainCode = domainMap[batchObj?.topic] || "ItTechnology";
       const isSpeaker = assignFormData.targetRole === "Speaker";
 
-      // 1. Lấy ngày kết thúc ISO
       let endDateClean = formatDateToISO(batchObj.rawEndDateIso || batchObj.endDate);
       if (!endDateClean && batchObj.endDate && batchObj.endDate.includes("/")) {
         const [d, m, y] = batchObj.endDate.split("/");
         endDateClean = `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
       }
 
-      // 2. TÍNH LẠI CHỈ TIÊU CHIA ĐỀU CHO CẢ TASK CŨ LẪN TASK MỚI
       const tasksInTargetBatch = assignTasks.filter(t => Number(t.campaignId) === targetBatchId);
       const batchTarget = Number(batchObj.target || 2000);
       const newTaskCount = tasksInTargetBatch.length + 1;
       const targetPerTask = Math.floor(batchTarget / newTaskCount);
 
-      // 3. CẬP NHẬT LẠI TARGETQTY CHO CÁC TASK CŨ
       if (tasksInTargetBatch.length > 0 && typeof taskService.updateTask === "function") {
         await Promise.all(
           tasksInTargetBatch.map(existingTask => 
@@ -497,7 +488,6 @@ export default function TaskManagerManagement() {
         );
       }
 
-      // 4. Tạo Task mới với targetQty đã được chia đều
       const payload = {
         title: assignFormData.taskTitle.trim(),
         description: assignFormData.taskTitle.trim(),
@@ -523,12 +513,11 @@ export default function TaskManagerManagement() {
         await taskService.assignTask(taskId, userIdsToAssign).catch(err => console.warn("Lỗi assignTask:", err));
         const targetPerUser = Math.floor(targetPerTask / userIdsToAssign.length);
 
-        // BỌC TRY-CATCH CHO NẠP CÂU TỰ ĐỘNG ĐỂ KHÔNG BỊ BÁO LỖI VƯỢT MỨC KHẢ DỤNG
         try {
           if (isSpeaker && typeof taskService.addTaskItems === "function") {
             await taskService.addTaskItems(taskId, { autoFill: true, quantity: targetPerUser });
           } else if (!isSpeaker && typeof taskService.addTextItems === "function") {
-            await taskService.addTextItems(taskId, { autoFill: true, quantity: targetPerUser });
+            await taskService.addTextItems(taskId, { userId: userIdsToAssign[0], count: targetPerUser });
           }
         } catch (itemsErr) {
           console.warn("Chưa đủ câu mẫu khả dụng trên BE để nạp tự động:", itemsErr);
@@ -614,12 +603,13 @@ export default function TaskManagerManagement() {
 
       const startIso = `${cleanStart}T00:00:00`;
       const endIso = `${cleanEnd}T23:59:59`;
+      const newCampaignTarget = Number(batchFormData.target);
 
       const campaignPayload = {
         title: String(batchFormData.name).trim(),
         campaignName: String(batchFormData.name).trim(),
         domain: domainMap[batchFormData.topic] || "ItTechnology",
-        targetQty: Number(batchFormData.target),
+        targetQty: newCampaignTarget,
         startDate: cleanStart,
         endDate: cleanEnd,
         StartDate: cleanStart,
@@ -632,28 +622,40 @@ export default function TaskManagerManagement() {
         await taskService.createCampaign(campaignPayload);
         toast.success(`Đã tạo thành công ${batchFormData.name}!`);
       } else {
-        await taskService.updateCampaign(modalTargetBatchId, campaignPayload);
-        toast.success(`Đã cập nhật ${batchFormData.name}!`);
-      }
+        const targetCampaignId = Number(modalTargetBatchId);
+        await taskService.updateCampaign(targetCampaignId, campaignPayload);
 
-      setBatches((prevBatches) =>
-        prevBatches.map((b) => {
-          if (modalMode === "UPDATE" && Number(b.id) === Number(modalTargetBatchId)) {
-            return {
-              ...b,
-              campaignName: batchFormData.name,
-              name: batchFormData.name,
-              target: Number(batchFormData.target),
-              topic: batchFormData.topic,
-              startDate: formatDateToVN(cleanStart),
-              endDate: formatDateToVN(cleanEnd),
-              rawStartDateIso: cleanStart,
-              rawEndDateIso: cleanEnd
-            };
-          }
-          return b;
-        })
-      );
+        // ĐỒNG BỘ CHIA LẠI CHỈ TIÊU CÁC TASK CON TRONG ĐỢT KHI SỬA CHỈ TIÊU ĐỢT
+        const tasksInBatch = assignTasks.filter(t => Number(t.campaignId) === targetCampaignId);
+        if (tasksInBatch.length > 0) {
+          const newTargetPerTask = Math.floor(newCampaignTarget / tasksInBatch.length);
+
+          await Promise.all(
+            tasksInBatch.map(async (t) => {
+              // 1. Cập nhật chỉ tiêu tổng của Task
+              await taskService.updateTask(t.id, { targetQty: newTargetPerTask }).catch(err => console.warn(err));
+
+              // 2. Cập nhật chỉ tiêu cá nhân cho từng người trong Task
+              if (t.assignedUsers && t.assignedUsers.length > 0) {
+                const perUserTarget = Math.floor(newTargetPerTask / t.assignedUsers.length);
+                const assignmentsPayload = t.assignedUsers.map(userName => {
+                  const foundUser = allAdminUsers.find(u => u.name === userName);
+                  return {
+                    userId: foundUser ? Number(foundUser.id) : null,
+                    targetQty: perUserTarget
+                  };
+                }).filter(a => a.userId !== null);
+
+                if (assignmentsPayload.length > 0) {
+                  await taskService.setAssignments(t.id, assignmentsPayload).catch(err => console.warn(err));
+                }
+              }
+            })
+          );
+        }
+
+        toast.success(`Đã cập nhật đợt và tự động đồng bộ chỉ tiêu các nhiệm vụ!`);
+      }
 
       setIsModalOpen(false);
       await loadDataFromApi();
@@ -864,28 +866,24 @@ export default function TaskManagerManagement() {
   const handleSaveUserTargets = async () => {
     if (!viewingAssignedTask) return;
 
-    // 1. Tính chỉ tiêu yêu cầu của Task
-    const taskRequiredTarget = viewingAssignedTask.targetQty || calculatedTargetPerTask || 0;
-
-    // 2. Tính tổng chỉ tiêu hiện tại của các thành viên được chia
     const currentTotalAllocated = (viewingAssignedTask.assignedUsers || []).reduce((sum, userName) => {
       const val = userTargets[userName] ?? 0;
       return sum + val;
     }, 0);
 
-    // 3. RÀNG BUỘC THEO BACKEND: Bắt buộc tổng chỉ tiêu thành viên bằng chỉ tiêu nhiệm vụ
-    if (currentTotalAllocated !== taskRequiredTarget) {
-      toast.error(
-        `Lưu thất bại! Tổng số câu phân công cho các thành viên (${currentTotalAllocated} câu) phải bằng đúng chỉ tiêu nhiệm vụ (${taskRequiredTarget} câu).`
-      );
-      return;
-    }
-
     try {
+      // 1. Cập nhật lại chỉ tiêu tổng của Task bằng tổng chỉ tiêu đã chia cho thành viên
+      if (typeof taskService.updateTask === "function") {
+        await taskService.updateTask(viewingAssignedTask.id, {
+          targetQty: currentTotalAllocated
+        }).catch(err => console.warn("Lỗi updateTask:", err));
+      }
+
+      // 2. Cập nhật quota phân công cá nhân xuống Backend
       const assignmentsPayload = (viewingAssignedTask.assignedUsers || []).map(userName => {
         const foundUser = allAdminUsers.find(u => u.name === userName);
         const userId = foundUser ? Number(foundUser.id) : null;
-        const targetQty = userTargets[userName] ?? Math.floor(taskRequiredTarget / (viewingAssignedTask.assignedUsers.length || 1));
+        const targetQty = userTargets[userName] ?? Math.floor(currentTotalAllocated / (viewingAssignedTask.assignedUsers.length || 1));
 
         return {
           userId,
@@ -904,7 +902,6 @@ export default function TaskManagerManagement() {
       console.error("Lỗi lưu chỉ tiêu phân công:", err?.response?.data || err);
       const apiMsg = err?.response?.data?.title || err?.response?.data?.message || "";
       
-      // Bắt trường hợp BE báo kho câu trống để hiển thị thông báo dịu hơn thay vì báo lỗi đỏ
       if (apiMsg.includes("vượt quá 0") || apiMsg.includes("mục người nhận")) {
         toast.warning("Đã lưu người thực hiện! (Chưa có câu ghi âm mẫu khả dụng trong kho của BE).");
         setViewingAssignedTask(null);
@@ -1836,7 +1833,7 @@ export default function TaskManagerManagement() {
                           </td>
 
                           <td className="py-2 px-3 text-center font-bold text-[#16171C] dark:text-white whitespace-nowrap font-sans">
-                            {calculatedTargetPerTask} câu
+                            {task.targetQty || calculatedTargetPerTask} câu
                           </td>
                           
                           <td className="py-2 px-3 text-center whitespace-nowrap">

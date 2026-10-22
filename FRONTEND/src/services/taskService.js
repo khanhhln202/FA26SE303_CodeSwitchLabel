@@ -76,16 +76,24 @@ export const taskService = {
     return res.data;
   },
 
-  // Nạp items/câu vào Task cho Speaker/Reviewer
+  // Nạp items/câu vào Task cho Speaker
   addTaskItems: async (id, data) => {
-    // data có thể là { autoFill: true, quantity: 833 } hoặc mảng items
-    const res = await apiClient.post(`/api/tasks/${id}/items`, data);
+    // Backend AddTaskItemsRequest nhận autoFill theo kiểu object hoặc mảng ids
+    const payload = data?.autoFill 
+      ? { autoFill: { count: data.quantity || data.count || 100 } } 
+      : data;
+    const res = await apiClient.post(`/api/tasks/${id}/items`, payload);
     return res.data;
   },
 
+  // Nạp text items cho Reviewer (ScriptQueueController)
   addTextItems: async (id, data) => {
-    // Nạp text items cho Reviewer
-    const res = await apiClient.post(`/api/tasks/${id}/text-items`, data);
+    // Backend AssignTextBatchRequest nhận: { userId: long, count?: int }
+    const payload = {
+      userId: Number(data.userId || data.assignedToUserId || 0),
+      count: Number(data.quantity || data.count || 100)
+    };
+    const res = await apiClient.post(`/api/tasks/${id}/text-items`, payload);
     return res.data;
   },
 
@@ -102,7 +110,6 @@ export const taskService = {
 
   // API lưu danh sách phân công kèm Quota/TargetQty từng user
   setAssignments: async (id, assignments) => {
-    // assignments dạng: [{ userId: 1, targetQty: 833 }, { userId: 2, targetQty: 833 }]
     const res = await apiClient.put(`/api/tasks/${id}/assignments`, { assignments });
     return res.data;
   },
