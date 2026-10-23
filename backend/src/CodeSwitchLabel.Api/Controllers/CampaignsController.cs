@@ -10,8 +10,8 @@ namespace CodeSwitchLabel.Api.Controllers;
 
 /// <summary>
 /// Chiến dịch thu thập — Task Manager lập kế hoạch cho một đợt (thường 1-2 tuần / tháng).
-/// Task có thể độc lập (campaign_id NULL) rồi gắn vào chiến dịch sau; gỡ task khỏi
-/// chiến dịch chỉ detach (giữ lại task), không xoá task.
+/// Task có thể độc lập (campaign_id NULL) rồi gắn vào chiến dịch sau; xoá task khỏi
+/// chiến dịch là xoá vĩnh viễn task đó.
 /// </summary>
 /// <remarks>
 /// Chỉ tiêu và thời gian của chiến dịch ràng buộc với các task con, phần lớn do trigger của
@@ -119,16 +119,21 @@ public class CampaignsController(ICampaignService campaignService) : ControllerB
         return NoContent();
     }
 
-    /// <summary>Gỡ task khỏi chiến dịch (detach): task còn tồn tại với campaign_id NULL, giữ assignments/items.</summary>
+    /// <summary>Xoá vĩnh viễn một task khỏi chiến dịch.</summary>
     /// <remarks>
-    /// Không xoá task, không xoá task_script/task_recording/assignment.
+    /// Task biến mất khỏi đợt, trang Speaker/Reviewer và API chi tiết task. Lượt giao, mục công việc,
+    /// hàng đợi và liên kết task_recording xoá theo task; bản ghi thu âm và lượt duyệt được giữ lại
+    /// với task_id NULL. Xoá được cả task đã hoàn thành hoặc đã có dữ liệu nộp.
     /// </remarks>
     [HttpDelete("{id:long}/tasks/{taskId:long}")]
-    [ProducesResponseType(typeof(TaskDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<TaskDetailDto>> DetachTask(
-        long id, long taskId, CancellationToken ct)
-        => Ok(await campaignService.DetachTaskAsync(id, taskId, User.GetUserId(), User.IsInRole("Admin"), ct));
+    public async Task<IActionResult> DeleteTask(long id, long taskId, CancellationToken ct)
+    {
+        await campaignService.DeleteTaskAsync(id, taskId, User.GetUserId(), User.IsInRole("Admin"), ct);
+        return NoContent();
+    }
 
     /// <summary>Giao hoặc lấy lại chiến dịch cho Task Manager. Chỉ Admin.</summary>
     /// <remarks>

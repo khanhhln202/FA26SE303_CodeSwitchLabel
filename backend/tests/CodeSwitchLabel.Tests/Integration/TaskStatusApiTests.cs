@@ -126,17 +126,17 @@ public sealed class TaskStatusApiTests(DatabaseFixture fixture) : ApiTestBase(fi
         Assert.Equal("InProgress", await TrangThaiDotAsync(ctx));
     }
 
-    /// <summary>Rút nhiệm vụ cuối ra khỏi đợt thì đợt không còn việc nào nên về lại Open.</summary>
+    /// <summary>Xoá nhiệm vụ cuối khỏi đợt thì đợt không còn việc nào nên về lại Open.</summary>
     [Fact]
-    public async Task RutNhiemVuRaKhoiDot_ThiDotVeLaiDangMo()
+    public async Task XoaNhiemVuRaKhoiDot_ThiDotVeLaiDangMo()
     {
         var ctx = await ChuBiAsync();
         var taskId = await TaoTaskIdAsync(ctx);
 
         Assert.Equal("InProgress", await TrangThaiDotAsync(ctx));
 
-        var rut = await DeleteAsync($"/api/campaigns/{ctx.CampaignId}/tasks/{taskId}", ctx.Token);
-        Assert.Equal(HttpStatusCode.OK, rut.StatusCode);
+        var xoa = await DeleteAsync($"/api/campaigns/{ctx.CampaignId}/tasks/{taskId}", ctx.Token);
+        Assert.Equal(HttpStatusCode.NoContent, xoa.StatusCode);
 
         Assert.Equal("Open", await TrangThaiDotAsync(ctx));
     }

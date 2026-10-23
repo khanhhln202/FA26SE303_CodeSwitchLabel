@@ -707,10 +707,12 @@ giao) — các dòng có `canReview: false`, nộp duyệt vẫn trả 403 `task
    rồi gắn sau bằng `PATCH /api/tasks/{id}/campaign`. Tạo kèm `campaignId` thì kiểm tra
    quota/hạn như cũ. Quy tắc quota (`task_target_exceeds_campaign`) và khung hạn
    (`task_deadline_outside_campaign`) **chỉ áp dụng khi task đang gắn với chiến dịch**.
-3. **Gỡ chứ không xoá:** `DELETE /api/campaigns/{id}/tasks/{taskId}` chỉ gỡ task khỏi chiến dịch
-   (task còn tồn tại với `campaignId: null`, giữ assignments/items). Muốn đóng task thì dùng
-   `POST /api/tasks/{id}/cancel` (task ở lại với trạng thái `Cancelled`).
-4. **Xoá task** là việc không hoàn tác được: `DELETE /api/tasks/{id}` → **204**.
+3. **Xoá hẳn khỏi đợt:** `DELETE /api/campaigns/{id}/tasks/{taskId}` → **204** xoá vĩnh viễn task.
+   Task biến mất khỏi đợt, trang Speaker/Reviewer và API chi tiết task (404). Xoá được cả task đã
+   hoàn thành hoặc đã có dữ liệu nộp. Lượt giao, mục công việc và hàng đợi bị xoá theo; bản ghi thu âm
+   và lượt duyệt được giữ lại với `taskId` NULL. Muốn giữ task thì dùng
+   `PATCH /api/tasks/{id}/campaign` với `campaignId: null`, hoặc đóng bằng `POST /api/tasks/{id}/cancel`.
+4. **Xoá task độc lập** là việc không hoàn tác được: `DELETE /api/tasks/{id}` → **204**.
    Xoá cứng được task **đã gỡ khỏi chiến dịch** (`campaignId: null`) và **chưa có dữ liệu
    nộp thật** — không có bản ghi nộp về hay lượt duyệt nào trỏ tới task; lượt giao
    (`task_assignment`) và hàng chờ (`task_script`/`task_recording`) bị xoá theo. Đã gắn
@@ -730,8 +732,8 @@ giao) — các dòng có `canReview: false`, nộp duyệt vẫn trả 403 `task
 | Danh sách task | `GET /api/tasks` — lọc tuỳ chọn: `taskType`, `status`, `assigneeId`, `overdue`, `page`, `pageSize`. Mỗi dòng kèm `campaignId`, `campaignName` |
 | Tạo task | `POST /api/tasks` `{ "campaignId": 2, "taskType": "Recording", "description": "…", "targetQty": 10, "deadline": "2026-09-30T17:00:00+07:00", "assigneeUserIds": [6, 7] }` — `campaignId` để trống/`null` = task độc lập; `assigneeUserIds` tuỳ chọn, bỏ qua hoặc `[]` để tạo chưa phân công |
 | Gắn/chuyển/gỡ chiến dịch | `PATCH /api/tasks/{id}/campaign` `{ "campaignId": 2 }` — `null` = gỡ về độc lập |
-| Gỡ task khỏi chiến dịch (giữ task) | `DELETE /api/campaigns/{id}/tasks/{taskId}` |
-| Xoá task | `DELETE /api/tasks/{id}` → 204 — task đã gỡ khỏi chiến dịch và chưa có dữ liệu nộp thật (lượt giao, hàng chờ xoá theo) |
+| Xoá task khỏi chiến dịch (vĩnh viễn) | `DELETE /api/campaigns/{id}/tasks/{taskId}` → 204 — task và dữ liệu điều phối bị xoá; bản ghi thu âm/lượt duyệt giữ lại |
+| Xoá task độc lập | `DELETE /api/tasks/{id}` → 204 — task đã gỡ khỏi chiến dịch và chưa có dữ liệu nộp thật (lượt giao, hàng chờ xoá theo) |
 | Chi tiết task | `GET /api/tasks/{id}` — tiến độ, lịch sử giao, danh sách mục (`campaignId`/`campaignName` có thể `null`) |
 | Sửa task | `PATCH /api/tasks/{id}` — chỉ gửi trường cần đổi (không đổi chiến dịch ở đây) |
 | Thêm mục chọn tay | `POST /api/tasks/{id}/items` `{ "ids": ["s_211000000001", "s_131000000002"] }` |

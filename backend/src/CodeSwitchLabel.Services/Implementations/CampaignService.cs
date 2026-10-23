@@ -164,10 +164,10 @@ public class CampaignService(
         return ToDto(campaign);
     }
 
-    /// <summary>Gỡ task khỏi chiến dịch (detach): task còn tồn tại, giữ assignments/items.</summary>
-    public Task<TaskDetailDto> DetachTaskAsync(
+    /// <summary>Xoá vĩnh viễn task khỏi chiến dịch. Giữ lại bản ghi thu âm và lượt duyệt.</summary>
+    public Task DeleteTaskAsync(
         long campaignId, long taskId, long? callerId, bool isAdmin, CancellationToken ct = default)
-        => tasks.DetachAsync(campaignId, taskId, ct, callerId, isAdmin);
+        => tasks.DeleteFromCampaignAsync(campaignId, taskId, ct, callerId, isAdmin);
 
     /// <summary>Task thu âm duy nhất của chiến dịch, tạo nếu chưa có.</summary>
     public Task<TaskDetailDto> GetOrCreateRecordingTaskAsync(

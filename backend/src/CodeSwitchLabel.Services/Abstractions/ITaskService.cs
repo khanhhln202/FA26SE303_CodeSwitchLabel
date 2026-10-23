@@ -60,8 +60,8 @@ public interface ITaskService
         long taskId, long? campaignId, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false);
 
-    /// <summary>Gỡ task khỏi chiến dịch nhưng giữ lại task (C2).</summary>
-    Task<TaskDetailDto> DetachAsync(
+    /// <summary>Xoá vĩnh viễn task khỏi chiến dịch; bản ghi thu âm và lượt duyệt được giữ lại.</summary>
+    Task DeleteFromCampaignAsync(
         long campaignId, long taskId, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false);
 
