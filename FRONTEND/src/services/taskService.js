@@ -78,7 +78,6 @@ export const taskService = {
 
   // Nạp items/câu vào Task cho Speaker
   addTaskItems: async (id, data) => {
-    // Backend AddTaskItemsRequest nhận autoFill theo kiểu object hoặc mảng ids
     const payload = data?.autoFill 
       ? { autoFill: { count: data.quantity || data.count || 100 } } 
       : data;
@@ -88,7 +87,6 @@ export const taskService = {
 
   // Nạp text items cho Reviewer (ScriptQueueController)
   addTextItems: async (id, data) => {
-    // Backend AssignTextBatchRequest nhận: { userId: long, count?: int }
     const payload = {
       userId: Number(data.userId || data.assignedToUserId || 0),
       count: Number(data.quantity || data.count || 100)

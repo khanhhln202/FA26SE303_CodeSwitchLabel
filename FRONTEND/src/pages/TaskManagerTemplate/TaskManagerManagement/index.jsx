@@ -637,12 +637,16 @@ export default function TaskManagerManagement() {
 
               // 2. Cập nhật chỉ tiêu cá nhân cho từng người trong Task
               if (t.assignedUsers && t.assignedUsers.length > 0) {
-                const perUserTarget = Math.floor(newTargetPerTask / t.assignedUsers.length);
-                const assignmentsPayload = t.assignedUsers.map(userName => {
+                const baseUserTarget = Math.floor(newTargetPerTask / t.assignedUsers.length);
+                const remainder = newTargetPerTask % t.assignedUsers.length;
+
+                const assignmentsPayload = t.assignedUsers.map((userName, index) => {
                   const foundUser = allAdminUsers.find(u => u.name === userName);
+                  // Dồn phần dư cho người đầu tiên để tổng đúng bằng chỉ tiêu Task
+                  const userTarget = index === 0 ? baseUserTarget + remainder : baseUserTarget;
                   return {
                     userId: foundUser ? Number(foundUser.id) : null,
-                    targetQty: perUserTarget
+                    targetQty: userTarget
                   };
                 }).filter(a => a.userId !== null);
 
@@ -837,16 +841,19 @@ export default function TaskManagerManagement() {
     
     const userCount = task.assignedUsers ? task.assignedUsers.length : 0;
     const taskTarget = task.targetQty || calculatedTargetPerTask || 0;
-    const defaultUserTarget = userCount > 0 ? Math.floor(taskTarget / userCount) : 0;
+    
+    // Tự động phân bổ đều chỉ tiêu task cho danh sách user, dồn phần dư cho user đầu tiên
+    const baseTarget = userCount > 0 ? Math.floor(taskTarget / userCount) : 0;
+    const remainder = userCount > 0 ? taskTarget % userCount : 0;
 
     setUserTargets(prev => {
       const updated = { ...prev };
       if (task.assignedUsers) {
-        task.assignedUsers.forEach((userName) => {
+        task.assignedUsers.forEach((userName, index) => {
           if (task.assignedUserTargets && task.assignedUserTargets[userName] !== undefined) {
             updated[userName] = task.assignedUserTargets[userName];
           } else if (updated[userName] === undefined) {
-            updated[userName] = defaultUserTarget;
+            updated[userName] = index === 0 ? baseTarget + remainder : baseTarget;
           }
         });
       }
@@ -866,24 +873,29 @@ export default function TaskManagerManagement() {
   const handleSaveUserTargets = async () => {
     if (!viewingAssignedTask) return;
 
-    const currentTotalAllocated = (viewingAssignedTask.assignedUsers || []).reduce((sum, userName) => {
+    const taskTargetQty = Number(viewingAssignedTask.targetQty || calculatedTargetPerTask || 0);
+    const assignedUsers = viewingAssignedTask.assignedUsers || [];
+
+    // Tính tổng chỉ tiêu hiện tại người dùng nhập cho các thành viên
+    const currentTotalAllocated = assignedUsers.reduce((sum, userName) => {
       const val = userTargets[userName] ?? 0;
       return sum + val;
     }, 0);
 
-    try {
-      // 1. Cập nhật lại chỉ tiêu tổng của Task bằng tổng chỉ tiêu đã chia cho thành viên
-      if (typeof taskService.updateTask === "function") {
-        await taskService.updateTask(viewingAssignedTask.id, {
-          targetQty: currentTotalAllocated
-        }).catch(err => console.warn("Lỗi updateTask:", err));
-      }
+    // Kiểm tra tuân thủ theo Backend: Tổng chỉ tiêu cá nhân bắt buộc bằng chỉ tiêu của nhiệm vụ
+    if (assignedUsers.length > 0 && currentTotalAllocated !== taskTargetQty) {
+      toast.error(
+        `Tổng chỉ tiêu người thực hiện (${currentTotalAllocated} câu) phải bằng chỉ tiêu nhiệm vụ (${taskTargetQty} câu)!`
+      );
+      return;
+    }
 
-      // 2. Cập nhật quota phân công cá nhân xuống Backend
-      const assignmentsPayload = (viewingAssignedTask.assignedUsers || []).map(userName => {
+    try {
+      // 1. Cập nhật quota phân công cá nhân xuống Backend
+      const assignmentsPayload = assignedUsers.map(userName => {
         const foundUser = allAdminUsers.find(u => u.name === userName);
         const userId = foundUser ? Number(foundUser.id) : null;
-        const targetQty = userTargets[userName] ?? Math.floor(currentTotalAllocated / (viewingAssignedTask.assignedUsers.length || 1));
+        const targetQty = userTargets[userName] ?? 0;
 
         return {
           userId,
@@ -902,8 +914,8 @@ export default function TaskManagerManagement() {
       console.error("Lỗi lưu chỉ tiêu phân công:", err?.response?.data || err);
       const apiMsg = err?.response?.data?.title || err?.response?.data?.message || "";
       
-      if (apiMsg.includes("vượt quá 0") || apiMsg.includes("mục người nhận")) {
-        toast.warning("Đã lưu người thực hiện! (Chưa có câu ghi âm mẫu khả dụng trong kho của BE).");
+      if (apiMsg.includes("vượt quá") || apiMsg.includes("mục người nhận")) {
+        toast.warning("Đã lưu phân công người thực hiện! (Lưu ý: Chưa đủ số câu ghi âm mẫu khả dụng trong kho BE).");
         setViewingAssignedTask(null);
         await loadDataFromApi();
       } else {
