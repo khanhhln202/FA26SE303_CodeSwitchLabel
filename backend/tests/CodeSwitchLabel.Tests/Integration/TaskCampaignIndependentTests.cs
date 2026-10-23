@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using CodeSwitchLabel.Repositories.Entities;
 using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Services.Common;
 using CodeSwitchLabel.Services.Dtos;
@@ -118,43 +119,91 @@ public sealed class TaskCampaignIndependentTests : IntegrationTestBase
     }
 
     [Fact]
-    public async Task Detach_PreservesTaskAndItems()
+    public async Task DeleteFromCampaign_RemovesTaskAndItems_KeepsRecordingAndReview()
     {
         var script = await CreateValidatedScriptAsync(
             "[vi]Em nên [en]scan [vi]tài liệu này.", "[vi]Em nên quét tài liệu này.",
             ScriptDomain.ItTechnology, AdminUserId, 1);
 
-        var created = await TaskService.CreateAsync(new CreateTaskRequest
+        var recordingTask = await TaskService.CreateAsync(new CreateTaskRequest
         {
             CampaignId = CampaignId,
             TaskType = TaskType.Recording,
-            Description = "Gỡ giữ hàng",
+            Domain = ScriptDomain.ItTechnology,
+            Description = "Xoá vĩnh viễn task thu âm",
             TargetQty = 1,
             Deadline = DateTimeOffset.UtcNow.AddDays(7)
         }, ManagerUserId, TestContext.Current.CancellationToken);
 
-        await TaskService.AddItemsAsync(created.Summary.TaskId,
+        await TaskService.AddItemsAsync(recordingTask.Summary.TaskId,
             new AddTaskItemsRequest { Ids = [script.ScriptId] },
             TestContext.Current.CancellationToken, ManagerUserId, false);
+        await TaskService.AssignAsync(recordingTask.Summary.TaskId, [SpeakerUserId],
+            TestContext.Current.CancellationToken, ManagerUserId, false);
 
-        var detached = await CampaignService.DetachTaskAsync(
-            CampaignId, created.Summary.TaskId, ManagerUserId, false,
-            TestContext.Current.CancellationToken);
+        var reviewTask = await TaskService.CreateAsync(new CreateTaskRequest
+        {
+            CampaignId = CampaignId,
+            TaskType = TaskType.Review,
+            Domain = ScriptDomain.ItTechnology,
+            Description = "Xoá vĩnh viễn task duyệt",
+            TargetQty = 1,
+            Deadline = DateTimeOffset.UtcNow.AddDays(7)
+        }, ManagerUserId, TestContext.Current.CancellationToken);
 
-        Assert.Null(detached.Summary.CampaignId);
+        var recording = await CreateRecordingAsync(
+            script.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching);
+        recording.TaskId = recordingTask.Summary.TaskId;
 
-        var row = await Tasks.GetRowAsync(created.Summary.TaskId, TestContext.Current.CancellationToken);
-        Assert.NotNull(row);
-        Assert.Null(row!.CampaignId);
+        Db.TaskRecordings.Add(new TaskRecording
+        {
+            TaskId = reviewTask.Summary.TaskId,
+            RecordingId = recording.RecordingId,
+            Status = TaskRecordingStatus.Queued,
+            IncludedAt = DateTimeOffset.UtcNow
+        });
+        var review = new Review
+        {
+            RecordingId = recording.RecordingId,
+            ReviewerId = ReviewerUserId,
+            TaskId = reviewTask.Summary.TaskId,
+            ReviewRound = 1,
+            Decision = ReviewDecision.Approved,
+            IsBlind = true,
+            ReviewedAt = DateTimeOffset.UtcNow
+        };
+        Db.Reviews.Add(review);
+        await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var items = await Tasks.GetScriptItemsAsync(created.Summary.TaskId, TestContext.Current.CancellationToken);
-        Assert.Contains(items, i => i.ScriptId == script.ScriptId);
+        await CampaignService.DeleteTaskAsync(CampaignId, recordingTask.Summary.TaskId,
+            ManagerUserId, false, TestContext.Current.CancellationToken);
+        await CampaignService.DeleteTaskAsync(CampaignId, reviewTask.Summary.TaskId,
+            ManagerUserId, false, TestContext.Current.CancellationToken);
+
+        Assert.Null(await Tasks.GetRowAsync(recordingTask.Summary.TaskId, TestContext.Current.CancellationToken));
+        Assert.Null(await Tasks.GetRowAsync(reviewTask.Summary.TaskId, TestContext.Current.CancellationToken));
+
+        var keptRecording = await Db.Recordings
+            .FirstAsync(r => r.RecordingId == recording.RecordingId, TestContext.Current.CancellationToken);
+        Assert.Null(keptRecording.TaskId);
+
+        var keptReview = await Db.Reviews
+            .FirstAsync(rv => rv.ReviewId == review.ReviewId, TestContext.Current.CancellationToken);
+        Assert.Null(keptReview.TaskId);
+
+        // Lượt giao, mục công việc và hàng đợi xoá theo task.
+        Assert.False(await Db.TaskAssignments.AnyAsync(
+            a => a.TaskId == recordingTask.Summary.TaskId, TestContext.Current.CancellationToken));
+        Assert.False(await Db.TaskScripts.AnyAsync(
+            ts => ts.TaskId == recordingTask.Summary.TaskId, TestContext.Current.CancellationToken));
+        Assert.False(await Db.TaskRecordings.AnyAsync(
+            tr => tr.TaskId == reviewTask.Summary.TaskId, TestContext.Current.CancellationToken));
     }
 
     [Fact]
-    public async Task DetachViaCampaignEndpoint_DetachesInDatabase()
+    public async Task DeleteViaCampaignEndpoint_RemovesTask()
     {
-        // Hồi quy cho bug FE: màn hình đợt phải gọi đúng endpoint detach này,
+        // Hồi quy cho bug FE: màn hình đợt phải gọi đúng endpoint này,
         // không phải PATCH /api/tasks/{id} với {campaignId: null} (bị backend lờ đi).
         // Toàn bộ đi qua HTTP (mỗi request commit riêng), vì dữ liệu tạo bằng
         // service nằm trong transaction ambient mà connection HTTP không thấy.
@@ -169,7 +218,7 @@ public sealed class TaskCampaignIndependentTests : IntegrationTestBase
         using var meDoc = JsonDocument.Parse(await me.Content.ReadAsStringAsync(ct));
         var managerId = meDoc.RootElement.GetProperty("userId").GetInt64();
 
-        var campaignName = $"Detach E2E {Guid.NewGuid():N}";
+        var campaignName = $"Xoá task E2E {Guid.NewGuid():N}";
         using var createCampaign = await admin.PostAsJsonAsync("/api/campaigns",
             new
             {
@@ -193,7 +242,7 @@ public sealed class TaskCampaignIndependentTests : IntegrationTestBase
             {
                 campaignId,
                 taskType = "Recording",
-                description = "Gỡ qua endpoint",
+                description = "Xoá qua endpoint",
                 targetQty = 1,
                 deadline = DateTimeOffset.UtcNow.AddDays(7)
             }, ct);
@@ -201,13 +250,33 @@ public sealed class TaskCampaignIndependentTests : IntegrationTestBase
         using var taskDoc = JsonDocument.Parse(await createTask.Content.ReadAsStringAsync(ct));
         var taskId = taskDoc.RootElement.GetProperty("summary").GetProperty("taskId").GetInt64();
 
-        using var detach = await manager.DeleteAsync(
+        using var delete = await manager.DeleteAsync(
             $"/api/campaigns/{campaignId}/tasks/{taskId}", ct);
-        Assert.Equal(HttpStatusCode.OK, detach.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, delete.StatusCode);
 
-        using var doc = JsonDocument.Parse(await detach.Content.ReadAsStringAsync(ct));
-        Assert.Equal(JsonValueKind.Null,
-            doc.RootElement.GetProperty("summary").GetProperty("campaignId").ValueKind);
+        using var get = await manager.GetAsync($"/api/tasks/{taskId}", ct);
+        Assert.Equal(HttpStatusCode.NotFound, get.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteFromCampaign_NotCampaignOwner_ForbiddenAndTaskRemains()
+    {
+        var created = await TaskService.CreateAsync(new CreateTaskRequest
+        {
+            CampaignId = CampaignId,
+            TaskType = TaskType.Recording,
+            Domain = ScriptDomain.ItTechnology,
+            Description = "Task của manager khác",
+            TargetQty = 1,
+            Deadline = DateTimeOffset.UtcNow.AddDays(7)
+        }, ManagerUserId, TestContext.Current.CancellationToken);
+
+        var ex = await Assert.ThrowsAsync<ForbiddenException>(() =>
+            CampaignService.DeleteTaskAsync(CampaignId, created.Summary.TaskId,
+                AdminUserId, false, TestContext.Current.CancellationToken));
+
+        Assert.Equal("task_not_owned", ex.Code);
+        Assert.NotNull(await Tasks.GetRowAsync(created.Summary.TaskId, TestContext.Current.CancellationToken));
     }
 
     [Fact]

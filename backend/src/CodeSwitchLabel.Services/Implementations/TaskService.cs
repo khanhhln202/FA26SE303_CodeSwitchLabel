@@ -381,9 +381,12 @@ public class TaskService(
         return await LoadDetailAsync(taskId, ct);
     }
 
-    /// <summary>Gỡ task khỏi chiến dịch nhưng giữ lại task (C2). Không xoá assignments/items.</summary>
-    /// <remarks>TEAM_017: cho phép detach cả task đã Cancelled (không qua LoadEditableAsync).</remarks>
-    public async Task<TaskDetailDto> DetachAsync(
+    /// <summary>Xoá vĩnh viễn task khỏi chiến dịch. Không chặn task đã hoàn thành hoặc đã có việc.</summary>
+    /// <remarks>
+    /// Lượt giao, mục công việc, hàng đợi và liên kết task_recording xoá theo task (ON DELETE CASCADE).
+    /// Bản ghi thu âm và lượt duyệt ở lại, task_id chuyển NULL (ON DELETE SET NULL).
+    /// </remarks>
+    public async Task DeleteFromCampaignAsync(
         long campaignId, long taskId, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false)
     {
@@ -396,18 +399,13 @@ public class TaskService(
                 "task_not_found", $"Task #{taskId} không thuộc chiến dịch #{campaignId}.");
         }
 
-        // TEAM_017: detach không yêu cầu task ở trạng thái chỉnh sửa được;
-        // chỉ cần người gọi có quyền trên chiến dịch cũ.
         await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
 
-        var previousCampaignId = task.CampaignId;
-        task.CampaignId = null;
+        tasks.RemoveTask(task);
         await SaveTasksAsync(ct);
-
-        if (previousCampaignId.HasValue) await campaigns.RefreshStatusAsync(previousCampaignId.Value, ct);
+        await campaigns.RefreshStatusAsync(campaignId, ct);
 
         if (transaction is not null) await transaction.CommitAsync(ct);
-        return await LoadDetailAsync(taskId, ct);
     }
 
     public async Task<PagedResult<TaskListItemDto>> SearchAsync(

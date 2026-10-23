@@ -123,8 +123,8 @@ public interface ICampaignService
     Task DeleteAsync(
         long campaignId, long? callerId, bool isAdmin, CancellationToken ct = default);
 
-    /// <summary>Gỡ task khỏi chiến dịch (detach, giữ lại task).</summary>
-    Task<TaskDetailDto> DetachTaskAsync(
+    /// <summary>Xoá vĩnh viễn một task khỏi chiến dịch; bản ghi thu âm và lượt duyệt được giữ lại.</summary>
+    Task DeleteTaskAsync(
         long campaignId, long taskId, long? callerId, bool isAdmin, CancellationToken ct = default);
 
     /// <summary>
