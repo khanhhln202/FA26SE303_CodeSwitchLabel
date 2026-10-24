@@ -37,12 +37,38 @@ public sealed class TaskProgressTrackerTests
         CreatedAt = DateTimeOffset.UtcNow
     };
 
-    private static TaskRow Row(
-        long id = 7, long? assignee = 9, int started = 1, int done = 0, int target = 10) => new(
-        id, 1, "Đợt 1", TaskType.Recording, ScriptDomain.ItTechnology, null, WorkTaskStatus.InProgress, target,
-        null, DateTimeOffset.UtcNow,
-        assignee.HasValue ? [new TaskAssigneeRow(assignee.Value, "Người nhận")] : [],
-        started, done, started, 1, 1);
+    private TaskRow Row(
+        long id = 7, long? assignee = 9, int started = 1, int done = 0, int target = 10)
+    {
+        // V17: tracker chấm lại từng lượt giao sau khi tính trạng thái task. Các test
+        // cũ chỉ quan tâm trạng thái task nên cấp sẵn một lượt giao "đang mở" khớp
+        // với Row; test nào cần kiểm quota thì tự setup đè lên.
+        if (assignee.HasValue)
+        {
+            _tasks.Setup(t => t.GetOpenAssignmentsAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync([new TaskAssignment
+                {
+                    TaskId = id,
+                    UserId = assignee.Value,
+                    TargetQty = target,
+                    AssignmentStatus = AssignmentStatus.Active
+                }]);
+            _tasks.Setup(t => t.GetAssigneeDoneAsync(
+                    It.IsAny<long>(), It.IsAny<TaskType>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new Dictionary<long, int> { [assignee.Value] = done });
+        }
+        else
+        {
+            _tasks.Setup(t => t.GetOpenAssignmentsAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync([]);
+        }
+
+        return new TaskRow(
+            id, 1, "Đợt 1", TaskType.Recording, ScriptDomain.ItTechnology, null, WorkTaskStatus.InProgress, target,
+            null, DateTimeOffset.UtcNow,
+            assignee.HasValue ? [new TaskAssigneeRow(assignee.Value, "Người nhận")] : [],
+            started, done, started, 1, 1);
+    }
 
     [Fact]
     public async Task RefreshStatus_DatChiTieu_ChuyenCompletedVaLuu()

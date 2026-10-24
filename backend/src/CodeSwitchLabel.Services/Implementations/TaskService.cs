@@ -582,7 +582,7 @@ public class TaskService(
             // TEAM_013: trước đây nhánh này bỏ qua khi task còn ở trạng thái `Draft`
             // (chưa giao cho ai). `Draft` đã bị bỏ, nên điều kiện được hỏi lại đúng bằng nghĩa
             // cũ: CHƯA CÓ NGƯỜI NHẬN thì cứ đặt chỉ tiêu trước, thêm mục vào sau.
-            var active = await tasks.GetActiveAssignmentsAsync(taskId, ct);
+            var active = await tasks.GetOpenAssignmentsAsync(taskId, ct);
             if (active.Count > 0)
             {
                 if (request.TargetQty.Value < active.Count)
@@ -680,7 +680,7 @@ public class TaskService(
 
         // TEAM_010: nhóm người nhận, không phải một người. Mọi luật "câu này thuộc về
         // người nhận task" giờ áp cho bất kỳ ai trong nhóm.
-        var assignees = await tasks.GetActiveAssignmentsAsync(taskId, ct);
+        var assignees = await tasks.GetOpenAssignmentsAsync(taskId, ct);
         var assigneeIds = assignees.Select(a => a.UserId).ToArray();
 
         var skipped = new List<SkippedItemDto>();
@@ -750,7 +750,7 @@ public class TaskService(
         // TEAM_013: cũng bỏ qua khi task CHƯA CÓ NGƯỜI NHẬN — cùng nghĩa với `Draft`
         // cũ mà nhánh này dùng để bỏ qua, chỉ là hỏi bằng tín hiệu còn tồn tại thay vì
         // hỏi bằng trạng thái (trạng thái `Draft` không còn nữa).
-        var active = await tasks.GetActiveAssignmentsAsync(taskId, ct);
+        var active = await tasks.GetOpenAssignmentsAsync(taskId, ct);
         if (active.Count == 0) return;
 
         var (workable, _) = await CountWorkableAsync(task, active, null, ct);
@@ -836,7 +836,7 @@ public class TaskService(
         var task = await LoadMutableAsync(taskId, ct);
         await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
 
-        var current = await tasks.GetActiveAssignmentsAsync(taskId, ct);
+        var current = await tasks.GetOpenAssignmentsAsync(taskId, ct);
         var already = current.Select(a => a.UserId).ToHashSet();
 
         var toAdd = wanted.Where(id => !already.Contains(id)).ToArray();
@@ -993,7 +993,7 @@ public class TaskService(
             }
         }
 
-        var active = await tasks.GetActiveAssignmentsAsync(taskId, ct);
+        var active = await tasks.GetOpenAssignmentsAsync(taskId, ct);
 
         // Đếm trên đúng danh sách mới: người bị thay ra không còn giữ chỗ, người mới
         // chưa có mục nào là chuyện bình thường với task duyệt trong đợt.
@@ -1044,7 +1044,7 @@ public class TaskService(
         }
 
         // Người mới được thêm theo đúng thứ tự trong request; cộng ticks để giữ thứ tự
-        // khi GetActiveAssignmentsAsync đọc lại bằng assigned_at.
+        // khi GetOpenAssignmentsAsync đọc lại bằng assigned_at.
         var nextOrder = active.Count;
         foreach (var item in requested.Where(a => !byUser.ContainsKey(a.UserId)))
         {
@@ -1145,7 +1145,7 @@ public class TaskService(
         var task = await LoadEditableAsync(taskId, ct);
         await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
 
-        var active = await tasks.GetActiveAssignmentsAsync(taskId, ct);
+        var active = await tasks.GetOpenAssignmentsAsync(taskId, ct);
         var mine = active.FirstOrDefault(a => a.UserId == userId);
 
         if (mine is null)
@@ -1601,7 +1601,7 @@ public class TaskService(
     {
         // TEAM_013: cùng nghĩa với nhánh `Draft` cũ — chưa giao cho ai thì chưa có mục nào
         // để kiểm tra, cứ để Task Manager sửa tiếp.
-        var active = await tasks.GetActiveAssignmentsAsync(task.TaskId, ct);
+        var active = await tasks.GetOpenAssignmentsAsync(task.TaskId, ct);
         if (active.Count == 0) return;
 
         var (workable, blocked) = await CountWorkableAsync(task, active, itemId, ct);

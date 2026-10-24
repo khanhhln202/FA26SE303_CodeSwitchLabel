@@ -208,9 +208,9 @@ public static partial class DatabaseSeeder
 
             if (existing is not null)
             {
-                // File .sql tạo sẵn một hàng admin với hash giả dài hơn 60 ký tự
-                // ($2a$11$REPLACE_WITH_REAL_BCRYPT_HASH_BEFORE_FIRST_LOGIN). Thay bằng hash thật,
-                // nếu không thì không ai đăng nhập được bằng tài khoản admin.
+                // File .sql không còn lưu hash mật khẩu (bỏ trống '', không phải bcrypt thật).
+                // Nếu hàng admin đã tồn tại từ SQL seed nhưng password_hash chưa thật,
+                // gán hash từ Seed:DefaultPassword để admin vẫn đăng nhập được.
                 if (!IsRealBcryptHash(existing.PasswordHash))
                 {
                     existing.PasswordHash = hasher.Hash(password);

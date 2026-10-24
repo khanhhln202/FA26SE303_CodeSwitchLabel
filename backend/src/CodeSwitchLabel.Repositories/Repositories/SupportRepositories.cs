@@ -134,7 +134,7 @@ public class UserRepository(CodeSwitchLabelDbContext db) : IUserRepository
 
     public Task<List<UserTaskRow>> GetOpenTasksAsync(long userId, CancellationToken ct = default) =>
         db.TaskAssignments.AsNoTracking()
-            .Where(a => a.UserId == userId && a.AssignmentStatus == AssignmentStatus.Active)
+            .Where(a => a.UserId == userId && a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled)
             .Where(a => a.Task.Status == WorkTaskStatus.InProgress)
             .OrderBy(a => a.TaskId)
             .Select(a => new UserTaskRow(a.TaskId, a.Task.TaskType, a.Task.Description, a.Task.Status))

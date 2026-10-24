@@ -119,7 +119,7 @@ public class ScriptQueueService(
                 $"Task #{taskId} là task {task.TaskType}. Chỉ task duyệt mới chia được lô câu văn bản.");
         }
 
-        var already = (await tasks.GetActiveAssignmentsAsync(taskId, ct)).Any(a => a.UserId == userId);
+        var already = (await tasks.GetOpenAssignmentsAsync(taskId, ct)).Any(a => a.UserId == userId);
 
         if (!already)
         {

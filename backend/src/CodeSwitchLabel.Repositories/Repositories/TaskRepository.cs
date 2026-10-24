@@ -86,6 +86,12 @@ public interface ITaskRepository
     /// "chỉ thấy người đầu tiên".
     /// </summary>
     Task<List<TaskAssignment>> GetActiveAssignmentsAsync(long taskId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Lượt giao còn hiệu lực: Active (chưa đạt quota) và Completed (đã đạt quota nhưng
+    /// vẫn còn là người nhận task). Reassigned/Cancelled mới là đã rời task.
+    /// </summary>
+    Task<List<TaskAssignment>> GetOpenAssignmentsAsync(long taskId, CancellationToken ct = default);
     Task<List<TaskAssignment>> GetAssignmentHistoryAsync(long taskId, CancellationToken ct = default);
 
     Task<TaskRow?> GetRowAsync(long taskId, CancellationToken ct = default);
@@ -256,11 +262,18 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         db.WorkTasks.FromSqlInterpolated($"SELECT * FROM task WHERE task_id = {taskId} FOR UPDATE")
             .SingleOrDefaultAsync(ct);
 
-    /// <summary>TEAM_010: trả về MỌI người đang nhận, theo thứ tự giao. Theo dõi thay đổi để
-    /// service đổi trạng thái rồi lưu được trong cùng một lần SaveChanges.</summary>
+    /// <summary>Chỉ lượt giao đang chờ đủ quota — dùng cho huỷ task, không gồm Completed.</summary>
     public Task<List<TaskAssignment>> GetActiveAssignmentsAsync(long taskId, CancellationToken ct = default) =>
         db.TaskAssignments
             .Where(a => a.TaskId == taskId && a.AssignmentStatus == AssignmentStatus.Active)
+            .OrderBy(a => a.AssignedAt)
+            .ToListAsync(ct);
+
+    public Task<List<TaskAssignment>> GetOpenAssignmentsAsync(long taskId, CancellationToken ct = default) =>
+        db.TaskAssignments
+            .Where(a => a.TaskId == taskId &&
+                        (a.AssignmentStatus == AssignmentStatus.Active ||
+                         a.AssignmentStatus == AssignmentStatus.Completed))
             .OrderBy(a => a.AssignedAt)
             .ToListAsync(ct);
 
@@ -314,7 +327,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         if (assigneeId.HasValue)
         {
             query = query.Where(t => t.Assignments.Any(a =>
-                a.UserId == assigneeId.Value && a.AssignmentStatus == AssignmentStatus.Active));
+                a.UserId == assigneeId.Value && a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled));
         }
 
         // Quá hạn chỉ có nghĩa với task còn đang làm và có đặt hạn.
@@ -374,7 +387,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
                 .Where(t => t.TaskType == type)
                 // TEAM_016: trả cả task đã đủ chỉ tiêu — người nhận vẫn làm thêm được.
                 .Where(t => t.Status != WorkTaskStatus.Cancelled)
-                .Where(t => t.Assignments.Any(a => a.UserId == userId && a.AssignmentStatus == AssignmentStatus.Active))
+                .Where(t => t.Assignments.Any(a => a.UserId == userId && a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled))
                 .OrderBy(t => t.Deadline))
             .ToListAsync(ct);
 
@@ -451,7 +464,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         var rows = await ProjectRows(db.WorkTasks
                 .AsNoTracking()
                 .Where(t => t.Status == WorkTaskStatus.InProgress)
-                .Where(t => t.Assignments.Any(a => a.AssignmentStatus == AssignmentStatus.Active)))
+                .Where(t => t.Assignments.Any(a => a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled)))
             .ToListAsync(ct);
 
         // TEAM_010: một task thuộc về NHIỀU người, nên mỗi người trong số đó đều phải
@@ -596,18 +609,18 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
                 Role = u.Role.RoleName,
                 ActiveTasks = db.TaskAssignments.Count(a =>
                     a.UserId == u.UserId &&
-                    a.AssignmentStatus == AssignmentStatus.Active &&
+                    a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled &&
                     (a.Task.Status == WorkTaskStatus.InProgress)),
                 TotalTarget = db.TaskAssignments
                     .Where(a =>
                         a.UserId == u.UserId &&
-                        a.AssignmentStatus == AssignmentStatus.Active &&
+                        a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled &&
                         (a.Task.Status == WorkTaskStatus.InProgress))
                     // Quota riêng đã có từ V12; task cũ chưa backfill thì tạm tính cả task.
                     .Sum(a => (int?)(a.TargetQty ?? a.Task.TargetQty)) ?? 0,
                 OverdueTasks = db.TaskAssignments.Count(a =>
                     a.UserId == u.UserId &&
-                    a.AssignmentStatus == AssignmentStatus.Active &&
+                    a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled &&
                     (a.Task.Status == WorkTaskStatus.InProgress) &&
                     a.Task.Deadline != null && a.Task.Deadline < now),
                 ApprovalRatePct = db.SpeakerPerformance
@@ -635,7 +648,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
             t.TaskType == type &&
             // TEAM_016: chỉ task đã huỷ mới chặn — task đủ chỉ tiêu vẫn nhận thêm việc.
             t.Status != WorkTaskStatus.Cancelled &&
-            t.Assignments.Any(a => a.UserId == userId && a.AssignmentStatus == AssignmentStatus.Active), ct);
+            t.Assignments.Any(a => a.UserId == userId && a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled), ct);
 
     public async Task<HashSet<string>> FindScriptsQueuedInOtherActiveTasksAsync(
         string[] scriptIds, long excludeTaskId, long[] assigneeIds, CancellationToken ct = default)
@@ -654,7 +667,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         {
             var ids = assigneeIds;
             query = query.Where(ts => ts.Task.Assignments.Any(a =>
-                ids.Contains(a.UserId) && a.AssignmentStatus == AssignmentStatus.Active));
+                ids.Contains(a.UserId) && a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled));
         }
 
         var rows = await query.Select(ts => ts.ScriptId).Distinct().ToListAsync(ct);
@@ -677,7 +690,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         {
             var ids = assigneeIds;
             query = query.Where(ts => ts.Task.Assignments.Any(a =>
-                ids.Contains(a.UserId) && a.AssignmentStatus == AssignmentStatus.Active));
+                ids.Contains(a.UserId) && a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled));
         }
 
         return query.ToListAsync(ct);
@@ -742,7 +755,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
                     // TEAM_016: task đủ chỉ tiêu vẫn giữ mục chưa xong nên vẫn tính là "đang giữ".
                     ts.Task.Status != WorkTaskStatus.Cancelled &&
                     ts.Task.Assignments.Any(a =>
-                        ids.Contains(a.UserId) && a.AssignmentStatus == AssignmentStatus.Active)));
+                        ids.Contains(a.UserId) && a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled)));
         }
         else
         {
@@ -932,8 +945,9 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
             // có nhiều người thì DTO chỉ trả về một người tuỳ ý, còn lại biến mất khỏi
             // danh sách — người quản lý không thấy ai đang làm.
             t.Assignments
-                .Where(a => a.AssignmentStatus == AssignmentStatus.Active)
+                .Where(a => a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled)
                 .OrderBy(a => a.User.FullName)
+                .ThenBy(a => a.UserId)
                 .Select(a => new TaskAssigneeRow(a.UserId, a.User.FullName, a.TargetQty))
                 .ToList(),
             t.TaskType == TaskType.Recording

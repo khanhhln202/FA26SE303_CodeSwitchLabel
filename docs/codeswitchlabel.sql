@@ -21,6 +21,7 @@ CREATE TYPE task_type             AS ENUM ('recording','review');
 -- TEAM_013: task còn ba trạng thái. Đợt còn ba trạng thái và là HÀM của task, không bấm tay.
 CREATE TYPE campaign_status         AS ENUM ('open','in_progress','completed');
 CREATE TYPE task_status           AS ENUM ('in_progress','completed','cancelled');
+-- 'completed' = người nhận đã đạt quota riêng; lượt giao vẫn còn hiệu lực (xem V17).
 CREATE TYPE assignment_status     AS ENUM ('active','completed','reassigned','cancelled');
 CREATE TYPE task_script_status    AS ENUM ('pending','completed','rejected');
 CREATE TYPE sentence_variant      AS ENUM ('code_switching','pure_vietnamese');
@@ -356,9 +357,12 @@ CREATE TABLE task_assignment (
 -- TEAM_010: Một task giao được cho NHIỀU người cùng lúc. Chỉ tiêu target_qty là của
 -- CẢ NHÓM (không nhân theo số người), nên quota đợt vẫn cộng đúng một lần.
 -- Mỗi người nhận có quota riêng trong task_assignment.target_qty.
--- Ràng buộc còn lại: cùng một người không được có hai lượt giao active trên một task.
+-- Ràng buộc còn lại: cùng một người không được có hai lượt giao còn hiệu lực trên một
+-- task. V17: Completed vẫn là lượt giao còn hiệu lực (đã đạt quota nhưng chưa rời task),
+-- nên index phải chặn trùng trên cả Active lẫn Completed.
 CREATE UNIQUE INDEX uq_task_assignment_active_user
-    ON task_assignment (task_id, user_id) WHERE assignment_status = 'active';
+    ON task_assignment (task_id, user_id)
+    WHERE assignment_status IN ('active', 'completed');
 CREATE INDEX idx_task_assignment_user ON task_assignment (user_id);
 
 CREATE TABLE task_script (
@@ -1248,7 +1252,7 @@ BEGIN
                      OR EXISTS (SELECT 1 FROM task_assignment a
                                  WHERE a.task_id = q.task_id
                                    AND a.user_id = p_user_id
-                                   AND a.assignment_status = 'active')
+                                   AND a.assignment_status IN ('active', 'completed'))
                  )
                  ELSE EXISTS (SELECT 1 FROM task_script ts
                                WHERE ts.script_id = q.script_id
@@ -1616,11 +1620,34 @@ BEGIN
         (CASE TG_OP WHEN 'INSERT' THEN 'create'
                     WHEN 'UPDATE' THEN 'update'
                     ELSE 'delete' END)::audit_action,
-        CASE WHEN TG_OP = 'INSERT' THEN NULL ELSE to_jsonb(OLD) END,
-        CASE WHEN TG_OP = 'DELETE' THEN NULL ELSE to_jsonb(NEW) END
+        CASE WHEN TG_OP = 'INSERT' THEN NULL ELSE to_jsonb(OLD) - 'password_hash' END,
+        CASE WHEN TG_OP = 'DELETE' THEN NULL ELSE to_jsonb(NEW) - 'password_hash' END
     );
     RETURN NULL;   -- AFTER trigger
 END $$ LANGUAGE plpgsql;
+
+-- V16: audit trail also covers recording, review, dataset, script_proposal and app_user
+-- (registration NFR: complete history of recordings, reviews and data changes).
+-- fn_audit strips 'password_hash' from old/new JSON, so app_user can be audited safely.
+CREATE TRIGGER trg_audit_recording
+    AFTER INSERT OR UPDATE OR DELETE ON recording
+    FOR EACH ROW EXECUTE FUNCTION fn_audit('recording', 'recording_id');
+
+CREATE TRIGGER trg_audit_review
+    AFTER INSERT OR UPDATE OR DELETE ON review
+    FOR EACH ROW EXECUTE FUNCTION fn_audit('review', 'review_id');
+
+CREATE TRIGGER trg_audit_dataset
+    AFTER INSERT OR UPDATE OR DELETE ON dataset
+    FOR EACH ROW EXECUTE FUNCTION fn_audit('dataset', 'dataset_id');
+
+CREATE TRIGGER trg_audit_script_proposal
+    AFTER INSERT OR UPDATE OR DELETE ON script_proposal
+    FOR EACH ROW EXECUTE FUNCTION fn_audit('script_proposal', 'proposal_id');
+
+CREATE TRIGGER trg_audit_app_user
+    AFTER INSERT OR UPDATE OR DELETE ON app_user
+    FOR EACH ROW EXECUTE FUNCTION fn_audit('app_user', 'user_id');
 
 -- Example attachment — replicate this line for other tables:
 CREATE TRIGGER trg_audit_script
@@ -1757,10 +1784,12 @@ INSERT INTO system_config (config_key, config_value, value_type, description) VA
     -- TEAM_010: lô câu văn bản Task Manager giao cho mỗi người duyệt (yêu cầu 2.2).
     ('text_review.batch_size',                   '100', 'int', 'Default number of pending sentences claimed per reviewer');
 
--- Bootstrap admin — valid bcrypt hash for initial password 'Codeswitch@2026'
+-- Bootstrap admin — KHÔNG lưu mã hash mật khẩu trong SQL seed.
+-- DatabaseSeeder gán hash thật (từ Seed:DefaultPassword) khi ứng dụng khởi động,
+-- nên không cần—and không nên—để hash cứng trong file lược đồ.
 INSERT INTO app_user (role_id, full_name, email, password_hash, status)
 SELECT role_id, 'System Admin', 'admin@codeswitchlabel.local',
-       '$2a$11$eUoiC4zG9UaJtJ6lY6qZ3.gQ3uRz5i0/7m6Fq5W2qXgC5S5wZ4mO', 'active'
+       '', 'active'
 FROM role WHERE role_name = 'admin';
 
 -- ============================================================
@@ -1832,7 +1861,7 @@ SELECT
     -- TEAM_010: một task có thể giao cho nhiều người. Chỉ tiêu là của cả nhóm nên
     -- không nhân theo số này — chỉ để báo cáo biết đang chia việc cho bao nhiêu người.
     (SELECT COUNT(*) FROM task_assignment a
-        WHERE a.task_id = t.task_id AND a.assignment_status = 'active') AS assignee_count,
+        WHERE a.task_id = t.task_id AND a.assignment_status IN ('active', 'completed')) AS assignee_count,
     (SELECT COUNT(*) FROM task_script ts WHERE ts.task_id = t.task_id) AS scripts_assigned,
     (SELECT COUNT(*) FROM task_script ts
         WHERE ts.task_id = t.task_id AND ts.status = 'completed')      AS scripts_completed,

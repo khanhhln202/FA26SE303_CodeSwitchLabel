@@ -165,7 +165,7 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
             t.TaskType == TaskType.Review &&
             // TEAM_016: chỉ task đã huỷ mới chặn — task đủ chỉ tiêu vẫn duyệt thêm được.
             t.Status != WorkTaskStatus.Cancelled &&
-            t.Assignments.Any(a => a.UserId == reviewerId && a.AssignmentStatus == AssignmentStatus.Active), ct);
+            t.Assignments.Any(a => a.UserId == reviewerId && a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled), ct);
 
     public Task<bool> IsReviewTaskOfAsync(
         long taskId, long reviewerId, CancellationToken ct = default) =>
@@ -183,7 +183,7 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
             tr.Task.TaskType == TaskType.Review &&
             // TEAM_016: task đã đủ chỉ tiêu vẫn nhận duyệt thêm.
             tr.Task.Status != WorkTaskStatus.Cancelled &&
-            tr.Task.Assignments.Any(a => a.UserId == reviewerId && a.AssignmentStatus == AssignmentStatus.Active), ct);
+            tr.Task.Assignments.Any(a => a.UserId == reviewerId && a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled), ct);
 
     public Task<List<TaskRecording>> GetQueuedItemsAsync(string recordingId, CancellationToken ct = default) =>
         db.TaskRecordings
@@ -193,7 +193,7 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
     public Task<bool> HasEligibleReviewerLeftAsync(
         long taskId, string recordingId, long speakerId, CancellationToken ct = default) =>
         db.TaskAssignments.AsNoTracking()
-            .Where(a => a.TaskId == taskId && a.AssignmentStatus == AssignmentStatus.Active)
+            .Where(a => a.TaskId == taskId && a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled)
             .Where(a => a.UserId != speakerId)
             .AnyAsync(a => !db.Reviews.Any(v => v.RecordingId == recordingId && v.ReviewerId == a.UserId), ct);
 
@@ -330,7 +330,7 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
         long reviewerId, CancellationToken ct = default) =>
         db.TaskAssignments
             .AsNoTracking()
-            .Where(a => a.UserId == reviewerId && a.AssignmentStatus == AssignmentStatus.Active)
+            .Where(a => a.UserId == reviewerId && a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled)
             .Where(a => a.Task.TaskType == TaskType.Review)
             // TEAM_016: trả cả task đã đủ chỉ tiêu — Reviewer vẫn vào duyệt thêm được,
             // màn hình cá nhân phải còn thấy task để mở.

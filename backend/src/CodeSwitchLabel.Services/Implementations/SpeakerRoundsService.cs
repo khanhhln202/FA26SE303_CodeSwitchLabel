@@ -22,7 +22,7 @@ public class SpeakerRoundsService(
         // TEAM_016: task đã đủ chỉ tiêu vẫn còn nhận việc nên vẫn nằm trong danh sách,
         // nhưng xếp SAU các task còn dở để hero không nhảy sang đợt đã xong khi còn việc khác.
         var task = await db.TaskAssignments.AsNoTracking()
-            .Where(a => a.UserId == speakerId && a.AssignmentStatus == AssignmentStatus.Active)
+            .Where(a => a.UserId == speakerId && a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled)
             .Where(a => a.Task.TaskType == TaskType.Recording)
             .Where(a => a.Task.Status != WorkTaskStatus.Cancelled)
             .OrderBy(a => a.Task.Status == WorkTaskStatus.Completed)
@@ -502,7 +502,7 @@ public class SpeakerRoundsService(
         long campaignId, CancellationToken ct)
     {
         var assignments = await db.TaskAssignments.AsNoTracking()
-            .Where(a => a.AssignmentStatus == AssignmentStatus.Active)
+            .Where(a => a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled)
             .Where(a => a.Task.Status != WorkTaskStatus.Cancelled)
             .Where(a => a.Task.CampaignId == campaignId && a.Task.TaskType == TaskType.Recording)
             .Select(a => new
@@ -511,8 +511,9 @@ public class SpeakerRoundsService(
                 a.TargetQty,
                 TaskTargetQty = a.Task.TargetQty,
                 Assignees = a.Task.Assignments
-                    .Where(x => x.AssignmentStatus == AssignmentStatus.Active)
+                    .Where(x => x.AssignmentStatus != AssignmentStatus.Reassigned && x.AssignmentStatus != AssignmentStatus.Cancelled)
                     .OrderBy(x => x.User.FullName)
+                    .ThenBy(x => x.UserId)
                     .Select(x => new { x.UserId, x.TargetQty })
                     .ToList()
             })

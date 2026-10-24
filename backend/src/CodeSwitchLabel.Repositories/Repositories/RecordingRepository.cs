@@ -154,7 +154,7 @@ public class RecordingRepository(CodeSwitchLabelDbContext db) : IRecordingReposi
             t.TaskType == TaskType.Recording &&
             // TEAM_016: chỉ task đã huỷ mới chặn — task đủ chỉ tiêu vẫn thu thêm được.
             t.Status != WorkTaskStatus.Cancelled &&
-            t.Assignments.Any(a => a.UserId == speakerId && a.AssignmentStatus == AssignmentStatus.Active) &&
+            t.Assignments.Any(a => a.UserId == speakerId && a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled) &&
             t.TaskScripts.Any(ts => ts.ScriptId == scriptId && ts.Status == TaskScriptStatus.Pending), ct);
 
     public Task<long?> FindOwnTaskContainingScriptAsync(
@@ -163,7 +163,7 @@ public class RecordingRepository(CodeSwitchLabelDbContext db) : IRecordingReposi
             .AsNoTracking()
             .Where(t => t.TaskType == TaskType.Recording)
             .Where(t => t.Status != WorkTaskStatus.Cancelled)
-            .Where(t => t.Assignments.Any(a => a.UserId == speakerId && a.AssignmentStatus == AssignmentStatus.Active))
+            .Where(t => t.Assignments.Any(a => a.UserId == speakerId && a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled))
             .Where(t => t.TaskScripts.Any(ts => ts.ScriptId == scriptId && ts.Status == TaskScriptStatus.Pending))
             .OrderBy(t => t.Deadline ?? DateTimeOffset.MaxValue)
             .Select(t => (long?)t.TaskId)

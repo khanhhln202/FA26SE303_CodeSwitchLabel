@@ -1,6 +1,7 @@
 using CodeSwitchLabel.Repositories.Entities;
 using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Repositories.Repositories;
+using CodeSwitchLabel.Services.Implementations;
 
 namespace CodeSwitchLabel.Services.WorkTasks;
 
@@ -229,18 +230,74 @@ public class TaskProgressTracker(
         if (task is null || row is null) return;
 
         var next = TaskStateMachine.Evaluate(task.Status, row.Done, task.TargetQty);
+        var taskStatusChanged = next != task.Status;
 
-        if (next == task.Status)
+        if (taskStatusChanged) task.Status = next;
+
+        // V17: trạng thái lượt giao cũng là HÀM của số liệu thật — đạt quota riêng thì
+        // Completed, tụt xuống dưới quota (bản ghi bị từ chối, chỉ tiêu tăng) thì Active.
+        var assignmentsChanged = await SyncAssignmentStatusesAsync(task, row, ct);
+
+        if (!taskStatusChanged && !assignmentsChanged)
         {
             // TEAM_013: status không đổi thì đợt cũng không đổi theo — bỏ qua cho khỏi
             // khoá dòng campaign ở mọi lần nộp bản ghi/duyệt (hàng chục lần một task).
             return;
         }
 
-        task.Status = next;
         await tasks.SaveChangesAsync(ct);
 
         // TEAM_013: trạng thái đợt là hàm của task, nên task đổi trạng thái thì đợt tính lại.
-        if (task.CampaignId.HasValue) await campaigns.RefreshStatusAsync(task.CampaignId.Value, ct);
+        if (taskStatusChanged && task.CampaignId.HasValue)
+            await campaigns.RefreshStatusAsync(task.CampaignId.Value, ct);
+    }
+
+    /// <summary>
+    /// V17 — quota riêng của từng người nhận. Mỗi lượt giao đang mở (Active/Completed)
+    /// được chấm lại theo đúng số việc người đó đã làm xong, không cộng dồn từng bước:
+    ///   done &gt;= quota → Completed
+    ///   done &lt;  quota → Active
+    ///
+    /// Completed KHÔNG phải trạng thái cuối và không khoá công việc (TEAM_016): người
+    /// nhận vẫn thu/duyệt thêm được. Nó chỉ nói "đã đạt phần của mình"; nếu task nâng
+    /// quota hoặc một bản ghi bị từ chối làm done tụt, lượt giao tự mở lại Active.
+    ///
+    /// Lượt giao Cancelled/Reassigned không bị đụng — người đó đã rời task.
+    /// </summary>
+    private async Task<bool> SyncAssignmentStatusesAsync(
+        WorkTask task, TaskRow row, CancellationToken ct)
+    {
+        // Task đã huỷ thì không mở lại lượt giao nào; CancelAsync đã chuyển các lượt
+        // đang chờ sang Cancelled.
+        if (task.Status == WorkTaskStatus.Cancelled) return false;
+
+        var open = await tasks.GetOpenAssignmentsAsync(task.TaskId, ct);
+        if (open.Count == 0) return false;
+
+        var done = await tasks.GetAssigneeDoneAsync(task.TaskId, task.TaskType, ct);
+        var byUser = open.ToDictionary(a => a.UserId);
+        var changed = false;
+
+        // row.Assignees sắp theo tên và là nguồn quota hiển thị cho người nhận; dùng
+        // đúng thứ tự đó để lượt giao cũ chưa có target_qty chia khớp với myProgress.
+        for (var i = 0; i < row.Assignees.Count; i++)
+        {
+            var assignee = row.Assignees[i];
+            if (!byUser.TryGetValue(assignee.UserId, out var assignment)) continue;
+
+            var quota = assignee.TargetQty ?? TaskService.SplitQuotaAt(
+                task.TargetQty, row.Assignees.Count, i);
+
+            var desired = quota > 0 && done.GetValueOrDefault(assignee.UserId) >= quota
+                ? AssignmentStatus.Completed
+                : AssignmentStatus.Active;
+
+            if (assignment.AssignmentStatus == desired) continue;
+
+            assignment.AssignmentStatus = desired;
+            changed = true;
+        }
+
+        return changed;
     }
 }
