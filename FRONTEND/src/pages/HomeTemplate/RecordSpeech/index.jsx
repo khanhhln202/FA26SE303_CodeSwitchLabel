@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import TaskStepper from '../../../components/TaskStepper/TaskStepper';
-import { Mic, RotateCcw, Play, Pause, Check, ArrowRight, HelpCircle } from 'lucide-react';
+import { Mic, RotateCcw, Play, Pause, Check, ArrowRight, ArrowLeft, HelpCircle, AlertCircle, Send } from 'lucide-react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import useWaveSurfer from '../../../hooks/useWaveSurfer';
 import { formatTime } from '../../../utils/audio';
 import CodeSwitchText from '../../../components/CodeSwitchText/CodeSwitchText';
+import WaveformInline from '../../../components/AudioPlayer/WaveformInline';
 import {
   SPEAKER_ACCENT as ACCENT,
   AUDIO_PRIMARY,
@@ -16,8 +18,17 @@ import {
 import Loading from '../../../components/Loading/Loading';
 import ErrorState from '../../../components/ErrorState/ErrorState';
 import EmptyState from '../../../components/EmptyState/EmptyState';
-import { getNextScriptApi } from '../../../services/speakerApi';
-import { GET_NEXT_SCRIPT_API } from '../../../utils/queryKey';
+import { getNextScriptApi, getSpeakerRejectedRecordingsApi } from '../../../services/speakerApi';
+import { uploadRecordingApi } from '../../../services/recordingApi';
+import {
+  GET_NEXT_SCRIPT_API,
+  GET_SPEAKER_REJECTED_RECORDINGS_API,
+  GET_SPEAKER_RECORDING_HISTORY_API,
+  GET_SPEAKER_STATS_API,
+  GET_SPEAKER_PROGRESS_API,
+  GET_SPEAKER_CURRENT_ROUND_API,
+  UPLOAD_RECORDING_API,
+} from '../../../utils/queryKey';
 
 const HISTORY_LEN = 60;
 const WAVEFORM_INTERVAL_MS = 80;
@@ -274,17 +285,132 @@ function SentenceCard({ id, label, contentNode, recordingCardId, setRecordingCar
   );
 }
 
+// Số bản ghi bị từ chối trang chủ lấy về - dùng chung cache với mục "Cần ghi lại"
+const REJECTED_LIMIT = 5;
+
+/**
+ * Ghi lại 1 bản ghi bị từ chối (mở từ mục "Cần ghi lại" ở trang chủ: ?rerecord=<recordingId>).
+ * Chỉ ghi đúng bản bị từ chối; loại câu theo mã bản ghi của backend: r_cs_... = Việt-Anh, r_vi_... = tiếng Việt.
+ * Nộp bằng POST /api/recordings (backend tự đặt mã _t2 cho lần thu lại).
+ */
+function RerecordView({ recordingId }) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [recording, setRecording] = useState(null); // { url, blob } hoặc null
+  const [recordingCardId, setRecordingCardId] = useState(null);
+  const onRecordedChange = useCallback((_id, rec) => setRecording(rec), []);
+
+  // Call API lấy bản ghi bị từ chối (cùng key với trang chủ -> có sẵn trong cache)
+  const { data: rejected, isLoading, isError, error, refetch } = useQuery({
+    queryKey: [GET_SPEAKER_REJECTED_RECORDINGS_API],
+    queryFn: () => getSpeakerRejectedRecordingsApi({ limit: REJECTED_LIMIT }),
+  });
+  const item = rejected?.find((r) => r.recordingId === recordingId);
+  const variant = recordingId.startsWith('r_cs_') ? 'cs' : 'vi';
+
+  // Mutation nộp bản ghi lại
+  const { mutate: uploadRerecord, isPending: isUploading } = useMutation({
+    mutationKey: [UPLOAD_RECORDING_API],
+    mutationFn: () =>
+      uploadRecordingApi({
+        audio: recording.blob,
+        scriptId: item.scriptId,
+        variant: variant === 'cs' ? 'CodeSwitching' : 'PureVietnamese',
+      }),
+    onSuccess: (result) => {
+      if (!result.qcPassed) {
+        // Trượt kiểm tra tự động: hiện đúng câu hướng dẫn của backend, ở lại trang để ghi tiếp
+        toast.error('Bản ghi chưa đạt kiểm tra tự động', {
+          description: (result.qcIssues ?? []).map((issue) => issue.message).join(' '),
+        });
+        return;
+      }
+      queryClient.invalidateQueries({ queryKey: [GET_SPEAKER_REJECTED_RECORDINGS_API] });
+      queryClient.invalidateQueries({ queryKey: [GET_SPEAKER_RECORDING_HISTORY_API] });
+      queryClient.invalidateQueries({ queryKey: [GET_SPEAKER_STATS_API] });
+      queryClient.invalidateQueries({ queryKey: [GET_SPEAKER_PROGRESS_API] });
+      queryClient.invalidateQueries({ queryKey: [GET_SPEAKER_CURRENT_ROUND_API] });
+      toast.success('Đã gửi bản ghi lại!', { description: 'Bản ghi đang chờ kiểm duyệt.' });
+      navigate('/speaker', { replace: true });
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  if (isLoading) return <Loading />;
+  if (isError) return <ErrorState message={error.message} onRetry={refetch} />;
+
+  return (
+    <div className="space-y-3 [@media(min-height:900px)]:space-y-4 text-left [@media(min-height:900px)]:pb-6 max-w-3xl mx-auto font-sans">
+      <button
+        onClick={() => navigate('/speaker')}
+        className="type-label flex items-center gap-1.5 hover:underline cursor-pointer"
+        style={{ color: ACCENT }}
+      >
+        <ArrowLeft className="w-3.5 h-3.5" /> Về trang chủ
+      </button>
+
+      {!item ? (
+        <EmptyState title="Bản ghi này không còn cần ghi lại" description="Có thể bạn đã gửi bản ghi lại. Xem các câu còn lại ở trang chủ." />
+      ) : (
+        <>
+          {/* Lý do bị từ chối */}
+          <div className="rounded-2xl px-4 py-3 flex gap-2.5 border border-[#F3C9C9] bg-[#FDEAEA]">
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-[#C63B3B]" />
+            <div className="min-w-0">
+              <p className="type-label text-[#C63B3B]">Bản ghi bị từ chối</p>
+              <p className="text-meta mt-0.5" style={{ color: TEXT_BODY }}>{item.reason ?? 'Không có lý do cụ thể.'}</p>
+            </div>
+          </div>
+
+          {/* Bản cũ để nghe lại */}
+          {item.audioUrl && (
+            <div className="rounded-2xl px-4 py-3 flex items-center gap-3 bg-white" style={{ border: `1px solid ${BORDER_LIGHT}` }}>
+              <span className="text-meta font-label shrink-0" style={{ color: TEXT_BODY }}>Bản cũ</span>
+              <WaveformInline src={item.audioUrl} label="bản cũ" className="flex-1 min-w-0" />
+            </div>
+          )}
+
+          {/* Chỉ 1 card: đúng câu bị từ chối */}
+          <SentenceCard
+            id={variant}
+            label={variant === 'cs' ? 'Câu Việt-Anh' : 'Câu tiếng Việt'}
+            contentNode={<CodeSwitchText transcript={item.transcript ?? ''} accent={ACCENT} />}
+            recordingCardId={recordingCardId}
+            setRecordingCardId={setRecordingCardId}
+            onRecordedChange={onRecordedChange}
+          />
+
+          <button
+            onClick={() => recording && uploadRerecord()}
+            disabled={!recording || isUploading}
+            className="w-full py-3 [@media(min-height:900px)]:py-4 rounded-2xl font-label text-body flex items-center justify-center gap-2 transition-all disabled:cursor-not-allowed"
+            style={{
+              background: recording ? ACCENT : SURFACE_MUTED,
+              color: recording ? '#FFFFFF' : TEXT_FAINT,
+              boxShadow: recording ? `0 10px 24px ${ACCENT}40` : 'none',
+              opacity: isUploading ? 0.6 : 1,
+            }}
+          >
+            {isUploading ? 'Đang gửi...' : (<><Send className="w-4 h-4" /> {recording ? 'Gửi bản ghi lại' : 'Ghi xong để gửi'}</>)}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function RecordSpeech() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const taskId = searchParams.get('taskId');
+  const rerecordId = searchParams.get('rerecord');
 
   // Cùng key với trang Câu chờ ghi âm -> có sẵn trong cache, không gọi lại API
   // Call API lấy cặp câu đang ghi (cùng key với trang Câu chờ ghi âm -> có sẵn trong cache)
   const { data: sentence, isLoading, isError, error, refetch } = useQuery({
     queryKey: [GET_NEXT_SCRIPT_API, Number(taskId)],
     queryFn: () => getNextScriptApi(taskId),
-    enabled: Boolean(taskId),
+    enabled: Boolean(taskId) && !rerecordId,
   });
 
   // Bản ghi của từng card: { url, blob } hoặc null (chưa ghi / ghi lại)
@@ -295,6 +421,8 @@ export default function RecordSpeech() {
     setRecordings((prev) => ({ ...prev, [id]: recording }));
   }, []);
 
+  // Mở từ mục "Cần ghi lại" ở trang chủ -> chỉ ghi lại bản bị từ chối
+  if (rerecordId) return <RerecordView key={rerecordId} recordingId={rerecordId} />;
   // Vào thẳng trang mà không chọn nhiệm vụ -> quay về bước 1
   if (!taskId) return <Navigate to="/speaker/review-text" replace />;
   if (isLoading) return <Loading />;

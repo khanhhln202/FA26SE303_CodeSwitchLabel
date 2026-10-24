@@ -285,7 +285,7 @@ export default function ReviewRecording() {
             <EmptyState title="Chưa có bản ghi" description="Nhiệm vụ này chưa có bản ghi nào cần duyệt." className="py-10" />
           ) : (
             // Luôn chia đúng PAGE_SIZE ô cao bằng nhau lấp đầy khung -> 10 bản ghi vừa 1 màn hình; màn quá thấp (ô < 44px) mới cuộn thay vì cắt chữ
-            <ul className="flex-1 min-h-0 grid gap-0.5 p-1.5 [@media(max-height:820px)]:p-1 overflow-auto" style={{ gridTemplateRows: `repeat(${PAGE_SIZE}, minmax(44px, 1fr))` }} aria-label="Danh sách bản ghi">
+            <ul className="flex-1 min-h-0 grid grid-cols-[minmax(0,1fr)] gap-0.5 p-1.5 [@media(max-height:820px)]:p-1 overflow-y-auto overflow-x-hidden" style={{ gridTemplateRows: `repeat(${PAGE_SIZE}, minmax(44px, 1fr))` }} aria-label="Danh sách bản ghi">
               {[...list, ...Array(Math.max(0, PAGE_SIZE - list.length)).fill(null)].map((rec, i) => {
                 if (!rec) return <li key={`empty-${i}`} aria-hidden="true" />;
                 const decision = sessionDecisions[rec.recordingId];
@@ -294,7 +294,7 @@ export default function ReviewRecording() {
                 // Cặp câu theo thứ tự VI-EN rồi VI: bản của dòng này (rec) + bản còn lại (sibling) API trả kèm
                 const lines = [rec, rec.sibling].filter(Boolean).sort((x, y) => (variantOf(x) === "cs" ? -1 : 1) - (variantOf(y) === "cs" ? -1 : 1));
                 return (
-                  <li key={rec.recordingId} className="min-h-0">
+                  <li key={rec.recordingId} className="min-h-0 min-w-0">
                     <button
                       type="button"
                       onClick={() => setSelectedId(rec.recordingId)}
@@ -311,9 +311,9 @@ export default function ReviewRecording() {
                         const v = lines[idx];
                         if (!v) return <span key={idx} className="h-4 [@media(max-height:820px)]:h-3.5" aria-hidden="true" />;
                         return (
-                          <span key={idx} className="flex items-center gap-2">
+                          <span key={idx} className="flex items-center gap-2 min-w-0">
                             <InlineLabel variant={variantOf(v)} className="h-4 [@media(max-height:820px)]:h-3.5" />
-                            <span className={`text-meta leading-4 [@media(max-height:820px)]:text-caption [@media(max-height:820px)]:leading-[14px] truncate text-[#6E7078]`}>{v.scriptText}</span>
+                            <span className={`min-w-0 text-meta leading-4 [@media(max-height:820px)]:text-caption [@media(max-height:820px)]:leading-[14px] truncate text-[#6E7078]`}>{v.scriptText}</span>
                           </span>
                         );
                       })}
