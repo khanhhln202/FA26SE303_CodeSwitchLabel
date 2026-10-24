@@ -25,6 +25,10 @@ public class SpeakerRoundsService(
             .Where(a => a.UserId == speakerId && a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled)
             .Where(a => a.Task.TaskType == TaskType.Recording)
             .Where(a => a.Task.Status != WorkTaskStatus.Cancelled)
+            // Chỉ xét task THUỘC MỘT ĐỢT. Trước đây lấy task hạn gần nhất rồi mới đọc
+            // campaignId, nên ai có một task lẻ (không thuộc đợt nào) đến hạn sớm hơn là
+            // mất sạch khối "đợt đang tham gia", dù đang nhận việc trong hai đợt khác.
+            .Where(a => a.Task.CampaignId != null)
             .OrderBy(a => a.Task.Status == WorkTaskStatus.Completed)
             .ThenBy(a => a.Task.Deadline)
             .Select(a => a.Task)
@@ -87,17 +91,35 @@ public class SpeakerRoundsService(
 
         // xếp hạng theo CÂU ĐÃ NỘP — đếm mọi bản ghi đã qua kiểm tra tự động
         // (chờ duyệt / đạt / bị từ chối), không chỉ bản được duyệt. Bản trượt QC không tính.
-        var rows = await db.Recordings.AsNoTracking()
+        var daNop = await db.Recordings.AsNoTracking()
             .Where(r => r.Status != RecordingStatus.QcFailed)
             .Where(r => r.Task != null && r.Task.CampaignId == campaignId)
             .GroupBy(r => new { r.SpeakerId, r.Speaker.FullName })
             .Select(g => new { g.Key.SpeakerId, g.Key.FullName, Submitted = g.Count() })
-            .OrderByDescending(x => x.Submitted)
-            .Take(Math.Clamp(top, 1, 50))
             .ToListAsync(ct);
 
         // Chỉ tiêu riêng từng người: quota trên từng lượt giao, không phải chỉ tiêu cả task.
         var chiTieuRieng = await PersonalTargetsAsync(campaignId, ct);
+
+        // Người ĐƯỢC GIAO việc trong đợt nhưng chưa thu câu nào vẫn có mặt, với 0 bản đã nộp.
+        // Không có họ thì đợt vừa mở ra bảng rỗng trơn, trong khi cả nhóm đã nhận chỉ tiêu —
+        // màn hình không nói được "bạn mới làm 0/625" cho tới khi ai đó thu bản đầu tiên.
+        var chuaThu = chiTieuRieng.Keys.Except(daNop.Select(x => x.SpeakerId)).ToArray();
+
+        var tenNguoiChuaThu = chuaThu.Length == 0
+            ? []
+            : await db.AppUsers.AsNoTracking()
+                .Where(u => chuaThu.Contains(u.UserId))
+                .Select(u => new { SpeakerId = u.UserId, u.FullName, Submitted = 0 })
+                .ToListAsync(ct);
+
+        // Xếp theo số đã nộp; bằng nhau thì theo tên, để thứ tự không đổi giữa hai lần gọi
+        // (giờ có cả một nhóm cùng đứng ở 0).
+        var rows = daNop.Concat(tenNguoiChuaThu)
+            .OrderByDescending(x => x.Submitted)
+            .ThenBy(x => x.FullName)
+            .Take(Math.Clamp(top, 1, 50))
+            .ToList();
 
         return new LeaderboardDto(chiTieu, daChia,
             [.. rows.Select((x, i) =>

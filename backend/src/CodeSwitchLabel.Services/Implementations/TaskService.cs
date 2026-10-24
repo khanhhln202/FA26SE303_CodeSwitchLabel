@@ -651,7 +651,7 @@ public class TaskService(
 
         if (status == WorkTaskStatus.Cancelled)
         {
-            foreach (var assignment in await tasks.GetActiveAssignmentsAsync(task.TaskId, ct))
+            foreach (var assignment in await tasks.GetOpenAssignmentsAsync(task.TaskId, ct))
             {
                 assignment.AssignmentStatus = AssignmentStatus.Cancelled;
             }

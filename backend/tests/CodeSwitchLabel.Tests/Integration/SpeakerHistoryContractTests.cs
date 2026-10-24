@@ -388,6 +388,120 @@ public sealed class SpeakerHistoryContractTests(DatabaseFixture fixture) : Integ
         Assert.Equal(0, dot.Submitted);
     }
 
+    /// <summary>
+    /// Task lẻ (không thuộc đợt nào) đến hạn SỚM hơn không được che mất đợt đang tham gia.
+    /// Trước đây endpoint lấy task hạn gần nhất rồi mới đọc campaignId, nên gặp task lẻ là
+    /// trả 204 — người đọc mất luôn khối "đợt đang tham gia" lẫn chỉ tiêu của mình.
+    /// </summary>
+    [Fact]
+    public async Task DotHienTai_TaskLeDenHanSomHon_VanLayDungDot()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var dau = Dau();
+
+        var manager = await CreateUserAsync($"tm-le-{dau}@test.local", RoleName.TaskManager);
+        var campaign = await CreateCampaignAsync($"Đợt có task lẻ {dau}", 2000,
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), manager.UserId);
+        campaign.AssignedTo = manager.UserId;
+        await Db.SaveChangesAsync(ct);
+
+        var toi = await CreateUserAsync($"sp-le-{dau}@test.local", RoleName.Speaker);
+
+        var trongDot = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 5,
+            manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
+
+        // Task lẻ: không thuộc đợt nào, hạn SỚM hơn task của đợt.
+        var taskLe = new WorkTask
+        {
+            CampaignId = null,
+            TaskType = TaskType.Recording,
+            TargetQty = 2,
+            Deadline = DateTimeOffset.UtcNow.AddDays(1),
+            Status = WorkTaskStatus.InProgress,
+            CreatedBy = manager.UserId,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        Db.WorkTasks.Add(taskLe);
+        await Db.SaveChangesAsync(ct);
+
+        foreach (var (taskId, quota) in new[] { (trongDot.TaskId, 5), (taskLe.TaskId, 2) })
+        {
+            Db.TaskAssignments.Add(new TaskAssignment
+            {
+                TaskId = taskId,
+                UserId = toi.UserId,
+                TargetQty = quota,
+                AssignmentStatus = AssignmentStatus.Active,
+                AssignedAt = DateTimeOffset.UtcNow
+            });
+        }
+
+        await Db.SaveChangesAsync(ct);
+
+        var dot = await Rounds.GetCurrentAsync(toi.UserId, ct);
+
+        Assert.NotNull(dot);
+        Assert.Equal(campaign.CampaignId, dot.CampaignId);
+        // Chỉ tiêu chỉ cộng quota trong đợt — task lẻ nằm ngoài đợt nên không tính vào.
+        Assert.Equal(5, dot.Target);
+    }
+
+    /// <summary>
+    /// Người được giao việc trong đợt nhưng chưa thu câu nào vẫn phải có tên, với số 0.
+    /// Thiếu họ thì đợt vừa mở ra bảng rỗng trơn, trong khi cả nhóm đã nhận chỉ tiêu.
+    /// </summary>
+    [Fact]
+    public async Task BangXepHang_NguoiDuocGiaoMaChuaThu_VanCoTenVoiSoKhong()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var dau = Dau();
+
+        var manager = await CreateUserAsync($"tm-chua-{dau}@test.local", RoleName.TaskManager);
+        var campaign = await CreateCampaignAsync($"Đợt mới mở {dau}", 2000,
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), manager.UserId);
+        campaign.AssignedTo = manager.UserId;
+        await Db.SaveChangesAsync(ct);
+
+        var task = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 10,
+            manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
+
+        var daThu = await CreateUserAsync($"sp-da-{dau}@test.local", RoleName.Speaker, $"A {dau}");
+        var chuaThu = await CreateUserAsync($"sp-chua-{dau}@test.local", RoleName.Speaker, $"B {dau}");
+
+        foreach (var user in new[] { daThu, chuaThu })
+        {
+            Db.TaskAssignments.Add(new TaskAssignment
+            {
+                TaskId = task.TaskId,
+                UserId = user.UserId,
+                TargetQty = 5,
+                AssignmentStatus = AssignmentStatus.Active,
+                AssignedAt = DateTimeOffset.UtcNow
+            });
+        }
+
+        await Db.SaveChangesAsync(ct);
+        await NopAsync(daThu.UserId, task.TaskId, 2, $"t{dau}", ct);
+
+        var bang = await Rounds.GetLeaderboardAsync(campaign.CampaignId, chuaThu.UserId, 10, ct);
+
+        Assert.Equal(2, bang.Items.Count);
+
+        var dongDaThu = Assert.Single(bang.Items, i => i.UserId == daThu.UserId);
+        Assert.Equal(1, dongDaThu.Rank);
+        Assert.Equal(2, dongDaThu.Submitted);
+        Assert.Equal(5, dongDaThu.TargetQty);
+
+        var dongChuaThu = Assert.Single(bang.Items, i => i.UserId == chuaThu.UserId);
+        Assert.Equal(2, dongChuaThu.Rank);
+        Assert.Equal(0, dongChuaThu.Submitted);
+        Assert.Equal(0, dongChuaThu.SubmittedCapped);
+        Assert.Equal(5, dongChuaThu.TargetQty);
+        Assert.True(dongChuaThu.IsMe);
+    }
+
     /// <summary>Nộp <paramref name="soBan"/> bản ghi của một người vào một task.</summary>
     private async Task NopAsync(long speakerId, long taskId, int soBan, string nhan, CancellationToken ct)
     {
