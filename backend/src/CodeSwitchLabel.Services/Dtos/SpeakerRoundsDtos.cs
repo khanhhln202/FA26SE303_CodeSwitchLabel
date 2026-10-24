@@ -78,7 +78,14 @@ public record RejectedRecordingDto(
 /// <param name="CsRecordingId">Null = cặp mới chỉ ghi được một bản.</param>
 /// <param name="CsAudioUrl">Link nghe tạm, hết hạn sau 15 phút.</param>
 /// <param name="DurationSec">Bản Việt-Anh, hoặc bản tiếng Việt nếu cặp chỉ có một bản.</param>
-/// <param name="Status">Trạng thái của CẶP, gộp từ hai bản.</param>
+/// <param name="Status">
+/// Trạng thái của CẶP, gộp từ hai bản: bản nào bị từ chối thì cặp từ chối; đủ cả hai bản đạt
+/// mới là đạt; còn lại là đang chờ. Nghĩa là cặp có bản cs ĐÃ đạt mà bản vi chưa ai duyệt
+/// vẫn hiện "đang chờ" — đúng với cặp, nhưng giấu mất việc một nửa đã xong. Dùng
+/// <paramref name="CsStatus"/> / <paramref name="ViStatus"/> để hiện từng bản.
+/// </param>
+/// <param name="CsStatus">Trạng thái bản đọc câu chen tiếng Anh; null = chưa thu bản nào.</param>
+/// <param name="ViStatus">Trạng thái bản đọc câu thuần Việt; null = chưa thu bản nào.</param>
 /// <param name="RecordedAt">Mốc của bản ghi mới nhất trong cặp.</param>
 /// <param name="Reviews">
 /// Mọi lượt duyệt của CẢ HAI bản, kể cả khi bản ghi chưa chốt — mỗi lượt kèm
@@ -103,7 +110,9 @@ public record SpeakerRecordingHistoryDto(
     DateTimeOffset RecordedAt,
     IReadOnlyList<HistoryReviewDto> Reviews,
     int ReviewedRounds,
-    int RoundsRequired);
+    int RoundsRequired,
+    RecordingStatus? CsStatus,
+    RecordingStatus? ViStatus);
 
 /// <param name="Reason">
 /// Bình luận của người duyệt; lượt từ chối không kèm bình luận thì là mô tả các lý do đã chọn.
