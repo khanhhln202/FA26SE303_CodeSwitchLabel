@@ -288,9 +288,9 @@ function RejectedList({ items }) {
                   </p>
                   <p className="text-caption font-regular mt-0.5" style={{ color: HOME_URGENT_TEXT }}>{item.reason ?? 'Bị từ chối'}</p>
                 </div>
-                {/* TODO: trang Ghi âm nhận state.rerecordId để mở đúng câu cần ghi lại */}
+                {/* Mở trang Ghi âm ở chế độ ghi lại đúng bản bị từ chối */}
                 <button
-                  onClick={() => navigate('/speaker/record-speech', { state: { rerecordId: item.recordingId } })}
+                  onClick={() => navigate(`/speaker/record-speech?rerecord=${item.recordingId}`)}
                   aria-label="Ghi lại"
                   className="w-8 h-8 rounded-[10px] shrink-0 flex items-center justify-center cursor-pointer transition-colors bg-[var(--soft)] hover:bg-[var(--soft-border)]"
                   style={{ '--soft': HOME_ACCENT_SOFT_BG, '--soft-border': HOME_ACCENT_SOFT_BORDER, color: HOME_ACCENT_HOVER }}
