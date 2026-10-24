@@ -41,7 +41,7 @@ public sealed class TaskServiceProgressTests
             .ReturnsAsync([Row()]);
         _tasks.Setup(t => t.GetSpeakerTotalsAsync(9, It.IsAny<CancellationToken>()))
             .ReturnsAsync((8, 0));
-        // TEAM_010: riêng phần việc của người 9 trong task.
+        // riêng phần việc của người 9 trong task.
         _tasks.Setup(t => t.GetAssigneeSubmittedAsync(7, TaskType.Recording, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Dictionary<long, int> { [9] = 5, [10] = 6, [11] = 7 });
         _tasks.Setup(t => t.GetAssigneeDoneAsync(7, TaskType.Recording, It.IsAny<CancellationToken>()))
@@ -75,7 +75,7 @@ public sealed class TaskServiceProgressTests
     }
 
     /// <summary>
-    /// TEAM_010: task có 3 người nhận thì mỗi người thấy TIẾN ĐỘ CỦA MÌNH, không
+    /// task có 3 người nhận thì mỗi người thấy TIẾN ĐỘ CỦA MÌNH, không
     /// phải tổng của cả nhóm. Trước đây cả ba thấy cùng một con số.
     /// </summary>
     [Fact]

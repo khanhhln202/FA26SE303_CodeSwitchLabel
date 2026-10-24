@@ -4,7 +4,7 @@ using CodeSwitchLabel.Repositories.Enums;
 namespace CodeSwitchLabel.Services.Dtos;
 
 /// <summary>
-/// TEAM_015: một câu trong đề xuất — đúng dạng hiển thị của câu trong kho:
+/// một câu trong đề xuất — đúng dạng hiển thị của câu trong kho:
 /// nội dung còn nhãn để tô màu, bản đã bỏ nhãn để hiển thị/đọc, và lời giải Anh–Việt.
 /// </summary>
 public record ProposalSentenceDto(

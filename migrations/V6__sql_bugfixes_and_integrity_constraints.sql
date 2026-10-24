@@ -123,7 +123,7 @@ END $$ LANGUAGE plpgsql;
 -- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION fn_recording_single_speaker() RETURNS trigger AS $$
 BEGIN
-    -- TEAM_007: Khóa cấp giao dịch theo băm script_id để ngăn race condition
+    -- Khóa cấp giao dịch theo băm script_id để ngăn race condition
     PERFORM pg_advisory_xact_lock(hashtext(NEW.script_id));
 
     IF EXISTS (SELECT 1 FROM recording r
@@ -171,7 +171,7 @@ BEGIN
         UPDATE recording SET status = v_final
          WHERE recording_id = NEW.recording_id AND status = 'pending_review';
 
-        -- TEAM_007: Chỉ khi đa số từ chối bản ghi VÀ có lý do thuộc nhóm 'content' mới trả câu về pending_validation
+        -- Chỉ khi đa số từ chối bản ghi VÀ có lý do thuộc nhóm 'content' mới trả câu về pending_validation
         IF v_final = 'rejected' THEN
             IF EXISTS (
                 SELECT 1

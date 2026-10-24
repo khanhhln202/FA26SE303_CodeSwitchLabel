@@ -472,6 +472,14 @@ private async Task SeedTestDataAsync()
 
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
+            // Đảm bảo mọi tài khoản prod đều có hash thật, kể cả hàng admin SQL seed
+            // để trống password_hash (gap #3: không lưu hash cứng trong lược đồ).
+            foreach (var u in new[] { prodAdmin, prodManager, prodReviewer, prodReviewer2, prodReviewer3, prodSpeaker1, prodSpeaker2 })
+            {
+                u.PasswordHash = hasher.Hash("Codeswitch@2026");
+            }
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
             admin = await db.AppUsers.FirstAsync(u => u.Email == "admin@test.local", TestContext.Current.CancellationToken);
             manager = await db.AppUsers.FirstAsync(u => u.Email == "manager@test.local", TestContext.Current.CancellationToken);
             reviewer = await db.AppUsers.FirstAsync(u => u.Email == "reviewer@test.local", TestContext.Current.CancellationToken);

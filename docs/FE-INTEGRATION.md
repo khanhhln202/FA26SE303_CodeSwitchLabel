@@ -24,6 +24,10 @@ màn hình nào gọi API nào theo thứ tự nào, cách xử lý đăng nhậ
 > Cập nhật V15 — `POST /api/tasks` nhận `assigneeUserIds`; `PUT /api/tasks/{id}/assignments` gửi
 > cả danh sách người nhận mới; task thu âm có `assignee_user_id` trên từng `task_script`; hàng
 > đợi ghi âm (`fn_queue_claim_next`) chỉ phát cặp cho đúng Speaker hoặc mục cũ chưa gán.
+>
+> Cập nhật V17 — `task_assignment.assignment_status` tự chuyển `Completed` khi người đó đạt quota
+> riêng và về `Active` khi quota tụt; `Completed` vẫn là người nhận, không khoá việc. FE chỉ cần
+> hiển thị đúng bốn giá trị trong bảng enum bên dưới.
 
 ---
 
@@ -528,7 +532,7 @@ Mỗi dòng của `GET /api/speaker/rounds/{campaignId}/leaderboard` mang:
 ```json
 {
   "recording":    { "total": 40, "approved": 30, "rejected": 4, "pending": 6, "submitted": 34 },
-  // TEAM_016: submitted = tổng đã nộp (chờ duyệt + đạt + từ chối), không chỉ approved
+  // submitted = tổng đã nộp (chờ duyệt + đạt + từ chối), không chỉ approved
   "contribution": { "total": 12, "validated": 9,  "rejected": 1, "pending": 2 }
 }
 ```
@@ -781,7 +785,8 @@ Task chưa giao cho ai thì không được cướp câu của người khác �
 - Chỉ tiêu task **thu âm đếm theo cặp câu**: một cặp chỉ xong khi cả hai bản đều đạt. Task **duyệt** đếm theo bản ghi. Trường `progress.unit` cho biết đơn vị để hiển thị.
 - **Quota nằm trên từng lượt giao.** `task.target_qty` là chỉ tiêu cả nhóm; `task_assignment.target_qty` là quota riêng của người nhận, tổng phải bằng đúng chỉ tiêu task. `POST /assign` chia đều lại cho cả nhóm (100 cho 3 người = 34/33/33); `PUT /assignments` đặt quota tuỳ ý và thay cả danh sách. Đổi `targetQty` của task qua `PATCH` cũng chia lại đều. Lượt giao cũ chưa có quota (dữ liệu trước V12) được tính bằng cùng công thức.
 - **Trạng thái task tự chạy theo số liệu thật**: đạt chỉ tiêu → `Completed`, chưa đạt → `InProgress`, đã huỷ → giữ `Cancelled`. Còn **đúng ba trạng thái** (`InProgress`, `Completed`, `Cancelled`) — `Draft` và `Open` đã bị bỏ vì chỉ nói về việc giao chứ không nói về việc làm.
-- **Task Manager đổi trạng thái bằng tay** được: gửi kèm `status` vào `PATCH /api/tasks/{id}` — `InProgress` (mở lại task đã xong), `Completed` (chốt sớm), `Cancelled` (dừng, giống hệt nút Huỷ: mọi lượt giao đang hoạt động cũng chuyển sang `cancelled`).
+- **Trạng thái từng lượt giao cũng tự chạy theo quota riêng** (V17): người đó đạt `done >= targetQty` → `Completed`, tụt xuống dưới (bản ghi bị từ chối, nâng chỉ tiêu) → `Active`. `Completed` **vẫn là người nhận**: task vẫn hiện trong danh sách của họ và họ vẫn thu/duyệt thêm được (TEAM_016), nên FE đừng coi `Completed` là đã rời task. Chỉ `Reassigned`/`Cancelled` mới là đã rời.
+- **Task Manager đổi trạng thái bằng tay** được: gửi kèm `status` vào `PATCH /api/tasks/{id}` — `InProgress` (mở lại task đã xong), `Completed` (chốt sớm), `Cancelled` (dừng, giống hệt nút Huỷ: mọi lượt giao đang chờ `Active` cũng chuyển sang `cancelled`; lượt đã `Completed` giữ nguyên).
   Giá trị bấm tay được **giữ tới khi có việc thật** (đổi `targetQty`, nộp bản ghi, duyệt) — lúc đó hệ thống tính lại và có thể ghi đè. Sửa mô tả, hạn hay chủ đề **không** làm mất nó.
   Task đã `Cancelled` thì khoá, không sửa được nữa (409 `task_cancelled`).
 - **Chỉ tiêu không được vượt số mục trong task.** Giao task mà `targetQty` lớn hơn số mục người nhận làm được
@@ -926,7 +931,7 @@ recorder.onstop = async () => {
 | `RejectionCategory` | `Content`, `AudioQuality`, `Pronunciation`, `Other` |
 | `TaskType` | `Recording`, `Review` |
 | `WorkTaskStatus` | `InProgress`, `Completed`, `Cancelled` — task mới tạo ra đã là `InProgress` (không còn `Draft`/`Open`) |
-| `AssignmentStatus` | `Active`, `Completed`, `Reassigned`, `Cancelled` |
+| `AssignmentStatus` | `Active` (chưa đạt quota riêng), `Completed` (đã đạt quota riêng, **vẫn còn là người nhận**), `Reassigned` (bị thay ra), `Cancelled` (task huỷ khi lượt giao còn đang chờ) |
 | `TaskScriptStatus` | `Pending`, `Completed`, `Rejected` |
 | `TaskRecordingStatus` | `Queued`, `Reviewed`, `Skipped` |
 | `ReviewBlocker` | `None`, `OwnRecording`, `AlreadyReviewedByMe`, `NotPendingReview`, `RoundsFull` |
@@ -1065,7 +1070,7 @@ Ai đã code theo bản API trước ngày 22/09/2026 thì cần sửa:
 | Không có nút gỡ người khỏi task | TEAM_010: `DELETE /api/tasks/{id}/assign/{userId}` |
 | `assigneeId` / `assigneeName` (một người) | TEAM_010: `assignees[]` — một task có nhiều người nhận, mỗi người kèm `targetQty` |
 | Tiến độ Speaker một bộ số | TEAM_010: `myProgress` + `teamProgress`; `myProgress.targetQty` là quota cá nhân, `teamProgress.targetQty` là chỉ tiêu task |
-| Câu nhập từ file tự `validated` | TEAM_010: **vào hàng đợi chờ duyệt** như mọi câu khác |
+| Câu nhập từ file tự `validated` | **vào hàng đợi chờ duyệt** như mọi câu khác |
 | Chỉ có 2 nút duyệt bản ghi | TEAM_010: thêm `reject-audio` và `discard-pair` |
 | Không có endpoint lấy câu chờ duyệt nội dung | TEAM_010: `GET /api/reviewer/scripts/next` |
 | — | Mới: nhập file `POST /api/scripts/import`, và nhóm thống kê `/api/admin/*` |

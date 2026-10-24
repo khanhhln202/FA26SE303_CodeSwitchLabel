@@ -8,7 +8,7 @@ using Xunit;
 namespace CodeSwitchLabel.Tests.Integration;
 
 /// <summary>
-/// TEAM_012: lịch sử ghi âm của Speaker là danh sách KHÓ NHẤT trong hệ thống.
+/// lịch sử ghi âm của Speaker là danh sách KHÓ NHẤT trong hệ thống.
 ///
 /// Một dòng là một CẶP bản ghi, cặp không có cột riêng nên phải gom bằng
 /// GroupBy(ScriptId) + Max(RecordedAt) trước khi cắt trang. Trước khi có sắp xếp, các

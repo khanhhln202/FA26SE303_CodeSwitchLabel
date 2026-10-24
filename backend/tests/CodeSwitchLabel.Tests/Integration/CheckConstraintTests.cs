@@ -358,8 +358,8 @@ public class CheckConstraintTests : IntegrationTestBase
 
     // ---------- Review constraints ----------
 
-    // TEAM_009: upper bound is review.rounds_required (service guard no_more_rounds),
-    // TEAM_009: upper bound is review.rounds_required (service guard no_more_rounds via ReviewRules),
+    // upper bound is review.rounds_required (service guard no_more_rounds),
+    // upper bound is review.rounds_required (service guard no_more_rounds via ReviewRules),
     // not a static DB CHECK - DB only enforces review_round >= 1 (V6 Item 9).
     [Fact]
     public async Task Review_ReviewRoundOutOfRange_Rejected()

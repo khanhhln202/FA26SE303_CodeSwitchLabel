@@ -18,7 +18,7 @@ public record PagedResult<T>(IReadOnlyList<T> Items, int Page, int PageSize, int
 /// <summary>
 /// Tham số dùng chung cho mọi endpoint trả danh sách: phân trang và sắp xếp.
 ///
-/// TEAM_012: `Sort`/`Dir` đặt ở đây vì cả mười hai request record đều kế thừa lớp này —
+/// `Sort`/`Dir` đặt ở đây vì cả mười hai request record đều kế thừa lớp này —
 /// quy ước sắp xếp được khai báo đúng một chỗ, không phải rải mười hai chỗ.
 ///
 /// Chặn trên pageSize để một request lỡ tay không kéo về vài chục nghìn hàng.
@@ -47,7 +47,7 @@ public record PageRequest
     }
 
     /// <summary>
-    /// TEAM_012: tên cột muốn sắp xếp, ví dụ `?sort=createdAt`. Rỗng hoặc sai tên thì
+    /// tên cột muốn sắp xếp, ví dụ `?sort=createdAt`. Rỗng hoặc sai tên thì
     /// endpoint trả về đúng thứ tự mặc định của nó — xem <c>SortSpec</c> để biết cột nào hợp lệ.
     /// </summary>
     [StringLength(40)]

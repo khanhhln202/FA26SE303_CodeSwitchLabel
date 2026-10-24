@@ -6,7 +6,7 @@ using Xunit;
 namespace CodeSwitchLabel.Tests.Integration;
 
 /// <summary>
-/// TEAM_013: đổi trạng thái nhiệm vụ qua HTTP. Đây là đường mà frontend sẽ gọi, nên phải
+/// đổi trạng thái nhiệm vụ qua HTTP. Đây là đường mà frontend sẽ gọi, nên phải
 /// chốt hợp đồng ở đây chứ không chỉ ở tầng service.
 ///
 /// Ranh giới quan trọng nhất: giá trị Task Manager bấm tay được GIỮ, không bị máy trạng

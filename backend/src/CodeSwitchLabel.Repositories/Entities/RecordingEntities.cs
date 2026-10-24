@@ -31,7 +31,7 @@ public class Recording
     public string? QcMetrics { get; set; }
 
     /// <summary>
-    /// TEAM_010: dấu vết cho nút "Chỉ xóa audio" / "Xóa hoàn toàn" (yêu cầu 2.4).
+    /// dấu vết cho nút "Chỉ xóa audio" / "Xóa hoàn toàn" (yêu cầu 2.4).
     ///
     /// CỐ Ý không nằm ở bảng review: hai hành động đó là quyết định dứt điểm, không
     /// phải phiếu bầu. Ghi vào review sẽ làm lệch bộ đếm 3 lượt và kích hoạt

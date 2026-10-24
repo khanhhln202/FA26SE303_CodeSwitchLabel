@@ -7,7 +7,7 @@ using Xunit;
 namespace CodeSwitchLabel.Tests.Integration;
 
 /// <summary>
-/// TEAM_013: chọn `Cancelled` bằng tay phải y hệt nút Huỷ — lượt giao đang hoạt động
+/// chọn `Cancelled` bằng tay phải y hệt nút Huỷ — lượt giao đang hoạt động
 /// chuyển sang `cancelled`.
 ///
 /// Hai đường ghi trạng thái là hai chỗ khác nhau trong code thì chỗ này sẽ lệch chỗ kia:

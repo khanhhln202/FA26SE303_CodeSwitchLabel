@@ -160,7 +160,7 @@ public class ReviewerStatsService(
 
         var sort = query.ToSort<ReviewSortField>();
 
-        // TEAM_012: chỉ ba cột của cặp là sắp xếp được TRƯỚC khi cắt trang. Trạng thái của
+        // chỉ ba cột của cặp là sắp xếp được TRƯỚC khi cắt trang. Trạng thái của
         // cặp gộp từ hai bản nên phải TÍNH RA sau đó — cùng lý do với SpeakerPairSortField.
         var ordered = sort.Field switch
         {
@@ -305,7 +305,7 @@ public class ReviewerStatsService(
 
         var sort = query.ToSort<ScriptReviewSortField>();
 
-        // TEAM_012: nhánh cuối là thứ tự cũ (lượt duyệt mới nhất trước).
+        // nhánh cuối là thứ tự cũ (lượt duyệt mới nhất trước).
         var ordered = sort.Field switch
         {
             ScriptReviewSortField.ReviewedAt => sort.Descending

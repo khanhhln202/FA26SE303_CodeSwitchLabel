@@ -5,7 +5,7 @@ using Xunit;
 namespace CodeSwitchLabel.Tests.Integration;
 
 /// <summary>
-/// TEAM_012: hợp đồng `?sort=` và `?dir=` ở tầng HTTP.
+/// hợp đồng `?sort=` và `?dir=` ở tầng HTTP.
 ///
 /// Repository test đã ghim thứ tự, nhưng hợp đồng mà client thật sự gặp là ở đây: gửi tên
 /// cột sai KHÔNG được sinh ra 400, và không gửi gì thì phải y hệt cũ. Hai điều đó chỉ

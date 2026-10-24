@@ -14,7 +14,7 @@ public sealed class TaskProgressTrackerTests
 {
     private readonly Mock<ITaskRepository> _tasks = new(MockBehavior.Strict);
 
-    // TEAM_013: tracker gọi tính lại trạng thái đợt mỗi khi trạng thái task đổi.
+    // tracker gọi tính lại trạng thái đợt mỗi khi trạng thái task đổi.
     private readonly Mock<ICampaignRepository> _campaigns = new(MockBehavior.Strict);
     private TaskProgressTracker Tracker => new(_tasks.Object, _campaigns.Object, TimeProvider.System);
 
@@ -37,12 +37,38 @@ public sealed class TaskProgressTrackerTests
         CreatedAt = DateTimeOffset.UtcNow
     };
 
-    private static TaskRow Row(
-        long id = 7, long? assignee = 9, int started = 1, int done = 0, int target = 10) => new(
-        id, 1, "Đợt 1", TaskType.Recording, ScriptDomain.ItTechnology, null, WorkTaskStatus.InProgress, target,
-        null, DateTimeOffset.UtcNow,
-        assignee.HasValue ? [new TaskAssigneeRow(assignee.Value, "Người nhận")] : [],
-        started, done, started, 1, 1);
+    private TaskRow Row(
+        long id = 7, long? assignee = 9, int started = 1, int done = 0, int target = 10)
+    {
+        // V17: tracker chấm lại từng lượt giao sau khi tính trạng thái task. Các test
+        // cũ chỉ quan tâm trạng thái task nên cấp sẵn một lượt giao "đang mở" khớp
+        // với Row; test nào cần kiểm quota thì tự setup đè lên.
+        if (assignee.HasValue)
+        {
+            _tasks.Setup(t => t.GetOpenAssignmentsAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync([new TaskAssignment
+                {
+                    TaskId = id,
+                    UserId = assignee.Value,
+                    TargetQty = target,
+                    AssignmentStatus = AssignmentStatus.Active
+                }]);
+            _tasks.Setup(t => t.GetAssigneeDoneAsync(
+                    It.IsAny<long>(), It.IsAny<TaskType>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new Dictionary<long, int> { [assignee.Value] = done });
+        }
+        else
+        {
+            _tasks.Setup(t => t.GetOpenAssignmentsAsync(It.IsAny<long>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync([]);
+        }
+
+        return new TaskRow(
+            id, 1, "Đợt 1", TaskType.Recording, ScriptDomain.ItTechnology, null, WorkTaskStatus.InProgress, target,
+            null, DateTimeOffset.UtcNow,
+            assignee.HasValue ? [new TaskAssigneeRow(assignee.Value, "Người nhận")] : [],
+            started, done, started, 1, 1);
+    }
 
     [Fact]
     public async Task RefreshStatus_DatChiTieu_ChuyenCompletedVaLuu()
@@ -212,7 +238,7 @@ public sealed class TaskProgressTrackerTests
         Assert.Equal(WorkTaskStatus.InProgress, task8.Status);
     }
 
-    /// <summary>TEAM_010: khi bản ghi ĐẠT thì không được đụng vào mục đã xong — chỉ đường lùi mới lùi.</summary>
+    /// <summary>khi bản ghi ĐẠT thì không được đụng vào mục đã xong — chỉ đường lùi mới lùi.</summary>
     [Fact]
     public async Task OnReviewSubmitted_BanGhiDat_KhongLuiMucNao()
     {
@@ -244,10 +270,10 @@ public sealed class TaskProgressTrackerTests
     }
 
     /// <summary>
-    /// TEAM_010: task có nhiều người nhận thì RefreshStatus phải tính bằng SỐ người,
+    /// task có nhiều người nhận thì RefreshStatus phải tính bằng SỐ người,
     /// không phải "có người hay không" — số người nhận không còn là đầu vào của luật trạng thái.
     ///
-    /// TEAM_013: trạng thái đợt phải được tính lại khi trạng thái task đổi, và KHÔNG tính lại
+    /// trạng thái đợt phải được tính lại khi trạng thái task đổi, và KHÔNG tính lại
     /// khi task giữ nguyên — nộp bản ghi xong trong lúc task vẫn InProgress là chuyện thường,
     /// mỗi lần lại khoá dòng campaign thì đợt nhiều task sẽ nghẽn hàng đợi.
     /// </summary>
@@ -289,7 +315,7 @@ public sealed class TaskProgressTrackerTests
         campaigns.Verify(c => c.RefreshStatusAsync(task.CampaignId!.Value, It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    // ---------------------------------------------------------- TEAM_018: tự đẩy vào hàng chờ
+    // ---------------------------------------------------------- tự đẩy vào hàng chờ
 
     /// <summary>
     /// Bản chờ duyệt của một đợt tự vào hàng chờ của MỌI task duyệt chưa huỷ trong đợt —
@@ -404,7 +430,7 @@ public sealed class TaskProgressTrackerTests
     }
 
     /// <summary>
-    /// TEAM_018: "Chỉ xóa audio" gỡ bản ghi khỏi vòng duyệt thì các task duyệt anh em —
+    /// "Chỉ xóa audio" gỡ bản ghi khỏi vòng duyệt thì các task duyệt anh em —
     /// nơi bản ghi tự vào lúc nộp — phải bỏ mục đang chờ, không thì mục trỏ vào bản đã
     /// bị loại còn mãi và số mục của task bị đếm sai.
     /// </summary>
@@ -437,7 +463,7 @@ public sealed class TaskProgressTrackerTests
     }
 
     /// <summary>
-    /// TEAM_018: xoá cả cặp thì mọi bản ghi của câu bị loại — mục đang chờ ở task duyệt
+    /// xoá cả cặp thì mọi bản ghi của câu bị loại — mục đang chờ ở task duyệt
     /// anh em (nơi bản ghi tự vào lúc nộp) cũng phải bỏ, kể cả khi câu chỉ còn nằm trong
     /// task duyệt mà không còn mục câu nào.
     /// </summary>

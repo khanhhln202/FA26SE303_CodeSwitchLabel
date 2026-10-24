@@ -17,7 +17,7 @@ public class ScriptAssignmentService(
     /// <summary>
     /// Cặp câu tiếp theo người này nên thu, theo thứ tự FIFO của hàng đợi chung.
     ///
-    /// TEAM_010: trước đây hàm này CHỈ ĐỌC — trả câu cho người này nhưng không giữ
+    /// trước đây hàm này CHỈ ĐỌC — trả câu cho người này nhưng không giữ
     /// lại, nên hai người có thể cùng nhìn thấy một câu rồi cùng thu. Chống trùng chỉ
     /// chạy ở lúc UPLOAD (uq_recording_active_variant + trg_recording_single_speaker),
     /// tức là người đã đọc xong mới biết mình bị trùng (yêu cầu 3.2).

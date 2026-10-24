@@ -53,7 +53,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
     protected readonly IUserService UserService;
     protected readonly IScriptService ScriptService;
 
-    /// <summary>TEAM_015: hàng chờ đề xuất câu của Reviewer.</summary>
+    /// <summary>hàng chờ đề xuất câu của Reviewer.</summary>
     protected readonly IScriptProposalService ProposalService;
 
     protected readonly IScriptAssignmentService ScriptAssignmentService;
@@ -124,7 +124,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
 
         Scope.Dispose();
 
-        // TEAM_012: phải dispose CẢ provider gốc chứ không chỉ scope. Provider gốc giữ
+        // phải dispose CẢ provider gốc chứ không chỉ scope. Provider gốc giữ
         // singleton DbContext và pool kết nối của nó; bỏ quên thì mỗi test để lại một pool,
         // và cả suite đỏ giữa chừng vì hết connection trên PostgreSQL của testcontainer.
         await _rootProvider.DisposeAsync();
@@ -433,7 +433,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
     }
 
     /// <summary>
-    /// TEAM_002: tạo cặp câu đã duyệt đúng luồng trigger trg_script_validated_domain —
+    /// tạo cặp câu đã duyệt đúng luồng trigger trg_script_validated_domain —
     /// chèn ở chờ duyệt, ghi lượt Accepted của Reviewer đủ chủ đề, rồi mới chốt Validated.
     /// Chèn thẳng Validated sẽ bị trigger từ chối vì thiếu lượt duyệt hợp lệ.
     /// </summary>

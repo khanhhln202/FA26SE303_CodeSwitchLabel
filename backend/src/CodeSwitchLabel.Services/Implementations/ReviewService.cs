@@ -64,7 +64,7 @@ public class ReviewService(
     {
         var isActive = await reviews.IsActiveReviewTaskOfAsync(taskId, reviewerId, ct);
 
-        // TEAM_016: task đã đủ chỉ tiêu vẫn duyệt tiếp được (isActive=true);
+        // task đã đủ chỉ tiêu vẫn duyệt tiếp được (isActive=true);
         // chỉ task đã huỷ mới rơi vào nhánh xem lại read-only dưới đây.
         if (!isActive && !await reviews.IsReviewTaskOfAsync(taskId, reviewerId, ct))
         {

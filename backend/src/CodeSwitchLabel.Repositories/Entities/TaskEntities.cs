@@ -28,7 +28,7 @@ public class Campaign
 
     /// <summary>
     /// Người tạo phải mang vai admin hoặc task_manager, do trigger của database chặn.
-    /// TEAM_003: Task Manager tự lập kế hoạch cho đợt của mình nên cũng tạo được đợt.
+    /// Task Manager tự lập kế hoạch cho đợt của mình nên cũng tạo được đợt.
     /// </summary>
     public long CreatedBy { get; set; }
 
@@ -101,7 +101,7 @@ public class TaskScript
     public long TaskId { get; set; }
     public string ScriptId { get; set; } = string.Empty;
 
-    /// <summary>TEAM_021: người nhận câu này (Recording), NULL = chưa gán / task duyệt.</summary>
+    /// <summary>người nhận câu này (Recording), NULL = chưa gán / task duyệt.</summary>
     public long? AssigneeUserId { get; set; }
 
     public TaskScriptStatus Status { get; set; }

@@ -72,7 +72,7 @@ public record UpdateCampaignRequest
     public DateOnly? EndDate { get; init; }
 
     /// <summary>
-    /// TEAM_013: không còn trường <c>status</c>. Trạng thái đợt là hàm của các task bên
+    /// không còn trường <c>status</c>. Trạng thái đợt là hàm của các task bên
     /// trong (chưa có nhiệm vụ → Open, có nhiệm vụ → InProgress, mọi nhiệm vụ xong →
     /// Completed), nên không có đường nào để bấm tay đặt nó.
     /// </summary>

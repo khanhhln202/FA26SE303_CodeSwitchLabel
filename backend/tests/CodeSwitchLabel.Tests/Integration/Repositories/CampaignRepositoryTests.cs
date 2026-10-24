@@ -109,7 +109,7 @@ public class CampaignRepositoryTests : IntegrationTestBase
         Assert.Equal(2000, items.First(c => c.CampaignName == "New Campaign").TargetQty);
     }
 
-    // ---------------------------------------------------------------- TEAM_012: sắp xếp
+    // ---------------------------------------------------------------- sắp xếp
 
     /// <summary>Ba chiến dịch có ngày bắt đầu khác nhau. Danh sách chiến dịch không lọc theo
     /// tên nên test lấy cả trang rồi chỉ giữ lại ba cái vừa tạo để so thứ tự tương đối.
@@ -139,7 +139,7 @@ public class CampaignRepositoryTests : IntegrationTestBase
     [Fact]
     public async Task SearchAsync_KhongTruyenSort_GiuNguyenThuTuDotMoiNhatTruoc()
     {
-        // Regression TEAM_012: mặc định của /api/campaigns là ngày bắt đầu giảm dần.
+        // Regression mặc định của /api/campaigns là ngày bắt đầu giảm dần.
         var mine = await CreateThreeSortedCampaignsAsync();
 
         var (items, _) = await Campaigns.SearchAsync(

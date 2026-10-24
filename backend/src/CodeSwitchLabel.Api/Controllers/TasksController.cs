@@ -20,7 +20,7 @@ namespace CodeSwitchLabel.Api.Controllers;
 /// Trạng thái **tự chạy theo công việc thật**: đạt chỉ tiêu thì Completed, chưa đạt thì
 /// InProgress, đã huỷ thì giữ nguyên.
 ///
-/// TEAM_013: còn đúng ba trạng thái — `InProgress`, `Completed`, `Cancelled`. Trước đây có
+/// còn đúng ba trạng thái — `InProgress`, `Completed`, `Cancelled`. Trước đây có
 /// thêm `Draft` và `Open`, nhưng hai trạng thái đó chỉ nói về việc giao chứ không nói về việc
 /// làm. Task Manager vẫn đổi trạng thái bằng tay được qua `PATCH /api/tasks/{id}`; hệ thống
 /// không ghi đè ngay, chỉ tính lại khi chỉ tiêu hoặc việc nộp/duyệt thật sự thay đổi.
@@ -55,7 +55,7 @@ public class TasksController(ITaskService taskService) : ControllerBase
     /// Sắp theo hạn gần nhất trước. <c>overdue=true</c> chỉ lấy task **còn đang làm** mà đã quá hạn —
     /// task đã xong hay đã huỷ thì không tính là trễ.
     ///
-    /// TEAM_012: `?sort=` nhận `taskId`, `deadline`, `status`, `taskType`, `createdAt`, `targetQty`;
+    /// `?sort=` nhận `taskId`, `deadline`, `status`, `taskType`, `createdAt`, `targetQty`;
     /// `?dir=asc|desc` (mặc định `asc`). Bỏ trống `sort` thì ra hạn gần nhất trước, task không đặt hạn ở cuối —
     /// sắp theo `deadline` cũng giữ nguyên quy tắc đó ở cả hai chiều.
     /// </remarks>
@@ -79,7 +79,7 @@ public class TasksController(ITaskService taskService) : ControllerBase
     /// Task **chưa có người nhận** thì cứ đặt chỉ tiêu trước, thêm mục vào sau — cùng luật
     /// cũ khi còn trạng thái `Draft`, nay hỏi bằng "đã giao cho ai chưa" thay vì hỏi trạng thái.
     ///
-    /// TEAM_013: gửi kèm `status` để Task Manager đổi trạng thái bằng tay —
+    /// gửi kèm `status` để Task Manager đổi trạng thái bằng tay —
     /// `InProgress` (mở lại task đã xong), `Completed` (chốt sớm) hoặc `Cancelled` (dừng).
     /// Chọn `Cancelled` thì mọi lượt giao đang hoạt động cũng chuyển sang `cancelled`, y hệt nút Huỷ.
     /// Giá trị bấm tay được giữ tới khi có việc thật đổi chỉ tiêu hoặc nộp bản ghi/duyệt —
@@ -131,7 +131,7 @@ public class TasksController(ITaskService taskService) : ControllerBase
 
     /// <summary>Giao task cho một hoặc nhiều người.</summary>
     /// <remarks>
-    /// TEAM_010: body `{ "userIds": [6, 7] }` — một task giao được cho NHIỀU người
+    /// body `{ "userIds": [6, 7] }` — một task giao được cho NHIỀU người
     /// cùng lúc. Người đang nhận không bị đuổi, lượt giao của họ giữ nguyên `active`.
     /// Trước đây giao là điều phối lại: lượt giao cũ chuyển sang `reassigned`.
     ///
@@ -139,7 +139,7 @@ public class TasksController(ITaskService taskService) : ControllerBase
     /// backend chia quota lần lượt 34/33/33. Người đã có mặt trong `userIds` bị bỏ qua
     /// chứ không báo lỗi, nhưng quota của cả nhóm được chia lại khi có người mới.
     ///
-    /// TEAM_013: giao task không còn làm đổi trạng thái nữa — task đã là `InProgress` ngay từ
+    /// giao task không còn làm đổi trạng thái nữa — task đã là `InProgress` ngay từ
     /// lúc tạo. Trạng thái chỉ đổi khi đạt chỉ tiêu, khi bị huỷ, hoặc khi Task Manager bấm tay.
     /// </remarks>
     [HttpPost("{id:long}/assign")]
@@ -171,7 +171,7 @@ public class TasksController(ITaskService taskService) : ControllerBase
         => Ok(await taskService.SetAssignmentsAsync(
             id, request, ct, User.GetUserId(), User.IsInRole("Admin")));
 
-    /// <summary>TEAM_010: gỡ một người khỏi task.</summary>
+    /// <summary>gỡ một người khỏi task.</summary>
     /// <remarks>
     /// Lượt giao chuyển sang `reassigned` chứ không bị xoá, nên vẫn xem được ai từng nhận.
     /// Không gỡ được người nhận cuối cùng khi task đã có việc — làm vậy thì không ai làm
@@ -200,7 +200,7 @@ public class TasksController(ITaskService taskService) : ControllerBase
 
     /// <summary>Huỷ task.</summary>
     /// <remarks>
-    /// TEAM_013: nút này và `PATCH /api/tasks/{id}` với `status = "Cancelled"` là CÙNG một việc
+    /// nút này và `PATCH /api/tasks/{id}` với `status = "Cancelled"` là CÙNG một việc
     /// — cả hai gọi chung một hàm, nên không thể xảy ra tình trạng một đường huỷ lượt giao còn
     /// đường kia không.
     ///
@@ -215,7 +215,7 @@ public class TasksController(ITaskService taskService) : ControllerBase
     public async Task<ActionResult<TaskDetailDto>> Cancel(long id, CancellationToken ct)
         => Ok(await taskService.CancelAsync(id, ct, User.GetUserId(), User.IsInRole("Admin")));
 
-    // TEAM_003: Xoá cứng nhiệm vụ đã gỡ khỏi đợt (chưa có dữ liệu nộp thật)
+    // Xoá cứng nhiệm vụ đã gỡ khỏi đợt (chưa có dữ liệu nộp thật)
     /// <summary>Xoá nhiệm vụ. Chỉ xoá được task đã gỡ khỏi đợt và chưa có dữ liệu nộp/duyệt thật.</summary>
     [HttpDelete("{id:long}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]

@@ -61,8 +61,7 @@ public interface IReviewRepository
     Task<List<RejectionReason>> GetReasonsByCodesAsync(string[] codes, CancellationToken ct = default);
 
     /// <summary>
-    /// Task duyệt đang giao cho người này và còn nhận việc (chưa huỷ). TEAM_016:
-    /// task đã đủ chỉ tiêu (Completed) vẫn duyệt thêm được — KPI không chặn.
+    /// Task duyệt đang giao cho người này và còn nhận việc (chưa huỷ).     /// task đã đủ chỉ tiêu (Completed) vẫn duyệt thêm được — KPI không chặn.
     /// </summary>
     Task<bool> IsActiveReviewTaskOfAsync(long taskId, long reviewerId, CancellationToken ct = default);
 
@@ -100,7 +99,7 @@ public interface IReviewRepository
     /// Các bản ghi nằm trong một task duyệt, phân trang. Người gọi phải tự kiểm task đó có đang
     /// giao cho người này không — ở đây không kiểm quyền.
     /// </summary>
-    /// <param name="sort">TEAM_012: rỗng (Field = null) là thứ tự mặc định.</param>
+    /// <param name="sort">rỗng (Field = null) là thứ tự mặc định.</param>
     Task<(List<TaskReviewRow> Rows, int Total)> GetTaskReviewRowsAsync(
         long taskId, long reviewerId, bool onlyReviewable, int roundsRequired,
         int page, int pageSize, SortSpec<TaskReviewSortField> sort, CancellationToken ct = default);
@@ -163,9 +162,9 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
         db.WorkTasks.AsNoTracking().AnyAsync(t =>
             t.TaskId == taskId &&
             t.TaskType == TaskType.Review &&
-            // TEAM_016: chỉ task đã huỷ mới chặn — task đủ chỉ tiêu vẫn duyệt thêm được.
+            // chỉ task đã huỷ mới chặn — task đủ chỉ tiêu vẫn duyệt thêm được.
             t.Status != WorkTaskStatus.Cancelled &&
-            t.Assignments.Any(a => a.UserId == reviewerId && a.AssignmentStatus == AssignmentStatus.Active), ct);
+            t.Assignments.Any(a => a.UserId == reviewerId && a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled), ct);
 
     public Task<bool> IsReviewTaskOfAsync(
         long taskId, long reviewerId, CancellationToken ct = default) =>
@@ -181,9 +180,9 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
             tr.RecordingId == recordingId &&
             tr.Status == TaskRecordingStatus.Queued &&
             tr.Task.TaskType == TaskType.Review &&
-            // TEAM_016: task đã đủ chỉ tiêu vẫn nhận duyệt thêm.
+            // task đã đủ chỉ tiêu vẫn nhận duyệt thêm.
             tr.Task.Status != WorkTaskStatus.Cancelled &&
-            tr.Task.Assignments.Any(a => a.UserId == reviewerId && a.AssignmentStatus == AssignmentStatus.Active), ct);
+            tr.Task.Assignments.Any(a => a.UserId == reviewerId && a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled), ct);
 
     public Task<List<TaskRecording>> GetQueuedItemsAsync(string recordingId, CancellationToken ct = default) =>
         db.TaskRecordings
@@ -193,7 +192,7 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
     public Task<bool> HasEligibleReviewerLeftAsync(
         long taskId, string recordingId, long speakerId, CancellationToken ct = default) =>
         db.TaskAssignments.AsNoTracking()
-            .Where(a => a.TaskId == taskId && a.AssignmentStatus == AssignmentStatus.Active)
+            .Where(a => a.TaskId == taskId && a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled)
             .Where(a => a.UserId != speakerId)
             .AnyAsync(a => !db.Reviews.Any(v => v.RecordingId == recordingId && v.ReviewerId == a.UserId), ct);
 
@@ -250,7 +249,7 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
 
         var total = await query.CountAsync(ct);
 
-        // TEAM_012: nhánh cuối giữ nguyên thứ tự của GET next — bản gần đủ lượt lên trước,
+        // nhánh cuối giữ nguyên thứ tự của GET next — bản gần đủ lượt lên trước,
         // rồi tới bản cũ nhất, để danh sách và GET next không nói khác nhau.
         var ordered = sort.Field switch
         {
@@ -270,7 +269,7 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
         };
 
         var rows = await ordered
-            // TEAM_012: ThenBy thời điểm thu giữ nguyên thứ tự cũ, ThenBy mã bản ghi chốt
+            // ThenBy thời điểm thu giữ nguyên thứ tự cũ, ThenBy mã bản ghi chốt
             // chặn cuối — hai bản của cùng một cặp có thể trùng thời điểm thu.
             .ThenBy(tr => tr.Recording.RecordedAt)
             .ThenBy(tr => tr.RecordingId)
@@ -330,9 +329,9 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
         long reviewerId, CancellationToken ct = default) =>
         db.TaskAssignments
             .AsNoTracking()
-            .Where(a => a.UserId == reviewerId && a.AssignmentStatus == AssignmentStatus.Active)
+            .Where(a => a.UserId == reviewerId && a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled)
             .Where(a => a.Task.TaskType == TaskType.Review)
-            // TEAM_016: trả cả task đã đủ chỉ tiêu — Reviewer vẫn vào duyệt thêm được,
+            // trả cả task đã đủ chỉ tiêu — Reviewer vẫn vào duyệt thêm được,
             // màn hình cá nhân phải còn thấy task để mở.
             .Where(a => a.Task.Status != WorkTaskStatus.Cancelled)
             .OrderBy(a => a.Task.Deadline)

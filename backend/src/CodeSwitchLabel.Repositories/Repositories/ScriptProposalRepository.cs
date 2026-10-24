@@ -14,8 +14,7 @@ namespace CodeSwitchLabel.Repositories.Repositories;
 /// ghi âm với thứ tự xử lý đề xuất, hai thứ không liên quan đến nhau.
 ///
 /// Việc "đề xuất chờ thì câu tạm rút khỏi hàng đợi ghi âm" do trigger database lo
-/// (fn_script_proposal_sync), không phải repository này — cùng lý do với TEAM_010:
-/// đường ghi SQL thẳng cũng phải tuân, không chỉ đường ghi qua service.
+/// (fn_script_proposal_sync), không phải repository này — cùng lý do với /// đường ghi SQL thẳng cũng phải tuân, không chỉ đường ghi qua service.
 /// </summary>
 public interface IScriptProposalRepository
 {
@@ -101,7 +100,7 @@ public class ScriptProposalRepository(CodeSwitchLabelDbContext db) : IScriptProp
 
         var total = await query.CountAsync(ct);
 
-        // TEAM_012: mọi nhánh đều nối tiếp proposalId để trang sau không lặp hoặc hụt dòng
+        // mọi nhánh đều nối tiếp proposalId để trang sau không lặp hoặc hụt dòng
         // khi cột sắp xếp bằng nhau. Nhánh cuối là thứ tự mặc định — cũ nhất trước, vì đây
         // là hàng chờ: câu chờ lâu nhất phải được xử lý trước.
         var ordered = sort.Field switch
@@ -163,7 +162,7 @@ public class ScriptProposalRepository(CodeSwitchLabelDbContext db) : IScriptProp
             _ => query.OrderByDescending(p => p.CreatedAt)
         };
 
-        // TEAM_012: nối tiếp proposalId để trang sau không lặp hoặc hụt dòng khi cột sắp xếp
+        // nối tiếp proposalId để trang sau không lặp hoặc hụt dòng khi cột sắp xếp
         // bằng nhau. Giảm dần ở đây vì nhánh mặc định cũng giảm dần.
         var items = await ordered
             .ThenByDescending(p => p.ProposalId)

@@ -64,7 +64,7 @@ public class SpeakerController(
 
     /// <summary>Gửi đề xuất cho một câu đã duyệt: báo lỗi (Report) hoặc kèm bản sửa (Edit).</summary>
     /// <remarks>
-    /// TEAM_015: đề xuất rơi thẳng vào hàng chờ của Reviewer, **không** đi qua hàng đợi
+    /// đề xuất rơi thẳng vào hàng chờ của Reviewer, **không** đi qua hàng đợi
     /// `script_queue`. Trong lúc chờ, câu tạm bị rút khỏi hàng đợi ghi âm; Reviewer xử lý
     /// xong (duyệt hoặc từ chối) thì câu tự quay lại hàng đợi ghi âm.
     ///
@@ -161,7 +161,7 @@ public class SpeakerController(
     /// <remarks>
     /// Mỗi dòng là MỘT CẶP bản ghi.
     ///
-    /// TEAM_012: `?sort=` chỉ nhận `lastRecordedAt` và `scriptId` — trạng thái và thời lượng của
+    /// `?sort=` chỉ nhận `lastRecordedAt` và `scriptId` — trạng thái và thời lượng của
     /// cặp là thứ tính ra sau khi đã cắt trang, nên không sắp xếp được trước đó.
     /// </remarks>
     [HttpGet("recordings/history")]
@@ -171,7 +171,7 @@ public class SpeakerController(
         => Ok(await roundsService.GetRecordingHistoryAsync(User.GetUserId(), query, ct));
 
     /// <summary>Lịch sử đóng góp câu của chính mình.</summary>
-    /// <remarks>TEAM_012: `?sort=` nhận `createdAt`, `scriptId`, `domain`, `status`.</remarks>
+    /// <remarks>`?sort=` nhận `createdAt`, `scriptId`, `domain`, `status`.</remarks>
     [HttpGet("contributions/history")]
     [ProducesResponseType(typeof(PagedResult<SpeakerContributionHistoryDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<PagedResult<SpeakerContributionHistoryDto>>> ContributionHistory(
@@ -184,7 +184,7 @@ public class SpeakerController(
     /// trước), nên đề xuất đã bị từ chối vẫn xem lại được.
     ///
     /// Lọc bằng `?kind=Report|Edit` và `?status=Pending|Accepted|Rejected`.
-    /// TEAM_012: `?sort=` nhận `createdAt`, `proposalId`, `kind`, `scriptId`.
+    /// `?sort=` nhận `createdAt`, `proposalId`, `kind`, `scriptId`.
     ///
     /// `original` là câu **đang** có trong kho chứ không phải bản chụp lúc gửi đề xuất: đề xuất
     /// Edit đã duyệt thì `original` chính là bản sửa đã ghi vào câu.

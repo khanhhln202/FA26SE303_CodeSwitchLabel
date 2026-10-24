@@ -208,9 +208,9 @@ public static partial class DatabaseSeeder
 
             if (existing is not null)
             {
-                // File .sql tạo sẵn một hàng admin với hash giả dài hơn 60 ký tự
-                // ($2a$11$REPLACE_WITH_REAL_BCRYPT_HASH_BEFORE_FIRST_LOGIN). Thay bằng hash thật,
-                // nếu không thì không ai đăng nhập được bằng tài khoản admin.
+                // File .sql không còn lưu hash mật khẩu (bỏ trống '', không phải bcrypt thật).
+                // Nếu hàng admin đã tồn tại từ SQL seed nhưng password_hash chưa thật,
+                // gán hash từ Seed:DefaultPassword để admin vẫn đăng nhập được.
                 if (!IsRealBcryptHash(existing.PasswordHash))
                 {
                     existing.PasswordHash = hasher.Hash(password);
@@ -313,7 +313,7 @@ public static partial class DatabaseSeeder
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
-        // TEAM_001: Bản cũ đặt CreatedBy = manager nên vi phạm trigger trg_campaign_creator_role
+        // Bản cũ đặt CreatedBy = manager nên vi phạm trigger trg_campaign_creator_role
         // (người tạo campaign phải là admin) — database trống là vỡ ngay lúc khởi động.
         db.Campaigns.Add(new Campaign
         {
@@ -498,7 +498,7 @@ public static partial class DatabaseSeeder
 
         if (finalStatus == ScriptStatus.PendingValidation) return scriptId;
 
-        // TEAM_008: deactivated seeds bypass review - only validated status is guarded by
+        // deactivated seeds bypass review - only validated status is guarded by
         // trg_script_validated_domain, and rejected reviews must carry error_reason_id.
         if (finalStatus == ScriptStatus.Deactivated)
         {
@@ -520,7 +520,7 @@ public static partial class DatabaseSeeder
                 "trg_script_validated_domain. Chạy SeedReviewerDomainsAsync trước.");
         }
 
-        // TEAM_008: ck_script_review_rejection_reason requires error_reason_id when action is rejected.
+        // ck_script_review_rejection_reason requires error_reason_id when action is rejected.
         short? rejectReasonId = null;
         if (action == ScriptReviewAction.Rejected)
         {

@@ -15,7 +15,7 @@ namespace CodeSwitchLabel.Tests.Integration;
 public sealed class CampaignRuleTests(DatabaseFixture fixture) : ApiTestBase(fixture)
 {
     /// <summary>
-    /// TEAM_013: đợt mới tạo chưa có nhiệm vụ nào thì là Open, và nhận task bình thường.
+    /// đợt mới tạo chưa có nhiệm vụ nào thì là Open, và nhận task bình thường.
     /// Trạng thái không cần mở bằng tay nữa — nó tự nhảy theo số nhiệm vụ bên trong.
     /// </summary>
     [Fact]
@@ -31,7 +31,7 @@ public sealed class CampaignRuleTests(DatabaseFixture fixture) : ApiTestBase(fix
     }
 
     /// <summary>
-    /// TEAM_013: bỏ luật "đợt đã đóng thì không nhận thêm task". Gắn nhiệm vụ mới vào đợt
+    /// bỏ luật "đợt đã đóng thì không nhận thêm task". Gắn nhiệm vụ mới vào đợt
     /// đã hoàn thành thì đợt phải mở lại chứ không phải từ chối — nếu chặn thì đợt xong
     /// là không bao giờ làm tiếp được nữa.
     /// </summary>

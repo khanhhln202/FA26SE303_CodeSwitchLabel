@@ -34,7 +34,7 @@ public record UpcomingRoundDto(
     bool IsRegistered);
 
 /// <summary>
-/// Một dòng bảng xếp hạng của đợt. TEAM_016: <see cref="Submitted"/> là số bản ghi
+/// Một dòng bảng xếp hạng của đợt. <see cref="Submitted"/> là số bản ghi
 /// người này ĐÃ NỘP (chờ duyệt / đạt / bị từ chối), không phải chỉ bản được duyệt.
 /// </summary>
 /// <param name="Submitted">Số bản đã nộp trong đợt — số thật, dùng để xếp hạng.</param>

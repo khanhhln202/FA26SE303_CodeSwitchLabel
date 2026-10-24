@@ -36,7 +36,7 @@ public sealed class EndToEndFlowTests : ApiTestBase
         var reviewer2 = await GetReviewer2TokenAsync();
         var reviewer3 = await GetReviewer3TokenAsync();
 
-        // 1) Admin nhập một cặp câu mới — TEAM_010: câu vào HÀNG ĐỢI chung, chờ duyệt.
+        // 1) Admin nhập một cặp câu mới — câu vào HÀNG ĐỢI chung, chờ duyệt.
         var scriptId = await ImportOneScriptAsync(admin);
 
         // 2) Duyệt nội dung: câu chỉ thu âm được sau lượt duyệt của người đủ chủ đề.

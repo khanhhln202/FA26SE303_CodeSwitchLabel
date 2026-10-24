@@ -4,7 +4,7 @@ using CodeSwitchLabel.Repositories.Repositories;
 namespace CodeSwitchLabel.Services.Common;
 
 /// <summary>
-/// TEAM_015: hai chốt nghiệp vụ mà cả luồng duyệt nội dung lẫn luồng xử lý đề xuất
+/// hai chốt nghiệp vụ mà cả luồng duyệt nội dung lẫn luồng xử lý đề xuất
 /// cùng đi qua, tách ra một chỗ để hai đường ghi không lệch nhau về sau.
 ///
 /// Đây là code chuyển nguyên vẹn từ ScriptService, không đổi hành vi.

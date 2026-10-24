@@ -5,7 +5,7 @@ using CodeSwitchLabel.Tests.Infrastructure;
 namespace CodeSwitchLabel.Tests.Integration;
 
 /// <summary>
-/// TEAM_002: volunteer Speaker self-registration — Active immediately, no admin approval.
+/// volunteer Speaker self-registration — Active immediately, no admin approval.
 /// POST /api/auth/register-speaker always creates a Speaker with a SpeakerProfile row.
 /// </summary>
 [Collection("Database")]

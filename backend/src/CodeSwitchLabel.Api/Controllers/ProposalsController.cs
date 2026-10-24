@@ -26,7 +26,7 @@ public class ProposalsController(IScriptProposalService proposalService) : Contr
     /// có `proposed` null — Reviewer tự đưa ra bản chốt khi duyệt.
     ///
     /// Lọc theo `kind`, `domain`, tìm theo `keyword` (nội dung câu, bản sửa, tên người gửi).
-    /// TEAM_012: `?sort=` nhận `proposalId`, `createdAt`, `kind`, `scriptId`.
+    /// `?sort=` nhận `proposalId`, `createdAt`, `kind`, `scriptId`.
     /// </remarks>
     [HttpGet("api/reviewer/proposals")]
     [Authorize(Roles = "Reviewer")]

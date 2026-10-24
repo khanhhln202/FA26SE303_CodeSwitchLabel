@@ -134,7 +134,7 @@ public class DatasetService(
 
         var sort = request.ToSort<DatasetSortField>();
 
-        // TEAM_012: nhánh cuối là thứ tự cũ (mới nhất trước).
+        // nhánh cuối là thứ tự cũ (mới nhất trước).
         var ordered = sort.Field switch
         {
             DatasetSortField.DatasetId => sort.Descending

@@ -65,7 +65,7 @@ BEGIN
     UPDATE recording SET status = v_final
      WHERE recording_id = NEW.recording_id AND status = 'pending_review';
 
-    -- TEAM_007: Chỉ khi đa số từ chối bản ghi VÀ có lý do thuộc nhóm 'content' mới trả câu về pending_validation
+    -- Chỉ khi đa số từ chối bản ghi VÀ có lý do thuộc nhóm 'content' mới trả câu về pending_validation
     IF v_final = 'rejected' THEN
         IF EXISTS (
             SELECT 1
@@ -79,7 +79,7 @@ BEGIN
              WHERE script_id = (SELECT script_id FROM recording WHERE recording_id = NEW.recording_id)
                AND status = 'validated';
 
-            -- TEAM_010: câu quay về bước duyệt nội dung thì không còn là mục công việc
+            -- câu quay về bước duyệt nội dung thì không còn là mục công việc
             -- nữa. Trước đây trigger để nguyên task_script ở 'pending' nên task treo
             -- vĩnh viễn, không bao giờ đạt chỉ tiêu.
             UPDATE task_script SET status = 'rejected'

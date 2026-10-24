@@ -8,7 +8,7 @@ using Xunit;
 namespace CodeSwitchLabel.Tests.Integration;
 
 /// <summary>
-/// TEAM_003: Kiểm thử toàn diện quyền Task Manager, xoá đợt, xoá nhiệm vụ và ràng buộc chủ đề (domain).
+/// Kiểm thử toàn diện quyền Task Manager, xoá đợt, xoá nhiệm vụ và ràng buộc chủ đề (domain).
 /// </summary>
 [Collection("Database")]
 [Trait("Category", "Integration")]

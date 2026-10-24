@@ -1,0 +1,11 @@
+stateDiagram-v2
+  %% Source: TaskProgressTracker + TaskService (review-task items).
+  %% Items are added as queued when a speaker submits a pending_review recording (all open review tasks
+  %% of the campaign) or manually / by autoFill.
+  [*] --> queued: recording enters a review task
+  queued --> reviewed: reviewer submits a vote in this task
+  %% queued -> reviewed is written in the review flow (ReviewService), not in the files read for this diagram.
+  queued --> skipped: recording finalized in another task, reject-audio, or discard-pair
+  reviewed --> skipped: recording finally rejected (contribution withdrawn from KPI)
+  skipped --> [*]
+  reviewed --> [*]: recording approved

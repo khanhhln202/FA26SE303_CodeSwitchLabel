@@ -236,7 +236,7 @@ END $$ LANGUAGE plpgsql;
 -- 6. Bảng review KHÔNG đổi trong V7
 -- ---------------------------------------------------------------------------
 -- TEAM_010 từng chuẩn bị một lượt duyệt của hệ thống (reviewer_kind, reviewer_id
--- cho phép NULL). ĐÃ BỎ ở TEAM_011: auto-QC chạy lúc nộp bản ghi và bản trượt thì
+-- cho phép NULL). ĐÃ BỎ ở auto-QC chạy lúc nộp bản ghi và bản trượt thì
 -- qc_failed, nên tới vòng duyệt chỉ còn bản đạt — lượt hệ thống không bao giờ có
 -- tác dụng. Giữ 3 người duyệt, chốt đa số 2/3 như hệ thống cũ.
 

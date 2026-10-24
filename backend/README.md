@@ -251,14 +251,20 @@ Task mới tạo ra đã là `InProgress` — không còn `Draft`/`Open` (TEAM_0
   đều được duyệt đạt. Chỉ tiêu task duyệt đếm theo số bản ghi.
 - **Một task giao cho NHIỀU người** (TEAM_010): `POST /api/tasks/{id}/assign` nhận
   `{ "userIds": [6, 7] }` và giao **thêm**, không đuổi người đang nhận. Index
-  `uq_task_assignment_active_user` chặn giao trùng một người; gỡ người ra thì lượt giao chuyển
-  `reassigned`, không bị xoá.
+  `uq_task_assignment_active_user` chặn giao trùng một người trên cả `active` lẫn `completed`
+  (V17); gỡ người ra thì lượt giao chuyển `reassigned`, không bị xoá.
 - **Quota nằm trên từng lượt giao** (V12): `task.target_qty` là chỉ tiêu cả nhóm, còn
   `task_assignment.target_qty` là quota riêng của người nhận, tổng phải bằng đúng chỉ tiêu task.
   Giao không kèm quota thì backend chia phần nguyên + dư (100 cho 3 người = 34/33/33);
   `PUT /api/tasks/{id}/assignments` thay cả bảng phân công và đặt quota từng người. Speaker thấy
   `myProgress` tính trên quota của mình, `teamProgress` trên chỉ tiêu task; trang chủ và bảng xếp
   hạng đợt cũng dùng quota cá nhân.
+- **Lượt giao tự chuyển trạng thái theo quota riêng** (V17): `TaskProgressTracker` chấm lại sau
+  mỗi việc thật — `done >= target_qty` → `Completed`, `done < target_qty` → `Active`. Nâng chỉ
+  tiêu hoặc bản ghi bị từ chối làm done tụt thì lượt giao tự mở lại. `Completed` **không phải
+  trạng thái cuối và không khoá việc**: mọi truy vấn người nhận / quyền làm việc tính cả
+  `Active` lẫn `Completed`; chỉ `Reassigned`/`Cancelled` mới là đã rời task. Database cũ áp
+  `migrations/V17__assignment_completed_on_quota.sql` (có backfill theo dữ liệu sẵn có).
 - **Có thể giao người nhận ngay khi tạo task** (TEAM_021): thêm `assigneeUserIds` vào `POST /api/tasks`.
   Danh sách được loại trùng; người nhận phải đang hoạt động và đúng vai trò (Speaker cho thu âm,
   Reviewer cho duyệt). Quota được chia đều, phần dư ưu tiên người đứng trước. Với task thu âm,
@@ -268,10 +274,12 @@ Task mới tạo ra đã là `InProgress` — không còn `Draft`/`Open` (TEAM_0
   Lược đồ gốc đã có cột `assignee_user_id` qua V14; database triển khai cũ cần áp `migrations/V14__task_script_assignee.sql` và `migrations/V15__recording_queue_assignee.sql` cho hàm hàng đợi mới.
 - **Trạng thái task tự tính lại** từ số liệu thật sau mỗi việc xảy ra (đạt chỉ tiêu →
   `Completed`, chưa đạt → `InProgress`); chỉ còn ba giá trị (`InProgress`/`Completed`/`Cancelled`).
-  **TEAM_016**: `Completed` KHÔNG khoá công việc — người nhận còn lượt giao Active vẫn thu/duyệt
-  thêm được (KPI chỉ để đo, không để chặn); chỉ `Cancelled` mới cấm hoàn toàn.
+  **TEAM_016**: `Completed` KHÔNG khoá công việc — người nhận còn lượt giao `Active` hoặc
+  `Completed` vẫn thu/duyệt thêm được (KPI chỉ để đo, không để chặn); chỉ `Cancelled` mới cấm
+  hoàn toàn.
   Task Manager đổi tay được qua `PATCH /api/tasks/{id}` với `status` — `Cancelled` bấm tay
-  y hệt nút Huỷ (mọi lượt giao đang hoạt động cũng chuyển `cancelled`). Trạng thái đợt thì
+  y hệt nút Huỷ (mọi lượt giao đang chờ `Active` cũng chuyển `cancelled`; lượt đã `Completed`
+  giữ nguyên dấu đã đạt quota). Trạng thái đợt thì
   **không bấm tay**: nó là hàm của task (`Open` chưa có nhiệm vụ nào, `InProgress` đang làm,
   `Completed` khi mọi nhiệm vụ xong).
 - **Giao việc kiểm tra người nhận có làm được không**: cặp câu người khác đã thu, hay bản ghi do

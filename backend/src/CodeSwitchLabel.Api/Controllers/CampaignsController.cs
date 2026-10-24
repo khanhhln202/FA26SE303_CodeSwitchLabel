@@ -24,7 +24,7 @@ namespace CodeSwitchLabel.Api.Controllers;
 [Authorize(Roles = "TaskManager,Admin")]
 public class CampaignsController(ICampaignService campaignService) : ControllerBase
 {
-    // TEAM_003: TaskManager và Admin đều tạo được đợt; TaskManager tự gán đợt cho mình
+    // TaskManager và Admin đều tạo được đợt; TaskManager tự gán đợt cho mình
     /// <summary>Tạo chiến dịch mới — ở trạng thái Open (chưa có nhiệm vụ nào).
     /// Chỉ tiêu từ 2000 đến 5000 cặp câu.</summary>
     [HttpPost]
@@ -42,7 +42,7 @@ public class CampaignsController(ICampaignService campaignService) : ControllerB
     /// Mỗi dòng kèm tiến độ: tổng chỉ tiêu đã chia cho các task, số task và số task đã xong.
     /// Task Manager chỉ xem được chiến dịch được giao cho mình (read-only).
     ///
-    /// TEAM_012: `?sort=` nhận `campaignId`, `startDate`, `endDate`, `status`, `createdAt`;
+    /// `?sort=` nhận `campaignId`, `startDate`, `endDate`, `status`, `createdAt`;
     /// `?dir=asc|desc` (mặc định `asc`). Bỏ trống `sort` thì ra đợt mới nhất trước.
     /// </remarks>
     [HttpGet]
@@ -88,12 +88,12 @@ public class CampaignsController(ICampaignService campaignService) : ControllerB
     public async Task<ActionResult<CampaignDto>> Get(long id, CancellationToken ct)
         => Ok(await campaignService.GetAsync(id, ct));
 
-    // TEAM_003: TaskManager phụ trách đợt và Admin đều sửa được
+    // TaskManager phụ trách đợt và Admin đều sửa được
     /// <summary>Sửa tên, chủ đề, chỉ tiêu hoặc khoảng ngày. Trường nào để trống thì giữ nguyên.</summary>
     /// <remarks>
     /// Không hạ chỉ tiêu xuống dưới phần đã chia cho các task — database sẽ từ chối.
     ///
-    /// TEAM_013: body **không còn nhận `status`**. Trạng thái đợt là hàm của các nhiệm vụ bên
+    /// body **không còn nhận `status`**. Trạng thái đợt là hàm của các nhiệm vụ bên
     /// trong (chưa có nhiệm vụ nào → `Open`, có nhiệm vụ → `InProgress`, mọi nhiệm vụ đều
     /// `Completed` → `Completed`) và được tính lại mỗi khi nhiệm vụ đổi, nên không có
     /// đường nào để bấm tay đặt nó.
@@ -107,7 +107,7 @@ public class CampaignsController(ICampaignService campaignService) : ControllerB
         long id, [FromBody] UpdateCampaignRequest request, CancellationToken ct)
         => Ok(await campaignService.UpdateAsync(id, request, User.GetUserId(), User.IsInRole("Admin"), ct));
 
-    // TEAM_003: Xoá đợt — các task con tự động thành task độc lập nhờ ON DELETE SET NULL
+    // Xoá đợt — các task con tự động thành task độc lập nhờ ON DELETE SET NULL
     /// <summary>Xoá chiến dịch. Task đang gắn tự động thành task độc lập (campaign_id = null).</summary>
     [HttpDelete("{id:long}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]

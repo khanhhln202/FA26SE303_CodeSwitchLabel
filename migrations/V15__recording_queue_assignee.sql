@@ -1,7 +1,7 @@
 -- ============================================================
 -- V15 — Hàng đợi ghi âm tôn trọng người nhận từng cặp câu
 --
--- TEAM_021: khi tạo/sửa task thu âm, mỗi cặp câu có thể được gán cho
+-- khi tạo/sửa task thu âm, mỗi cặp câu có thể được gán cho
 -- đúng một Speaker (task_script.assignee_user_id). Hàm claim cũ chỉ kiểm
 -- tra câu có nằm trong task hay không, nên vẫn phát cặp của Speaker A
 -- cho Speaker B.
@@ -71,12 +71,12 @@ BEGIN
                                WHERE ts.script_id = q.script_id
                                  AND ts.task_id = p_task_id
                                  AND ts.status = 'pending'
-                                 -- TEAM_021: chỉ phát cặp đã gán cho đúng Speaker;
+                                 -- chỉ phát cặp đã gán cho đúng Speaker;
                                  -- NULL là mục cũ chưa gán nên giữ hành vi cũ.
                                  AND (ts.assignee_user_id IS NULL OR ts.assignee_user_id = p_user_id))
                END
            )
-       -- TEAM_021: cặp đã gán cho Speaker khác thì không phát cho người này, kể cả
+       -- cặp đã gán cho Speaker khác thì không phát cho người này, kể cả
        -- khi gọi không kèm task_id. Mục cũ assignee_user_id NULL vẫn dùng chung.
        AND (
             q.stage <> 'recording'
