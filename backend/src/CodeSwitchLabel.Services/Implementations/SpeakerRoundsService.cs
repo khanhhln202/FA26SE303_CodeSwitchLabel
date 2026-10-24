@@ -325,7 +325,12 @@ public class SpeakerRoundsService(
                         v.ReviewRound, v.Decision.ToString(), ReviewDisplay.ReasonOf(v),
                         v.RecordingId, v.ReviewedAt))],
                 takes.Length > 0 ? takes.Min(r => r.Reviews.Count) : 0,
-                soVongCan));
+                soVongCan,
+                // Trạng thái RIÊNG của từng bản. Cặp gộp lấy bản chậm nhất, nên bản cs đã đạt
+                // mà bản vi chưa ai duyệt thì cả dòng hiện "đang chờ" — hai trường này để màn
+                // hình nói đúng "VI-EN: Đạt · VI: Chờ duyệt".
+                cs?.Status,
+                vi?.Status));
         }
 
         return new PagedResult<SpeakerRecordingHistoryDto>(items, query.Page, query.PageSize, total);
