@@ -36,7 +36,7 @@ internal static class TaskMapper
             r.Deadline.HasValue && r.Deadline.Value < now && TaskStateMachine.AcceptsWork(r.Status));
     }
 
-    // TEAM_003: Tính toán khả năng xoá của task (đã gỡ khỏi đợt + chưa có dữ liệu nộp thật)
+    // Tính toán khả năng xoá của task (đã gỡ khỏi đợt + chưa có dữ liệu nộp thật)
     public static (bool CanDelete, string? Reason) EvaluateCanDelete(this TaskRow r)
     {
         if (r.CampaignId.HasValue)
@@ -72,7 +72,7 @@ internal static class TaskMapper
     // Speaker thấy task của chính mình nên không cần thời điểm tạo.
     // Tiến độ đếm cặp câu đã THU ĐỦ, không đợi duyệt: gửi xong hai bản là cộng 1.
     //
-    // TEAM_010: task có thể giao cho nhiều người, nên trả CẢ HAI bộ số:
+    // task có thể giao cho nhiều người, nên trả CẢ HAI bộ số:
     //   MyDone   — việc của riêng người đang xem (để biết mình còn bao nhiêu)
     //   TeamDone — việc của cả nhóm (để biết cả đợt còn bao nhiêu)
     // Chỉ trả một bộ thì hoặc người đó tưởng mình làm cả nhiệm vụ, hoặc tưởng nhóm
@@ -104,7 +104,7 @@ public class TaskService(
     ISystemConfigService config,
     TimeProvider clock) : ITaskService
 {
-    // TEAM_007: Múi giờ Việt Nam (UTC+7 / Asia/Ho_Chi_Minh) thống nhất với database
+    // Múi giờ Việt Nam (UTC+7 / Asia/Ho_Chi_Minh) thống nhất với database
     private static readonly TimeSpan VietnamOffset = TimeSpan.FromHours(7);
     private static DateOnly ToVietnamDate(DateTimeOffset dt) => DateOnly.FromDateTime(dt.ToOffset(VietnamOffset).DateTime);
 
@@ -119,7 +119,7 @@ public class TaskService(
         var targetQty = request.TargetQty!.Value;
         var deadline = ToUtcFuture(request.Deadline!.Value, now);
 
-        // TEAM_021: phân công thành viên ngay lúc tạo (tùy chọn)
+        // phân công thành viên ngay lúc tạo (tùy chọn)
         List<long> assigneeUserIds = request.AssigneeUserIds?.Distinct().ToList() ?? [];
         int[]? assignmentQuotas = null;
 
@@ -170,7 +170,7 @@ public class TaskService(
             campaign = await campaigns.GetAsync(campaignId, ct)
                 ?? throw new NotFoundException("campaign_not_found", $"Không tìm thấy chiến dịch #{campaignId}.");
 
-            // TEAM_001: ERD — Task Manager chỉ tạo được task trong chiến dịch Admin đã giao cho chính
+            // ERD — Task Manager chỉ tạo được task trong chiến dịch Admin đã giao cho chính
             // mình; chiến dịch chưa giao thì chưa nhận task. Trigger trg_task_creator_assigned của
             // database chặn lần nữa ở tầng sâu.
             if (campaign.AssignedTo != createdById)
@@ -182,7 +182,7 @@ public class TaskService(
                         : $"Chiến dịch #{campaignId} đang giao cho người khác — bạn chỉ tạo được task trong chiến dịch của mình.");
             }
 
-            // TEAM_013: bỏ luật "đợt đã đóng thì không nhận thêm task". Trước đây đợt `Completed`
+            // bỏ luật "đợt đã đóng thì không nhận thêm task". Trước đây đợt `Completed`
             // nghĩa là đã chốt kết quả; giờ nó chỉ có nghĩa là mọi task đã xong, và gắn task mới
             // vào thì đợt tự quay lại `InProgress`. Chặn ở đây sẽ thành vòng luẩn quanh: đợt xong
             // → không gắn được → không bao giờ mở lại được nữa.
@@ -200,7 +200,7 @@ public class TaskService(
 
             var domain = request.Domain ?? campaign.Domain;
 
-            // TEAM_003: Nhiệm vụ phải cùng chủ đề với chiến dịch
+            // Nhiệm vụ phải cùng chủ đề với chiến dịch
             if (domain != campaign.Domain)
             {
                 throw new UnprocessableException(
@@ -222,7 +222,7 @@ public class TaskService(
 
         var taskDomain = request.Domain ?? (campaign != null ? campaign.Domain : ScriptDomain.ItTechnology);
 
-        // TEAM_021: Recording lấy đủ cặp câu hợp lệ theo CHỦ ĐỀ ĐÃ CHỐT (có thể đến từ
+        // Recording lấy đủ cặp câu hợp lệ theo CHỦ ĐỀ ĐÃ CHỐT (có thể đến từ
         // chiến dịch) trước khi tạo task. Thiếu cặp thì không tạo gì cả.
         List<string>? recordingScriptIds = null;
         if (assigneeUserIds.Count > 0 && request.TaskType == TaskType.Recording)
@@ -248,7 +248,7 @@ public class TaskService(
             Description = Clean(request.Description),
             TargetQty = targetQty,
             Deadline = deadline,
-            // TEAM_013: còn ba trạng thái (InProgress/Completed/Cancelled). Task vừa tạo chưa
+            // còn ba trạng thái (InProgress/Completed/Cancelled). Task vừa tạo chưa
             // có việc gì nhưng KHÔNG còn trạng thái nháp nữa — chờ người nhận thì vẫn là
             // InProgress, và chỉ tiêu vẫn được đặt trước rồi thêm mục vào sau.
             Status = WorkTaskStatus.InProgress,
@@ -258,7 +258,7 @@ public class TaskService(
         tasks.Add(task);
         await SaveTasksAsync(ct);
 
-        // TEAM_021: tạo phân công cùng lúc với task
+        // tạo phân công cùng lúc với task
         if (assigneeUserIds.Count > 0)
         {
             var scriptIndex = 0;
@@ -300,7 +300,7 @@ public class TaskService(
             await SaveTasksAsync(ct);
         }
 
-        // TEAM_013: đợt vừa nhận nhiệm vụ đầu tiên thì phải rời Open.
+        // đợt vừa nhận nhiệm vụ đầu tiên thì phải rời Open.
         if (campaign is not null) await campaigns.RefreshStatusAsync(campaign.CampaignId, ct);
 
         var detail = await LoadDetailAsync(task.TaskId, ct);
@@ -317,7 +317,7 @@ public class TaskService(
         var task = await LoadEditableAsync(taskId, ct);
         await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
 
-        // TEAM_013: đợt cũ cũng phải được tính lại — rút task ra khỏi đợt xong thì đợt có
+        // đợt cũ cũng phải được tính lại — rút task ra khỏi đợt xong thì đợt có
         // thể hết nhiệm vụ (về lại Open) hoặc mọi task còn lại đều xong (về Completed).
         var previousCampaignId = task.CampaignId;
 
@@ -334,9 +334,9 @@ public class TaskService(
                     $"Chiến dịch #{campaignId} không giao cho bạn nên không gắn task vào được.");
             }
 
-            // TEAM_013: bỏ luật chặn nhận thêm task vào đợt đã đóng — xem ở CreateAsync.
+            // bỏ luật chặn nhận thêm task vào đợt đã đóng — xem ở CreateAsync.
 
-            // TEAM_003: Nhiệm vụ phải cùng chủ đề với chiến dịch
+            // Nhiệm vụ phải cùng chủ đề với chiến dịch
             if (task.Domain != campaign.Domain)
             {
                 throw new UnprocessableException(
@@ -413,7 +413,7 @@ public class TaskService(
     {
         var now = clock.GetUtcNow();
 
-        // TEAM_003: Truyền request.Domain xuống repository
+        // Truyền request.Domain xuống repository
         var (rows, total) = await tasks.SearchAsync(
             request.TaskType, request.Status, request.AssigneeId, request.Domain, request.Overdue,
             now, request.Page, request.PageSize, request.ToSort<TaskSortField>(), ct);
@@ -522,7 +522,7 @@ public class TaskService(
 
         if (request.Description is not null) task.Description = Clean(request.Description);
 
-        // TEAM_003: Cập nhật chủ đề (nếu task đang gắn chiến dịch thì phải khớp chủ đề chiến dịch)
+        // Cập nhật chủ đề (nếu task đang gắn chiến dịch thì phải khớp chủ đề chiến dịch)
         if (request.Domain.HasValue)
         {
             var newDomain = request.Domain.Value;
@@ -579,7 +579,7 @@ public class TaskService(
                 }
             }
 
-            // TEAM_013: trước đây nhánh này bỏ qua khi task còn ở trạng thái `Draft`
+            // trước đây nhánh này bỏ qua khi task còn ở trạng thái `Draft`
             // (chưa giao cho ai). `Draft` đã bị bỏ, nên điều kiện được hỏi lại đúng bằng nghĩa
             // cũ: CHƯA CÓ NGƯỜI NHẬN thì cứ đặt chỉ tiêu trước, thêm mục vào sau.
             var active = await tasks.GetOpenAssignmentsAsync(taskId, ct);
@@ -596,7 +596,7 @@ public class TaskService(
                 var quotas = SplitQuota(request.TargetQty.Value, active.Count);
                 var (workable, blocked) = await CountWorkableAsync(task, active, null, ct);
 
-                // TEAM_018: task duyệt trong đợt được nâng chỉ tiêu trước khi có bản ghi.
+                // task duyệt trong đợt được nâng chỉ tiêu trước khi có bản ghi.
                 if (RequiresItemsToAssign(task) && quotas.Max() > workable)
                 {
                     throw new UnprocessableException(
@@ -614,7 +614,7 @@ public class TaskService(
 
         await SaveTasksAsync(ct);
 
-        // TEAM_013: Task Manager bấm tay đổi trạng thái. Giá trị này được giữ nguyên —
+        // Task Manager bấm tay đổi trạng thái. Giá trị này được giữ nguyên —
         // cố ý KHÔNG gọi tracker ở đây, vì tracker sẽ tính lại từ số liệu và ghi đè mất
         // lựa chọn của người ngay lập tức. Trạng thái bấm tay chỉ bị tính lại khi có việc
         // thật xảy ra sau đó (nộp bản ghi, duyệt, đổi chỉ tiêu...).
@@ -639,7 +639,7 @@ public class TaskService(
     }
 
     /// <summary>
-    /// TEAM_013: dùng chung cho nút Huỷ và cho việc Task Manager chọn `Cancelled` tay,
+    /// dùng chung cho nút Huỷ và cho việc Task Manager chọn `Cancelled` tay,
     /// để hai đường không lệch nhau. Các mục giữ nguyên để còn dấu vết công việc; lượt giao
     /// đang hoạt động thì chuyển sang `cancelled` — task đã dừng thì giữ chỗ là vô nghĩa.
     /// </summary>
@@ -678,7 +678,7 @@ public class TaskService(
                 "Chọn đúng một cách: gửi danh sách ids, hoặc gửi điều kiện autoFill.");
         }
 
-        // TEAM_010: nhóm người nhận, không phải một người. Mọi luật "câu này thuộc về
+        // nhóm người nhận, không phải một người. Mọi luật "câu này thuộc về
         // người nhận task" giờ áp cho bất kỳ ai trong nhóm.
         var assignees = await tasks.GetOpenAssignmentsAsync(taskId, ct);
         var assigneeIds = assignees.Select(a => a.UserId).ToArray();
@@ -747,7 +747,7 @@ public class TaskService(
         var task = await tasks.GetForUpdateAsync(taskId, ct);
         if (task is null) return;
 
-        // TEAM_013: cũng bỏ qua khi task CHƯA CÓ NGƯỜI NHẬN — cùng nghĩa với `Draft`
+        // cũng bỏ qua khi task CHƯA CÓ NGƯỜI NHẬN — cùng nghĩa với `Draft`
         // cũ mà nhánh này dùng để bỏ qua, chỉ là hỏi bằng tín hiệu còn tồn tại thay vì
         // hỏi bằng trạng thái (trạng thái `Draft` không còn nữa).
         var active = await tasks.GetOpenAssignmentsAsync(taskId, ct);
@@ -818,7 +818,7 @@ public class TaskService(
     }
 
     /// <summary>
-    /// TEAM_010: giao task cho NHIỀU người cùng lúc. Trước đây giao là ĐUỔI người cũ
+    /// giao task cho NHIỀU người cùng lúc. Trước đây giao là ĐUỔI người cũ
     /// (chuyển lượt giao của họ sang Reassigned) — đúng khi mỗi task chỉ một người,
     /// nhưng sai ngay khi cho phép nhiều người. Giờ giao thêm, không đuổi ai.
     /// </summary>
@@ -843,7 +843,7 @@ public class TaskService(
 
         if (toAdd.Length == 0)
         {
-            // TEAM_017: không có người mới để thêm → coi như thành công (no-op),
+            // không có người mới để thêm → coi như thành công (no-op),
             // tránh ném ConflictException khi frontend gửi lại danh sách không đổi.
             await tracker.RefreshStatusAsync(taskId, ct);
             return await LoadDetailAsync(taskId, ct);
@@ -872,7 +872,7 @@ public class TaskService(
             fresh.Add(user);
         }
 
-        // TEAM_010: chỉ tiêu là của CẢ NHÓM. Mỗi người khoảng target/n, nên không
+        // chỉ tiêu là của CẢ NHÓM. Mỗi người khoảng target/n, nên không
         // đòi mỗi người phải làm đủ cả target — làm vậy thì giao người thứ hai vào
         // là luôn trượt điều kiện dù tổng số mục vẫn dư.
         var finalCount = already.Count + toAdd.Length;
@@ -889,7 +889,7 @@ public class TaskService(
         afterAssigning.AddRange(fresh.Select(f => new TaskAssignment { TaskId = taskId, UserId = f.UserId }));
         var (workable, blocked) = await CountWorkableAsync(task, afterAssigning, null, ct);
 
-        // TEAM_018: task duyệt trong đợt nhận việc qua đường tự đẩy lúc Speaker nộp, nên hàng
+        // task duyệt trong đợt nhận việc qua đường tự đẩy lúc Speaker nộp, nên hàng
         // chờ rỗng lúc giao KHÔNG phải lỗi — giao reviewer trước, bản ghi tự tới sau là luồng
         // chính. Task thu âm và task duyệt ngoài đợt vẫn phải đủ mục trước khi giao.
         if (RequiresItemsToAssign(task) && quotas.Max() > workable)
@@ -920,7 +920,7 @@ public class TaskService(
             });
         }
 
-        // TEAM_021: task thu âm chia lại các cặp CHƯA bắt đầu theo quota mới.
+        // task thu âm chia lại các cặp CHƯA bắt đầu theo quota mới.
         // Cặp đã có bản ghi/đang thu giữ nguyên người nhận.
         if (task.TaskType == TaskType.Recording)
         {
@@ -934,7 +934,7 @@ public class TaskService(
 
         await SaveTasksAsync(ct);
 
-        // TEAM_013: giao task không còn đổi trạng thái (task đã là InProgress từ lúc tạo),
+        // giao task không còn đổi trạng thái (task đã là InProgress từ lúc tạo),
         // nhưng tracker vẫn chạy để một task bị Task Manager bấm tay về Completed rồi
         // được giao thêm người sẽ tính lại đúng theo số liệu.
         await tracker.RefreshStatusAsync(taskId, ct);
@@ -1002,7 +1002,7 @@ public class TaskService(
             .ToList();
         var (workable, blocked) = await CountWorkableAsync(task, afterAssigning, null, ct);
 
-        // TEAM_021: task duyệt nhận việc qua đường tự đẩy, nên hàng chờ rỗng lúc sửa
+        // task duyệt nhận việc qua đường tự đẩy, nên hàng chờ rỗng lúc sửa
         // phân công không phải lỗi. Chỉ task thu âm mới phải đủ cặp câu đã gán.
         if (task.TaskType == TaskType.Recording && quotas.Sum() > workable)
         {
@@ -1015,7 +1015,7 @@ public class TaskService(
         var wanted = requested.Select(a => a.UserId).ToHashSet();
         var byUser = active.ToDictionary(a => a.UserId);
 
-        // TEAM_021: người bị gỡ mà còn cặp câu đang làm/đã có bản ghi thì không được gỡ.
+        // người bị gỡ mà còn cặp câu đang làm/đã có bản ghi thì không được gỡ.
         if (task.TaskType == TaskType.Recording)
         {
             var removed = active
@@ -1129,12 +1129,12 @@ public class TaskService(
     }
 
     /// <summary>
-    /// TEAM_010: gỡ một người khỏi task, giữ lịch sử (lượt giao chuyển sang Reassigned).
+    /// gỡ một người khỏi task, giữ lịch sử (lượt giao chuyển sang Reassigned).
     ///
     /// Không cho gỡ người CUỐI CÙNG khi task đã có việc: task sẽ không còn ai làm tiếp,
     /// dữ liệu đã làm thì còn nguyên nhưng không ai dùng được nữa. Muốn dừng hẳn thì dùng Huỷ.
     ///
-    /// TEAM_013: trước đây lý do cụ thể hơn là "task rơi về Draft, mà Draft không nhận việc
+    /// trước đây lý do cụ thể hơn là "task rơi về Draft, mà Draft không nhận việc
     /// nữa" — trạng thái `Draft` đã bị bỏ nên luật này giữ nguyên vì lý do thật của nó.
     /// </summary>
     public async Task<TaskDetailDto> UnassignAsync(
@@ -1168,7 +1168,7 @@ public class TaskService(
             }
         }
 
-        // TEAM_021: cặp câu đã bắt đầu (đang thu / đã có bản ghi / đã xong) không đổi chủ.
+        // cặp câu đã bắt đầu (đang thu / đã có bản ghi / đã xong) không đổi chủ.
         if (task.TaskType == TaskType.Recording)
         {
             await EnsureRecordingAssigneesHaveNoStartedPairsAsync(taskId, [userId], ct);
@@ -1203,7 +1203,7 @@ public class TaskService(
     }
 
     /// <summary>
-    /// TEAM_021: chặn gỡ người nhận task thu âm khi người đó còn cặp câu đã bắt đầu.
+    /// chặn gỡ người nhận task thu âm khi người đó còn cặp câu đã bắt đầu.
     /// Cặp đã có bản ghi hoặc đang được thu không thể chuyển sang người khác — chuyển
     /// đi là mất dấu công việc và có thể làm sai lệch bản ghi đã nộp.
     /// </summary>
@@ -1236,7 +1236,7 @@ public class TaskService(
     }
 
     /// <summary>
-    /// TEAM_021: chia lại các cặp câu CHƯA bắt đầu của task thu âm theo danh sách người
+    /// chia lại các cặp câu CHƯA bắt đầu của task thu âm theo danh sách người
     /// nhận và quota mới. Cặp đã có bản ghi, đã xong hoặc đang bị giữ trong hàng đợi
     /// giữ nguyên người nhận — dữ liệu đã làm không đổi chủ.
     ///
@@ -1308,7 +1308,7 @@ public class TaskService(
     }
 
     /// <summary>
-    /// TEAM_020: quota hiển thị cho lượt giao cũ chưa có target_qty (dữ liệu trước V12).
+    /// quota hiển thị cho lượt giao cũ chưa có target_qty (dữ liệu trước V12).
     /// Lấy đúng phần của người ở vị trí <paramref name="index"/> trong mảng đã sắp xếp
     /// (cùng thứ tự <see cref="SplitQuota"/> dùng khi chia), để tổng các phần hiển thị
     /// đúng bằng chỉ tiêu task. Min 1 cho dữ liệu cũ bất thường (target &lt; số người),
@@ -1324,7 +1324,7 @@ public class TaskService(
     }
 
     /// <summary>
-    /// TEAM_018: task duyệt trong đợt nhận việc qua đường tự đẩy lúc Speaker nộp, nên hàng chờ
+    /// task duyệt trong đợt nhận việc qua đường tự đẩy lúc Speaker nộp, nên hàng chờ
     /// rỗng lúc giao KHÔNG phải lỗi — giao reviewer trước, bản ghi tự tới sau là luồng chính.
     /// Task thu âm và task duyệt ngoài đợt vẫn phải đủ mục trước khi giao/nâng chỉ tiêu.
     /// </summary>
@@ -1343,7 +1343,7 @@ public class TaskService(
             throw new ConflictException("task_completed", $"Task #{taskId} đã hoàn thành, không huỷ được.");
         }
 
-        // TEAM_013: đi qua helper chung với đường "Task Manager chọn Cancelled tay" ở
+        // đi qua helper chung với đường "Task Manager chọn Cancelled tay" ở
         // UpdateAsync — một nơi ghi trạng thái, một nơi huỷ lượt giao.
         await ApplyManualStatusAsync(task, WorkTaskStatus.Cancelled, ct);
 
@@ -1354,7 +1354,7 @@ public class TaskService(
         return await LoadDetailAsync(taskId, ct);
     }
 
-    // TEAM_003: Xoá cứng task đã gỡ khỏi đợt và chưa có dữ liệu nộp thật
+    // Xoá cứng task đã gỡ khỏi đợt và chưa có dữ liệu nộp thật
     public async Task DeleteAsync(
         long taskId, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false)
@@ -1419,7 +1419,7 @@ public class TaskService(
 
         foreach (var row in rows)
         {
-            // TEAM_010: đếm riêng phần việc của người này. Task có 3 người nhận thì
+            // đếm riêng phần việc của người này. Task có 3 người nhận thì
             // cả ba sẽ thấy cùng TaskRow.Done nếu không tra riêng.
             var mine = await tasks.GetAssigneeDoneAsync(row.TaskId, row.TaskType, ct);
             var nop = await tasks.GetAssigneeSubmittedAsync(row.TaskId, row.TaskType, ct);
@@ -1445,7 +1445,7 @@ public class TaskService(
     {
         var role = taskType == TaskType.Recording ? RoleName.Speaker : RoleName.Reviewer;
 
-        // TEAM_002: rows arrive ranked-first from repository
+        // rows arrive ranked-first from repository
         // (approval DESC, overdue ASC, load ASC); keep that order for Task Manager UI.
         var rows = await tasks.GetAssignableUsersAsync(role, clock.GetUtcNow(), ct);
 
@@ -1473,7 +1473,7 @@ public class TaskService(
 
         // Đếm task còn chạy theo loại + quá hạn: chỉ cần Total nên pageSize = 1.
         // Chỉ đếm nên thứ tự không quan trọng — SortSpec rỗng là thứ tự mặc định.
-        // TEAM_013: chỉ còn một trạng thái "đang chạy" là InProgress, nên không cộng
+        // chỉ còn một trạng thái "đang chạy" là InProgress, nên không cộng
         // `Open` với `InProgress` nữa.
         var (_, activeRec) = await tasks.SearchAsync(
             TaskType.Recording, WorkTaskStatus.InProgress, null, null, null, now, 1, 1, default, ct);
@@ -1516,7 +1516,7 @@ public class TaskService(
                 skipped.Add(new SkippedItemDto(id, $"Đang ở trạng thái {script.Status}, chỉ nhận câu đã duyệt nội dung."));
             else if (script.Domain != taskDomain)
                 skipped.Add(new SkippedItemDto(id, $"Chủ đề câu ({script.Domain}) không khớp với chủ đề nhiệm vụ ({taskDomain})."));
-            // TEAM_010: một cặp câu chỉ một người đọc. Với nhóm n người nhận, câu do
+            // một cặp câu chỉ một người đọc. Với nhóm n người nhận, câu do
             // một người NGOÀI nhóm đã thu thì cả nhóm đều không thu được nữa.
             else if (assigneeIds.Length > 0 &&
                      script.Recordings.Any(r => !assigneeIds.Contains(r.SpeakerId) && r.Status != RecordingStatus.QcFailed))
@@ -1580,7 +1580,7 @@ public class TaskService(
                 skipped.Add(new SkippedItemDto(id, $"Đang ở trạng thái {recording.Status}, không còn chờ duyệt."));
             else if (recording.Reviews.Count >= roundsRequired)
                 skipped.Add(new SkippedItemDto(id, $"Đã đủ {roundsRequired} lượt duyệt."));
-            // TEAM_010: bản ghi của bất kỳ ai trong nhóm nhận task đều không thể đưa
+            // bản ghi của bất kỳ ai trong nhóm nhận task đều không thể đưa
             // vào task này — người duyệt không được duyệt bản ghi của chính mình, và
             // 3 lượt duyệt phải là 3 người khác nhau.
             else if (assigneeIds.Length > 0 && assigneeIds.Contains(recording.SpeakerId))
@@ -1599,14 +1599,14 @@ public class TaskService(
 
     private async Task EnsureRemovalKeepsTargetAsync(WorkTask task, string itemId, CancellationToken ct)
     {
-        // TEAM_013: cùng nghĩa với nhánh `Draft` cũ — chưa giao cho ai thì chưa có mục nào
+        // cùng nghĩa với nhánh `Draft` cũ — chưa giao cho ai thì chưa có mục nào
         // để kiểm tra, cứ để Task Manager sửa tiếp.
         var active = await tasks.GetOpenAssignmentsAsync(task.TaskId, ct);
         if (active.Count == 0) return;
 
         var (workable, blocked) = await CountWorkableAsync(task, active, itemId, ct);
 
-        // TEAM_018: task duyệt trong đợt tự đầy lại khi có bản ghi mới, nên gỡ một mục
+        // task duyệt trong đợt tự đầy lại khi có bản ghi mới, nên gỡ một mục
         // không làm task kẹt — cùng lý do với RequiresItemsToAssign ở đường giao việc.
         if (RequiresItemsToAssign(task) && task.TargetQty > workable)
         {
@@ -1622,7 +1622,7 @@ public class TaskService(
     /// trong nhóm làm được — cặp câu của người đọc khác, hoặc bản ghi do chính người
     /// nhận task thu (người duyệt không được duyệt bản của mình).
     ///
-    /// TEAM_010: trước đây đếm theo MỘT người nhận. Nhiều người thì phải hỏi "cả nhóm
+    /// trước đây đếm theo MỘT người nhận. Nhiều người thì phải hỏi "cả nhóm
     /// còn làm được bao nhiêu", không phải "người này còn làm được bao nhiêu" — nếu
     /// tính theo một người thì có thể báo thiếu mục trong khi người khác vẫn làm được.
     ///

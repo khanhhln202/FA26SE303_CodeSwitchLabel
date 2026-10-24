@@ -25,7 +25,7 @@ public interface IUserRepository
 
     Task<List<AppUser>> GetByRoleAsync(RoleName role, CancellationToken ct = default);
 
-    /// <summary>TEAM_012: <paramref name="sort"/> rỗng (Field = null) là thứ tự mặc định.</summary>
+    /// <summary><paramref name="sort"/> rỗng (Field = null) là thứ tự mặc định.</summary>
     Task<(IReadOnlyList<AppUser> Items, int Total)> SearchAsync(
         RoleName? role, UserStatus? status, string? keyword,
         int page, int pageSize, SortSpec<UserSortField> sort, CancellationToken ct = default);
@@ -83,7 +83,7 @@ public class UserRepository(CodeSwitchLabelDbContext db) : IUserRepository
 
         var total = await query.CountAsync(ct);
 
-        // TEAM_012: nhánh cuối là thứ tự cũ (họ tên A-Z).
+        // nhánh cuối là thứ tự cũ (họ tên A-Z).
         var ordered = sort.Field switch
         {
             UserSortField.UserId => sort.Descending

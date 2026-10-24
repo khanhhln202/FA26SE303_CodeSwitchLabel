@@ -265,7 +265,7 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
     }
 
     /// <summary>
-    /// TEAM_018: task duyệt TRONG đợt với hàng chờ TRỐNG — đúng thế "giao việc trước
+    /// task duyệt TRONG đợt với hàng chờ TRỐNG — đúng thế "giao việc trước
     /// khi có bản ghi" mà đợt nào cũng gặp lúc khởi tạo.
     /// </summary>
     private async Task<WorkTask> TaoTaskDuyetTrongDotAsync(string nhan, int chiTieu = 3)
@@ -366,7 +366,7 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
         await TaskService.AssignAsync(task.TaskId, [speakers[0].UserId],
             TestContext.Current.CancellationToken, task.CreatedBy);
 
-        // Act — giao lại đúng người đang có (TEAM_017: no-op, không ném lỗi).
+        // Act — giao lại đúng người đang có (no-op, không ném lỗi).
         var result = await TaskService.AssignAsync(
             task.TaskId, [speakers[0].UserId], TestContext.Current.CancellationToken, task.CreatedBy);
 

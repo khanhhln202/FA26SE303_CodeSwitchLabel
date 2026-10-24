@@ -28,7 +28,7 @@ public enum ScriptDomain { ItTechnology, Education, DailyLife }
 public enum ScriptReviewAction { Accepted, Edited, Rejected }
 
 /// <summary>
-/// TEAM_010: Một câu đi hai chặng — duyệt nội dung rồi mới ghi âm. Cả hai chặng dùng
+/// Một câu đi hai chặng — duyệt nội dung rồi mới ghi âm. Cả hai chặng dùng
 /// chung một bảng script_queue để thứ tự FIFO và cơ chế giữ chỗ chỉ phải viết một lần.
 /// </summary>
 public enum QueueStage { TextReview, Recording }
@@ -40,13 +40,13 @@ public enum QueueStage { TextReview, Recording }
 public enum QueueState { Queued, Claimed, Done, Dropped }
 
 /// <summary>
-/// TEAM_015: loại đề xuất của Speaker trên một câu đã duyệt nội dung.
+/// loại đề xuất của Speaker trên một câu đã duyệt nội dung.
 /// Report = chỉ báo câu có lỗi (kèm lý do); Edit = gửi kèm bản sửa đề xuất.
 /// </summary>
 public enum ProposalKind { Report, Edit }
 
 /// <summary>
-/// TEAM_015: Pending = đang nằm trong hàng chờ của Reviewer; Accepted/Rejected = đã có
+/// Pending = đang nằm trong hàng chờ của Reviewer; Accepted/Rejected = đã có
 /// quyết định. Đề xuất Pending giữ câu khỏi hàng đợi ghi âm (trigger fn_script_proposal_sync);
 /// xử lý xong câu tự quay lại hàng đợi.
 /// </summary>
@@ -64,7 +64,7 @@ public enum TaskType { Recording, Review }
 /// Ứng với kiểu task_status. Đặt tên WorkTaskStatus để khỏi lẫn với
 /// System.Threading.Tasks.TaskStatus, nên phải khai báo tên kiểu PostgreSQL một cách tường minh.
 ///
-/// TEAM_013: còn đúng ba trạng thái. Trước đây có thêm `Draft` (chưa giao) và `Open`
+/// còn đúng ba trạng thái. Trước đây có thêm `Draft` (chưa giao) và `Open`
 /// (đã giao mà chưa làm), nhưng hai trạng thái đó chỉ nói về việc giao chứ không nói về
 /// việc làm — Task Manager nhìn bảng thì thấy y như nhau. Bỏ đi cho đúng ba.
 /// </summary>
@@ -74,7 +74,7 @@ public enum WorkTaskStatus { InProgress, Completed, Cancelled }
 /// Ứng với kiểu campaign_status. Một chiến dịch là đơn vị kế hoạch của Task Manager
 /// cho một đợt thu thập.
 ///
-/// TEAM_013: trạng thái KHÔNG bấm tay — nó là hàm của các task bên trong đợt, xem
+/// trạng thái KHÔNG bấm tay — nó là hàm của các task bên trong đợt, xem
 /// <c>CampaignStateMachine</c>. Không còn `Draft` (đợt mới tạo ra `Open`) và
 /// `Cancelled` (không có đường huỷ cả đợt).
 /// </summary>

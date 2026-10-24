@@ -58,7 +58,7 @@ SELECT
     t.status        AS task_status,
     t.target_qty,
     t.deadline,
-    -- TEAM_010: một task có thể giao cho nhiều người. Chỉ tiêu là của cả nhóm nên
+    -- một task có thể giao cho nhiều người. Chỉ tiêu là của cả nhóm nên
     -- không nhân theo số này — chỉ để báo cáo biết đang chia việc cho bao nhiêu người.
     (SELECT COUNT(*) FROM task_assignment a
         WHERE a.task_id = t.task_id AND a.assignment_status IN ('active', 'completed')) AS assignee_count,
@@ -128,12 +128,12 @@ BEGIN
                                WHERE ts.script_id = q.script_id
                                  AND ts.task_id = p_task_id
                                  AND ts.status = 'pending'
-                                 -- TEAM_021: chỉ phát cặp đã gán cho đúng Speaker;
+                                 -- chỉ phát cặp đã gán cho đúng Speaker;
                                  -- NULL là mục cũ chưa gán nên giữ hành vi cũ.
                                  AND (ts.assignee_user_id IS NULL OR ts.assignee_user_id = p_user_id))
                END
            )
-     -- TEAM_021: cặp đã gán cho Speaker khác thì không phát cho người này, kể cả
+     -- cặp đã gán cho Speaker khác thì không phát cho người này, kể cả
        -- khi gọi không kèm task_id. Mục cũ assignee_user_id NULL vẫn dùng chung.
        AND (
             q.stage <> 'recording'

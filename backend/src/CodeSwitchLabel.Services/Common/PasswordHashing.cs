@@ -46,7 +46,7 @@ public sealed class BcryptPasswordHasher : IPasswordHasher
         }
         catch (Exception)
         {
-            // TEAM_007: Hash không đúng định dạng bcrypt (lỗi parse, chuỗi quá ngắn, sai salt) trả false thay vì ném ngoại lệ 500
+            // Hash không đúng định dạng bcrypt (lỗi parse, chuỗi quá ngắn, sai salt) trả false thay vì ném ngoại lệ 500
             return false;
         }
     }

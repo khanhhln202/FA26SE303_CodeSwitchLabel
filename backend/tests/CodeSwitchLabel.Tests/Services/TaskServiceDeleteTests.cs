@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 namespace CodeSwitchLabel.Tests.Services;
 
 /// <summary>
-/// TEAM_003: xoá cứng task chỉ chặn khi còn dữ liệu nộp THẬT (bản ghi nộp về /
+/// xoá cứng task chỉ chặn khi còn dữ liệu nộp THẬT (bản ghi nộp về /
 /// lượt duyệt trỏ tới task). Lượt giao và hàng chờ là sổ sách — xoá theo task;
 /// trước đây chúng cũng chặn nên task gỡ khỏi đợt xong vẫn không xoá được.
 /// </summary>

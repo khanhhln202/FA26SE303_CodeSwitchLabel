@@ -34,7 +34,7 @@ public record TaskRow(
     int UsableItems,
     int TotalItems);
 
-/// <summary>TEAM_010: một người đang nhận task. Trước đây TaskRow chỉ giữ một người đầu tiên.</summary>
+/// <summary>một người đang nhận task. Trước đây TaskRow chỉ giữ một người đầu tiên.</summary>
 /// <param name="TargetQty">Quota riêng của người này; null = lượt giao cũ chưa có quota.</param>
 public record TaskAssigneeRow(long UserId, string FullName, int? TargetQty = null);
 
@@ -81,7 +81,7 @@ public interface ITaskRepository
     Task<WorkTask?> GetForUpdateAsync(long taskId, CancellationToken ct = default);
 
     /// <summary>
-    /// TEAM_010: một task có thể có nhiều người nhận. Hàm cũ trả về đúng một dòng
+    /// một task có thể có nhiều người nhận. Hàm cũ trả về đúng một dòng
     /// (FirstOrDefault) nên 8 chỗ gọi nó đều phải sửa — giữ hàm cũ là giữ cái bẫy
     /// "chỉ thấy người đầu tiên".
     /// </summary>
@@ -96,12 +96,12 @@ public interface ITaskRepository
 
     Task<TaskRow?> GetRowAsync(long taskId, CancellationToken ct = default);
 
-    /// <summary>TEAM_018: đợt của một task, để định tuyến công việc sang các task cùng đợt.</summary>
+    /// <summary>đợt của một task, để định tuyến công việc sang các task cùng đợt.</summary>
     Task<long?> GetCampaignIdAsync(long taskId, CancellationToken ct = default);
 
     /// <summary>
-    /// TEAM_018: các task duyệt còn nhận việc của một đợt (chưa huỷ), theo thứ tự tạo.
-    /// Gồm cả task đã đủ chỉ tiêu — TEAM_016: người nhận vẫn duyệt thêm được, KPI không chặn.
+    /// các task duyệt còn nhận việc của một đợt (chưa huỷ), theo thứ tự tạo.
+    /// Gồm cả task đã đủ chỉ tiêu — người nhận vẫn duyệt thêm được, KPI không chặn.
     /// </summary>
     Task<List<long>> GetReviewTaskIdsForCampaignAsync(long campaignId, CancellationToken ct = default);
 
@@ -111,20 +111,20 @@ public interface ITaskRepository
     /// </summary>
     Task<WorkTask?> GetRecordingTaskForCampaignAsync(long campaignId, CancellationToken ct = default);
 
-    /// <summary>TEAM_012: <paramref name="sort"/> rỗng (Field = null) là thứ tự mặc định.</summary>
+    /// <summary><paramref name="sort"/> rỗng (Field = null) là thứ tự mặc định.</summary>
     Task<(IReadOnlyList<TaskRow> Items, int Total)> SearchAsync(
         TaskType? type, WorkTaskStatus? status, long? assigneeId, ScriptDomain? domain, bool? overdue,
         DateTimeOffset now, int page, int pageSize, SortSpec<TaskSortField> sort,
         CancellationToken ct = default);
 
     /// <summary>
-    /// Các task còn nhận việc (chưa huỷ) đang giao cho người này. TEAM_016: gồm cả task
+    /// Các task còn nhận việc (chưa huỷ) đang giao cho người này. gồm cả task
     /// đã đủ chỉ tiêu — người nhận vẫn làm thêm được nên màn hình cá nhân phải còn thấy task.
     /// </summary>
     Task<List<TaskRow>> GetActiveRowsForAssigneeAsync(long userId, TaskType type, CancellationToken ct = default);
 
     /// <summary>
-    /// TEAM_010: số mục MỖI NGƯỜI NHẬN đã làm xong, để màn hình cá nhân hiện tiến độ
+    /// số mục MỖI NGƯỜI NHẬN đã làm xong, để màn hình cá nhân hiện tiến độ
     /// của chính mình bên cạnh tiến độ chung của cả nhóm.
     ///
     /// Task thu âm đếm cặp câu có bản ghi của đúng người đó; task duyệt đếm lượt
@@ -134,7 +134,7 @@ public interface ITaskRepository
     Task<Dictionary<long, int>> GetAssigneeDoneAsync(long taskId, TaskType type, CancellationToken ct = default);
 
     /// <summary>
-    /// TEAM_010: số việc đã NỘP của từng người trong task — khác <see cref="GetAssigneeDoneAsync"/>
+    /// số việc đã NỘP của từng người trong task — khác <see cref="GetAssigneeDoneAsync"/>
     /// ở chỗ nộp rồi vẫn có thể chưa được duyệt đạt.
     /// </summary>
     Task<Dictionary<long, int>> GetAssigneeSubmittedAsync(long taskId, TaskType type, CancellationToken ct = default);
@@ -143,13 +143,13 @@ public interface ITaskRepository
     Task<List<TaskScript>> GetScriptItemsAsync(long taskId, CancellationToken ct = default);
 
     /// <summary>
-    /// TEAM_021: mục task_script có theo dõi thay đổi, để đổi người nhận câu khi
+    /// mục task_script có theo dõi thay đổi, để đổi người nhận câu khi
     /// sửa bảng phân công. Không include Script vì chỉ cần cột assignee/status.
     /// </summary>
     Task<List<TaskScript>> GetScriptItemsTrackedAsync(long taskId, CancellationToken ct = default);
 
     /// <summary>
-    /// TEAM_021: các cặp câu đã bắt đầu làm — mục không còn Pending, đã có bản ghi
+    /// các cặp câu đã bắt đầu làm — mục không còn Pending, đã có bản ghi
     /// (không tính bản trượt QC), hoặc đang bị giữ trong hàng đợi ghi âm còn hiệu lực.
     /// Cặp đã bắt đầu thì không được đổi người nhận khi sửa phân công.
     /// </summary>
@@ -162,7 +162,7 @@ public interface ITaskRepository
     Task<List<TaskRecording>> GetQueuedRecordingItemsAsync(string recordingId, CancellationToken ct = default);
 
     /// <summary>
-    /// TEAM_018: mọi mục đang chờ của MỌI bản ghi thuộc một cặp câu, ở bất kỳ task nào.
+    /// mọi mục đang chờ của MỌI bản ghi thuộc một cặp câu, ở bất kỳ task nào.
     /// Xoá cả cặp thì tất cả bản ghi của câu bị loại, nên mục chờ ở task duyệt anh em cũng chết theo.
     /// </summary>
     Task<List<TaskRecording>> GetQueuedRecordingItemsByScriptAsync(string scriptId, CancellationToken ct = default);
@@ -171,19 +171,18 @@ public interface ITaskRepository
     Task<List<TaskScript>> GetPendingScriptItemsAsync(string scriptId, CancellationToken ct = default);
 
     /// <summary>
-    /// TEAM_010: các mục đã tính là xong của một cặp câu. Bản ghi bị từ chối thì phải
+    /// các mục đã tính là xong của một cặp câu. Bản ghi bị từ chối thì phải
     /// lùi chúng về Pending, nếu không chỉ tiêu không bao giờ tụt lại.
     /// </summary>
     Task<List<TaskScript>> GetCompletedScriptItemsAsync(string scriptId, CancellationToken ct = default);
 
-    /// <summary>TEAM_010: các mục trong task duyệt đã tính là xong cho bản ghi này.</summary>
+    /// <summary>các mục trong task duyệt đã tính là xong cho bản ghi này.</summary>
     Task<List<TaskRecording>> GetReviewedRecordingItemsAsync(string recordingId, CancellationToken ct = default);
 
     Task<AppUser?> GetUserWithRoleAsync(long userId, CancellationToken ct = default);
 
     /// <summary>
-    /// Task đúng loại, còn nhận việc (chưa huỷ), đang giao cho người này. TEAM_016:
-    /// task đã đủ chỉ tiêu (Completed) vẫn nhận thêm — KPI không chặn.
+    /// Task đúng loại, còn nhận việc (chưa huỷ), đang giao cho người này.     /// task đã đủ chỉ tiêu (Completed) vẫn nhận thêm — KPI không chặn.
     /// </summary>
     Task<bool> IsActiveTaskOfAsync(long taskId, long userId, TaskType type, CancellationToken ct = default);
 
@@ -213,7 +212,7 @@ public interface ITaskRepository
         long taskId, long[] assigneeIds, long? speakerId, int count,
         int roundsRequired, CancellationToken ct = default);
 
-    /// <summary>TEAM_021: lấy ID các câu validated chưa nằm trong task nào, theo chủ đề, giới hạn count.</summary>
+    /// <summary>lấy ID các câu validated chưa nằm trong task nào, theo chủ đề, giới hạn count.</summary>
     Task<List<string>> GetAvailableScriptIdsByDomainAsync(
         ScriptDomain domain, int count, CancellationToken ct = default);
 
@@ -344,7 +343,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
 
         var total = await query.CountAsync(ct);
 
-        // TEAM_012: nhánh cuối là thứ tự cũ — task có hạn trước, không có hạn ở cuối.
+        // nhánh cuối là thứ tự cũ — task có hạn trước, không có hạn ở cuối.
         // Sắp theo deadline cũng giữ nguyên quy tắc đó ở CẢ hai chiều: Postgres mặc định
         // NULLS FIRST khi DESC, nên lật chiều nguyên xi sẽ đẩy task không hạn lên đầu bảng.
         var ordered = sort.Field switch
@@ -385,7 +384,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         ProjectRows(db.WorkTasks
                 .AsNoTracking()
                 .Where(t => t.TaskType == type)
-                // TEAM_016: trả cả task đã đủ chỉ tiêu — người nhận vẫn làm thêm được.
+                // trả cả task đã đủ chỉ tiêu — người nhận vẫn làm thêm được.
                 .Where(t => t.Status != WorkTaskStatus.Cancelled)
                 .Where(t => t.Assignments.Any(a => a.UserId == userId && a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled))
                 .OrderBy(t => t.Deadline))
@@ -467,7 +466,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
                 .Where(t => t.Assignments.Any(a => a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled)))
             .ToListAsync(ct);
 
-        // TEAM_010: một task thuộc về NHIỀU người, nên mỗi người trong số đó đều phải
+        // một task thuộc về NHIỀU người, nên mỗi người trong số đó đều phải
         // được tính. Trước đây code lấy AssigneeId của một task rồi gán cho đúng một
         // người — task 3 người thì 2 người biến mất khỏi bảng tải việc, và số liệu
         // "chia đều việc cho từng người" sai hoàn toàn.
@@ -494,7 +493,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
                         var mineRow = r.Assignees.First(a => a.UserId == u.UserId);
                         if (mineRow.TargetQty.HasValue) return mineRow.TargetQty.Value;
 
-                        // TEAM_020: lượt giao cũ chưa có quota — lấy đúng phần của người
+                        // lượt giao cũ chưa có quota — lấy đúng phần của người
                         // này trong phép chia (cùng thứ tự Assignees đã sắp xếp), để tổng
                         // hiển thị đúng bằng chỉ tiêu task. Min 1 cho dữ liệu cũ bất thường.
                         var idx = r.Assignees.ToList().FindIndex(a => a.UserId == u.UserId);
@@ -595,7 +594,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
 
     public async Task<List<AssignableUserRow>> GetAssignableUsersAsync(RoleName role, DateTimeOffset now, CancellationToken ct = default)
     {
-        // TEAM_002: speaker prioritization — reuse v_speaker_performance + assignment load.
+        // speaker prioritization — reuse v_speaker_performance + assignment load.
         // Sort ranked-first (approval DESC, overdue ASC, load ASC); name last for stability.
         // Speakers with no recordings have NULL rate and sort after rated speakers.
         var users = await db.AppUsers.AsNoTracking()
@@ -646,7 +645,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         db.WorkTasks.AsNoTracking().AnyAsync(t =>
             t.TaskId == taskId &&
             t.TaskType == type &&
-            // TEAM_016: chỉ task đã huỷ mới chặn — task đủ chỉ tiêu vẫn nhận thêm việc.
+            // chỉ task đã huỷ mới chặn — task đủ chỉ tiêu vẫn nhận thêm việc.
             t.Status != WorkTaskStatus.Cancelled &&
             t.Assignments.Any(a => a.UserId == userId && a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled), ct);
 
@@ -658,10 +657,10 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         var query = db.TaskScripts.AsNoTracking()
             .Where(ts => scriptIds.Contains(ts.ScriptId) && ts.TaskId != excludeTaskId &&
                          ts.Status == TaskScriptStatus.Pending &&
-                         // TEAM_016: task đủ chỉ tiêu vẫn giữ mục chưa xong nên vẫn tính là "đang giữ".
+                         // task đủ chỉ tiêu vẫn giữ mục chưa xong nên vẫn tính là "đang giữ".
                          ts.Task.Status != WorkTaskStatus.Cancelled);
 
-        // TEAM_010: "cùng người" giờ nghĩa là "có chung ít nhất một người nhận". Task giao
+        // "cùng người" giờ nghĩa là "có chung ít nhất một người nhận". Task giao
         // cho nhiều người nên câu đang nằm ở task kia thuộc về bất kỳ ai trong số này.
         if (assigneeIds.Length > 0)
         {
@@ -684,7 +683,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
                          ts.Status == TaskScriptStatus.Pending &&
                          ts.Task.Status != WorkTaskStatus.Cancelled);
 
-        // TEAM_010: "cùng người" giờ nghĩa là "có chung ít nhất một người nhận". Task giao
+        // "cùng người" giờ nghĩa là "có chung ít nhất một người nhận". Task giao
         // cho nhiều người nên câu đang nằm ở task kia thuộc về bất kỳ ai trong số này.
         if (assigneeIds.Length > 0)
         {
@@ -704,7 +703,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         var rows = await db.TaskRecordings.AsNoTracking()
             .Where(tr => recordingIds.Contains(tr.RecordingId) && tr.TaskId != excludeTaskId &&
                          tr.Status == TaskRecordingStatus.Queued &&
-                         // TEAM_016: task đủ chỉ tiêu vẫn giữ mục chưa duyệt nên vẫn tính là "đang giữ".
+                         // task đủ chỉ tiêu vẫn giữ mục chưa duyệt nên vẫn tính là "đang giữ".
                          tr.Task.Status != WorkTaskStatus.Cancelled)
             .Select(tr => tr.RecordingId)
             .Distinct()
@@ -752,7 +751,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
                 // Chưa nằm trong task thu âm khác đang giao cho CHÍNH những người này.
                 .Where(s => !s.TaskScripts.Any(ts =>
                     ts.Status == TaskScriptStatus.Pending &&
-                    // TEAM_016: task đủ chỉ tiêu vẫn giữ mục chưa xong nên vẫn tính là "đang giữ".
+                    // task đủ chỉ tiêu vẫn giữ mục chưa xong nên vẫn tính là "đang giữ".
                     ts.Task.Status != WorkTaskStatus.Cancelled &&
                     ts.Task.Assignments.Any(a =>
                         ids.Contains(a.UserId) && a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled)));
@@ -786,7 +785,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
             .Where(r => r.Status == RecordingStatus.PendingReview)
             .Where(r => r.Reviews.Count < roundsRequired)
             .Where(r => !r.TaskRecordings.Any(tr => tr.TaskId == taskId))
-            // Chưa bị một task duyệt khác còn nhận việc giữ (TEAM_016: gồm task đủ chỉ tiêu).
+            // Chưa bị một task duyệt khác còn nhận việc giữ (gồm task đủ chỉ tiêu).
             .Where(r => !r.TaskRecordings.Any(tr =>
                 tr.Status == TaskRecordingStatus.Queued &&
                 tr.Task.Status != WorkTaskStatus.Cancelled));
@@ -905,7 +904,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
     public Task<int> SaveChangesAsync(CancellationToken ct = default) => db.SaveChangesAsync(ct);
 
     /// <summary>
-    /// TEAM_020: quota hiển thị cho lượt giao cũ chưa có target_qty (dữ liệu trước V12).
+    /// quota hiển thị cho lượt giao cũ chưa có target_qty (dữ liệu trước V12).
     /// Chia "phần nguyên + dư" (cùng công thức backfill V12 và SplitQuota bên service):
     /// tổng các phần đúng bằng chỉ tiêu task. Min 1 cho dữ liệu cũ bất thường.
     /// </summary>
@@ -941,7 +940,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
             t.TargetQty,
             t.Deadline,
             t.CreatedAt,
-            // TEAM_010: lấy HẾT người nhận, không lấy .FirstOrDefault(). Trước đây khi task
+            // lấy HẾT người nhận, không lấy .FirstOrDefault(). Trước đây khi task
             // có nhiều người thì DTO chỉ trả về một người tuỳ ý, còn lại biến mất khỏi
             // danh sách — người quản lý không thấy ai đang làm.
             t.Assignments

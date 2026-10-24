@@ -33,7 +33,7 @@ public interface IScriptService
     Task<ImportResultDto> ImportAsync(
         Stream jsonFile, string fileName, long importedById, CancellationToken ct = default);
 
-    /// <summary>TEAM_022: Chấp nhận hàng loạt câu đang chờ duyệt của một batch nhập.</summary>
+    /// <summary>Chấp nhận hàng loạt câu đang chờ duyệt của một batch nhập.</summary>
     /// <remarks>
     /// Người gọi (Admin) là người duyệt của từng lượt `Accepted`. Dùng luồng duyệt hiện có
     /// (`ReviewAsync`) nên vẫn giữ đủ quy tắc: chủ đề, phân công hàng đợi, lịch sử duyệt và

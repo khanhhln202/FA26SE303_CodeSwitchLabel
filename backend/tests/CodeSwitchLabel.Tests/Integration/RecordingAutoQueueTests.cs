@@ -121,7 +121,7 @@ public sealed class RecordingAutoQueueTests(DatabaseFixture fixture) : Integrati
 
         var hangCho = await HangChoCuaBanGhiAsync(recording.RecordingId, ct);
 
-        // Đang chạy lẫn đã đủ chỉ tiêu đều nhận (TEAM_016: KPI không khoá việc).
+        // Đang chạy lẫn đã đủ chỉ tiêu đều nhận (KPI không khoá việc).
         Assert.Equal(2, hangCho.Count);
         Assert.All(hangCho, tr =>
         {

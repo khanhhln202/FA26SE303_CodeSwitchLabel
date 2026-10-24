@@ -532,7 +532,7 @@ Mỗi dòng của `GET /api/speaker/rounds/{campaignId}/leaderboard` mang:
 ```json
 {
   "recording":    { "total": 40, "approved": 30, "rejected": 4, "pending": 6, "submitted": 34 },
-  // TEAM_016: submitted = tổng đã nộp (chờ duyệt + đạt + từ chối), không chỉ approved
+  // submitted = tổng đã nộp (chờ duyệt + đạt + từ chối), không chỉ approved
   "contribution": { "total": 12, "validated": 9,  "rejected": 1, "pending": 2 }
 }
 ```
@@ -1070,7 +1070,7 @@ Ai đã code theo bản API trước ngày 22/09/2026 thì cần sửa:
 | Không có nút gỡ người khỏi task | TEAM_010: `DELETE /api/tasks/{id}/assign/{userId}` |
 | `assigneeId` / `assigneeName` (một người) | TEAM_010: `assignees[]` — một task có nhiều người nhận, mỗi người kèm `targetQty` |
 | Tiến độ Speaker một bộ số | TEAM_010: `myProgress` + `teamProgress`; `myProgress.targetQty` là quota cá nhân, `teamProgress.targetQty` là chỉ tiêu task |
-| Câu nhập từ file tự `validated` | TEAM_010: **vào hàng đợi chờ duyệt** như mọi câu khác |
+| Câu nhập từ file tự `validated` | **vào hàng đợi chờ duyệt** như mọi câu khác |
 | Chỉ có 2 nút duyệt bản ghi | TEAM_010: thêm `reject-audio` và `discard-pair` |
 | Không có endpoint lấy câu chờ duyệt nội dung | TEAM_010: `GET /api/reviewer/scripts/next` |
 | — | Mới: nhập file `POST /api/scripts/import`, và nhóm thống kê `/api/admin/*` |

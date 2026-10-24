@@ -1,6 +1,6 @@
 namespace CodeSwitchLabel.Repositories.Enums;
 
-// TEAM_012: cho phép client chọn thứ tự của mọi endpoint trả danh sách phân trang
+// cho phép client chọn thứ tự của mọi endpoint trả danh sách phân trang
 // bằng `?sort=<cột>&dir=asc|desc`.
 //
 // Nguyên tắc: KHÔNG gửi `sort` thì ra đúng thứ tự cũ. Nhờ vậy client cũ không phải
@@ -76,7 +76,7 @@ public enum ImportBatchSortField { BatchId, CreatedAt, FileName, ScriptCount }
 /// <summary>
 /// Lịch sử duyệt bản ghi: GET /api/reviewer/history/recordings.
 ///
-/// TEAM_012: một dòng là MỘT CẶP bản ghi, mà trạng thái của cặp là thứ TÍNH RA sau khi cắt
+/// một dòng là MỘT CẶP bản ghi, mà trạng thái của cặp là thứ TÍNH RA sau khi cắt
 /// trang (gộp từ hai bản), nên không có cột `status` ở đây — cùng lý do với SpeakerPairSortField.
 /// </summary>
 public enum ReviewSortField { ReviewedAt, Decision, ScriptId }
@@ -87,7 +87,7 @@ public enum ScriptReviewSortField { ReviewedAt, Action, Status, Domain }
 /// <summary>
 /// Lịch sử ghi âm của Speaker: GET /api/speaker/recordings/history.
 ///
-/// TEAM_012: một dòng là MỘT CẶP bản ghi, mà cặp không có cột riêng trong database —
+/// một dòng là MỘT CẶP bản ghi, mà cặp không có cột riêng trong database —
 /// nó được tính lúc truy vấn bằng GroupBy(ScriptId). Chỉ những cột nào biểu được bằng
 /// biểu thức gom nhóm mới sắp xếp được TRƯỚC khi cắt trang; trạng thái và thời lượng của
 /// cặp thì không, nên cố tình không có ở đây.

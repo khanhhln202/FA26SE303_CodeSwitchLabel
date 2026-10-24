@@ -60,7 +60,7 @@ public class TaskRepositoryTests : IntegrationTestBase
         Assert.True(total >= 2);
     }
 
-    // ---------------------------------------------------------------- TEAM_012: sắp xếp
+    // ---------------------------------------------------------------- sắp xếp
 
     /// <summary>
     /// Ba task với chỉ tiêu khác nhau; chỉ một task có hạn. Danh sách task không lọc được theo
@@ -93,7 +93,7 @@ public class TaskRepositoryTests : IntegrationTestBase
     [Fact]
     public async Task SearchAsync_KhongTruyenSort_GiuNguyenThuTuCoHanTruocVaKhongHanOCuoi()
     {
-        // Regression TEAM_012: mặc định của /api/tasks là task có hạn trước, task không hạn ở cuối.
+        // Regression mặc định của /api/tasks là task có hạn trước, task không hạn ở cuối.
         var mine = await CreateThreeSortedTasksAsync();
 
         var (items, _) = await Tasks.SearchAsync(
@@ -162,7 +162,7 @@ public class TaskRepositoryTests : IntegrationTestBase
     [Fact]
     public async Task GetAssignableUsersAsync_RanksByApprovalThenOverdueThenLoad()
     {
-        // TEAM_002: speaker prioritization — approval DESC, overdue ASC, load ASC.
+        // speaker prioritization — approval DESC, overdue ASC, load ASC.
         var good = await CreateUserWithBuilderAsync(RoleName.Speaker, NewUniqueEmail("rank-good"), "Rank Good");
         var bad = await CreateUserWithBuilderAsync(RoleName.Speaker, NewUniqueEmail("rank-bad"), "Rank Bad");
         var fresh = await CreateUserWithBuilderAsync(RoleName.Speaker, NewUniqueEmail("rank-fresh"), "Rank Fresh");

@@ -39,7 +39,7 @@ public sealed class AssignmentQuotaCompletionTests(DatabaseFixture fixture) : In
             .SingleAsync(t => t.TaskId == task.TaskId, ct);
         Assert.Equal(WorkTaskStatus.Completed, saved.Status);
 
-        // TEAM_016: Completed chỉ nói "đã đạt phần của mình", không phải bị gỡ khỏi task.
+        // Completed chỉ nói "đã đạt phần của mình", không phải bị gỡ khỏi task.
         Assert.True(await Tasks.IsActiveTaskOfAsync(
             task.TaskId, SpeakerUserId, TaskType.Recording, ct));
     }

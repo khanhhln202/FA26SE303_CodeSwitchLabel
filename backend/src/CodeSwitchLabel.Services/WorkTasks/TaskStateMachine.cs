@@ -12,7 +12,7 @@ namespace CodeSwitchLabel.Services.WorkTasks;
 /// Trạng thái được TÍNH LẠI từ số liệu thật mỗi khi có việc xảy ra — nộp bản ghi, duyệt,
 /// bỏ qua, giao lại, sửa chỉ tiêu — thay vì cộng trừ từng bước. Tính lại thì không bao giờ lệch.
 ///
-/// TEAM_013: bỏ `Draft` và `Open`. Trước đây còn phân biệt "chưa giao" với "đã giao mà chưa
+/// bỏ `Draft` và `Open`. Trước đây còn phân biệt "chưa giao" với "đã giao mà chưa
 /// làm" nhưng cả hai đều là việc đang dở, và Task Manager bấm tay cũng chỉ đổi được sang
 /// hai trạng thái đó nên luật tự chạy và luật bấm tay lệch nhau. Giờ còn một nhánh duy nhất.
 ///
@@ -20,7 +20,7 @@ namespace CodeSwitchLabel.Services.WorkTasks;
 /// Nhánh "chưa đạt chỉ tiêu" cũng tự mở lại được: bản ghi bị từ chối làm chỉ tiêu tụt,
 /// task rơi về InProgress và người nhận phải thu bù (yêu cầu 4.2).
 ///
-/// TEAM_016: Completed KHÔNG khoá công việc — người nhận còn lượt giao Active thì thu/duyệt
+/// Completed KHÔNG khoá công việc — người nhận còn lượt giao Active thì thu/duyệt
 /// tiếp được và số vượt chỉ tiêu vẫn ghi nhận; chỉ Cancelled mới chặn. KPI để đo, không để khoá.
 ///
 /// Lưu ý: trạng thái Task Manager bấm tay KHÔNG bị nhánh này ghi đè ngay lập tức —

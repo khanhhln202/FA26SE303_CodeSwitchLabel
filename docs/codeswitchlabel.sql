@@ -18,7 +18,7 @@ CREATE TYPE script_domain         AS ENUM ('it_technology','education','daily_li
 CREATE TYPE script_review_action  AS ENUM ('accepted','edited','rejected');
 CREATE TYPE script_word_relation  AS ENUM ('semantic_equivalent','proper_noun');
 CREATE TYPE task_type             AS ENUM ('recording','review');
--- TEAM_013: task còn ba trạng thái. Đợt còn ba trạng thái và là HÀM của task, không bấm tay.
+-- task còn ba trạng thái. Đợt còn ba trạng thái và là HÀM của task, không bấm tay.
 CREATE TYPE campaign_status         AS ENUM ('open','in_progress','completed');
 CREATE TYPE task_status           AS ENUM ('in_progress','completed','cancelled');
 -- 'completed' = người nhận đã đạt quota riêng; lượt giao vẫn còn hiệu lực (xem V17).
@@ -30,12 +30,12 @@ CREATE TYPE task_recording_status AS ENUM ('queued','reviewed','skipped');
 CREATE TYPE review_decision       AS ENUM ('approved','rejected');
 CREATE TYPE rejection_category    AS ENUM ('content','audio_quality','pronunciation','other');
 
--- TEAM_010: Một hàng đợi chung cho MỌI câu văn bản (yêu cầu 2.1). Mỗi câu đi qua
+-- Một hàng đợi chung cho MỌI câu văn bản (yêu cầu 2.1). Mỗi câu đi qua
 -- hai chặng theo thứ tự: text_review -> recording. enqueued_at là mốc FIFO.
 CREATE TYPE queue_stage           AS ENUM ('text_review','recording');
 CREATE TYPE queue_state           AS ENUM ('queued','claimed','done','dropped');
 
--- TEAM_015: đề xuất của Speaker trên một câu ĐÃ duyệt nội dung — báo lỗi (report) hoặc
+-- đề xuất của Speaker trên một câu ĐÃ duyệt nội dung — báo lỗi (report) hoặc
 -- kèm bản sửa (edit). Hàng chờ của Reviewer là truy vấn trên bảng script_proposal,
 -- không phải một chặng của script_queue: đề xuất là VIỆC RIÊNG chờ quyết định,
 -- không phải bước bắt buộc mà mọi câu đều phải đi qua.
@@ -286,7 +286,7 @@ CREATE INDEX idx_script_proposal_queue ON script_proposal (created_at) WHERE sta
 -- ------------------------------------------------------------
 -- A campaign is the planning unit created by the Task Manager for a
 -- collection period (typically 1-2 weeks / month).
--- TEAM_003: domain = chủ đề của cả đợt. Một đợt chỉ đi trên MỘT chủ đề;
+-- domain = chủ đề của cả đợt. Một đợt chỉ đi trên MỘT chủ đề;
 -- trg_task_campaign_domain chặn gắn task khác chủ đề vào đợt này.
 CREATE TABLE campaign (
     campaign_id   BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -322,7 +322,7 @@ CREATE INDEX idx_campaign_registration_speaker ON campaign_registration (speaker
 -- attached to a campaign later, or detached back). Deleting a campaign
 -- keeps its tasks: FK is ON DELETE SET NULL; use the campaign-scoped
 -- detach endpoint to remove a task from a campaign without deleting it.
--- TEAM_003: domain = chủ đề của nhiệm vụ. Task độc lập thì tự do; task gắn
+-- domain = chủ đề của nhiệm vụ. Task độc lập thì tự do; task gắn
 -- vào đợt thì phải trùng chủ đề với đợt (trg_task_campaign_domain).
 CREATE TABLE task (
     task_id      BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -354,7 +354,7 @@ CREATE TABLE task_assignment (
         CHECK (target_qty IS NULL OR target_qty > 0)
 );
 
--- TEAM_010: Một task giao được cho NHIỀU người cùng lúc. Chỉ tiêu target_qty là của
+-- Một task giao được cho NHIỀU người cùng lúc. Chỉ tiêu target_qty là của
 -- CẢ NHÓM (không nhân theo số người), nên quota đợt vẫn cộng đúng một lần.
 -- Mỗi người nhận có quota riêng trong task_assignment.target_qty.
 -- Ràng buộc còn lại: cùng một người không được có hai lượt giao còn hiệu lực trên một
@@ -368,7 +368,7 @@ CREATE INDEX idx_task_assignment_user ON task_assignment (user_id);
 CREATE TABLE task_script (
     task_id         BIGINT NOT NULL REFERENCES task(task_id) ON DELETE CASCADE,
     script_id       VARCHAR(16) NOT NULL REFERENCES script(script_id),
-    assignee_user_id BIGINT REFERENCES app_user(user_id),   -- TEAM_021: người nhận câu này (Recording), NULL = chưa gán / task duyệt
+    assignee_user_id BIGINT REFERENCES app_user(user_id),   -- người nhận câu này (Recording), NULL = chưa gán / task duyệt
     status          task_script_status NOT NULL DEFAULT 'pending',
     included_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (task_id, script_id)
@@ -593,7 +593,7 @@ CREATE TRIGGER trg_system_config_touch BEFORE UPDATE ON system_config
 
 -- [ERD / CAMPAIGN] Campaign creators must be Admin or Task Manager.
 -- Task creators must be Task Manager.
--- TEAM_003: Task Manager tự lập kế hoạch cho đợt của mình nên cũng được
+-- Task Manager tự lập kế hoạch cho đợt của mình nên cũng được
 -- tạo chiến dịch. Việc gán đợt cho ai vẫn do trg_task_creator_assigned
 -- kiểm tra tầng dưới (task trong đợt do đúng người được giao đợt tạo).
 CREATE OR REPLACE FUNCTION fn_require_task_manager_creator() RETURNS trigger AS $$
@@ -1258,12 +1258,12 @@ BEGIN
                                WHERE ts.script_id = q.script_id
                                  AND ts.task_id = p_task_id
                                  AND ts.status = 'pending'
-                                 -- TEAM_021: chỉ phát cặp đã gán cho đúng Speaker;
+                                 -- chỉ phát cặp đã gán cho đúng Speaker;
                                  -- NULL là mục cũ chưa gán nên giữ hành vi cũ.
                                  AND (ts.assignee_user_id IS NULL OR ts.assignee_user_id = p_user_id))
                END
            )
-     -- TEAM_021: cặp đã gán cho Speaker khác thì không phát cho người này, kể cả
+     -- cặp đã gán cho Speaker khác thì không phát cho người này, kể cả
        -- khi gọi không kèm task_id. Mục cũ assignee_user_id NULL vẫn dùng chung.
        AND (
             q.stage <> 'recording'
@@ -1395,7 +1395,7 @@ CREATE TRIGGER trg_review_no_self BEFORE INSERT OR UPDATE ON review
 -- qc_failed takes do not claim ownership: a failed take by another speaker must not
 -- permanently block reuse.
 CREATE OR REPLACE FUNCTION fn_recording_single_speaker() RETURNS trigger AS $$ BEGIN
-    -- TEAM_007: Khóa cấp giao dịch theo băm script_id để ngăn race condition
+    -- Khóa cấp giao dịch theo băm script_id để ngăn race condition
     PERFORM pg_advisory_xact_lock(hashtext(NEW.script_id));
 
     IF EXISTS (SELECT 1 FROM recording r
@@ -1490,7 +1490,7 @@ BEGIN
     UPDATE recording SET status = v_final
      WHERE recording_id = NEW.recording_id AND status = 'pending_review';
 
-    -- TEAM_007: Chỉ khi đa số từ chối bản ghi VÀ có lý do thuộc nhóm 'content' mới trả câu về pending_validation
+    -- Chỉ khi đa số từ chối bản ghi VÀ có lý do thuộc nhóm 'content' mới trả câu về pending_validation
     IF v_final = 'rejected' THEN
         IF EXISTS (
             SELECT 1
@@ -1504,7 +1504,7 @@ BEGIN
              WHERE script_id = (SELECT script_id FROM recording WHERE recording_id = NEW.recording_id)
                AND status = 'validated';
 
-            -- TEAM_010: câu quay về bước duyệt nội dung thì không còn là mục công việc
+            -- câu quay về bước duyệt nội dung thì không còn là mục công việc
             -- nữa. Trước đây trigger để nguyên task_script ở 'pending' nên task treo
             -- vĩnh viễn, không bao giờ đạt chỉ tiêu.
             UPDATE task_script SET status = 'rejected'
@@ -1751,7 +1751,7 @@ INSERT INTO script_error_reason (reason_code, description, sort_order) VALUES
     ('duplicate',      'Câu này đã có trong dữ liệu — không cần gửi lại', 60),
     ('other',          'Lỗi văn bản khác — ghi rõ ở ô bình luận', 99);
 
--- TEAM_016: lý do từ chối bản ghi còn ĐÚNG 4 lý do — mỗi nhóm một mã.
+-- lý do từ chối bản ghi còn ĐÚNG 4 lý do — mỗi nhóm một mã.
 -- Các mã cũ cùng nhóm (script_text_error, word_skipped_added, low_volume,
 -- clipping_distortion, excess_silence) bị ẩn ở migrations/V10__four_rejection_reasons.sql.
 INSERT INTO rejection_reason (reason_code, category, description) VALUES
@@ -1778,10 +1778,10 @@ INSERT INTO system_config (config_key, config_value, value_type, description) VA
     ('quality.speaker_min_approval_rate',        '60', 'int', 'Min approval rate (%) before a speaker is flagged'),
     ('quality.speaker_max_consecutive_qc_fail',  '5',  'int', 'Consecutive qc_failed recordings before warning/suspension'),
     ('quality.min_recordings_before_eval',       '20', 'int', 'Recordings needed before approval rate is evaluated'),
-    -- TEAM_010: hạn claim của hàng đợi. Người mở câu rồi bỏ ngang sẽ trả câu về
+    -- hạn claim của hàng đợi. Người mở câu rồi bỏ ngang sẽ trả câu về
     -- hàng đợi sau tối đa số phút này, thay vì giữ mãi.
     ('queue.claim_ttl_minutes',                  '30',  'int', 'Minutes before an unclaimed queue item becomes claimable again'),
-    -- TEAM_010: lô câu văn bản Task Manager giao cho mỗi người duyệt (yêu cầu 2.2).
+    -- lô câu văn bản Task Manager giao cho mỗi người duyệt (yêu cầu 2.2).
     ('text_review.batch_size',                   '100', 'int', 'Default number of pending sentences claimed per reviewer');
 
 -- Bootstrap admin — KHÔNG lưu mã hash mật khẩu trong SQL seed.
@@ -1858,7 +1858,7 @@ SELECT
     t.status        AS task_status,
     t.target_qty,
     t.deadline,
-    -- TEAM_010: một task có thể giao cho nhiều người. Chỉ tiêu là của cả nhóm nên
+    -- một task có thể giao cho nhiều người. Chỉ tiêu là của cả nhóm nên
     -- không nhân theo số này — chỉ để báo cáo biết đang chia việc cho bao nhiêu người.
     (SELECT COUNT(*) FROM task_assignment a
         WHERE a.task_id = t.task_id AND a.assignment_status IN ('active', 'completed')) AS assignee_count,

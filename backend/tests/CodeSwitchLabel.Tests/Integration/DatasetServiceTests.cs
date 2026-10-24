@@ -104,7 +104,7 @@ public sealed class DatasetServiceTests : IntegrationTestBase
         Assert.Equal("dataset_exists", loi.Code);
     }
 
-    // ---------------------------------------------------------------- TEAM_012: sắp xếp
+    // ---------------------------------------------------------------- sắp xếp
 
     /// <summary>Ba dataset rỗng (không cần bản ghi nào) với tên theo thứ tự ngược lại.</summary>
     private async Task<(string Prefix, long[] Ids)> CreateThreeNamedDatasetsAsync()
@@ -130,7 +130,7 @@ public sealed class DatasetServiceTests : IntegrationTestBase
     [Fact]
     public async Task SearchAsync_KhongTruyenSort_GiuNguyenThuTuMoiNhatTruoc()
     {
-        // Regression TEAM_012: mặc định của /api/datasets là mới nhất trước.
+        // Regression mặc định của /api/datasets là mới nhất trước.
         var (_, ids) = await CreateThreeNamedDatasetsAsync();
 
         var page = await _datasets.SearchAsync(

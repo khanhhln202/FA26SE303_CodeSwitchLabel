@@ -33,10 +33,10 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
     public DbSet<ScriptErrorReason> ScriptErrorReasons => Set<ScriptErrorReason>();
     public DbSet<ScriptReview> ScriptReviews => Set<ScriptReview>();
 
-    /// <summary>TEAM_015: đề xuất của Speaker (báo lỗi / đề xuất sửa) — hàng chờ của Reviewer.</summary>
+    /// <summary>đề xuất của Speaker (báo lỗi / đề xuất sửa) — hàng chờ của Reviewer.</summary>
     public DbSet<ScriptProposal> ScriptProposals => Set<ScriptProposal>();
 
-    // TEAM_010: hàng đợi chung cho duyệt văn bản và ghi âm. Chỉ đọc — hàng do
+    // hàng đợi chung cho duyệt văn bản và ghi âm. Chỉ đọc — hàng do
     // trigger fn_script_queue_sync sinh và hàm fn_queue_claim_next xử lý giữ chỗ.
     public DbSet<ScriptQueue> ScriptQueue => Set<ScriptQueue>();
 
@@ -231,7 +231,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.HasOne(x => x.ErrorReason).WithMany().HasForeignKey(x => x.ErrorReasonId);
         });
 
-        // TEAM_010: hàng đợi chung. Phải chỉ tường minh — quy ước của EF ghép
+        // hàng đợi chung. Phải chỉ tường minh — quy ước của EF ghép
         // `ClaimedBy` + `ClaimedByUser` thành khoá ngoại chỉ khi tên cột là
         // `<Navigation>Id` hoặc `<Navigation>Key`. Tên `ClaimedBy` không khớp, nên EF
         // tự sinh cột `claimed_by_user_user_id` — cột không tồn tại trong lược đồ.
@@ -254,7 +254,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
                 .HasFilter("state IN ('queued','claimed')");
         });
 
-        // TEAM_015: đề xuất câu. Khoá ngoại tới app_user phải chỉ tường minh vì tên
+        // đề xuất câu. Khoá ngoại tới app_user phải chỉ tường minh vì tên
         // `DecidedByUser` + cột `decided_by` không khớp quy ước EF (<Navigation>Id).
         modelBuilder.Entity<ScriptProposal>(e =>
         {
@@ -320,7 +320,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.HasOne(x => x.Task).WithMany(t => t.Assignments).HasForeignKey(x => x.TaskId);
             e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId);
 
-            // TEAM_010: một task giao cho NHIỀU người được. Ràng buộc còn lại là cùng
+            // một task giao cho NHIỀU người được. Ràng buộc còn lại là cùng
             // một người không được nhận trùng — index một phần trên (task_id, user_id).
             e.HasIndex(x => new { x.TaskId, x.UserId })
                 .HasDatabaseName("uq_task_assignment_active_user")

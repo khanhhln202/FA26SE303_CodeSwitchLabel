@@ -9,7 +9,7 @@ namespace CodeSwitchLabel.Repositories.Repositories;
 public interface IRecordingRepository
 {
     /// <summary>
-    /// TEAM_010: chuyển mọi bản ghi của cặp câu sang rejected — dùng cho nút
+    /// chuyển mọi bản ghi của cặp câu sang rejected — dùng cho nút
     /// "Xóa hoàn toàn". Trả về số bản bị đổi.
     /// </summary>
     Task<int> MarkAllRejectedAsync(string scriptId, CancellationToken ct = default);
@@ -18,7 +18,7 @@ public interface IRecordingRepository
 
     Task<Recording?> GetAsync(string recordingId, CancellationToken ct = default);
 
-    /// <summary>TEAM_012: <paramref name="sort"/> rỗng (Field = null) là thứ tự mặc định.</summary>
+    /// <summary><paramref name="sort"/> rỗng (Field = null) là thứ tự mặc định.</summary>
     Task<(IReadOnlyList<Recording> Items, int Total)> SearchAsync(
         long? speakerId, string? scriptId, RecordingStatus? status,
         int page, int pageSize, SortSpec<RecordingSortField> sort, CancellationToken ct = default);
@@ -42,7 +42,7 @@ public interface IRecordingRepository
 
     /// <summary>
     /// Task có đúng là task thu âm còn nhận việc (chưa huỷ), đang giao cho người này,
-    /// và chứa cặp câu này. TEAM_016: task đã đủ chỉ tiêu (Completed) vẫn nhận — KPI không chặn.
+    /// và chứa cặp câu này. task đã đủ chỉ tiêu (Completed) vẫn nhận — KPI không chặn.
     /// </summary>
     Task<bool> IsRecordableInTaskAsync(
         long taskId, long speakerId, string scriptId, CancellationToken ct = default);
@@ -88,7 +88,7 @@ public class RecordingRepository(CodeSwitchLabelDbContext db) : IRecordingReposi
 
         var total = await query.CountAsync(ct);
 
-        // TEAM_012: nhánh cuối là thứ tự cũ (bản ghi mới nhất trước).
+        // nhánh cuối là thứ tự cũ (bản ghi mới nhất trước).
         var ordered = sort.Field switch
         {
             RecordingSortField.RecordingId => sort.Descending
@@ -152,7 +152,7 @@ public class RecordingRepository(CodeSwitchLabelDbContext db) : IRecordingReposi
         db.WorkTasks.AsNoTracking().AnyAsync(t =>
             t.TaskId == taskId &&
             t.TaskType == TaskType.Recording &&
-            // TEAM_016: chỉ task đã huỷ mới chặn — task đủ chỉ tiêu vẫn thu thêm được.
+            // chỉ task đã huỷ mới chặn — task đủ chỉ tiêu vẫn thu thêm được.
             t.Status != WorkTaskStatus.Cancelled &&
             t.Assignments.Any(a => a.UserId == speakerId && a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled) &&
             t.TaskScripts.Any(ts => ts.ScriptId == scriptId && ts.Status == TaskScriptStatus.Pending), ct);

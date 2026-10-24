@@ -19,7 +19,7 @@ public class SpeakerRoundsService(
     public async Task<SpeakerRoundDto?> GetCurrentAsync(long speakerId, CancellationToken ct = default)
     {
         // Đợt đang làm = chiến dịch của task thu âm còn nhận việc, hạn gần nhất trước.
-        // TEAM_016: task đã đủ chỉ tiêu vẫn còn nhận việc nên vẫn nằm trong danh sách,
+        // task đã đủ chỉ tiêu vẫn còn nhận việc nên vẫn nằm trong danh sách,
         // nhưng xếp SAU các task còn dở để hero không nhảy sang đợt đã xong khi còn việc khác.
         var task = await db.TaskAssignments.AsNoTracking()
             .Where(a => a.UserId == speakerId && a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled)
@@ -49,7 +49,7 @@ public class SpeakerRoundsService(
             .Select(r => r.CampaignId)
             .ToListAsync(ct);
 
-        // TEAM_013: đợt chưa có nhiệm vụ nào (Open) thì người đọc còn đăng ký được;
+        // đợt chưa có nhiệm vụ nào (Open) thì người đọc còn đăng ký được;
         // đợt đã có nhiệm vụ rồi thì việc đến từ task, không phải từ đăng ký.
         // Trước đây lọc cả `Draft` — trạng thái đó không tồn tại nữa, và đợt mới tạo đã là Open.
         var campaigns = await db.Campaigns.AsNoTracking()
@@ -85,7 +85,7 @@ public class SpeakerRoundsService(
             .Where(t => t.CampaignId == campaignId && t.TaskType == TaskType.Recording)
             .SumAsync(t => (int?)t.TargetQty, ct) ?? 0;
 
-        // TEAM_016: xếp hạng theo CÂU ĐÃ NỘP — đếm mọi bản ghi đã qua kiểm tra tự động
+        // xếp hạng theo CÂU ĐÃ NỘP — đếm mọi bản ghi đã qua kiểm tra tự động
         // (chờ duyệt / đạt / bị từ chối), không chỉ bản được duyệt. Bản trượt QC không tính.
         var rows = await db.Recordings.AsNoTracking()
             .Where(r => r.Status != RecordingStatus.QcFailed)
@@ -117,7 +117,7 @@ public class SpeakerRoundsService(
         var campaign = await db.Campaigns.FirstOrDefaultAsync(c => c.CampaignId == campaignId, ct)
             ?? throw new NotFoundException("campaign_not_found", $"Không tìm thấy chiến dịch #{campaignId}.");
 
-        // TEAM_013: đợt chỉ còn Open/InProgress/Completed, và trạng thái đợt là hàm của task —
+        // đợt chỉ còn Open/InProgress/Completed, và trạng thái đợt là hàm của task —
         // đăng ký là việc của người đọc chứ không phải việc của task, nên đợt đang chạy hay
         // đã xong đều không chặn. Luật cũ chặn cả Completed lẫn Cancelled đã bị gỡ.
         var exists = await db.CampaignRegistrations.AnyAsync(
@@ -222,7 +222,7 @@ public class SpeakerRoundsService(
 
         var sort = query.ToSort<SpeakerPairSortField>();
 
-        // TEAM_012: chỉ hai cột của cặp là sắp xếp được trước khi cắt trang. Trạng thái và
+        // chỉ hai cột của cặp là sắp xếp được trước khi cắt trang. Trạng thái và
         // thời lượng của cặp là thứ TÍNH RA ở dưới, nên không có trong SpeakerPairSortField.
         var orderedPairs = sort.Field switch
         {
@@ -252,7 +252,7 @@ public class SpeakerRoundsService(
         // hỏng cả dòng lịch sử.
         var items = new List<SpeakerRecordingHistoryDto>(pageScripts.Count);
 
-        // TEAM_012: dựng dòng theo đúng thứ tự pageScripts đã cắt trang, KHÔNG theo thứ tự
+        // dựng dòng theo đúng thứ tự pageScripts đã cắt trang, KHÔNG theo thứ tự
         // của `rows` — `rows` xếp theo thời điểm thu, nên `?sort=scriptId` sẽ trả về thứ tự
         // khác hẳn thứ tự client yêu cầu.
         var rowsByScript = rows.ToLookup(r => r.ScriptId);
@@ -346,7 +346,7 @@ public class SpeakerRoundsService(
 
         var sort = query.ToSort<ScriptSortField>();
 
-        // TEAM_012: cùng bộ cột với GET /api/scripts vì hai danh sách này đọc cùng bảng.
+        // cùng bộ cột với GET /api/scripts vì hai danh sách này đọc cùng bảng.
         var ordered = sort.Field switch
         {
             ScriptSortField.ScriptId => sort.Descending

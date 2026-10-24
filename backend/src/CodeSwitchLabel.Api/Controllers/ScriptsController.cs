@@ -21,7 +21,7 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
     /// <remarks>
     /// Từ khoá tìm trên cả hai câu của cặp.
     ///
-    /// TEAM_012: `?sort=` nhận `scriptId`, `createdAt`, `domain`, `status`; `?dir=asc|desc`
+    /// `?sort=` nhận `scriptId`, `createdAt`, `domain`, `status`; `?dir=asc|desc`
     /// (mặc định `asc`). Bỏ trống `sort` thì ra mới nhất trước — tức `sort=createdAt` + `dir=desc`.
     /// </remarks>
     [HttpGet]
@@ -162,7 +162,7 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
     }
 
     /// <summary>Danh sách batch đã nhập, mới nhất trước.</summary>
-    /// <remarks>TEAM_012: `?sort=` nhận `batchId`, `createdAt`, `fileName`, `scriptCount`.</remarks>
+    /// <remarks>`?sort=` nhận `batchId`, `createdAt`, `fileName`, `scriptCount`.</remarks>
     [HttpGet("import/batches")]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(PagedResult<ImportBatchDto>), StatusCodes.Status200OK)]

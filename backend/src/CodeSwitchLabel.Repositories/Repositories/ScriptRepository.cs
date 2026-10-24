@@ -7,7 +7,7 @@ namespace CodeSwitchLabel.Repositories.Repositories;
 
 public interface IScriptRepository
 {
-    /// <summary>TEAM_012: <paramref name="sort"/> rỗng (Field = null) là thứ tự mặc định.</summary>
+    /// <summary><paramref name="sort"/> rỗng (Field = null) là thứ tự mặc định.</summary>
     Task<(IReadOnlyList<Script> Items, int Total)> SearchAsync(
         ScriptStatus? status, ScriptDomain? domain, string? keyword,
         int page, int pageSize, SortSpec<ScriptSortField> sort, CancellationToken ct = default);
@@ -17,7 +17,7 @@ public interface IScriptRepository
     Task<Script?> GetWithReviewsAsync(string id, CancellationToken ct = default);
 
     /// <summary>
-    /// TEAM_010: câu đã có lượt duyệt nội dung nào chưa. Dùng chặn duyệt lần thứ hai —
+    /// câu đã có lượt duyệt nội dung nào chưa. Dùng chặn duyệt lần thứ hai —
     /// mỗi câu chỉ một lượt (yêu cầu 2.3).
     /// </summary>
     Task<bool> HasAcceptedReviewAsync(string scriptId, CancellationToken ct = default);
@@ -44,12 +44,12 @@ public interface IScriptRepository
     /// <summary>Script đã có bản ghi âm nào chưa — dùng để chặn sửa nội dung sau khi đã thu.</summary>
     Task<bool> HasRecordingsAsync(string scriptId, CancellationToken ct = default);
 
-    /// <summary>TEAM_010: các bản ghi của CHÍNH người đọc này.</summary>
+    /// <summary>các bản ghi của CHÍNH người đọc này.</summary>
     Task<List<Recording>> GetRecordingsOfSpeakerAsync(
         string scriptId, long speakerId, CancellationToken ct = default);
 
     /// <summary>
-    /// TEAM_010: câu đã có người KHÁC đọc và bản ghi chưa trượt QC. Câu như vậy không
+    /// câu đã có người KHÁC đọc và bản ghi chưa trượt QC. Câu như vậy không
     /// phát ra cho người này được — trigger trg_recording_single_speaker sẽ chặn lúc
     /// thu, tức là sau khi người đó đã đọc xong câu rồi.
     /// </summary>
@@ -105,7 +105,7 @@ public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
 
         var total = await query.CountAsync(ct);
 
-        // TEAM_012: nhánh cuối là thứ tự cũ (mới nhất trước). Mọi nhánh đều nối scriptId
+        // nhánh cuối là thứ tự cũ (mới nhất trước). Mọi nhánh đều nối scriptId
         // ở ngoài switch để trang sau không lặp dòng khi cột sắp xếp bằng nhau.
         var ordered = sort.Field switch
         {

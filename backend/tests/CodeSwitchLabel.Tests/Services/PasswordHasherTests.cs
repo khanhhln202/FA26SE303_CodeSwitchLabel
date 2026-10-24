@@ -75,7 +75,7 @@ public sealed class PasswordHasherTests
     [InlineData("$2a$11$REPLACE_WITH_REAL_BCRYPT_HASH_BEFORE_FIRST_LOGIN")]
     public void Verify_HashCucNganHoacSaiDinhDang_TraFalse(string hash)
     {
-        // TEAM_007: chuỗi quá ngắn hoặc sai định dạng bcrypt đều được xử lý êm, trả false
+        // chuỗi quá ngắn hoặc sai định dạng bcrypt đều được xử lý êm, trả false
         var ok = _hasher.Verify("MatKhau2026", hash);
         Assert.False(ok);
     }

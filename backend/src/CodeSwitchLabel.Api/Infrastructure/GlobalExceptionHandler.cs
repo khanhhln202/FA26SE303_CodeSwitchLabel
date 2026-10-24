@@ -104,7 +104,7 @@ public class GlobalExceptionHandler(
                     "Bạn không được duyệt bản ghi do chính mình thu.");
             }
 
-            // TEAM_015: fn_script_proposal_guard. Service đã kiểm trước hai điều kiện này;
+            // fn_script_proposal_guard. Service đã kiểm trước hai điều kiện này;
             // nhánh dưới chỉ để ca đua hiếm gặp (bản ghi âm được ghi xen giữa lúc kiểm và
             // lúc insert) trả đúng mã nghiệp vụ thay vì 500.
             if (message.Contains("proposal: script", StringComparison.OrdinalIgnoreCase))

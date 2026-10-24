@@ -136,7 +136,7 @@ public class ScriptRepositoryTests : IntegrationTestBase
         Assert.False(exists);
     }
 
-    // ---------------------------------------------------------------- TEAM_012: sắp xếp
+    // ---------------------------------------------------------------- sắp xếp
 
     /// <summary>
     /// Ba câu của riêng test này (kèm từ khoá chỉ chúng có) và mốc thời gian cách nhau rõ.
@@ -166,7 +166,7 @@ public class ScriptRepositoryTests : IntegrationTestBase
     [Fact]
     public async Task SearchAsync_KhongTruyenSort_GiuNguyenThuTuMoiNhatTruoc()
     {
-        // Regression TEAM_012: client cũ không gửi sort thì phải y hệt trước khi có tính năng này.
+        // Regression client cũ không gửi sort thì phải y hệt trước khi có tính năng này.
         var (keyword, scripts) = await CreateThreeSortedScriptsAsync();
 
         var (items, total) = await Scripts.SearchAsync(

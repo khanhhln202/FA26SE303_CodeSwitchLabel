@@ -223,7 +223,7 @@ public sealed class TaskCampaignIndependentTests : IntegrationTestBase
             new
             {
                 campaignName,
-                domain = "ItTechnology", // TEAM_009: domain is required
+                domain = "ItTechnology", // domain is required
                 targetQty = 2000,
                 startDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
                 endDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30))
@@ -315,7 +315,7 @@ public sealed class TaskCampaignIndependentTests : IntegrationTestBase
         {
             CampaignId = null,
             TaskType = TaskType.Recording,
-            Domain = ScriptDomain.DailyLife, // TEAM_009: match script domain
+            Domain = ScriptDomain.DailyLife, // match script domain
             Description = "Đóng thay vì xoá",
             TargetQty = 1,
             Deadline = DateTimeOffset.UtcNow.AddDays(7)

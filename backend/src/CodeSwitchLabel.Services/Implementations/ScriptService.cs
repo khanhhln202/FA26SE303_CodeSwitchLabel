@@ -67,7 +67,7 @@ public class ScriptService(
     }
 
     /// <summary>
-    /// TEAM_010: điều kiện được phép duyệt nội dung một câu — chỉ một lượt, và chỉ
+    /// điều kiện được phép duyệt nội dung một câu — chỉ một lượt, và chỉ
     /// người được Task Manager giao câu đó trong lô.
     ///
     /// Câu nào đã có lượt duyệt rồi thì câu đó không còn trong hàng đợi nữa, nên chặn
@@ -206,7 +206,7 @@ public class ScriptService(
 
         if (pendingScripts.Count > 0)
         {
-            // TEAM_010: câu vào hàng đợi thì KHÔNG cần người duyệt có thẩm quyền chủ đề
+            // câu vào hàng đợi thì KHÔNG cần người duyệt có thẩm quyền chủ đề
             // ngay lúc nhập — thẩm quyền áp dụng cho người DUYỆT (ReviewCoreAsync), không
             // áp dụng cho việc cho câu nào vào hàng đợi. Kiểm tra fail-fast cũ vì vậy bị
             // bỏ: nó chặn cả file nhập hàng loạt chỉ vì Admin chưa có domain.
@@ -294,7 +294,7 @@ public class ScriptService(
         return new ImportBatchDetailDto(batch.BatchId, batch.FileName, batch.ScriptCount, batch.ImportedBy, batch.CreatedAt, scriptIds);
     }
 
-    /// <summary>TEAM_022: Accept pending scripts in an imported batch.</summary>
+    /// <summary>Accept pending scripts in an imported batch.</summary>
     /// <remarks>
     /// The calling Admin is recorded as reviewer for each Accepted review. Reuses ReviewAsync
     /// so domain qualification, queue assignment, review history, and script status rules apply.

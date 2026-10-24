@@ -9,7 +9,7 @@ namespace CodeSwitchLabel.Repositories.WorkTasks;
 ///   Có nhiệm vụ           → InProgress
 ///   Mọi nhiệm vụ đã xong  → Completed
 ///
-/// TEAM_013: trước đây đợt có `Draft`/`Open`/`InProgress`/`Completed`/`Cancelled` nhưng
+/// trước đây đợt có `Draft`/`Open`/`InProgress`/`Completed`/`Cancelled` nhưng
 /// `campaign.status` gần như không bao giờ được cập nhật — tạo ra là `Draft`, rồi chỉ đổi
 /// khi Admin PATCH tay, nên bảng đợt trên frontend phải tự đếm task mới hiện được chữ
 /// "Hoàn thành". Giờ trạng thái đợt là HÀM của task, không ai bấm tay nữa.
