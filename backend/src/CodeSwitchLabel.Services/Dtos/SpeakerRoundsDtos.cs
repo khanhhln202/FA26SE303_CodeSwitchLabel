@@ -3,6 +3,11 @@ using CodeSwitchLabel.Repositories.Enums;
 namespace CodeSwitchLabel.Services.Dtos;
 
 /// <summary>Một "Đợt" ở FE = một chiến dịch ở BE, kèm tiến độ của chính người đọc.</summary>
+/// <param name="Target">
+/// Chỉ tiêu riêng của người đọc: tổng quota trên các lượt giao task thu âm còn hiệu lực
+/// trong đợt — không phải <c>campaign.TargetQty</c>. 0 nghĩa là chưa nhận nhiệm vụ nào.
+/// </param>
+/// <param name="Submitted">Số bản đã nộp thật trong đợt; có thể vượt <paramref name="Target"/>.</param>
 public record SpeakerRoundDto(
     long CampaignId,
     string Name,
@@ -29,10 +34,23 @@ public record UpcomingRoundDto(
     bool IsRegistered);
 
 /// <summary>
-/// Một dòng bảng xếp hạng của đợt. TEAM_016: <see cref="Submitted"/> là số bản ghi
+/// Một dòng bảng xếp hạng của đợt. <see cref="Submitted"/> là số bản ghi
 /// người này ĐÃ NỘP (chờ duyệt / đạt / bị từ chối), không phải chỉ bản được duyệt.
 /// </summary>
-public record LeaderboardEntryDto(int Rank, long UserId, string Name, int Submitted, bool IsMe);
+/// <param name="Submitted">Số bản đã nộp trong đợt — số thật, dùng để xếp hạng.</param>
+/// <param name="TargetQty">
+/// Chỉ tiêu riêng của người này trong đợt: tổng quota trên các lượt giao task thu âm họ đang
+/// nhận. Task giao nhiều người thì mỗi người nhận quota của mình (chia đều khi giao); lượt
+/// giao cũ chưa có quota thì chia theo số người nhận, cùng quy tắc với API tiến độ Speaker.
+/// 0 nghĩa là chưa nhận nhiệm vụ nào trong đợt.
+/// </param>
+/// <param name="SubmittedCapped">
+/// <paramref name="Submitted"/> nhưng không vượt <paramref name="TargetQty"/> — dùng hiển thị
+/// tiến độ (ví dụ "15/100"). Hệ thống cho thu tiếp sau khi đạt chỉ tiêu nên số thật vượt mốc
+/// là bình thường; xếp hạng vẫn tính trên số thật để người làm nhiều hơn không bị tụt hạng oan.
+/// </param>
+public record LeaderboardEntryDto(
+    int Rank, long UserId, string Name, int Submitted, bool IsMe, int TargetQty, int SubmittedCapped);
 
 /// <summary>
 /// Bảng xếp hạng kèm mốc để vẽ thanh tiến độ.
@@ -62,6 +80,15 @@ public record RejectedRecordingDto(
 /// <param name="DurationSec">Bản Việt-Anh, hoặc bản tiếng Việt nếu cặp chỉ có một bản.</param>
 /// <param name="Status">Trạng thái của CẶP, gộp từ hai bản.</param>
 /// <param name="RecordedAt">Mốc của bản ghi mới nhất trong cặp.</param>
+/// <param name="Reviews">
+/// Mọi lượt duyệt của CẢ HAI bản, kể cả khi bản ghi chưa chốt — mỗi lượt kèm
+/// <see cref="HistoryReviewDto.RecordingId"/> để biết nó thuộc bản nào.
+/// </param>
+/// <param name="ReviewedRounds">
+/// Số lượt duyệt đã có của bản ÍT lượt nhất trong cặp. Cặp chỉ xong khi cả hai bản xong,
+/// nên đây mới là tiến độ thật của cặp — hiện "ReviewedRounds/RoundsRequired".
+/// </param>
+/// <param name="RoundsRequired">Số lượt duyệt cần có cho mỗi bản ghi (system_config).</param>
 public record SpeakerRecordingHistoryDto(
     string ScriptId,
     string? TaskTitle,
@@ -74,9 +101,23 @@ public record SpeakerRecordingHistoryDto(
     decimal DurationSec,
     RecordingStatus Status,
     DateTimeOffset RecordedAt,
-    IReadOnlyList<HistoryReviewDto> Reviews);
+    IReadOnlyList<HistoryReviewDto> Reviews,
+    int ReviewedRounds,
+    int RoundsRequired);
 
-public record HistoryReviewDto(int Round, string Decision, string? Reason);
+/// <param name="Reason">
+/// Bình luận của người duyệt; lượt từ chối không kèm bình luận thì là mô tả các lý do đã chọn.
+/// </param>
+/// <param name="RecordingId">
+/// Bản ghi mà lượt duyệt này thuộc về. Null ở lịch sử của Reviewer (ở đó mỗi dòng đã là
+/// một bản ghi rồi), có giá trị ở lịch sử của Speaker vì một dòng là một CẶP hai bản.
+/// </param>
+public record HistoryReviewDto(
+    int Round,
+    string Decision,
+    string? Reason,
+    string? RecordingId = null,
+    DateTimeOffset? ReviewedAt = null);
 
 /// <summary>
 /// Số liệu của một nhóm việc của Speaker. Cả hai nhóm đều đếm bản ghi / câu, không đếm theo cặp.
@@ -90,7 +131,23 @@ public record RecordingStats(int Total, int Approved, int Rejected, int Pending)
 /// <param name="Rejected">Câu bị từ chối, cộng cả câu đã bị ẩn.</param>
 public record ContributionStats(int Total, int Validated, int Rejected, int Pending);
 
-/// <summary>Dòng lịch sử đóng góp câu của Speaker.</summary>
+/// <summary>
+/// Lượt duyệt nội dung của một câu đóng góp.
+///
+/// Duyệt văn bản chỉ có MỘT lượt (TEAM_010), khác bản ghi âm cần ba lượt quá bán — nên ở đây
+/// là một đối tượng chứ không phải danh sách, và không có số vòng.
+/// </summary>
+public record ContributionReviewDto(
+    long ReviewId,
+    string Action,
+    long ReviewerId,
+    string ReviewerName,
+    string? ErrorReasonCode,
+    string? ErrorReasonDescription,
+    string? Comment,
+    DateTimeOffset ReviewedAt);
+
+/// <param name="Review">Null khi câu còn đang chờ duyệt.</param>
 public record SpeakerContributionHistoryDto(
     string ScriptId,
     string Category,
@@ -99,7 +156,7 @@ public record SpeakerContributionHistoryDto(
     IReadOnlyList<AlignmentItem> Alignment,
     DateTimeOffset CreatedAt,
     ScriptStatus Status,
-    IReadOnlyList<HistoryReviewDto> Reviews);
+    ContributionReviewDto? Review);
 
 public record SpeakerHistoryQuery : PageRequest
 {

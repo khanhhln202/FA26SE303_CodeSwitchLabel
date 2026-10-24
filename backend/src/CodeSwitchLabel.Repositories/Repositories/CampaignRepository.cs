@@ -19,7 +19,7 @@ public interface ICampaignRepository
     Task<Campaign?> GetForUpdateAsync(long campaignId, CancellationToken ct = default);
     Task<Campaign?> GetAsync(long campaignId, CancellationToken ct = default);
 
-    /// <summary>TEAM_012: <paramref name="sort"/> rỗng (Field = null) là thứ tự mặc định.</summary>
+    /// <summary><paramref name="sort"/> rỗng (Field = null) là thứ tự mặc định.</summary>
     Task<(IReadOnlyList<Campaign> Items, int Total)> SearchAsync(
         CampaignStatus? status, long? assignedTo, int page, int pageSize,
         SortSpec<CampaignSortField> sort, CancellationToken ct = default);
@@ -35,7 +35,7 @@ public interface ICampaignRepository
     Task<bool> IsTaskManagerAsync(long userId, CancellationToken ct = default);
 
     /// <summary>
-    /// TEAM_013: tính lại trạng thái đợt từ các task bên trong rồi lưu. Không ai bấm tay
+    /// tính lại trạng thái đợt từ các task bên trong rồi lưu. Không ai bấm tay
     /// được trạng thái đợt nữa, nên đây là chỗ DUY NHẤT được ghi nó.
     ///
     /// Khoá dòng campaign trước khi đếm: hai task cùng đợt đổi trạng thái song song thì
@@ -53,8 +53,15 @@ public class CampaignRepository(CodeSwitchLabelDbContext db) : ICampaignReposito
 
     public void Remove(Campaign campaign) => db.Campaigns.Remove(campaign);
 
+    /// <summary>
+    /// Khoá dòng campaign thật sự (<c>FOR UPDATE</c>) để các thao tác create/update/delete
+    /// và tạo task thu âm idempotent không race nhau. Dùng <c>SingleOrDefault</c> vì SQL thô
+    /// đã lọc theo khoá chính; EF không đọc được WHERE trong câu thô nên <c>First</c> sẽ cảnh báo.
+    /// </summary>
     public Task<Campaign?> GetForUpdateAsync(long campaignId, CancellationToken ct = default) =>
-        db.Campaigns.FirstOrDefaultAsync(c => c.CampaignId == campaignId, ct);
+        db.Campaigns
+            .FromSqlInterpolated($"SELECT * FROM campaign WHERE campaign_id = {campaignId} FOR UPDATE")
+            .SingleOrDefaultAsync(ct);
 
     public Task<Campaign?> GetAsync(long campaignId, CancellationToken ct = default) =>
         db.Campaigns.AsNoTracking().FirstOrDefaultAsync(c => c.CampaignId == campaignId, ct);
@@ -70,7 +77,7 @@ public class CampaignRepository(CodeSwitchLabelDbContext db) : ICampaignReposito
 
         var total = await query.CountAsync(ct);
 
-        // TEAM_012: nhánh cuối là thứ tự cũ (đợt mới nhất trước).
+        // nhánh cuối là thứ tự cũ (đợt mới nhất trước).
         var ordered = sort.Field switch
         {
             CampaignSortField.CampaignId => sort.Descending
@@ -128,9 +135,11 @@ public class CampaignRepository(CodeSwitchLabelDbContext db) : ICampaignReposito
 
     public async Task RefreshStatusAsync(long campaignId, CancellationToken ct = default)
     {
+        // cùng câu FOR UPDATE với GetForUpdateAsync — dùng SingleOrDefault
+        // vì SQL thô đã lọc theo khoá chính (First cảnh báo EF).
         var campaign = await db.Campaigns
             .FromSqlInterpolated($"SELECT * FROM campaign WHERE campaign_id = {campaignId} FOR UPDATE")
-            .FirstOrDefaultAsync(ct);
+            .SingleOrDefaultAsync(ct);
 
         if (campaign is null) return;
 

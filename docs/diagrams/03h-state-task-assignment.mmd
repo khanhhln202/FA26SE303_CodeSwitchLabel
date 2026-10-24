@@ -1,0 +1,13 @@
+stateDiagram-v2
+  %% Source: TaskService (CreateAsync, AssignAsync, SetAssignmentsAsync, UnassignAsync, ApplyManualStatusAsync),
+  %% TaskProgressTracker (V17) and enum assignment_status in docs/codeswitchlabel.sql.
+  [*] --> active: task created with assignees / assign / set-assignments
+  active --> reassigned: replaced in PUT /assignments, or unassigned (history kept)
+  active --> cancelled: task cancelled (Cancel button or manual status Cancelled)
+  reassigned --> [*]
+  cancelled --> [*]
+  %% V17: 'completed' do TaskProgressTracker set khi người nhận đạt quota riêng
+  %% (done >= task_assignment.target_qty); tụt quota thì quay lại active.
+  active --> completed: done >= quota của người nhận
+  completed --> active: quota tăng / bản ghi bị từ chối
+  %% completed KHÔNG phải trạng thái cuối: vẫn là người nhận, vẫn làm thêm được (TEAM_016).

@@ -31,7 +31,7 @@ public sealed class TaskServiceProgressTests
     /// <summary>Speaker vừa gửi đủ hai bản, chưa có bản nào được duyệt.</summary>
     private static TaskRow Row(int done = 0, int submittedPairs = 4, int target = 10) => new(
         7, 1, "Đợt 1", TaskType.Recording, ScriptDomain.ItTechnology, "Thu âm", WorkTaskStatus.InProgress, target,
-        null, DateTimeOffset.UtcNow, [new TaskAssigneeRow(9, "Người đọc")],
+        null, DateTimeOffset.UtcNow, [new TaskAssigneeRow(9, "Người đọc", target)],
         Started: 8, Done: done, SubmittedPairs: submittedPairs, UsableItems: 10, TotalItems: 10);
 
     [Fact]
@@ -41,7 +41,7 @@ public sealed class TaskServiceProgressTests
             .ReturnsAsync([Row()]);
         _tasks.Setup(t => t.GetSpeakerTotalsAsync(9, It.IsAny<CancellationToken>()))
             .ReturnsAsync((8, 0));
-        // TEAM_010: riêng phần việc của người 9 trong task.
+        // riêng phần việc của người 9 trong task.
         _tasks.Setup(t => t.GetAssigneeSubmittedAsync(7, TaskType.Recording, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new Dictionary<long, int> { [9] = 5, [10] = 6, [11] = 7 });
         _tasks.Setup(t => t.GetAssigneeDoneAsync(7, TaskType.Recording, It.IsAny<CancellationToken>()))
@@ -75,7 +75,7 @@ public sealed class TaskServiceProgressTests
     }
 
     /// <summary>
-    /// TEAM_010: task có 3 người nhận thì mỗi người thấy TIẾN ĐỘ CỦA MÌNH, không
+    /// task có 3 người nhận thì mỗi người thấy TIẾN ĐỘ CỦA MÌNH, không
     /// phải tổng của cả nhóm. Trước đây cả ba thấy cùng một con số.
     /// </summary>
     [Fact]
@@ -83,7 +83,12 @@ public sealed class TaskServiceProgressTests
     {
         var row = Row(done: 9, submittedPairs: 12, target: 30) with
         {
-            Assignees = [new TaskAssigneeRow(9, "A"), new TaskAssigneeRow(10, "B"), new TaskAssigneeRow(11, "C")]
+            Assignees =
+            [
+                new TaskAssigneeRow(9, "A", 10),
+                new TaskAssigneeRow(10, "B", 10),
+                new TaskAssigneeRow(11, "C", 10)
+            ]
         };
 
         _tasks.Setup(t => t.GetActiveRowsForAssigneeAsync(9, TaskType.Recording, It.IsAny<CancellationToken>()))
@@ -99,12 +104,14 @@ public sealed class TaskServiceProgressTests
 
         var task = Assert.Single(result.ActiveTasks);
 
-        // Riêng người 9: 3 cặp câu trên tổng 30 → 10%.
+        // Riêng người 9: 3 cặp câu trên quota 10 → 30%.
         Assert.Equal(3, task.MyProgress.Done);
-        Assert.Equal(10, task.MyProgress.Percent);
+        Assert.Equal(10, task.MyProgress.TargetQty);
+        Assert.Equal(30, task.MyProgress.Percent);
 
         // Cả nhóm: 12 cặp câu đã thu đủ trên tổng 30 → 40%.
         Assert.Equal(12, task.TeamProgress.Done);
+        Assert.Equal(30, task.TeamProgress.TargetQty);
         Assert.Equal(40, task.TeamProgress.Percent);
 
         // Số đã NỘP cũng phải là của riêng người xem, không phải của cả task.
@@ -115,6 +122,41 @@ public sealed class TaskServiceProgressTests
         // Thấy rõ các người cùng nhận.
         Assert.Equal(3, task.Assignees.Count);
         Assert.Equal([9L, 10L, 11L], task.Assignees.Select(a => a.UserId).Order());
+    }
+
+    /// <summary>
+    /// V12: quota nằm trên từng lượt giao, không phải lấy target của task chia đều
+    /// lúc hiển thị. Người nhận quota 20/30 phải thấy 20, không phải 10.
+    /// </summary>
+    [Fact]
+    public async Task Speaker_ThayQuotaRiengCuaMinh()
+    {
+        var row = Row(done: 3, submittedPairs: 12, target: 30) with
+        {
+            Assignees =
+            [
+                new TaskAssigneeRow(9, "A", 20),
+                new TaskAssigneeRow(10, "B", 5),
+                new TaskAssigneeRow(11, "C", 5)
+            ]
+        };
+
+        _tasks.Setup(t => t.GetActiveRowsForAssigneeAsync(9, TaskType.Recording, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([row]);
+        _tasks.Setup(t => t.GetSpeakerTotalsAsync(9, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((12, 3));
+        _tasks.Setup(t => t.GetAssigneeSubmittedAsync(7, TaskType.Recording, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<long, int> { [9] = 5, [10] = 4, [11] = 3 });
+        _tasks.Setup(t => t.GetAssigneeDoneAsync(7, TaskType.Recording, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<long, int> { [9] = 3, [10] = 2, [11] = 1 });
+
+        var result = await _service.GetSpeakerProgressAsync(9, TestContext.Current.CancellationToken);
+        var task = Assert.Single(result.ActiveTasks);
+
+        Assert.Equal(20, task.MyProgress.TargetQty);
+        Assert.Equal(3, task.MyProgress.Done);
+        Assert.Equal(15, task.MyProgress.Percent);
+        Assert.Equal(30, task.TeamProgress.TargetQty);
     }
 
     [Fact]

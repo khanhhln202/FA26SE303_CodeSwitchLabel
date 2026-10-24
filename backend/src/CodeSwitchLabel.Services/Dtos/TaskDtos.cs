@@ -30,6 +30,9 @@ public record CreateTaskRequest
     /// <summary>Gửi kèm múi giờ nào cũng được; backend đổi sang UTC trước khi lưu.</summary>
     [Required(ErrorMessage = "Phải đặt hạn hoàn thành.")]
     public DateTimeOffset? Deadline { get; init; }
+
+    /// <summary>thành viên nhận task ngay lúc tạo (tùy chọn). Không chọn thì giữ luồng hiện tại.</summary>
+    public List<long>? AssigneeUserIds { get; init; }
 }
 
 /// <summary>Trường nào để trống thì giữ nguyên.</summary>
@@ -47,7 +50,7 @@ public record UpdateTaskRequest
     public DateTimeOffset? Deadline { get; init; }
 
     /// <summary>
-    /// TEAM_013: Task Manager đổi trạng thái nhiệm vụ bằng tay. Gửi `InProgress` để mở
+    /// Task Manager đổi trạng thái nhiệm vụ bằng tay. Gửi `InProgress` để mở
     /// lại một task đã xong, `Completed` để chốt sớm, `Cancelled` để dừng (giống nút Huỷ:
     /// mọi lượt giao đang hoạt động cũng chuyển sang `cancelled`).
     ///
@@ -80,7 +83,7 @@ public record AutoFillCriteria
 }
 
 /// <summary>
-/// TEAM_010: giao cho NHIỀU người cùng lúc. Chỉ tiêu là của cả nhóm, không nhân theo
+/// giao cho NHIỀU người cùng lúc. Chỉ tiêu là của cả nhóm, không nhân theo
 /// số người — nên giao 3 người vào task chỉ tiêu 100 vẫn là 100 câu, chia đều ra.
 /// </summary>
 public record AssignTaskRequest
@@ -89,6 +92,30 @@ public record AssignTaskRequest
     [Required(ErrorMessage = "Phải chọn ít nhất một người nhận.")]
     [MinLength(1, ErrorMessage = "Phải chọn ít nhất một người nhận.")]
     public List<long> UserIds { get; init; } = [];
+}
+
+/// <summary>
+/// Một người nhận trong danh sách giao việc. Để trống <see cref="TargetQty"/> thì backend
+/// chia đều phần chỉ tiêu còn lại; gửi số thì đó là quota riêng của người này.
+/// </summary>
+public record AssignmentQuotaRequest
+{
+    [Range(1, long.MaxValue, ErrorMessage = "Người nhận không hợp lệ.")]
+    public long UserId { get; init; }
+
+    [Range(1, 100_000, ErrorMessage = "Chỉ tiêu mỗi người phải từ 1 đến 100000.")]
+    public int? TargetQty { get; init; }
+}
+
+/// <summary>
+/// Thay toàn bộ danh sách người nhận đang hoạt động của task bằng danh sách mới, kèm quota.
+/// Người không còn trong danh sách chuyển sang `reassigned` (giữ lịch sử), người mới được thêm.
+/// </summary>
+public record SetTaskAssignmentsRequest
+{
+    [Required(ErrorMessage = "Phải chọn ít nhất một người nhận.")]
+    [MinLength(1, ErrorMessage = "Phải chọn ít nhất một người nhận.")]
+    public List<AssignmentQuotaRequest> Assignments { get; init; } = [];
 }
 
 /// <param name="Unit">Đơn vị của chỉ tiêu: cặp câu hay bản ghi.</param>
@@ -126,8 +153,9 @@ public record AttachTaskRequest
     public long? CampaignId { get; init; }
 }
 
-/// <summary>TEAM_010: một người đang nhận task. Trước đây chỉ có một assigneeId/assigneeName.</summary>
-public record TaskAssigneeDto(long UserId, string FullName);
+/// <summary>một người đang nhận task. Trước đây chỉ có một assigneeId/assigneeName.</summary>
+/// <param name="TargetQty">Chỉ tiêu riêng của người này; null với lượt giao cũ chưa có quota.</param>
+public record TaskAssigneeDto(long UserId, string FullName, int? TargetQty);
 
 /// <param name="CanDelete">Task rảnh (chưa gắn đợt, chưa có ai nhận, chưa có mục) thì xoá cứng được.</param>
 /// <param name="DeleteBlockedReason">Vì sao không xoá được — tiếng Việt để frontend hiện thẳng cho người dùng.</param>
@@ -147,10 +175,21 @@ public record TaskListItemDto(
     string? DeleteBlockedReason);
 
 public record TaskAssignmentDto(
-    long AssignmentId, long UserId, string FullName, AssignmentStatus Status, DateTimeOffset AssignedAt);
+    long AssignmentId,
+    long UserId,
+    string FullName,
+    int? TargetQty,
+    AssignmentStatus Status,
+    DateTimeOffset AssignedAt);
 
 /// <param name="Id">script_id với task thu âm, recording_id với task duyệt.</param>
-public record TaskItemDto(string Id, string Status, string? Preview, DateTimeOffset IncludedAt);
+/// <param name="AssigneeUserId">Speaker được gán cặp câu này; null = chưa gán hoặc task duyệt.</param>
+public record TaskItemDto(
+    string Id,
+    string Status,
+    string? Preview,
+    DateTimeOffset IncludedAt,
+    long? AssigneeUserId = null);
 
 /// <param name="Assignments">Toàn bộ lịch sử giao việc, kể cả các lượt đã chuyển cho người khác.</param>
 public record TaskDetailDto(
@@ -186,9 +225,9 @@ public record AssigneeSummaryDto(
     int OverdueTasks);
 
 /// <param name="TaskTitle">Tên nhiệm vụ (task.description) — cùng nghĩa với `taskTitle` ở lịch sử ghi âm.</param>
-/// <param name="MyProgress">TEAM_010: tiến độ của riêng người đang xem.</param>
-/// <param name="TeamProgress">TEAM_010: tiến độ của cả nhóm người nhận task.</param>
-/// <param name="Assignees">TEAM_010: ai cùng nhận task này.</param>
+/// <param name="MyProgress">tiến độ của riêng người đang xem, tính trên quota của người đó.</param>
+/// <param name="TeamProgress">tiến độ của cả nhóm người nhận task.</param>
+/// <param name="Assignees">ai cùng nhận task này.</param>
 public record SpeakerActiveTaskDto(
     long TaskId,
     string? TaskTitle,
@@ -207,7 +246,7 @@ public record SpeakerProgressDto(
     IReadOnlyList<SpeakerActiveTaskDto> ActiveTasks);
 
 /// <summary>Tổng quan cho trang chủ Task Manager: chiến dịch của mình + tải của từng người nhận.</summary>
-/// <param name="ActiveRecordingTasks">TEAM_013: đổi tên từ `OpenRecordingTasks` — trạng thái
+/// <param name="ActiveRecordingTasks">đổi tên từ `OpenRecordingTasks` — trạng thái
 /// `Open` của task đã bị bỏ, "đang chạy" giờ chỉ có một giá trị là `InProgress`.</param>
 public record TaskManagerOverviewDto(
     IReadOnlyList<CampaignProgressDto> MyCampaigns,

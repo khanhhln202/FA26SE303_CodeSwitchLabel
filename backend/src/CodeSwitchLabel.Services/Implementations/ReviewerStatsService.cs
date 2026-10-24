@@ -4,13 +4,15 @@ using CodeSwitchLabel.Repositories.Persistence;
 using CodeSwitchLabel.Repositories.Storage;
 using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Dtos;
+using CodeSwitchLabel.Services.Reviews;
 using Microsoft.EntityFrameworkCore;
 
 namespace CodeSwitchLabel.Services.Implementations;
 
 public class ReviewerStatsService(
     CodeSwitchLabelDbContext db,
-    IObjectStorage storage) : IReviewerStatsService
+    IObjectStorage storage,
+    ISystemConfigService config) : IReviewerStatsService
 {
     public async Task<ReviewerTotalsDto> GetTotalsAsync(long reviewerId, CancellationToken ct = default)
     {
@@ -158,7 +160,7 @@ public class ReviewerStatsService(
 
         var sort = query.ToSort<ReviewSortField>();
 
-        // TEAM_012: chỉ ba cột của cặp là sắp xếp được TRƯỚC khi cắt trang. Trạng thái của
+        // chỉ ba cột của cặp là sắp xếp được TRƯỚC khi cắt trang. Trạng thái của
         // cặp gộp từ hai bản nên phải TÍNH RA sau đó — cùng lý do với SpeakerPairSortField.
         var ordered = sort.Field switch
         {
@@ -181,6 +183,10 @@ public class ReviewerStatsService(
             .ToListAsync(ct);
 
         var pageScripts = page.Select(x => x.ScriptId).ToList();
+
+        // Cùng tham số mà ReviewService và trigger trg_review_majority đọc.
+        var soVongCan = await config.GetIntAsync(
+            ConfigKeys.ReviewRoundsRequired, ReviewRules.DefaultRoundsRequired, ct);
 
         // Kéo MỌI lần thu của các cặp trong trang — cả hai biến thể lẫn các bản cũ để chọn bản
         // mới nhất — kèm lượt duyệt và lý do từ chối của từng lượt.
@@ -236,14 +242,22 @@ public class ReviewerStatsService(
                             ? RecordingStatus.QcFailed
                             : RecordingStatus.PendingReview,
                 pair.LastReviewedAt,
-                // Giống GET /api/recordings/{id}/reviews: chỉ hiện lượt duyệt khi bản đã chốt.
+                // Lịch sử chỉ hiện cặp mà người xem ĐÃ có phiếu (query lọc ReviewerId ở trên),
+                // nên sau khi đã bỏ phiếu thì được xem đủ phiếu của cả hai bản — kể cả khi
+                // cặp chưa chốt. Màn hình duyệt đang hoạt động vẫn mù hoàn toàn; chỗ này chỉ
+                // là lịch sử sau khi phiếu của mình đã ghi.
+                //
+                // Giữ đủ lượt của CẢ HAI bản, mỗi lượt kèm recordingId: gom theo số vòng rồi
+                // lấy một dòng sẽ làm lượt vòng 1 của bản vi bị lượt vòng 1 của bản cs nuốt mất.
                 [.. both
-                    .Where(r => r.Status is RecordingStatus.Approved or RecordingStatus.Rejected)
-                    .SelectMany(r => r.Reviews)
-                    .GroupBy(v => v.ReviewRound)
-                    .Select(g => g.First())
-                    .OrderBy(v => v.ReviewRound)
-                    .Select(v => new HistoryReviewDto(v.ReviewRound, v.Decision.ToString(), ReasonOf(v)))]));
+                    .SelectMany(r => r.Reviews.AsEnumerable())
+                    .OrderBy(v => v.RecordingId)
+                    .ThenBy(v => v.ReviewRound)
+                    .Select(v => new HistoryReviewDto(
+                        v.ReviewRound, v.Decision.ToString(), ReviewDisplay.ReasonOf(v),
+                        v.RecordingId, v.ReviewedAt))],
+                both.Length > 0 ? both.Min(r => r.Reviews.Count) : 0,
+                soVongCan));
         }
 
         return new PagedResult<ReviewerHistoryItemDto>(items, query.Page, query.PageSize, total);
@@ -291,7 +305,7 @@ public class ReviewerStatsService(
 
         var sort = query.ToSort<ScriptReviewSortField>();
 
-        // TEAM_012: nhánh cuối là thứ tự cũ (lượt duyệt mới nhất trước).
+        // nhánh cuối là thứ tự cũ (lượt duyệt mới nhất trước).
         var ordered = sort.Field switch
         {
             ScriptReviewSortField.ReviewedAt => sort.Descending
@@ -356,23 +370,6 @@ public class ReviewerStatsService(
             return key is null ? null : (await storage.GetDownloadUrlAsync(key, ct)).Url;
         }
         catch { return null; }
-    }
-
-    /// <summary>
-    /// Lý do hiển thị của một lượt duyệt: bình luận là chính; lượt từ chối không kèm bình luận
-    /// thì ghép mô tả các mã lý do từ chối, để dòng lịch sử luôn có lý do để hiện.
-    /// </summary>
-    private static string? ReasonOf(Review review)
-    {
-        if (!string.IsNullOrWhiteSpace(review.Comment)) return review.Comment;
-
-        var reasons = review.RejectionReasons
-            .Select(rr => rr.Reason.Description ?? rr.Reason.ReasonCode)
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .Distinct()
-            .ToList();
-
-        return reasons.Count > 0 ? string.Join(", ", reasons) : null;
     }
 
     private static string CategoryLabel(RejectionCategory category) => category switch

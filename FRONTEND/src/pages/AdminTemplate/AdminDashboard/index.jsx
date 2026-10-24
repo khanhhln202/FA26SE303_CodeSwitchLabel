@@ -20,12 +20,14 @@ import { adminService } from "../../../services/adminService";
 export default function AdminDashboard() {
   const [users, setUsers] = useState([]);
   const [recordingsDataset, setRecordingsDataset] = useState([]);
+  const [rejectionReasonsApiMap, setRejectionReasonsApiMap] = useState({});
 
   const fetchDashboardData = async () => {
     try {
-      const [usersRes, dashboardRes] = await Promise.allSettled([
-        adminService.getUsers(),
-        adminService.getDashboardStats()
+      const [usersRes, recordingsRes, rejectionStatsRes] = await Promise.allSettled([
+        adminService.getUsers({ pageSize: 1000 }),
+        adminService.getRecordings({ pageSize: 1000 }),
+        adminService.getRejectionStats()
       ]);
 
       if (usersRes.status === "fulfilled" && usersRes.value) {
@@ -35,11 +37,64 @@ export default function AdminDashboard() {
         })));
       }
 
-      if (dashboardRes.status === "fulfilled" && dashboardRes.value) {
-        const stats = dashboardRes.value;
-        if (stats.recordings) {
-          setRecordingsDataset(stats.recordings);
+      if (rejectionStatsRes.status === "fulfilled" && rejectionStatsRes.value) {
+        const rejStats = rejectionStatsRes.value;
+        const map = {};
+        if (Array.isArray(rejStats)) {
+          rejStats.forEach((item) => {
+            const label = item.reason || item.reasonName || item.description || item.code || "Lỗi nội dung";
+            if (item.count || item.total) {
+              map[label] = item.count || item.total || 0;
+            }
+          });
+        } else if (typeof rejStats === "object") {
+          Object.entries(rejStats).forEach(([key, val]) => {
+            const count = typeof val === "number" ? val : (val?.count || 0);
+            if (count > 0) map[key] = count;
+          });
         }
+        setRejectionReasonsApiMap(map);
+      }
+
+      if (recordingsRes.status === "fulfilled" && recordingsRes.value) {
+        const rawList = recordingsRes.value.items || recordingsRes.value || [];
+        
+        // Đọc trực tiếp thuộc tính status từ Backend RecordingDto
+        const fullRecordings = await Promise.all(
+          rawList.map(async (r) => {
+            const recId = r.recordingId || r.id;
+            let reviews = [];
+            try {
+              const reviewsData = await adminService.getRecordingReviews(recId);
+              reviews = (Array.isArray(reviewsData) ? reviewsData : []).map((rev) => ({
+                status: rev.decision || rev.status || "Pending",
+                reason: rev.reason || rev.comment || rev.errorReasonCode || ""
+              }));
+            } catch (e) {
+              reviews = Array.isArray(r.reviewers) ? r.reviewers : [];
+            }
+
+            // Lấy trực tiếp status chuẩn từ BE DTO
+            const rawStatus = String(r.status || r.state || "").trim();
+            let mappedStatus = "Pending";
+
+            if (["Approved", "Accepted", "1"].includes(rawStatus)) {
+              mappedStatus = "Approved";
+            } else if (["Rejected", "Discarded", "QcFailed", "2", "3"].includes(rawStatus)) {
+              mappedStatus = "Rejected";
+            } else {
+              mappedStatus = "Pending";
+            }
+
+            return {
+              ...r,
+              status: mappedStatus,
+              reviewers: reviews
+            };
+          })
+        );
+
+        setRecordingsDataset(fullRecordings);
       }
     } catch (err) {
       console.error("Lỗi khi tải dữ liệu dashboard:", err);
@@ -65,18 +120,18 @@ export default function AdminDashboard() {
     let approvedCount = 0;
     let rejectedCount = 0;
     let pendingCount = 0;
-    const reasonMap = {};
+    const reasonMap = { ...rejectionReasonsApiMap };
 
     recordingsDataset.forEach((rec) => {
       totalDuration += rec.durationSec || 0;
+      
       const status = rec.status || "Pending";
-
       if (status === "Approved") approvedCount++;
-      else if (status === "Pending") pendingCount++;
       else if (status === "Rejected") rejectedCount++;
+      else pendingCount++;
 
       (rec.reviewers || []).forEach((rev) => {
-        if (rev.status === "Rejected" && rev.reason) {
+        if ((rev.status === "Rejected" || rev.status === "Discarded") && rev.reason) {
           reasonMap[rev.reason] = (reasonMap[rev.reason] || 0) + 1;
         }
       });
@@ -99,16 +154,12 @@ export default function AdminDashboard() {
       approvalRate,
       reasonMap,
     };
-  }, [recordingsDataset]);
+  }, [recordingsDataset, rejectionReasonsApiMap]);
 
   const reviewR = 20;
   const reviewCIRC = 2 * Math.PI * reviewR;
   const approvalDash = (qualityStats.approvalRate / 100) * reviewCIRC;
   const approvalColor = getRateColor(qualityStats.approvalRate);
-
-  const totalRejectionReasonsCount = useMemo(() => {
-    return Object.values(qualityStats.reasonMap).reduce((sum, count) => sum + count, 0);
-  }, [qualityStats.reasonMap]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 text-left font-sans p-1 transition-colors flex flex-col justify-start">
@@ -219,22 +270,13 @@ export default function AdminDashboard() {
         <div className="space-y-2 pt-1">
           {Object.keys(qualityStats.reasonMap).length > 0 ? (
             Object.entries(qualityStats.reasonMap).map(([reason, count], idx) => {
-              const percent = Math.round((count / (totalRejectionReasonsCount || 1)) * 100);
-              const barColor = getRateColor(percent);
-
               return (
-                <div key={idx} className="p-3 bg-[#F7F5EF] dark:bg-[#25272E] rounded-xl space-y-1.5 border border-[#E5E2D8]/80 dark:border-gray-700/60 transition-colors">
-                  <div className="flex justify-between type-ui">
+                <div key={idx} className="p-3 bg-[#F7F5EF] dark:bg-[#25272E] rounded-xl border border-[#E5E2D8]/80 dark:border-gray-700/60 transition-colors">
+                  <div className="flex justify-between items-center type-ui">
                     <span className="text-[#16171C] dark:text-gray-200 truncate pr-2 font-medium">{reason}</span>
-                    <span className="font-bold font-sans shrink-0 type-label" style={{ color: barColor }}>
+                    <span className="font-bold font-sans shrink-0 type-label" style={{ color: DANGER }}>
                       {count} bản thu
                     </span>
-                  </div>
-                  <div className="w-full bg-[#E5E2D8] dark:bg-gray-700 rounded-full h-1.5 overflow-hidden">
-                    <div 
-                      className="h-1.5 rounded-full transition-all duration-300" 
-                      style={{ width: `${percent}%`, backgroundColor: barColor }} 
-                    />
                   </div>
                 </div>
               );

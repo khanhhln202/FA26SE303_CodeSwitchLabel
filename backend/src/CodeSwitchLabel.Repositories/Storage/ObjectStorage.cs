@@ -76,4 +76,10 @@ public interface IObjectStorage
     /// API không làm trung gian truyền file nên không phải gánh băng thông audio.
     /// </summary>
     Task<(string Url, DateTimeOffset ExpiresAt)> GetDownloadUrlAsync(string key, CancellationToken ct = default);
+
+    /// <summary>
+    /// Mở luồng đọc file trong kho. Dùng khi API cần đóng gói chính file đó
+    /// (ví dụ nhúng audio vào ZIP dataset). Người gọi phải dispose luồng.
+    /// </summary>
+    Task<Stream> OpenReadAsync(string key, CancellationToken ct = default);
 }

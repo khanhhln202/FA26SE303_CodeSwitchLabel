@@ -246,3 +246,15 @@ public record ScriptSearchRequest : PageRequest
 }
 
 public record ReasonDto(short ReasonId, string ReasonCode, string? Category, string? Description, bool IsActive);
+
+/// <summary>Kết quả duyệt của MỘT câu trong `POST /api/scripts/import/batches/{batchId}/validate`.</summary>
+/// <param name="ScriptId">Mã câu.</param>
+/// <param name="Code">Mã lỗi nghiệp vụ khi câu không được duyệt (ví dụ `reviewer_domain_required`, `text_review_already_done`).</param>
+/// <param name="Message">Lý do đọc được, tiếng Việt.</param>
+public record BatchValidateScriptOutcomeDto(string ScriptId, string Code, string Message);
+
+/// <summary>Phản hồi của `POST /api/scripts/import/batches/{batchId}/validate` (TEAM_022).</summary>
+/// <param name="BatchId">Mã batch nhập.</param>
+/// <param name="AcceptedCount">Số câu được duyệt đạt (`Accepted`).</param>
+/// <param name="Failures">Các câu KHÔNG được duyệt, kèm lý do. Các câu đã duyệt KHÔNG bị rollback khi câu khác bị chặn.</param>
+public record BatchValidateResultDto(long BatchId, int AcceptedCount, IReadOnlyList<BatchValidateScriptOutcomeDto> Failures);

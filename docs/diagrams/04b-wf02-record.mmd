@@ -1,0 +1,16 @@
+flowchart TD
+  subgraph TaskManager
+    T1([Start]) --> T2[Create recording task: target, deadline] --> T3[Assign to one or more Speakers]
+  end
+  subgraph Speaker
+    S1[Claim next sentence pair] --> S2[Record cs version] --> S3[Record vi version] --> S4[Upload]
+  end
+  T3 --> S1
+  subgraph System
+    Y1[ffmpeg normalize 16 kHz mono WAV + auto-QC] --> Y2{QC passed?}
+    Y2 -- No --> Y3[recording qc_failed] --> S1
+    Y2 -- Yes --> Y4[recording pending_review; added to review tasks]
+    Y4 --> Y5[Recompute task status]
+  end
+  S4 --> Y1
+  Y5 --> E([End])

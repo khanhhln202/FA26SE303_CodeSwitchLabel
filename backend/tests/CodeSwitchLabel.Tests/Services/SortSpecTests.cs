@@ -5,7 +5,7 @@ using Xunit;
 namespace CodeSwitchLabel.Tests.Services;
 
 /// <summary>
-/// TEAM_012: đọc `?sort=` và `?dir=` thành yêu cầu sắp xếp.
+/// đọc `?sort=` và `?dir=` thành yêu cầu sắp xếp.
 ///
 /// Đây là hợp đồng mà MỌI endpoint danh sách đều dựa vào, nên nó được ghim ở mức unit:
 /// đặc biệt là nguyên tắc "sai tên cột thì rơi về thứ tự mặc định, không phải lỗi" —

@@ -45,7 +45,18 @@ public class ReviewsController(IReviewService reviewService, IReviewerStatsServi
     /// <remarks>
     /// Dùng cho màn hình "task duyệt của tôi": thấy cả task một lượt thay vì bấm `next` từng bản.
     ///
-    /// TEAM_016: task đã đủ chỉ tiêu (Completed) vẫn duyệt tiếp được — KPI không chặn.
+    /// **Một dòng là MỘT BẢN GHI, không phải một cặp câu.** Mỗi cặp câu có hai bản thu — bản đọc
+    /// câu chen tiếng Anh (`CodeSwitching`) và bản đọc câu thuần Việt tương đương
+    /// (`PureVietnamese`) — nên một cặp câu cho ra **hai dòng** cùng `scriptId`, khác
+    /// `sentenceVariant`, `scriptText` và `durationSec`. Đó không phải dòng trùng: hai bản là hai
+    /// file âm thanh riêng, mỗi bản cần đủ `roundsRequired` lượt duyệt của riêng nó, và duyệt là
+    /// gọi `POST /api/reviewer/recordings/{id}/review` cho TỪNG bản.
+    ///
+    /// Muốn hiện mỗi cặp một thẻ thì gom các dòng theo `scriptId`; `sibling` cho biết dòng này đi
+    /// cặp với bản nào, còn `myReviewDone` / `blocker` / `reviewsDone` thì mỗi dòng mang riêng vì
+    /// hai bản có thể ở hai tình trạng khác nhau.
+    ///
+    /// task đã đủ chỉ tiêu (Completed) vẫn duyệt tiếp được — KPI không chặn.
     /// Chỉ task đã huỷ (Cancelled) mới khoá: các dòng khi đó có `canReview: false` và
     /// nộp duyệt trả 403 `task_not_reviewable`.
     ///
@@ -59,7 +70,7 @@ public class ReviewsController(IReviewService reviewService, IReviewerStatsServi
     /// Mặc định trả cả task; đặt `onlyReviewable=true` để chỉ còn những bản duyệt được.
     /// Bấm vào một bản thì gọi `GET /api/reviewer/recordings/{id}` để lấy câu và link nghe.
     ///
-    /// TEAM_012: `?sort=` nhận `recordedAt`, `status`, `reviewCount`, `scriptId`. Bỏ trống `sort`
+    /// `?sort=` nhận `recordedAt`, `status`, `reviewCount`, `scriptId`. Bỏ trống `sort`
     /// thì ra bản gần đủ lượt duyệt trước — cùng thứ tự với `GET .../recordings/next`.
     /// </remarks>
     [HttpGet("api/reviewer/tasks/{taskId:long}/recordings")]
@@ -181,7 +192,7 @@ public class ReviewsController(IReviewService reviewService, IReviewerStatsServi
     /// `status` lọc theo trạng thái của bản ghi MÌNH ĐÃ DUYỆT; `recordingStatus` trả về là
     /// trạng thái của CẶP (gộp hai bản).
     ///
-    /// TEAM_012: `?sort=` nhận `reviewedAt`, `decision`, `scriptId` — trạng thái của cặp
+    /// `?sort=` nhận `reviewedAt`, `decision`, `scriptId` — trạng thái của cặp
     /// không sắp xếp được vì phải tính sau khi cắt trang.
     /// </remarks>
     [HttpGet("api/reviewer/history/recordings")]
@@ -198,7 +209,7 @@ public class ReviewsController(IReviewService reviewService, IReviewerStatsServi
     /// gửi câu (`speakerId`/`speakerName`), và khi lượt đó là Từ chối thì có `reason` (mô tả lỗi)
     /// cùng `comment`.
     ///
-    /// TEAM_012: `?sort=` nhận `reviewedAt`, `action`, `status`, `domain`.
+    /// `?sort=` nhận `reviewedAt`, `action`, `status`, `domain`.
     /// </remarks>
     [HttpGet("api/reviewer/history/contributions")]
     [Authorize(Roles = "Reviewer")]

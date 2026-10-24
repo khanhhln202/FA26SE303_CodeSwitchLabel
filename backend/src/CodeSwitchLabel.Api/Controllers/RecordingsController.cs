@@ -61,7 +61,7 @@ public class RecordingsController(IRecordingService recordingService, IReviewSer
     /// <remarks>
     /// Speaker chỉ thấy bản của chính mình; Reviewer, Task Manager và Admin thấy tất cả.
     ///
-    /// TEAM_012: `?sort=` nhận `recordingId`, `recordedAt`, `status`, `scriptId`, `durationSec`;
+    /// `?sort=` nhận `recordingId`, `recordedAt`, `status`, `scriptId`, `durationSec`;
     /// `?dir=asc|desc` (mặc định `asc`). Bỏ trống `sort` thì ra bản thu mới nhất trước.
     /// </remarks>
     [HttpGet]

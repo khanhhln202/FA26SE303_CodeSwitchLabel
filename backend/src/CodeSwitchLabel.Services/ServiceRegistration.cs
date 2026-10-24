@@ -23,7 +23,7 @@ public static class ServiceRegistration
     {
         // Một NpgsqlDataSource dùng chung: nó giữ pool kết nối và bảng ánh xạ kiểu ENUM.
         //
-        // TEAM_012: đăng ký bằng FACTORY chứ không phải bằng instance dựng sẵn. Container KHÔNG
+        // đăng ký bằng FACTORY chứ không phải bằng instance dựng sẵn. Container KHÔNG
         // dispose service mà nó không tự tạo, nên instance dựng sẵn sẽ sống mãi cùng provider —
         // và mỗi test integration dựng một provider riêng (IntegrationTestBase), tức là mỗi test
         // để lại một pool kết nối. PostgreSQL của testcontainer chỉ chịu 100 connection, nên suite
@@ -73,7 +73,7 @@ public static class ServiceRegistration
         services.AddScoped<IScriptRepository, ScriptRepository>();
         services.AddScoped<IScriptQueueRepository, ScriptQueueRepository>();
         services.AddScoped<IScriptQueueService, ScriptQueueService>();
-        // TEAM_015: đề xuất câu — hàng chờ riêng của Reviewer, không đi qua script_queue.
+        // đề xuất câu — hàng chờ riêng của Reviewer, không đi qua script_queue.
         services.AddScoped<IScriptProposalRepository, ScriptProposalRepository>();
         services.AddScoped<IRecordingRepository, RecordingRepository>();
         services.AddScoped<IReviewRepository, ReviewRepository>();

@@ -8,7 +8,7 @@ using Xunit;
 namespace CodeSwitchLabel.Tests.Integration;
 
 /// <summary>
-/// TEAM_003: Kiểm thử toàn diện quyền Task Manager, xoá đợt, xoá nhiệm vụ và ràng buộc chủ đề (domain).
+/// Kiểm thử toàn diện quyền Task Manager, xoá đợt, xoá nhiệm vụ và ràng buộc chủ đề (domain).
 /// </summary>
 [Collection("Database")]
 [Trait("Category", "Integration")]
@@ -317,6 +317,64 @@ public sealed class CampaignTaskPermissionAndDomainTests(DatabaseFixture fixture
         // 6. Task biến mất hẳn
         var getRes = await GetAsync($"/api/tasks/{taskId}", managerToken);
         Assert.Equal(HttpStatusCode.NotFound, getRes.StatusCode);
+    }
+
+    [Fact]
+    public async Task XoaTaskKhoiDot_TaskDaHoanThanh_XoaDuoc()
+    {
+        var managerToken = await GetManagerTokenAsync();
+        var campaignId = await TaoChienDichBoiManagerAsync(managerToken, "ItTechnology");
+
+        var createRes = await PostAsync("/api/tasks", new
+        {
+            campaignId,
+            taskType = "Recording",
+            domain = "ItTechnology",
+            description = "Task đã hoàn thành vẫn xoá được",
+            targetQty = 5,
+            deadline = DateTimeOffset.UtcNow.AddDays(7)
+        }, managerToken);
+        Assert.Equal(HttpStatusCode.Created, createRes.StatusCode);
+
+        using var doc = JsonDocument.Parse(await createRes.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var taskId = doc.RootElement.GetProperty("summary").GetProperty("taskId").GetInt64();
+
+        var completeRes = await PatchAsync($"/api/tasks/{taskId}", new { status = "Completed" }, managerToken);
+        Assert.Equal(HttpStatusCode.OK, completeRes.StatusCode);
+
+        var deleteRes = await DeleteAsync($"/api/campaigns/{campaignId}/tasks/{taskId}", managerToken);
+        Assert.Equal(HttpStatusCode.NoContent, deleteRes.StatusCode);
+
+        var getRes = await GetAsync($"/api/tasks/{taskId}", managerToken);
+        Assert.Equal(HttpStatusCode.NotFound, getRes.StatusCode);
+    }
+
+    [Fact]
+    public async Task XoaTaskKhoiDot_TaskKhongThuocDot_Tra404VaTaskCon()
+    {
+        var managerToken = await GetManagerTokenAsync();
+        var campaignA = await TaoChienDichBoiManagerAsync(managerToken, "ItTechnology");
+        var campaignB = await TaoChienDichBoiManagerAsync(managerToken, "ItTechnology");
+
+        var createRes = await PostAsync("/api/tasks", new
+        {
+            campaignId = campaignA,
+            taskType = "Recording",
+            domain = "ItTechnology",
+            description = "Task thuộc đợt A",
+            targetQty = 5,
+            deadline = DateTimeOffset.UtcNow.AddDays(7)
+        }, managerToken);
+        Assert.Equal(HttpStatusCode.Created, createRes.StatusCode);
+
+        using var doc = JsonDocument.Parse(await createRes.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var taskId = doc.RootElement.GetProperty("summary").GetProperty("taskId").GetInt64();
+
+        var deleteRes = await DeleteAsync($"/api/campaigns/{campaignB}/tasks/{taskId}", managerToken);
+        Assert.Equal(HttpStatusCode.NotFound, deleteRes.StatusCode);
+
+        var getRes = await GetAsync($"/api/tasks/{taskId}", managerToken);
+        Assert.Equal(HttpStatusCode.OK, getRes.StatusCode);
     }
 
     // ----------------------------------------------------------------- Trợ giúp

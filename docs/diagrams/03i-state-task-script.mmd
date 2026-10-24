@@ -1,0 +1,10 @@
+stateDiagram-v2
+  %% Source: TaskProgressTracker (OnReviewSubmittedAsync, OnScriptRejectedAsync,
+  %% OnRecordingReturnedAsync, OnPairDiscardedAsync), trg_review_majority in docs/codeswitchlabel.sql.
+  [*] --> pending: pair added to recording task (create with assignees / add items)
+  pending --> completed: both cs and vi recordings approved
+  completed --> pending: a recording rejected, or reject-audio (KPI drops, task may reopen)
+  pending --> rejected: script content rejected (script back to pending_validation)
+  pending --> rejected: discard-pair
+  completed --> rejected: discard-pair
+  rejected --> [*]

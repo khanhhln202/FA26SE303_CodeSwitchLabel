@@ -67,7 +67,7 @@ public class ScriptService(
     }
 
     /// <summary>
-    /// TEAM_010: điều kiện được phép duyệt nội dung một câu — chỉ một lượt, và chỉ
+    /// điều kiện được phép duyệt nội dung một câu — chỉ một lượt, và chỉ
     /// người được Task Manager giao câu đó trong lô.
     ///
     /// Câu nào đã có lượt duyệt rồi thì câu đó không còn trong hàng đợi nữa, nên chặn
@@ -133,9 +133,14 @@ public class ScriptService(
         repository.AddBatch(batch);
         await repository.SaveChangesAsync(ct);
 
-        // Dedupe trong file + so với DB bằng một câu truy vấn duy nhất (đã chia chunk trong repo).
-        var trimmedCs = items.Select(i => (i.CsTranscript ?? string.Empty).Trim()).Distinct().ToArray();
-        var existing = await repository.FindExistingContentsAsync(trimmedCs, ct);
+        // Dedupe trong file + so với DB theo khoá chuẩn hoá (bỏ nhãn, gộp khoảng trắng,
+        // hạ chữ thường). Gom khoá trước nên 10.000 dòng biến thể chỉ tốn một lượt tra.
+        var keys = items
+            .Select(i => CodeSwitchText.ComparisonKey(i.CsTranscript ?? string.Empty))
+            .Where(k => k.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var existing = await repository.FindExistingContentsAsync(keys, ct);
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
         var skipped = new List<ImportSkippedDto>();
@@ -156,18 +161,15 @@ public class ScriptService(
                     throw new UnprocessableException("empty_content", "Thiếu câu chen tiếng Anh hoặc câu thuần Việt.");
                 }
 
-                if (!seen.Add(cs))
-                {
-                    throw ConflictException.DuplicateContent();
-                }
+                var (wordCount, enWordCount) = ScriptPairRules.ValidatePair(cs, ve);
+                var key = CodeSwitchText.ComparisonKey(cs);
 
-                if (existing.Contains(cs))
+                if (!seen.Add(key) || existing.Contains(key))
                 {
                     throw ConflictException.DuplicateContent();
                 }
 
                 var domain = ParseDomain(item.Domain);
-                var (wordCount, enWordCount) = ScriptPairRules.ValidatePair(cs, ve);
                 var words = ScriptPairRules.BuildWords(item.Alignment ?? [], enWordCount);
                 var relation = ScriptPairRules.RelationOf(words);
                 var scriptId = await repository.GenerateIdAsync(enWordCount, domain, relation, ct);
@@ -204,7 +206,7 @@ public class ScriptService(
 
         if (pendingScripts.Count > 0)
         {
-            // TEAM_010: câu vào hàng đợi thì KHÔNG cần người duyệt có thẩm quyền chủ đề
+            // câu vào hàng đợi thì KHÔNG cần người duyệt có thẩm quyền chủ đề
             // ngay lúc nhập — thẩm quyền áp dụng cho người DUYỆT (ReviewCoreAsync), không
             // áp dụng cho việc cho câu nào vào hàng đợi. Kiểm tra fail-fast cũ vì vậy bị
             // bỏ: nó chặn cả file nhập hàng loạt chỉ vì Admin chưa có domain.
@@ -290,6 +292,43 @@ public class ScriptService(
         var scriptIds = await repository.GetScriptIdsByBatchAsync(batchId, ct);
 
         return new ImportBatchDetailDto(batch.BatchId, batch.FileName, batch.ScriptCount, batch.ImportedBy, batch.CreatedAt, scriptIds);
+    }
+
+    /// <summary>Accept pending scripts in an imported batch.</summary>
+    /// <remarks>
+    /// The calling Admin is recorded as reviewer for each Accepted review. Reuses ReviewAsync
+    /// so domain qualification, queue assignment, review history, and script status rules apply.
+    /// Per-script failures are returned while processing continues for the rest of the batch.
+    /// </remarks>
+    public async Task<BatchValidateResultDto> ValidateBatchAsync(
+        long batchId, long reviewerId, CancellationToken ct = default)
+    {
+        if (await repository.GetBatchAsync(batchId, ct) is null)
+        {
+            throw new NotFoundException("batch_not_found", $"Batch #{batchId} not found.");
+        }
+
+        var scriptIds = await repository.GetScriptIdsByBatchAsync(batchId, ct);
+        var accepted = 0;
+        var failures = new List<BatchValidateScriptOutcomeDto>();
+
+        foreach (var scriptId in scriptIds)
+        {
+            try
+            {
+                await ReviewAsync(scriptId, reviewerId,
+                    new ReviewScriptRequest { Action = ScriptReviewAction.Accepted }, ct);
+                accepted++;
+            }
+            catch (AppException ex)
+            {
+                // ReviewAsync can throw after adding an unsaved review; discard it before continuing.
+                repository.ClearTracked();
+                failures.Add(new BatchValidateScriptOutcomeDto(scriptId, ex.Code, ex.Message));
+            }
+        }
+
+        return new BatchValidateResultDto(batchId, accepted, failures);
     }
 
     private static string SanitizeFileName(string fileName)

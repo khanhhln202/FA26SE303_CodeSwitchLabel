@@ -13,7 +13,7 @@ namespace CodeSwitchLabel.Tests.Integration;
 /// <summary>
 /// Chạy trọn chuỗi nghiệp vụ qua API thật (WebApplicationFactory + PostgreSQL Testcontainer):
 /// Admin nhập file câu → duyệt nội dung → chiến dịch → Task Manager phân task → Speaker ghi âm
-/// → ba Reviewer duyệt đa số → task tự hoàn thành. Kèm nhánh QC trượt và luật phân task.
+/// → Reviewer duyệt tới khi quá bán → task tự hoàn thành. Kèm nhánh QC trượt và luật phân task.
 /// </summary>
 [Collection("Database")]
 [Trait("Category", "Integration")]
@@ -36,7 +36,7 @@ public sealed class EndToEndFlowTests : ApiTestBase
         var reviewer2 = await GetReviewer2TokenAsync();
         var reviewer3 = await GetReviewer3TokenAsync();
 
-        // 1) Admin nhập một cặp câu mới — TEAM_010: câu vào HÀNG ĐỢI chung, chờ duyệt.
+        // 1) Admin nhập một cặp câu mới — câu vào HÀNG ĐỢI chung, chờ duyệt.
         var scriptId = await ImportOneScriptAsync(admin);
 
         // 2) Duyệt nội dung: câu chỉ thu âm được sau lượt duyệt của người đủ chủ đề.
@@ -84,6 +84,14 @@ public sealed class EndToEndFlowTests : ApiTestBase
         Assert.True(viQcPassed);
         Assert.StartsWith("r_vi_", viRecordingId);
 
+        // Server chuẩn hoá WebM của trình duyệt thành WAV: định dạng ghi trong DB và đuôi
+        // file đã lưu phải cùng là wav, không lệch với kiểu MIME client gửi lên.
+        foreach (var recordingId in new[] { csRecordingId, viRecordingId })
+        {
+            Assert.Equal("wav", await ReadRecordingColumnAsync(recordingId, "audio_format"));
+            Assert.EndsWith(".wav", await ReadRecordingColumnAsync(recordingId, "cloud_link"));
+        }
+
         // Đã nộp đủ hai bản nhưng cặp câu chưa xong: task đang chạy, chưa tính đạt chỉ tiêu.
         using (var progress = await ReadJsonAsync(await GetAsync($"/api/tasks/{taskId}", manager)))
         {
@@ -93,10 +101,11 @@ public sealed class EndToEndFlowTests : ApiTestBase
             Assert.Equal(0, summary.GetProperty("progress").GetProperty("done").GetInt32());
         }
 
-        // 6) Ba Reviewer duyệt mỗi bản một lượt — duyệt mù, lượt thứ ba chốt theo đa số.
+        // 6) Duyệt mù từng lượt. Cần 3 lượt nên HAI phiếu đạt đã là quá bán: bản ghi chốt
+        //    ngay ở lượt thứ hai, lượt thứ ba không còn chỗ.
         foreach (var recordingId in new[] { csRecordingId, viRecordingId })
         {
-            foreach (var token in new[] { reviewer1, reviewer2, reviewer3 })
+            foreach (var token in new[] { reviewer1, reviewer2 })
             {
                 using var open = await ReadJsonAsync(await GetAsync($"/api/reviewer/recordings/{recordingId}", token));
                 var round = open.RootElement.GetProperty("round").GetInt32();
@@ -107,12 +116,16 @@ public sealed class EndToEndFlowTests : ApiTestBase
 
                 using var result = await ReadJsonAsync(submit);
 
-                if (round == 3)
+                if (round == 2)
                 {
                     Assert.True(result.RootElement.GetProperty("isFinal").GetBoolean());
                     Assert.Equal("Approved", result.RootElement.GetProperty("recordingStatus").GetString());
                 }
             }
+
+            var muon = await PostAsync($"/api/recordings/{recordingId}/reviews",
+                new { decision = "Approved", expectedRound = 3 }, reviewer3);
+            Assert.Equal(HttpStatusCode.Conflict, muon.StatusCode);
         }
 
         // 7) Cả hai bản duyệt đạt → mục cặp câu hoàn thành → task tự chuyển Completed.
@@ -247,6 +260,70 @@ public sealed class EndToEndFlowTests : ApiTestBase
         using var client = CreateAuthenticatedClient(accessToken);
         var me = await client.GetFromJsonAsync<JsonElement>("/api/auth/me", JsonOptions, TestContext.Current.CancellationToken);
         return me.GetProperty("userId").GetInt64();
+    }
+
+    [Fact]
+    public async Task Import_TrungTrongFileVaTrongKho_BoQuaTheoKhoaChuanHoa()
+    {
+        var admin = await GetAdminTokenAsync();
+        var uid = Guid.NewGuid().ToString("N")[..6];
+        var core = $"[vi]Em nên [en]scan [vi]tài liệu mã {uid} này.";
+
+        object Row(string id, string cs) => new
+        {
+            id,
+            domain = "IT/Technology",
+            cs_transcript = cs,
+            vi_equivalent = $"[vi]Em nên quét tài liệu mã {uid} này.",
+            alignment = new[]
+            {
+                new { source = "scan", target = "quét", relation = "semantic_equivalent" }
+            }
+        };
+
+        // Ba dòng cùng nội dung nhưng khác hoa/thường và khoảng trắng: chỉ dòng đầu vào kho.
+        using (var first = await ImportJsonAsync(admin, new[]
+        {
+            Row("1", core),
+            Row("2", $"  [vi]EM NÊN [en]SCAN [vi]TÀI LIỆU MÃ {uid} NÀY.  "),
+            Row("3", $"[vi]Em  nên [en]scan [vi]tài   liệu mã {uid} này.")
+        }))
+        {
+            Assert.Equal(1, first.RootElement.GetProperty("imported").GetInt32());
+
+            var skipped = first.RootElement.GetProperty("skipped").EnumerateArray().ToList();
+            Assert.Equal(2, skipped.Count);
+            Assert.All(skipped, s =>
+                Assert.Equal("duplicate_content", s.GetProperty("code").GetString()));
+        }
+
+        // Batch sau vẫn nhận ra câu đã có trong kho dù khác hoa/thường và khoảng trắng.
+        using (var second = await ImportJsonAsync(admin, new[]
+        {
+            Row("4", $" [vi]EM NÊN [en]SCAN [vi]TÀI LIỆU MÃ {uid} NÀY. ")
+        }))
+        {
+            Assert.Equal(0, second.RootElement.GetProperty("imported").GetInt32());
+
+            var skipped = second.RootElement.GetProperty("skipped").EnumerateArray().ToList();
+            var only = Assert.Single(skipped);
+            Assert.Equal("duplicate_content", only.GetProperty("code").GetString());
+        }
+    }
+
+    private async Task<JsonDocument> ImportJsonAsync(string adminToken, object rows)
+    {
+        var json = JsonSerializer.Serialize(rows);
+
+        using var form = new MultipartFormDataContent();
+        var file = new ByteArrayContent(Encoding.UTF8.GetBytes(json));
+        file.Headers.ContentType = MediaTypeHeaderValue.Parse("application/json");
+        form.Add(file, "File", $"import-{Guid.NewGuid():N}.json");
+
+        var response = await PostMultipartAsync("/api/scripts/import", form, adminToken);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        return await ReadJsonAsync(response);
     }
 
     private async Task<string> ImportOneScriptAsync(string adminToken)

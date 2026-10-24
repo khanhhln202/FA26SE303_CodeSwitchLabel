@@ -129,6 +129,13 @@ public sealed class S3ObjectStorage : IObjectStorage, IDisposable
         return (url, expiresAt);
     }
 
+    public async Task<Stream> OpenReadAsync(string key, CancellationToken ct = default)
+    {
+        // Chỉ trả luồng nội dung; người gọi dispose luồng là SDK đóng luôn response bên dưới.
+        var response = await _s3.GetObjectAsync(_options.BucketName, key, ct);
+        return response.ResponseStream;
+    }
+
     public void Dispose()
     {
         if (_ownsPresigner) _presigner.Dispose();

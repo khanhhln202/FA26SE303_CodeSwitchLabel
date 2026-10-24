@@ -7,7 +7,7 @@ namespace CodeSwitchLabel.Repositories.Repositories;
 
 public interface IScriptRepository
 {
-    /// <summary>TEAM_012: <paramref name="sort"/> rỗng (Field = null) là thứ tự mặc định.</summary>
+    /// <summary><paramref name="sort"/> rỗng (Field = null) là thứ tự mặc định.</summary>
     Task<(IReadOnlyList<Script> Items, int Total)> SearchAsync(
         ScriptStatus? status, ScriptDomain? domain, string? keyword,
         int page, int pageSize, SortSpec<ScriptSortField> sort, CancellationToken ct = default);
@@ -17,13 +17,21 @@ public interface IScriptRepository
     Task<Script?> GetWithReviewsAsync(string id, CancellationToken ct = default);
 
     /// <summary>
-    /// TEAM_010: câu đã có lượt duyệt nội dung nào chưa. Dùng chặn duyệt lần thứ hai —
+    /// câu đã có lượt duyệt nội dung nào chưa. Dùng chặn duyệt lần thứ hai —
     /// mỗi câu chỉ một lượt (yêu cầu 2.3).
     /// </summary>
     Task<bool> HasAcceptedReviewAsync(string scriptId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Câu đã có trong kho chưa, so theo khoá chuẩn hoá: bỏ nhãn ngôn ngữ, gộp khoảng
+    /// trắng, không phân biệt hoa thường.
+    /// </summary>
     Task<bool> ContentExistsAsync(string csContent, CancellationToken ct = default);
 
+    /// <summary>
+    /// Lọc các khoá <see cref="CodeSwitchText.ComparisonKey"/> đã có câu tương ứng trong kho.
+    /// Trả về chính các khoá đã khớp, không phải nội dung gốc.
+    /// </summary>
     Task<HashSet<string>> FindExistingContentsAsync(IEnumerable<string> csContents, CancellationToken ct = default);
 
     Task<ImportBatch?> GetBatchAsync(long batchId, CancellationToken ct = default);
@@ -36,18 +44,18 @@ public interface IScriptRepository
     /// <summary>Script đã có bản ghi âm nào chưa — dùng để chặn sửa nội dung sau khi đã thu.</summary>
     Task<bool> HasRecordingsAsync(string scriptId, CancellationToken ct = default);
 
-    /// <summary>TEAM_010: các bản ghi của CHÍNH người đọc này.</summary>
+    /// <summary>các bản ghi của CHÍNH người đọc này.</summary>
     Task<List<Recording>> GetRecordingsOfSpeakerAsync(
         string scriptId, long speakerId, CancellationToken ct = default);
 
     /// <summary>
-    /// TEAM_010: câu đã có người KHÁC đọc và bản ghi chưa trượt QC. Câu như vậy không
+    /// câu đã có người KHÁC đọc và bản ghi chưa trượt QC. Câu như vậy không
     /// phát ra cho người này được — trigger trg_recording_single_speaker sẽ chặn lúc
     /// thu, tức là sau khi người đó đã đọc xong câu rồi.
     /// </summary>
     Task<bool> IsRecordedByOtherAsync(string scriptId, long speakerId, CancellationToken ct = default);
 
-    /// <summary>Gọi hàm fn_generate_script_id của database để lấy mã đúng chuẩn s_ + 9 chữ số.</summary>
+    /// <summary>Gọi hàm fn_generate_script_id của database để lấy mã đúng chuẩn s_ + 9 hoặc 12 chữ số.</summary>
     Task<string> GenerateIdAsync(
         int enWordCount, ScriptDomain domain, ScriptRelation relation, CancellationToken ct = default);
 
@@ -97,7 +105,7 @@ public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
 
         var total = await query.CountAsync(ct);
 
-        // TEAM_012: nhánh cuối là thứ tự cũ (mới nhất trước). Mọi nhánh đều nối scriptId
+        // nhánh cuối là thứ tự cũ (mới nhất trước). Mọi nhánh đều nối scriptId
         // ở ngoài switch để trang sau không lặp dòng khi cột sắp xếp bằng nhau.
         var ordered = sort.Field switch
         {
@@ -144,29 +152,31 @@ public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
             r => r.ScriptId == scriptId &&
                  (r.Action == ScriptReviewAction.Accepted || r.Action == ScriptReviewAction.Edited), ct);
 
-    public Task<bool> ContentExistsAsync(string csContent, CancellationToken ct = default) =>
-        db.Scripts.AsNoTracking().AnyAsync(s => s.CsContent == csContent, ct);
+    public async Task<bool> ContentExistsAsync(string csContent, CancellationToken ct = default) =>
+        (await FindExistingContentsAsync([csContent], ct)).Count > 0;
 
     public async Task<HashSet<string>> FindExistingContentsAsync(
         IEnumerable<string> csContents, CancellationToken ct = default)
     {
-        var distinct = csContents.Distinct().ToArray();
-        if (distinct.Length == 0) return [];
+        var wanted = csContents
+            .Select(CodeSwitchText.ComparisonKey)
+            .ToHashSet(StringComparer.Ordinal);
 
-        // Chia nhỏ mệnh đề IN để tránh vượt giới hạn tham số Postgres với batch lớn.
-        const int chunkSize = 1000;
+        if (wanted.Count == 0) return [];
+
+        // ponytail: database chỉ có unique index md5(cs_content) khớp CHÍNH XÁC, nên chuẩn
+        // hoá phải làm trong bộ nhớ. Khi kho lớn tới mức quét cả bảng thành vấn đề, thêm cột
+        // sinh normalized_content + index rồi đẩy phép so xuống SQL; API này giữ nguyên.
+        var rows = await db.Scripts.AsNoTracking()
+            .Select(s => s.CsContent)
+            .ToListAsync(ct);
+
         var found = new HashSet<string>(StringComparer.Ordinal);
 
-        for (var i = 0; i < distinct.Length; i += chunkSize)
+        foreach (var row in rows)
         {
-            var chunk = distinct.Skip(i).Take(chunkSize).ToArray();
-
-            var rows = await db.Scripts.AsNoTracking()
-                .Where(s => chunk.Contains(s.CsContent))
-                .Select(s => s.CsContent)
-                .ToListAsync(ct);
-
-            foreach (var row in rows) found.Add(row);
+            var key = CodeSwitchText.ComparisonKey(row);
+            if (wanted.Contains(key)) found.Add(key);
         }
 
         return found;

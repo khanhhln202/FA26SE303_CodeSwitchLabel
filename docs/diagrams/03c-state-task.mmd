@@ -1,0 +1,8 @@
+stateDiagram-v2
+  [*] --> in_progress: task created
+  in_progress --> completed: done >= target
+  completed --> in_progress: target raised / recording rejected / manual reopen
+  in_progress --> completed: manual close by Task Manager
+  in_progress --> cancelled: cancel
+  completed --> cancelled: cancel
+  cancelled --> [*]

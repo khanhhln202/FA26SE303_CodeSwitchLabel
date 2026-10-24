@@ -69,13 +69,13 @@ public class RecordingService(
 
             var probe = await ConvertAndMeasureAsync(inputPath, wavPath, ct);
 
-            // TEAM_001: QC giờ đo thêm khoảng lặng/âm lượng và ghi lại toàn bộ kết quả vào qc_metrics.
+            // QC giờ đo thêm khoảng lặng/âm lượng và ghi lại toàn bộ kết quả vào qc_metrics.
             var (issues, qcReport) = await RunQualityChecksAsync(probe, wavPath, ct);
             var now = clock.GetUtcNow();
 
             var take = await NextTakeAsync(command, ct);
 
-            // Mã bản ghi do database sinh: r_cs_/r_vi_ + 9 chữ số của cặp câu, thu lại thì thêm _tN.
+            // Mã bản ghi do database sinh: r_cs_/r_vi_ + 9 hoặc 12 chữ số của cặp câu, thu lại thì thêm _tN.
             var recordingId = await recordings.GenerateIdAsync(
                 command.ScriptId, command.SentenceVariant, take, ct);
 
@@ -127,7 +127,7 @@ public class RecordingService(
                         $"Cặp câu {command.ScriptId} đã do người đọc khác thu. Mỗi cặp câu chỉ một người đọc.");
                 }
 
-                // TEAM_018: vừa lưu bản ghi là tính lại task thu âm VÀ tự đẩy bản chờ duyệt
+                // vừa lưu bản ghi là tính lại task thu âm VÀ tự đẩy bản chờ duyệt
                 // vào hàng chờ của các task duyệt đang mở cùng đợt (không có thì thôi —
                 // bản thu ngoài task/ngoài đợt vẫn nằm ở hàng chờ chung như trước).
                 await taskTracker.OnRecordingSubmittedAsync(recording, ct);
@@ -212,7 +212,7 @@ public class RecordingService(
                 $"Cặp câu {script.ScriptId} đang ở trạng thái {script.Status}, chỉ thu âm được câu đã duyệt nội dung.");
         }
 
-        // TEAM_015: câu đang có đề xuất chờ thì tạm rút khỏi hàng đợi ghi âm. Hàng đợi đã
+        // câu đang có đề xuất chờ thì tạm rút khỏi hàng đợi ghi âm. Hàng đợi đã
         // không phát câu này ra nữa, nhưng người đọc có thể đã giữ câu TRƯỚC lúc đề xuất
         // được gửi — chốt ở đây để bản thu của nội dung cũ không lọt vào kho.
         if (await proposals.HasPendingAsync(command.ScriptId, ct))

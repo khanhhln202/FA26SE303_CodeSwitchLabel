@@ -25,8 +25,9 @@ public enum ReviewBlocker
 }
 
 /// <summary>
-/// Luật duyệt theo lược đồ nhóm chốt: mỗi bản ghi cần đủ số lượt duyệt mù độc lập
-/// (mặc định 3, đổi được qua <c>system_config</c>), rồi chốt theo đa số.
+/// Luật duyệt theo lược đồ nhóm chốt: mỗi bản ghi nhận tối đa <c>review.rounds_required</c>
+/// lượt duyệt mù độc lập (mặc định 3, đổi được qua <c>system_config</c>) và chốt theo đa số
+/// NGAY KHI một bên đã quá bán — những lượt còn lại không lật được kết quả nữa.
 ///
 /// CHỖ CHỐT THẬT SỰ NẰM DƯỚI DATABASE — trigger trg_review_majority. Lớp này chỉ là bản sao
 /// để tầng trên biết còn thiếu mấy lượt và để kiểm thử luật, KHÔNG được dùng để ghi trạng thái.
@@ -46,16 +47,25 @@ public static class ReviewRules
     /// Kết quả theo đa số, viết giống hệt trigger: đủ số lượt thì bên nào quá nửa thì thắng.
     /// Trả null khi chưa đủ lượt — lúc đó bản ghi vẫn nằm chờ.
     /// </summary>
+    public static int MajorityOf(int roundsRequired) => (roundsRequired / 2) + 1;
+
     public static RecordingStatus? Outcome(IReadOnlyList<ReviewDecision> decisions, int roundsRequired)
     {
         if (roundsRequired < 1) throw new ArgumentOutOfRangeException(nameof(roundsRequired));
-        if (decisions.Count < roundsRequired) return null;
 
+        var quaBan = MajorityOf(roundsRequired);
         var approved = decisions.Count(d => d == ReviewDecision.Approved);
+        var rejected = decisions.Count - approved;
 
-        return approved >= (roundsRequired / 2) + 1
-            ? RecordingStatus.Approved
-            : RecordingStatus.Rejected;
+        // Quá bán là chốt, không chờ cho đủ lượt: hai phiếu từ chối trên ba vòng thì lượt
+        // thứ ba không đổi được gì, mà bản ghi cứ nằm "chờ duyệt" thì người đọc không biết
+        // đường thu lại.
+        if (approved >= quaBan) return RecordingStatus.Approved;
+        if (rejected >= quaBan) return RecordingStatus.Rejected;
+
+        // Đủ lượt mà chưa bên nào quá bán chỉ xảy ra với số vòng CHẴN (2-2 khi cần 4):
+        // không đủ phiếu đạt thì trượt, đúng như luật cũ.
+        return decisions.Count >= roundsRequired ? RecordingStatus.Rejected : null;
     }
 
     /// <summary>

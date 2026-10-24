@@ -50,11 +50,16 @@ const formatDateToVN = (dateStr) => {
   return `${day}/${month}/${year}`;
 };
 
-// Helper format ngày ISO (yyyy-mm-dd)
+// Helper format ngày ISO (yyyy-mm-dd) - Giữ nguyên chuỗi gốc không bị lệch múi giờ
 const formatDateToISO = (dateStr) => {
   if (!dateStr) return "";
-  if (dateStr.includes("-")) return dateStr.split("T")[0];
-  const parts = dateStr.split("/");
+  const clean = String(dateStr).trim();
+  
+  if (clean.includes("-")) {
+    return clean.split("T")[0];
+  }
+  
+  const parts = clean.split("/");
   if (parts.length === 3) {
     const [day, month, year] = parts;
     return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
@@ -178,18 +183,18 @@ export default function TaskManagerManagement() {
   });
 
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
-  const [editingAssignment, setEditingAssignment] = useState(null);
   const [allAdminUsers, setAllAdminUsers] = useState([]);
-  const [speakerTasksList, setSpeakerTasksList] = useState([]);
-  const [reviewerTasksList, setReviewerTasksList] = useState([]);
 
+  // Form tạo nhiệm vụ mới
   const [assignFormData, setAssignFormData] = useState({
     selectedBatchId: "",
-    selectedUniqueKey: "",
+    taskTitle: "",
+    targetRole: "Speaker", // Speaker hoặc Reviewer
     assignedUsers: []
   });
 
   const [viewingAssignedTask, setViewingAssignedTask] = useState(null);
+  const [userTargets, setUserTargets] = useState({});
   const [deletingBatch, setDeletingBatch] = useState(null);
 
   const [isEditTaskModalOpen, setIsEditTaskModalOpen] = useState(false);
@@ -230,6 +235,8 @@ export default function TaskManagerManagement() {
             topic: mapDomainToTopicVN(c.domain || c.topic),
             startDate: formatDateToVN(c.startDate || todayIso),
             endDate: formatDateToVN(c.endDate || todayIso),
+            rawStartDateIso: c.startDate ? formatDateToISO(c.startDate) : todayIso,
+            rawEndDateIso: c.endDate ? formatDateToISO(c.endDate) : todayIso,
             status: c.status || "Draft",
             assignedSpeakers: [],
             assignedReviewers: []
@@ -273,28 +280,34 @@ export default function TaskManagerManagement() {
         const isSpeaker = rawType === "recording" || rawType === "speaker" || rawType === "0";
 
         let usersList = [];
+        const userTargetsMap = {};
+
+        const assignmentsArr = Array.isArray(t.assignments) && t.assignments.length > 0 
+          ? t.assignments 
+          : (Array.isArray(t.assignees) ? t.assignees : []);
         
-        if (Array.isArray(t.assignees) && t.assignees.length > 0) {
-          usersList = t.assignees.map(u => {
-            if (typeof u === "string") return u;
-            if (u.fullName) return u.fullName;
-            if (u.userName) return u.userName;
-            if (u.name) return u.name;
-            const rawUid = String(u.userId || u.id || "");
-            const found = combinedUsers.find(cu => String(cu.id) === rawUid);
-            return found ? found.name : (rawUid ? `User ${rawUid}` : "");
-          }).filter(Boolean);
-        } else if (Array.isArray(t.assignments) && t.assignments.length > 0) {
-          usersList = t.assignments.map(u => {
-            if (typeof u === "string") return u;
-            if (u.fullName) return u.fullName;
-            if (u.userFullName) return u.userFullName;
-            if (u.userName) return u.userName;
-            if (u.name) return u.name;
-            const rawUid = String(u.userId || u.id || "");
-            const found = combinedUsers.find(cu => String(cu.id) === rawUid);
-            return found ? found.name : (rawUid ? `User ${rawUid}` : "");
-          }).filter(Boolean);
+        if (assignmentsArr.length > 0) {
+          assignmentsArr.forEach(u => {
+            let uName = "";
+            let uId = null;
+            if (typeof u === "string") {
+              uName = u;
+            } else if (u && typeof u === "object") {
+              uId = Number(u.userId || u.id);
+              uName = u.fullName || u.userFullName || u.userName || u.name;
+              if (!uName && uId) {
+                const found = combinedUsers.find(cu => Number(cu.id) === uId);
+                uName = found ? found.name : `User ${uId}`;
+              }
+            }
+
+            if (uName) {
+              usersList.push(uName);
+              if (u && typeof u === "object" && (u.targetQty || u.quota || u.target)) {
+                userTargetsMap[uName] = Number(u.targetQty || u.quota || u.target);
+              }
+            }
+          });
         } else if (Array.isArray(t.assignedUsers) && t.assignedUsers.length > 0) {
           usersList = t.assignedUsers.map(u => typeof u === "string" ? u : u.fullName || u.userName || u.name);
         } else if (t.assigneeName) {
@@ -307,9 +320,8 @@ export default function TaskManagerManagement() {
           }
         }
 
-        const actualTarget = t.progress?.targetQty ?? 10;
+        const actualTarget = t.targetQty ?? t.progress?.targetQty ?? 10;
 
-        // Id người đang nhận để tick/bỏ checkbox — so theo tên là dính người trùng tên.
         const rawAssigneesForIds = Array.isArray(t.assignees) && t.assignees.length > 0
           ? t.assignees
           : (Array.isArray(t.assignments) ? t.assignments : []);
@@ -318,14 +330,15 @@ export default function TaskManagerManagement() {
           .filter(Boolean);
 
         return {
-          id: t.taskId || t.id,
-          taskId: t.taskId || t.id,
+          id: Number(t.taskId || t.id),
+          taskId: Number(t.taskId || t.id),
           title: t.title || t.description || "Nhiệm vụ",
           role: isSpeaker ? "Speaker" : "Reviewer",
           campaignId: Number(t.campaignId),
           topic: mapDomainToTopicVN(t.domain || t.topic || t.categoryName),
           targetQty: Number(actualTarget),
           assignedUsers: usersList,
+          assignedUserTargets: userTargetsMap,
           assignedUserIds,
           assignedToUserId: t.assignedToUserId || t.assigneeId,
           createdAt: formatDateToVN(t.createdAt || t.createdDate),
@@ -350,9 +363,6 @@ export default function TaskManagerManagement() {
         }
       });
       setBatchMapping(mapping);
-
-      setSpeakerTasksList(mappedTasks.filter((t) => t.role === "Speaker"));
-      setReviewerTasksList(mappedTasks.filter((t) => t.role === "Reviewer"));
     } catch (error) {
       console.error("Lỗi khi kết nối API:", error);
     }
@@ -376,89 +386,25 @@ export default function TaskManagerManagement() {
     return allAdminUsers.filter(u => u.role === "Reviewer" && u.status === "Active");
   }, [allAdminUsers]);
 
-  const allTasksOptions = useMemo(() => [
-    ...speakerTasksList.map(t => ({ 
-      ...t, 
-      role: "Speaker", 
-      uniqueKey: `Speaker-${t.id}`,
-      label: `[Speaker] ${t.title}` 
-    })),
-    ...reviewerTasksList.map(t => ({ 
-      ...t, 
-      role: "Reviewer", 
-      uniqueKey: `Reviewer-${t.id}`,
-      label: `[Reviewer] ${t.title}` 
-    }))
-  ], [speakerTasksList, reviewerTasksList]);
-
-  const assignModalSelectedBatch = useMemo(() => {
-    return batches.find(b => Number(b.id) === Number(assignFormData.selectedBatchId)) || batches[0] || null;
-  }, [batches, assignFormData.selectedBatchId]);
-
-  const filteredTasksForAssignModal = useMemo(() => {
-    if (!assignModalSelectedBatch) return allTasksOptions;
-    return allTasksOptions.filter(t => !t.topic || t.topic === assignModalSelectedBatch.topic);
-  }, [allTasksOptions, assignModalSelectedBatch]);
-
-  const currentSelectedTask = useMemo(() => {
-    return filteredTasksForAssignModal.find(t => t.uniqueKey === assignFormData.selectedUniqueKey) || filteredTasksForAssignModal[0];
-  }, [assignFormData.selectedUniqueKey, filteredTasksForAssignModal]);
-
   const targetUserList = useMemo(() => {
-    return currentSelectedTask?.role === "Speaker" ? activeSpeakers : activeReviewers;
-  }, [currentSelectedTask, activeSpeakers, activeReviewers]);
+    return assignFormData.targetRole === "Speaker" ? activeSpeakers : activeReviewers;
+  }, [assignFormData.targetRole, activeSpeakers, activeReviewers]);
 
   const handleOpenAssignModal = () => {
     if (batches.length === 0) {
-      toast.error("Vui lòng tạo đợt trước khi thực hiện phân công nhiệm vụ!");
+      toast.error("Vui lòng tạo đợt trước khi thực hiện tạo nhiệm vụ!");
       return;
     }
 
-    setEditingAssignment(null);
     const initialBatch = batches.find(b => Number(b.id) === Number(selectedBatchId)) || batches[0] || null;
-    const initialBatchTopic = initialBatch?.topic;
-    const availableTasks = initialBatchTopic 
-      ? allTasksOptions.filter(t => !t.topic || t.topic === initialBatchTopic) 
-      : allTasksOptions;
-
-    const defaultTask = availableTasks[0] || allTasksOptions[0];
-
-    const currentTaskInState = assignTasks.find(t => Number(t.id) === Number(defaultTask?.id));
-    const currentAssignedUsers = currentTaskInState ? currentTaskInState.assignedUsers : (defaultTask?.assignedUsers || []);
 
     setAssignFormData({
       selectedBatchId: initialBatch ? initialBatch.id : "",
-      selectedUniqueKey: defaultTask ? defaultTask.uniqueKey : "",
-      assignedUsers: currentAssignedUsers
+      taskTitle: "",
+      targetRole: "Speaker",
+      assignedUsers: []
     });
     setIsAssignModalOpen(true);
-  };
-
-  const handleBatchChangeInAssignModal = (newBatchId) => {
-    const nextBatch = batches.find(b => Number(b.id) === Number(newBatchId));
-    const nextAvailableTasks = nextBatch 
-      ? allTasksOptions.filter(t => !t.topic || t.topic === nextBatch.topic)
-      : allTasksOptions;
-    
-    const defaultNextTask = nextAvailableTasks[0];
-    const currentTaskInState = assignTasks.find(t => Number(t.id) === Number(defaultNextTask?.id));
-
-    setAssignFormData({
-      selectedBatchId: newBatchId,
-      selectedUniqueKey: defaultNextTask ? defaultNextTask.uniqueKey : "",
-      assignedUsers: currentTaskInState ? currentTaskInState.assignedUsers : (defaultNextTask?.assignedUsers || [])
-    });
-  };
-
-  const handleTaskChangeInAssignModal = (newUniqueKey) => {
-    const newSelectedTask = filteredTasksForAssignModal.find(t => t.uniqueKey === newUniqueKey);
-    const currentTaskInState = assignTasks.find(t => Number(t.id) === Number(newSelectedTask?.id));
-
-    setAssignFormData(prev => ({
-      ...prev,
-      selectedUniqueKey: newUniqueKey,
-      assignedUsers: currentTaskInState ? currentTaskInState.assignedUsers : (newSelectedTask?.assignedUsers || [])
-    }));
   };
 
   const handleUserCheckboxToggle = (userName) => {
@@ -472,47 +418,118 @@ export default function TaskManagerManagement() {
     });
   };
 
+  const currentTasks = useMemo(() => {
+    if (!selectedBatchId) return assignTasks;
+    return assignTasks.filter((t) => Number(t.campaignId) === Number(selectedBatchId));
+  }, [assignTasks, selectedBatchId]);
+
+  const selectedBatchObj = batches.find((b) => Number(b.id) === Number(selectedBatchId)) || null;
+
+  const calculatedTargetPerTask = useMemo(() => {
+    if (!selectedBatchObj) return 0;
+    const totalBatchTarget = Number(selectedBatchObj.target || 2000);
+    const taskCount = currentTasks.length;
+
+    if (taskCount === 0) return totalBatchTarget;
+
+    const dividedTarget = totalBatchTarget / taskCount;
+
+    if (!Number.isInteger(dividedTarget)) {
+      return Math.floor(dividedTarget);
+    }
+
+    return dividedTarget;
+  }, [selectedBatchObj, currentTasks.length]);
+
   const handleSubmitAssignForm = async (e) => {
     e.preventDefault();
 
-    try {
-      const taskObj = currentSelectedTask;
-      const targetBatchId = Number(assignFormData.selectedBatchId);
-      const taskId = Number(taskObj?.id || taskObj?.taskId);
+    if (!assignFormData.taskTitle.trim()) {
+      toast.error("Vui lòng nhập tên nhiệm vụ!");
+      return;
+    }
 
-      if (!taskId || isNaN(targetBatchId)) {
-        toast.error("Vui lòng chọn đợt và nhiệm vụ hợp lệ!");
+    try {
+      const targetBatchId = Number(assignFormData.selectedBatchId);
+      const batchObj = batches.find(b => Number(b.id) === targetBatchId);
+
+      if (!batchObj) {
+        toast.error("Vui lòng chọn đợt hợp lệ!");
         return;
       }
 
-      await taskService.attachTaskToCampaign(taskId, targetBatchId);
+      const domainMap = {
+        "Công nghệ thông tin": "ItTechnology",
+        "Giáo dục": "Education",
+        "Hội thoại hàng ngày": "DailyLife"
+      };
 
-      try {
-        await taskService.addTaskItems(taskId, {
-          autoFill: {
-            count: taskObj.targetQty || 10,
-            domain: assignModalSelectedBatch?.topic === "Công nghệ thông tin" ? "ItTechnology" : 
-                    assignModalSelectedBatch?.topic === "Giáo dục" ? "Education" : "DailyLife"
-          }
-        });
-      } catch (itemErr) {
-        console.warn("AutoFill items warning:", itemErr);
+      const selectedDomainCode = domainMap[batchObj?.topic] || "ItTechnology";
+      const isSpeaker = assignFormData.targetRole === "Speaker";
+
+      let endDateClean = formatDateToISO(batchObj.rawEndDateIso || batchObj.endDate);
+      if (!endDateClean && batchObj.endDate && batchObj.endDate.includes("/")) {
+        const [d, m, y] = batchObj.endDate.split("/");
+        endDateClean = `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+      }
+
+      const tasksInTargetBatch = assignTasks.filter(t => Number(t.campaignId) === targetBatchId);
+      const batchTarget = Number(batchObj.target || 2000);
+      const newTaskCount = tasksInTargetBatch.length + 1;
+      const targetPerTask = Math.floor(batchTarget / newTaskCount);
+
+      if (tasksInTargetBatch.length > 0 && typeof taskService.updateTask === "function") {
+        await Promise.all(
+          tasksInTargetBatch.map(existingTask => 
+            taskService.updateTask(existingTask.id, {
+              targetQty: targetPerTask
+            }).catch(err => console.warn(`Lỗi hạ targetQty task ${existingTask.id}:`, err))
+          )
+        );
+      }
+
+      const payload = {
+        title: assignFormData.taskTitle.trim(),
+        description: assignFormData.taskTitle.trim(),
+        taskType: isSpeaker ? "Recording" : "Review",
+        domain: selectedDomainCode,
+        topic: batchObj?.topic || "Công nghệ thông tin",
+        campaignId: targetBatchId,
+        targetQty: targetPerTask,
+        deadline: endDateClean
+      };
+
+      const newCreatedTask = await taskService.createTask(payload);
+      const taskId = Number(newCreatedTask?.summary?.taskId || newCreatedTask?.taskId || newCreatedTask?.id);
+
+      if (taskId && targetBatchId) {
+        await taskService.attachTaskToCampaign(taskId, targetBatchId).catch(() => {});
       }
 
       const selectedUsers = targetUserList.filter(u => assignFormData.assignedUsers.includes(u.name));
       const userIdsToAssign = selectedUsers.map(u => Number(u.id)).filter(Boolean);
 
-      if (userIdsToAssign.length > 0) {
-        await taskService.assignTask(taskId, userIdsToAssign);
+      if (taskId && userIdsToAssign.length > 0) {
+        await taskService.assignTask(taskId, userIdsToAssign).catch(err => console.warn("Lỗi assignTask:", err));
+        const targetPerUser = Math.floor(targetPerTask / userIdsToAssign.length);
+
+        try {
+          if (isSpeaker && typeof taskService.addTaskItems === "function") {
+            await taskService.addTaskItems(taskId, { autoFill: true, quantity: targetPerUser });
+          } else if (!isSpeaker && typeof taskService.addTextItems === "function") {
+            await taskService.addTextItems(taskId, { userId: userIdsToAssign[0], count: targetPerUser });
+          }
+        } catch (itemsErr) {
+          console.warn("Chưa đủ câu mẫu khả dụng trên BE để nạp tự động:", itemsErr);
+        }
       }
 
-      toast.success(`Đã phân công nhiệm vụ "${taskObj.title}" vào đợt thành công!`);
+      toast.success(`Đã tạo và tự động chia lại chỉ tiêu (${targetPerTask} câu/nhiệm vụ) thành công!`);
       setIsAssignModalOpen(false);
-
       await loadDataFromApi();
     } catch (err) {
-      console.error("Lỗi khi phân công nhiệm vụ vào đợt:", err?.response?.data || err);
-      const msg = err?.response?.data?.title || err?.response?.data?.message || "Phân công thất bại!";
+      console.error("Lỗi tạo nhiệm vụ:", err?.response?.data || err);
+      const msg = err?.response?.data?.title || err?.response?.data?.message || err?.message || "Tạo nhiệm vụ thất bại!";
       toast.error(msg);
     }
   };
@@ -584,14 +601,15 @@ export default function TaskManagerManagement() {
         "Hội thoại hàng ngày": "DailyLife"
       };
 
-      const startIso = `${cleanStart}T00:00:00Z`;
-      const endIso = `${cleanEnd}T23:59:59Z`;
+      const startIso = `${cleanStart}T00:00:00`;
+      const endIso = `${cleanEnd}T23:59:59`;
+      const newCampaignTarget = Number(batchFormData.target);
 
       const campaignPayload = {
         title: String(batchFormData.name).trim(),
         campaignName: String(batchFormData.name).trim(),
         domain: domainMap[batchFormData.topic] || "ItTechnology",
-        targetQty: Number(batchFormData.target),
+        targetQty: newCampaignTarget,
         startDate: cleanStart,
         endDate: cleanEnd,
         StartDate: cleanStart,
@@ -604,26 +622,44 @@ export default function TaskManagerManagement() {
         await taskService.createCampaign(campaignPayload);
         toast.success(`Đã tạo thành công ${batchFormData.name}!`);
       } else {
-        await taskService.updateCampaign(modalTargetBatchId, campaignPayload);
-        toast.success(`Đã cập nhật ${batchFormData.name}!`);
-      }
+        const targetCampaignId = Number(modalTargetBatchId);
+        await taskService.updateCampaign(targetCampaignId, campaignPayload);
 
-      setBatches((prevBatches) =>
-        prevBatches.map((b) => {
-          if (modalMode === "UPDATE" && Number(b.id) === Number(modalTargetBatchId)) {
-            return {
-              ...b,
-              campaignName: batchFormData.name,
-              name: batchFormData.name,
-              target: Number(batchFormData.target),
-              topic: batchFormData.topic,
-              startDate: formatDateToVN(cleanStart),
-              endDate: formatDateToVN(cleanEnd)
-            };
-          }
-          return b;
-        })
-      );
+        // ĐỒNG BỘ CHIA LẠI CHỈ TIÊU CÁC TASK CON TRONG ĐỢT KHI SỬA CHỈ TIÊU ĐỢT
+        const tasksInBatch = assignTasks.filter(t => Number(t.campaignId) === targetCampaignId);
+        if (tasksInBatch.length > 0) {
+          const newTargetPerTask = Math.floor(newCampaignTarget / tasksInBatch.length);
+
+          await Promise.all(
+            tasksInBatch.map(async (t) => {
+              // 1. Cập nhật chỉ tiêu tổng của Task
+              await taskService.updateTask(t.id, { targetQty: newTargetPerTask }).catch(err => console.warn(err));
+
+              // 2. Cập nhật chỉ tiêu cá nhân cho từng người trong Task
+              if (t.assignedUsers && t.assignedUsers.length > 0) {
+                const baseUserTarget = Math.floor(newTargetPerTask / t.assignedUsers.length);
+                const remainder = newTargetPerTask % t.assignedUsers.length;
+
+                const assignmentsPayload = t.assignedUsers.map((userName, index) => {
+                  const foundUser = allAdminUsers.find(u => u.name === userName);
+                  // Dồn phần dư cho người đầu tiên để tổng đúng bằng chỉ tiêu Task
+                  const userTarget = index === 0 ? baseUserTarget + remainder : baseUserTarget;
+                  return {
+                    userId: foundUser ? Number(foundUser.id) : null,
+                    targetQty: userTarget
+                  };
+                }).filter(a => a.userId !== null);
+
+                if (assignmentsPayload.length > 0) {
+                  await taskService.setAssignments(t.id, assignmentsPayload).catch(err => console.warn(err));
+                }
+              }
+            })
+          );
+        }
+
+        toast.success(`Đã cập nhật đợt và tự động đồng bộ chỉ tiêu các nhiệm vụ!`);
+      }
 
       setIsModalOpen(false);
       await loadDataFromApi();
@@ -714,7 +750,6 @@ export default function TaskManagerManagement() {
       const currentIds = (editingTask.assignedUserIds || []).map(Number);
       const selectedIds = (editTaskFormData.assignedUserIds || []).map(Number).filter(id => roleUserIds.has(id));
 
-      // API phân công chỉ THÊM người, không tự bỏ — người bị bỏ tick phải gọi gỡ riêng.
       for (const userId of currentIds.filter(id => roleUserIds.has(id) && !selectedIds.includes(id))) {
         await taskService.unassignTask(editingTask.id, userId);
       }
@@ -777,11 +812,6 @@ export default function TaskManagerManagement() {
     }
   };
 
-  const currentTasks = useMemo(() => {
-    if (!selectedBatchId) return assignTasks;
-    return assignTasks.filter((t) => Number(t.campaignId) === Number(selectedBatchId));
-  }, [assignTasks, selectedBatchId]);
-
   const handleSearchSubmit = (e) => {
     e.preventDefault();
     setSearchQuery(searchInput);
@@ -804,8 +834,95 @@ export default function TaskManagerManagement() {
     });
   }, [currentTasks, searchQuery, statusFilter]);
 
-  const selectedBatchObj = batches.find((b) => Number(b.id) === Number(selectedBatchId)) || null;
   const targetModalBatchObj = batches.find((b) => Number(b.id) === Number(modalTargetBatchId)) || selectedBatchObj;
+
+  const handleOpenViewingTaskModal = (task) => {
+    setViewingAssignedTask(task);
+    
+    const userCount = task.assignedUsers ? task.assignedUsers.length : 0;
+    const taskTarget = task.targetQty || calculatedTargetPerTask || 0;
+    
+    // Tự động phân bổ đều chỉ tiêu task cho danh sách user, dồn phần dư cho user đầu tiên
+    const baseTarget = userCount > 0 ? Math.floor(taskTarget / userCount) : 0;
+    const remainder = userCount > 0 ? taskTarget % userCount : 0;
+
+    setUserTargets(prev => {
+      const updated = { ...prev };
+      if (task.assignedUsers) {
+        task.assignedUsers.forEach((userName, index) => {
+          if (task.assignedUserTargets && task.assignedUserTargets[userName] !== undefined) {
+            updated[userName] = task.assignedUserTargets[userName];
+          } else if (updated[userName] === undefined) {
+            updated[userName] = index === 0 ? baseTarget + remainder : baseTarget;
+          }
+        });
+      }
+      return updated;
+    });
+  };
+
+  const handleUserTargetChange = (userName, value) => {
+    const numValue = Math.max(0, parseInt(value, 10) || 0);
+
+    setUserTargets(prev => ({
+      ...prev,
+      [userName]: numValue
+    }));
+  };
+
+  const handleSaveUserTargets = async () => {
+    if (!viewingAssignedTask) return;
+
+    const taskTargetQty = Number(viewingAssignedTask.targetQty || calculatedTargetPerTask || 0);
+    const assignedUsers = viewingAssignedTask.assignedUsers || [];
+
+    // Tính tổng chỉ tiêu hiện tại người dùng nhập cho các thành viên
+    const currentTotalAllocated = assignedUsers.reduce((sum, userName) => {
+      const val = userTargets[userName] ?? 0;
+      return sum + val;
+    }, 0);
+
+    // Kiểm tra tuân thủ theo Backend: Tổng chỉ tiêu cá nhân bắt buộc bằng chỉ tiêu của nhiệm vụ
+    if (assignedUsers.length > 0 && currentTotalAllocated !== taskTargetQty) {
+      toast.error(
+        `Tổng chỉ tiêu người thực hiện (${currentTotalAllocated} câu) phải bằng chỉ tiêu nhiệm vụ (${taskTargetQty} câu)!`
+      );
+      return;
+    }
+
+    try {
+      // 1. Cập nhật quota phân công cá nhân xuống Backend
+      const assignmentsPayload = assignedUsers.map(userName => {
+        const foundUser = allAdminUsers.find(u => u.name === userName);
+        const userId = foundUser ? Number(foundUser.id) : null;
+        const targetQty = userTargets[userName] ?? 0;
+
+        return {
+          userId,
+          targetQty
+        };
+      }).filter(a => a.userId !== null);
+
+      if (assignmentsPayload.length > 0 && typeof taskService.setAssignments === "function") {
+        await taskService.setAssignments(viewingAssignedTask.id, assignmentsPayload);
+      }
+
+      toast.success("Đã lưu chỉ tiêu phân công thành công!");
+      setViewingAssignedTask(null);
+      await loadDataFromApi();
+    } catch (err) {
+      console.error("Lỗi lưu chỉ tiêu phân công:", err?.response?.data || err);
+      const apiMsg = err?.response?.data?.title || err?.response?.data?.message || "";
+      
+      if (apiMsg.includes("vượt quá") || apiMsg.includes("mục người nhận")) {
+        toast.warning("Đã lưu phân công người thực hiện! (Lưu ý: Chưa đủ số câu ghi âm mẫu khả dụng trong kho BE).");
+        setViewingAssignedTask(null);
+        await loadDataFromApi();
+      } else {
+        toast.error(apiMsg || "Lưu chỉ tiêu thất bại!");
+      }
+    }
+  };
 
   return (
     <div className="w-full h-full flex flex-col gap-3.5 text-left font-sans p-1 overflow-y-auto relative transition-colors">
@@ -888,7 +1005,7 @@ export default function TaskManagerManagement() {
 
                 <div>
                   <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
-                    Mục tiêu (Số câu)
+                    Mục tiêu
                   </label>
                   <input
                     type="number"
@@ -946,7 +1063,7 @@ export default function TaskManagerManagement() {
         </div>
       )}
 
-      {/* MODAL PHÂN CÔNG NHIỆM VỤ MỚI */}
+      {/* MODAL TẠO NHIỆM VỤ MỚI */}
       {isAssignModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#16171C]/55 backdrop-blur-xs" onClick={() => setIsAssignModalOpen(false)}>
           <div 
@@ -957,7 +1074,7 @@ export default function TaskManagerManagement() {
             <form onSubmit={handleSubmitAssignForm} className="p-6 space-y-4">
               <div className="flex items-center justify-between border-b border-[#E5E2D8] dark:border-gray-800 pb-3">
                 <h3 className="type-section truncate text-[#16171C] dark:text-gray-100">
-                  Phân công nhiệm vụ mới
+                  Tạo nhiệm vụ mới
                 </h3>
                 <button 
                   type="button"
@@ -975,7 +1092,7 @@ export default function TaskManagerManagement() {
                 <div className="relative flex items-center">
                   <select
                     value={assignFormData.selectedBatchId}
-                    onChange={(e) => handleBatchChangeInAssignModal(e.target.value)}
+                    onChange={(e) => setAssignFormData({ ...assignFormData, selectedBatchId: e.target.value })}
                     className="w-full h-11 appearance-none border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl type-body outline-none font-bold transition-all font-sans truncate pl-3.5 pr-8 py-2.5 cursor-pointer"
                     onFocus={(e) => {
                       e.target.style.borderColor = TASK_MANAGER_ACCENT;
@@ -997,15 +1114,35 @@ export default function TaskManagerManagement() {
               </div>
               
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block type-label text-[#2B2C31] dark:text-gray-200">
-                    Chọn nhiệm vụ (Thuộc chủ đề: {assignModalSelectedBatch?.topic || "Tất cả"})
-                  </label>
-                </div>
+                <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
+                  Tên nhiệm vụ
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Nhập tên nhiệm vụ..."
+                  value={assignFormData.taskTitle}
+                  onChange={(e) => setAssignFormData({ ...assignFormData, taskTitle: e.target.value })}
+                  className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none font-medium transition-all font-sans placeholder:text-[#9A9CA3]"
+                  onFocus={(e) => {
+                    e.target.style.borderColor = TASK_MANAGER_ACCENT;
+                    e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '';
+                    e.target.style.boxShadow = 'none';
+                  }}
+                />
+              </div>
+
+              <div>
+                <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
+                  Phân công nhiệm vụ cho
+                </label>
                 <div className="relative flex items-center">
                   <select
-                    value={assignFormData.selectedUniqueKey}
-                    onChange={(e) => handleTaskChangeInAssignModal(e.target.value)}
+                    value={assignFormData.targetRole}
+                    onChange={(e) => setAssignFormData({ ...assignFormData, targetRole: e.target.value, assignedUsers: [] })}
                     className="w-full h-11 appearance-none border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl type-body outline-none font-bold transition-all font-sans truncate pl-3.5 pr-8 py-2.5 cursor-pointer"
                     onFocus={(e) => {
                       e.target.style.borderColor = TASK_MANAGER_ACCENT;
@@ -1016,17 +1153,8 @@ export default function TaskManagerManagement() {
                       e.target.style.boxShadow = 'none';
                     }}
                   >
-                    {filteredTasksForAssignModal.length > 0 ? (
-                      filteredTasksForAssignModal.map((t) => (
-                        <option key={t.uniqueKey} value={t.uniqueKey} className="bg-white text-[#16171C] dark:bg-[#1C1D22] dark:text-white">
-                          {t.label}
-                        </option>
-                      ))
-                    ) : (
-                      <option value="" disabled className="bg-white text-[#16171C] dark:bg-[#1C1D22] dark:text-white">
-                        Không có nhiệm vụ nào thuộc chủ đề {assignModalSelectedBatch?.topic}
-                      </option>
-                    )}
+                    <option value="Speaker" className="bg-white text-[#16171C] dark:bg-[#1C1D22] dark:text-white">Speaker</option>
+                    <option value="Reviewer" className="bg-white text-[#16171C] dark:bg-[#1C1D22] dark:text-white">Reviewer</option>
                   </select>
                   <ChevronDown className="w-4 h-4 absolute right-3 pointer-events-none text-[#9A9CA3]" />
                 </div>
@@ -1035,13 +1163,13 @@ export default function TaskManagerManagement() {
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="block type-label text-[#2B2C31] dark:text-gray-200">
-                    {currentSelectedTask?.role} đang hoạt động
+                    Danh sách {assignFormData.targetRole} tham gia
                   </label>
                   <span 
-                    style={{ backgroundColor: currentSelectedTask?.role === "Speaker" ? SPEAKER_ACCENT : REVIEWER_ACCENT }}
+                    style={{ backgroundColor: assignFormData.targetRole === "Speaker" ? SPEAKER_ACCENT : REVIEWER_ACCENT }}
                     className="type-caption text-white px-2 py-0.5 rounded-md font-bold"
                   >
-                    {currentSelectedTask?.role}
+                    {assignFormData.targetRole}
                   </span>
                 </div>
 
@@ -1049,79 +1177,38 @@ export default function TaskManagerManagement() {
                   {targetUserList.length > 0 ? (
                     targetUserList.map((u) => {
                       const isChecked = assignFormData.assignedUsers.includes(u.name);
-                      const hasPreferenceReason = currentSelectedTask?.role === "Speaker" && 
-                                                  u.performanceReason && 
-                                                  (u.performanceTag === "GOOD" || u.performanceTag === "BAD");
 
                       return (
                         <label 
                           key={u.id} 
                           style={isChecked ? { borderColor: TASK_MANAGER_ACCENT } : {}}
-                          className={`flex items-start justify-between p-2.5 rounded-xl type-ui transition-all border cursor-pointer ${
+                          className={`flex items-center justify-between p-2.5 rounded-xl type-ui transition-all border cursor-pointer ${
                             isChecked 
                               ? "bg-white dark:bg-[#1C1D22] shadow-xs font-bold text-[#16171C] dark:text-white" 
                               : "bg-white/70 dark:bg-[#1C1D22]/50 border-[#E5E2D8] dark:border-gray-700 hover:bg-white text-[#6E7078] dark:text-gray-300"
                           }`}
                         >
-                          <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
                             <input
                               type="checkbox"
                               checked={isChecked}
                               onChange={() => handleUserCheckboxToggle(u.name)}
                               style={{ accentColor: TASK_MANAGER_ACCENT }}
-                              className="rounded focus:ring-0 cursor-pointer shrink-0 mt-0.5"
+                              className="rounded focus:ring-0 cursor-pointer shrink-0"
                             />
                             <div className="flex flex-col min-w-0 pr-1">
                               <span className="truncate leading-tight font-bold">{u.name}</span>
                               <span className="type-caption text-[#6E7078] dark:text-gray-400 truncate">
                                 {u.email}
                               </span>
-                              
-                              {hasPreferenceReason && (
-                                <span className="type-meta font-medium mt-0.5 text-[#6E7078] dark:text-gray-400 line-clamp-1">
-                                  Lý do: {u.performanceReason}
-                                </span>
-                              )}
                             </div>
                           </div>
-
-                          {currentSelectedTask?.role === "Speaker" && (
-                            <div className="flex items-center gap-1 shrink-0 ml-1 mt-0.5">
-                              {u.performanceTag === "GOOD" && (
-                                <span 
-                                  style={{
-                                    backgroundColor: CHIP_SUCCESS_BG,
-                                    borderColor: CHIP_SUCCESS_BORDER,
-                                    color: CHIP_SUCCESS_TEXT
-                                  }}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md type-caption font-bold border"
-                                >
-                                  <Award className="w-3 h-3 shrink-0" />
-                                  <span>Ưu tiên</span>
-                                </span>
-                              )}
-
-                              {u.performanceTag === "BAD" && (
-                                <span 
-                                  style={{
-                                    backgroundColor: "rgba(243, 114, 127, 0.15)",
-                                    borderColor: "rgba(243, 114, 127, 0.4)",
-                                    color: DANGER
-                                  }}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md type-caption font-bold border"
-                                >
-                                  <AlertCircle className="w-3 h-3 shrink-0" />
-                                  <span>Hạn chế</span>
-                                </span>
-                              )}
-                            </div>
-                          )}
                         </label>
                       );
                     })
                   ) : (
                     <div className="p-3 text-center type-ui text-[#6E7078] dark:text-gray-400">
-                      Không có {currentSelectedTask?.role} nào đang hoạt động (Active).
+                      Không có {assignFormData.targetRole} nào đang hoạt động.
                     </div>
                   )}
                 </div>
@@ -1137,11 +1224,10 @@ export default function TaskManagerManagement() {
                 </button>
                 <button
                   type="submit"
-                  disabled={filteredTasksForAssignModal.length === 0}
                   style={{ backgroundColor: TASK_MANAGER_ACCENT, boxShadow: `0 10px 24px ${TASK_MANAGER_ACCENT}40` }}
-                  className="flex-1 py-2.5 text-white rounded-xl type-button hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 py-2.5 text-white rounded-xl type-button hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer font-bold"
                 >
-                  Lưu phân công
+                  Tạo nhiệm vụ
                 </button>
               </div>
             </form>
@@ -1270,73 +1356,32 @@ export default function TaskManagerManagement() {
                       <div className="max-h-52 overflow-y-auto border border-[#E5E2D8] dark:border-gray-700 bg-[#F7F5EF] dark:bg-[#25272E] rounded-xl p-2.5 space-y-2">
                         {userList.map((u) => {
                           const isChecked = editTaskFormData.assignedUserIds.includes(Number(u.id));
-                          const hasPreferenceReason = editTaskFormData.role === "Speaker" && 
-                                                      u.performanceReason && 
-                                                      (u.performanceTag === "GOOD" || u.performanceTag === "BAD");
 
                           return (
                             <label 
                               key={u.id}
                               style={isChecked ? { borderColor: TASK_MANAGER_ACCENT } : {}}
-                              className={`flex items-start justify-between p-2.5 rounded-xl type-ui transition-all border cursor-pointer ${
+                              className={`flex items-center justify-between p-2.5 rounded-xl type-ui transition-all border cursor-pointer ${
                                 isChecked 
                                   ? "bg-white dark:bg-[#1C1D22] shadow-xs font-bold text-[#16171C] dark:text-white" 
                                   : "bg-white/70 dark:bg-[#1C1D22]/50 border-[#E5E2D8] dark:border-gray-700 hover:bg-white text-[#6E7078] dark:text-gray-300"
                               }`}
                             >
-                              <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                              <div className="flex items-center gap-2.5 min-w-0 flex-1">
                                 <input
                                   type="checkbox"
                                   checked={isChecked}
                                   onChange={() => handleToggleUserInEditTask(Number(u.id))}
                                   style={{ accentColor: TASK_MANAGER_ACCENT }}
-                                  className="rounded focus:ring-0 cursor-pointer shrink-0 mt-0.5"
+                                  className="rounded focus:ring-0 cursor-pointer shrink-0"
                                 />
                                 <div className="flex flex-col min-w-0 pr-1">
                                   <span className="truncate leading-tight font-bold">{u.name}</span>
                                   <span className="type-caption text-[#6E7078] dark:text-gray-400 truncate">
                                     {u.email}
                                   </span>
-
-                                  {hasPreferenceReason && (
-                                    <span className="type-meta font-medium mt-0.5 text-[#6E7078] dark:text-gray-400 line-clamp-1">
-                                      Lý do: {u.performanceReason}
-                                    </span>
-                                  )}
                                 </div>
                               </div>
-
-                              {editTaskFormData.role === "Speaker" && (
-                                <div className="flex items-center gap-1 shrink-0 ml-1 mt-0.5">
-                                  {u.performanceTag === "GOOD" && (
-                                    <span 
-                                      style={{
-                                        backgroundColor: CHIP_SUCCESS_BG,
-                                        borderColor: CHIP_SUCCESS_BORDER,
-                                        color: CHIP_SUCCESS_TEXT
-                                      }}
-                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md type-caption font-bold border"
-                                    >
-                                      <Award className="w-3 h-3 shrink-0" />
-                                      <span>Ưu tiên</span>
-                                    </span>
-                                  )}
-
-                                  {u.performanceTag === "BAD" && (
-                                    <span 
-                                      style={{
-                                        backgroundColor: "rgba(243, 114, 127, 0.15)",
-                                        borderColor: "rgba(243, 114, 127, 0.4)",
-                                        color: DANGER
-                                      }}
-                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md type-caption font-bold border"
-                                    >
-                                      <AlertCircle className="w-3 h-3 shrink-0" />
-                                      <span>Hạn chế</span>
-                                    </span>
-                                  )}
-                                </div>
-                              )}
                             </label>
                           );
                         })}
@@ -1414,7 +1459,7 @@ export default function TaskManagerManagement() {
       {viewingAssignedTask && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#16171C]/55 backdrop-blur-xs" onClick={() => setViewingAssignedTask(null)}>
           <div 
-            className="rounded-[24px] w-full max-w-md shadow-[0_20px_50px_rgba(16,17,20,0.25)] overflow-hidden border border-[#E5E2D8] dark:border-gray-800 bg-white dark:bg-[#1C1D22] animate-in fade-in zoom-in-95 duration-200" 
+            className="rounded-[24px] w-full max-w-lg shadow-[0_20px_50px_rgba(16,17,20,0.25)] overflow-hidden border border-[#E5E2D8] dark:border-gray-800 bg-white dark:bg-[#1C1D22] animate-in fade-in zoom-in-95 duration-200" 
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ backgroundColor: TASK_MANAGER_ACCENT }} className="h-1.5 w-full shrink-0" />
@@ -1454,12 +1499,31 @@ export default function TaskManagerManagement() {
                         </div>
                         <span className="font-bold">{userName}</span>
                       </div>
-                      <span 
-                        style={{ backgroundColor: viewingAssignedTask.role === "Speaker" ? SPEAKER_ACCENT : REVIEWER_ACCENT }}
-                        className="type-caption text-white px-2.5 py-0.5 rounded-md font-bold"
-                      >
-                        {viewingAssignedTask.role || "Thực hiện"}
-                      </span>
+
+                      <div className="flex items-center gap-2">
+                        <span 
+                          style={{ backgroundColor: viewingAssignedTask.role === "Speaker" ? SPEAKER_ACCENT : REVIEWER_ACCENT }}
+                          className="type-caption text-white px-2.5 py-1 rounded-md font-bold"
+                        >
+                          {viewingAssignedTask.role || "Thực hiện"}
+                        </span>
+
+                        <div className="flex items-center gap-1 bg-white dark:bg-[#1C1D22] border border-[#E5E2D8] dark:border-gray-700 rounded-lg px-2 py-0.5">
+                          <input
+                            type="number"
+                            min="0"
+                            value={
+                              userTargets[userName] ?? 
+                              (viewingAssignedTask.assignedUsers.length > 0 
+                                ? Math.floor((viewingAssignedTask.targetQty || calculatedTargetPerTask) / viewingAssignedTask.assignedUsers.length) 
+                                : 0)
+                            }
+                            onChange={(e) => handleUserTargetChange(userName, e.target.value)}
+                            className="w-16 h-6 text-center font-bold type-caption text-[#16171C] dark:text-white bg-transparent outline-none font-sans"
+                          />
+                          <span className="type-caption text-[#6E7078] dark:text-gray-400 font-medium">câu</span>
+                        </div>
+                      </div>
                     </div>
                   ))
                 ) : (
@@ -1468,14 +1532,21 @@ export default function TaskManagerManagement() {
               </div>
             </div>
 
-            <div className="p-4 border-t border-[#E5E2D8] dark:border-gray-800 text-right bg-[#F7F5EF]/50 dark:bg-[#25272E]/50">
+            <div className="p-4 border-t border-[#E5E2D8] dark:border-gray-800 flex gap-2.5 bg-[#F7F5EF]/50 dark:bg-[#25272E]/50">
               <button
                 type="button"
                 onClick={() => setViewingAssignedTask(null)}
-                style={{ backgroundColor: TASK_MANAGER_ACCENT }}
-                className="w-full py-2.5 text-white rounded-xl type-button hover:opacity-90 transition-opacity cursor-pointer shadow-sm text-center"
+                className="flex-1 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 type-button text-[#6E7078] dark:text-gray-300 hover:bg-[#F7F5EF] cursor-pointer"
               >
-                Đóng
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveUserTargets}
+                style={{ backgroundColor: TASK_MANAGER_ACCENT }}
+                className="flex-1 py-2.5 text-white rounded-xl type-button hover:opacity-90 transition-opacity cursor-pointer shadow-sm text-center font-bold"
+              >
+                Lưu & Đóng
               </button>
             </div>
           </div>
@@ -1599,7 +1670,7 @@ export default function TaskManagerManagement() {
 
                       <div className="flex items-center gap-1 font-medium text-[#16171C] dark:text-gray-300">
                         <Target className="w-3 h-3 text-blue-500 shrink-0" />
-                        <span>Mục tiêu: <strong className="text-[#16171C] dark:text-white font-bold">{batch.target || 2000}</strong> câu</span>
+                        <span>Mục tiêu đợt: <strong className="text-[#16171C] dark:text-white font-bold">{batch.target || 2000}</strong> câu</span>
                       </div>
 
                       <div className="flex items-center gap-1 font-medium text-[#16171C] dark:text-gray-300">
@@ -1692,7 +1763,7 @@ export default function TaskManagerManagement() {
                 className="inline-flex items-center gap-1.5 py-2 px-3.5 type-button text-white rounded-xl hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer whitespace-nowrap"
               >
                 <UserCheck className="w-4 h-4" />
-                <span>Phân công</span>
+                <span>Tạo nhiệm vụ</span>
               </button>
             </div>
           </div>
@@ -1700,24 +1771,22 @@ export default function TaskManagerManagement() {
           {/* BẢNG CHUẨN */}
           <div className="rounded-2xl border border-[#E5E2D8] dark:border-gray-800 bg-white dark:bg-[#1C1D22] shadow-[0_1px_3px_rgba(16,17,20,0.04)] overflow-hidden flex-1 flex flex-col">
             <div className="overflow-x-auto flex-1">
-              <table className="w-full text-left type-ui min-w-[1050px]">
+              <table className="w-full text-left type-ui min-w-[850px]">
                 <thead>
                   <tr className="border-b border-[#E5E2D8] dark:border-gray-800 text-[#9A9CA3] dark:text-gray-400 type-label h-8 bg-[#F7F5EF] dark:bg-[#25272E]">
                     <th className="py-2 px-3 text-center w-[50px]">STT</th>
-                    <th className="py-2 px-3 min-w-[180px]">Nhiệm vụ</th>
-                    <th className="py-2 px-3 text-center w-[90px]">Vai trò</th>
-                    <th className="py-2 px-3 text-center w-[180px]">Người được phân công</th>
-                    <th className="py-2 px-3 text-center w-[110px] whitespace-nowrap">Mục tiêu</th>
-                    <th className="py-2 px-3 text-center w-[120px]">Ngày tạo</th>
-                    <th className="py-2 px-3 text-center w-[120px]">Hạn chót</th>
+                    <th className="py-2 px-3 min-w-[200px]">Nhiệm vụ</th>
+                    <th className="py-2 px-3 text-center w-[100px]">Vai trò</th>
+                    <th className="py-2 px-3 text-center w-[200px]">Người được phân công</th>
+                    <th className="py-2 px-3 text-center w-[150px] whitespace-nowrap">Mục tiêu (Số câu)</th>
                     <th className="py-2 px-3 text-center w-[130px]">Trạng thái</th>
-                    <th className="py-2 px-3 text-center w-[90px]">Thao tác</th>
+                    <th className="py-2 px-3 text-center w-[100px]">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#F0EEE6] dark:divide-gray-800">
                   {!selectedBatchObj || filteredTasks.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-12 text-center text-[#9A9CA3] dark:text-gray-500 type-ui">
+                      <td colSpan={7} className="py-12 text-center text-[#9A9CA3] dark:text-gray-500 type-ui">
                         {!selectedBatchObj 
                           ? "Hãy chọn hoặc tạo một đợt để xem danh sách nhiệm vụ." 
                           : `Không tìm thấy nhiệm vụ nào trong ${selectedBatchObj.campaignName || selectedBatchObj.name}.`}
@@ -1767,7 +1836,7 @@ export default function TaskManagerManagement() {
                           <td className="py-2 px-3 text-center whitespace-nowrap">
                             <button
                               type="button"
-                              onClick={() => setViewingAssignedTask(task)}
+                              onClick={() => handleOpenViewingTaskModal(task)}
                               className="inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-xl bg-[#F7F5EF] dark:bg-[#25272E] hover:bg-[#E5E2D8] dark:hover:bg-gray-700 text-[#16171C] dark:text-gray-200 type-meta font-label border border-[#E5E2D8] dark:border-gray-700 transition-colors cursor-pointer"
                             >
                               <Eye className="w-3.5 h-3.5 text-[#6E7078] dark:text-gray-400 shrink-0" />
@@ -1775,20 +1844,10 @@ export default function TaskManagerManagement() {
                             </button>
                           </td>
 
-                          {/* CỘT MỤC TIÊU SỐ CÂU */}
                           <td className="py-2 px-3 text-center font-bold text-[#16171C] dark:text-white whitespace-nowrap font-sans">
-                            {task.targetQty || 10} câu
-                          </td>
-
-                          <td className="py-2 px-3 text-center font-semibold text-[#16171C] dark:text-white whitespace-nowrap font-sans">
-                            {task.createdAt || "---"}
-                          </td>
-
-                          <td className="py-2 px-3 text-center font-semibold text-[#16171C] dark:text-white whitespace-nowrap font-sans">
-                            {task.deadline || "---"}
+                            {task.targetQty || calculatedTargetPerTask} câu
                           </td>
                           
-                          {/* BADGE TRẠNG THÁI */}
                           <td className="py-2 px-3 text-center whitespace-nowrap">
                             <div className="relative inline-block group">
                               <span

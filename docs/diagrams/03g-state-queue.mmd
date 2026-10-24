@@ -1,0 +1,9 @@
+stateDiagram-v2
+  [*] --> queued: script enters stage (text_review / recording)
+  queued --> claimed: fn_queue_claim_next (SKIP LOCKED)
+  claimed --> queued: TTL expired / release
+  claimed --> done: work submitted
+  queued --> dropped: script rejected/deactivated or proposal pending
+  claimed --> dropped: same
+  done --> queued: audio rejected, requeue at end
+  dropped --> [*]

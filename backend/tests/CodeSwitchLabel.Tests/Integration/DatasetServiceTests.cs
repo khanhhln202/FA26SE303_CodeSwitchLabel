@@ -6,6 +6,7 @@ using CodeSwitchLabel.Services.Dtos;
 using CodeSwitchLabel.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using System.IO.Compression;
 using Xunit;
 
 namespace CodeSwitchLabel.Tests.Integration;
@@ -103,7 +104,7 @@ public sealed class DatasetServiceTests : IntegrationTestBase
         Assert.Equal("dataset_exists", loi.Code);
     }
 
-    // ---------------------------------------------------------------- TEAM_012: sắp xếp
+    // ---------------------------------------------------------------- sắp xếp
 
     /// <summary>Ba dataset rỗng (không cần bản ghi nào) với tên theo thứ tự ngược lại.</summary>
     private async Task<(string Prefix, long[] Ids)> CreateThreeNamedDatasetsAsync()
@@ -129,7 +130,7 @@ public sealed class DatasetServiceTests : IntegrationTestBase
     [Fact]
     public async Task SearchAsync_KhongTruyenSort_GiuNguyenThuTuMoiNhatTruoc()
     {
-        // Regression TEAM_012: mặc định của /api/datasets là mới nhất trước.
+        // Regression mặc định của /api/datasets là mới nhất trước.
         var (_, ids) = await CreateThreeNamedDatasetsAsync();
 
         var page = await _datasets.SearchAsync(
@@ -191,13 +192,50 @@ public sealed class DatasetServiceTests : IntegrationTestBase
         Assert.Equal(AdminUserId, released.ReleasedBy);
         Assert.Equal(2, released.RecordingCount);
 
-        var file = await _datasets.DownloadAsync(dataset.DatasetId, TestContext.Current.CancellationToken);
+        var file = await _datasets.DownloadAsync(
+            dataset.DatasetId, includeAudio: true, TestContext.Current.CancellationToken);
 
         Assert.Equal("application/zip", file.ContentType);
         Assert.NotEmpty(file.Content);
         // ZIP bắt đầu bằng chữ ký "PK".
         Assert.Equal((byte)'P', file.Content[0]);
         Assert.Equal((byte)'K', file.Content[1]);
+
+        using var zip = new ZipArchive(new MemoryStream(file.Content), ZipArchiveMode.Read);
+        var names = zip.Entries.Select(e => e.FullName).ToList();
+
+        Assert.Contains("manifest.json", names);
+        Assert.Contains("metadata.csv", names);
+        // Bản thu đã chọn lúc tạo dataset phải có mặt trong ZIP, không chỉ là link tạm.
+        Assert.Contains($"audio/{cs}.wav", names);
+        Assert.Contains($"audio/{vi}.wav", names);
+
+        using var csv = new StreamReader(zip.GetEntry("metadata.csv")!.Open());
+        var metadata = await csv.ReadToEndAsync(TestContext.Current.CancellationToken);
+        Assert.Contains($"audio/{cs}.wav", metadata);
+        Assert.Contains($"audio/{vi}.wav", metadata);
+    }
+
+    [Fact]
+    public async Task TaiVe_KhongKemAudio_ThiChiCoManifestVaMetadata()
+    {
+        var (_, cs, vi) = await CreateApprovedPairAsync();
+        await MarkApprovedAsync(cs);
+        await MarkApprovedAsync(vi);
+
+        var request = await NewRequest(recordingIds: [cs, vi]);
+        var dataset = (await _datasets.CreateAsync(request, AdminUserId, TestContext.Current.CancellationToken)).Dataset;
+
+        await _datasets.ReleaseAsync(
+            dataset.DatasetId, new ReleaseDatasetRequest(), AdminUserId, TestContext.Current.CancellationToken);
+
+        var file = await _datasets.DownloadAsync(
+            dataset.DatasetId, includeAudio: false, TestContext.Current.CancellationToken);
+
+        using var zip = new ZipArchive(new MemoryStream(file.Content), ZipArchiveMode.Read);
+        Assert.NotNull(zip.GetEntry("manifest.json"));
+        Assert.NotNull(zip.GetEntry("metadata.csv"));
+        Assert.DoesNotContain(zip.Entries, e => e.FullName.StartsWith("audio/"));
     }
 
     [Fact]
@@ -225,7 +263,8 @@ public sealed class DatasetServiceTests : IntegrationTestBase
         var dataset = (await _datasets.CreateAsync(request, AdminUserId, TestContext.Current.CancellationToken)).Dataset;
 
         var loi = await Assert.ThrowsAsync<ConflictException>(
-            () => _datasets.DownloadAsync(dataset.DatasetId, TestContext.Current.CancellationToken));
+            () => _datasets.DownloadAsync(
+                dataset.DatasetId, includeAudio: true, TestContext.Current.CancellationToken));
 
         Assert.Equal("dataset_not_released", loi.Code);
     }
@@ -244,5 +283,55 @@ public sealed class DatasetServiceTests : IntegrationTestBase
         var archived = await _datasets.ArchiveAsync(dataset.DatasetId, TestContext.Current.CancellationToken);
 
         Assert.Equal(DatasetStatus.Archived, archived.Status);
+    }
+
+    [Fact]
+    public async Task TaoDataset_KhongCoBanDuyetDat_ThiBaoLoi()
+    {
+        var (_, cs, _) = await CreateApprovedPairAsync();
+
+        // cs còn pending_review: không được tạo dataset rỗng rồi báo thành công.
+        var request = await NewRequest(recordingIds: [cs]);
+
+        var loi = await Assert.ThrowsAsync<UnprocessableException>(
+            () => _datasets.CreateAsync(request, AdminUserId, TestContext.Current.CancellationToken));
+
+        Assert.Equal("dataset_no_approved_recordings", loi.Code);
+    }
+
+    [Fact]
+    public async Task Xoa_DatasetNhap_XoaDuocCaBanGhiLienKet()
+    {
+        var (_, cs, vi) = await CreateApprovedPairAsync();
+        await MarkApprovedAsync(cs);
+        await MarkApprovedAsync(vi);
+
+        var request = await NewRequest(recordingIds: [cs, vi]);
+        var dataset = (await _datasets.CreateAsync(request, AdminUserId, TestContext.Current.CancellationToken)).Dataset;
+
+        await _datasets.DeleteAsync(dataset.DatasetId, TestContext.Current.CancellationToken);
+
+        Assert.False(await Db.Datasets.AnyAsync(
+            d => d.DatasetId == dataset.DatasetId, TestContext.Current.CancellationToken));
+        Assert.False(await Db.DatasetRecordings.AnyAsync(
+            dr => dr.DatasetId == dataset.DatasetId, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Xoa_DatasetDaPhatHanh_ThiBiChan()
+    {
+        var (_, cs, vi) = await CreateApprovedPairAsync();
+        await MarkApprovedAsync(cs);
+        await MarkApprovedAsync(vi);
+
+        var request = await NewRequest(recordingIds: [cs, vi]);
+        var dataset = (await _datasets.CreateAsync(request, AdminUserId, TestContext.Current.CancellationToken)).Dataset;
+        await _datasets.ReleaseAsync(
+            dataset.DatasetId, new ReleaseDatasetRequest(), AdminUserId, TestContext.Current.CancellationToken);
+
+        var loi = await Assert.ThrowsAsync<ConflictException>(
+            () => _datasets.DeleteAsync(dataset.DatasetId, TestContext.Current.CancellationToken));
+
+        Assert.Equal("dataset_not_draft", loi.Code);
     }
 }

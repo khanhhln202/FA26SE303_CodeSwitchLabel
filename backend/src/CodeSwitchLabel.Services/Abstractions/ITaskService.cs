@@ -11,6 +11,13 @@ public interface ITaskService
 
     Task<TaskDetailDto> GetAsync(long taskId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Lấy (hoặc tạo idempotent) task thu âm duy nhất của chiến dịch, chỉ tiêu bằng cả chiến dịch.
+    /// <paramref name="autoFill"/> tự lấp cặp câu đã duyệt nội dung cho tới khi đủ chỉ tiêu.
+    /// </summary>
+    Task<TaskDetailDto> GetOrCreateRecordingTaskAsync(
+        long campaignId, bool autoFill, long callerId, bool isAdmin, CancellationToken ct = default);
+
     Task<TaskDetailDto> UpdateAsync(
         long taskId, UpdateTaskRequest request, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false);
@@ -24,14 +31,22 @@ public interface ITaskService
         long? callerId = null, bool isAdmin = false);
 
     /// <summary>
-    /// TEAM_010: giao cho NHIỀU người cùng lúc — giao thêm, không đuổi người đang nhận.
+    /// giao cho NHIỀU người cùng lúc — giao thêm, không đuổi người đang nhận.
     /// Chỉ tiêu là của cả nhóm nên không nhân theo số người.
     /// </summary>
     Task<TaskDetailDto> AssignAsync(
         long taskId, long[] userIds, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false);
 
-    /// <summary>TEAM_010: gỡ một người khỏi task, giữ lịch sử lượt giao.</summary>
+    /// <summary>
+    /// Thay toàn bộ người nhận đang hoạt động bằng danh sách mới, kèm quota từng người.
+    /// Ô quota trống được chia đều phần chỉ tiêu còn lại.
+    /// </summary>
+    Task<TaskDetailDto> SetAssignmentsAsync(
+        long taskId, SetTaskAssignmentsRequest request, CancellationToken ct = default,
+        long? callerId = null, bool isAdmin = false);
+
+    /// <summary>gỡ một người khỏi task, giữ lịch sử lượt giao.</summary>
     Task<TaskDetailDto> UnassignAsync(
         long taskId, long userId, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false);
@@ -45,12 +60,12 @@ public interface ITaskService
         long taskId, long? campaignId, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false);
 
-    /// <summary>Gỡ task khỏi chiến dịch nhưng giữ lại task (C2).</summary>
-    Task<TaskDetailDto> DetachAsync(
+    /// <summary>Xoá vĩnh viễn task khỏi chiến dịch; bản ghi thu âm và lượt duyệt được giữ lại.</summary>
+    Task DeleteFromCampaignAsync(
         long campaignId, long taskId, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false);
 
-    // TEAM_003: Xoá cứng task rảnh (độc lập + chưa có việc).
+    // Xoá cứng task rảnh (độc lập + chưa có việc).
     /// <summary>
     /// Xoá cứng một nhiệm vụ. Chỉ xoá được task rảnh (chưa gắn đợt nào và chưa có việc/lượt giao/mục nào).
     /// </summary>

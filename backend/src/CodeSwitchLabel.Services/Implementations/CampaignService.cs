@@ -38,7 +38,7 @@ public class CampaignService(
         {
             progress.TryGetValue(c.CampaignId, out var p);
 
-            // TEAM_003: Truyền c.Domain sang CampaignListItemDto
+            // Truyền c.Domain sang CampaignListItemDto
             return new CampaignListItemDto(
                 c.CampaignId, c.CampaignName, c.Domain, c.TargetQty, c.StartDate, c.EndDate, c.Status, c.CreatedAt,
                 p?.AllocatedTaskQty ?? 0, (int)(p?.TaskCount ?? 0), (int)(p?.CompletedTaskCount ?? 0), c.AssignedTo);
@@ -53,7 +53,7 @@ public class CampaignService(
         return ToDto(campaign);
     }
 
-    // TEAM_003: Hỗ trợ Task Manager tạo đợt (auto-assign cho chính mình nếu không phải Admin)
+    // Hỗ trợ Task Manager tạo đợt (auto-assign cho chính mình nếu không phải Admin)
     public async Task<CampaignDto> CreateAsync(
         CreateCampaignRequest request, long createdById, bool isAdmin, CancellationToken ct = default)
     {
@@ -73,7 +73,7 @@ public class CampaignService(
             TargetQty = request.TargetQty!.Value,
             StartDate = start,
             EndDate = end,
-            // TEAM_013: đợt mới tạo chưa có nhiệm vụ nào nên là Open. Sau đó trạng thái
+            // đợt mới tạo chưa có nhiệm vụ nào nên là Open. Sau đó trạng thái
             // đợt là hàm của các task, tự tính lại ở CampaignRepository.RefreshStatusAsync.
             Status = CampaignStatus.Open,
             CreatedBy = createdById,
@@ -88,7 +88,7 @@ public class CampaignService(
         return ToDto(campaign);
     }
 
-    // TEAM_003: Kiểm tra quyền sở hữu khi sửa đợt (TaskManager chỉ sửa đợt của mình)
+    // Kiểm tra quyền sở hữu khi sửa đợt (TaskManager chỉ sửa đợt của mình)
     public async Task<CampaignDto> UpdateAsync(
         long campaignId, UpdateCampaignRequest request, long? callerId, bool isAdmin, CancellationToken ct = default)
     {
@@ -98,7 +98,7 @@ public class CampaignService(
         if (request.CampaignName is not null) campaign.CampaignName = request.CampaignName.Trim();
         if (request.Domain.HasValue) campaign.Domain = request.Domain.Value;
 
-        // TEAM_013: UpdateCampaignRequest không còn trường `status`. Trạng thái đợt là hàm
+        // UpdateCampaignRequest không còn trường `status`. Trạng thái đợt là hàm
         // của các task bên trong nên không bấm tay được — sửa tên/chủ đề/ngày không được đổi nó,
         // và nó cũng không cần đổi vì những thay đổi đó không đụng tới task.
 
@@ -131,7 +131,7 @@ public class CampaignService(
         return ToDto(campaign);
     }
 
-    // TEAM_003: Xoá chiến dịch — task con thành độc lập nhờ ON DELETE SET NULL
+    // Xoá chiến dịch — task con thành độc lập nhờ ON DELETE SET NULL
     public async Task DeleteAsync(
         long campaignId, long? callerId, bool isAdmin, CancellationToken ct = default)
     {
@@ -164,10 +164,15 @@ public class CampaignService(
         return ToDto(campaign);
     }
 
-    /// <summary>Gỡ task khỏi chiến dịch (detach): task còn tồn tại, giữ assignments/items.</summary>
-    public Task<TaskDetailDto> DetachTaskAsync(
+    /// <summary>Xoá vĩnh viễn task khỏi chiến dịch. Giữ lại bản ghi thu âm và lượt duyệt.</summary>
+    public Task DeleteTaskAsync(
         long campaignId, long taskId, long? callerId, bool isAdmin, CancellationToken ct = default)
-        => tasks.DetachAsync(campaignId, taskId, ct, callerId, isAdmin);
+        => tasks.DeleteFromCampaignAsync(campaignId, taskId, ct, callerId, isAdmin);
+
+    /// <summary>Task thu âm duy nhất của chiến dịch, tạo nếu chưa có.</summary>
+    public Task<TaskDetailDto> GetOrCreateRecordingTaskAsync(
+        long campaignId, bool autoFill, long callerId, bool isAdmin, CancellationToken ct = default)
+        => tasks.GetOrCreateRecordingTaskAsync(campaignId, autoFill, callerId, isAdmin, ct);
 
     private static void EnsureCampaignOwner(Campaign campaign, long? callerId, bool isAdmin)
     {

@@ -8,7 +8,7 @@ namespace CodeSwitchLabel.Tests;
 /// Trạng thái task được tính lại từ số liệu thật sau mỗi việc xảy ra. Tính sai thì task hiện
 /// "Hoàn thành" khi chưa xong — nên mỗi nhánh có test riêng.
 ///
-/// TEAM_013: bỏ `Draft` và `Open`, nên luật còn đúng ba nhánh: đã huỷ thì giữ, đạt chỉ tiêu
+/// bỏ `Draft` và `Open`, nên luật còn đúng ba nhánh: đã huỷ thì giữ, đạt chỉ tiêu
 /// thì hoàn thành, còn lại thì đang thực hiện.
 /// </summary>
 [Trait("Category", "Unit")]
@@ -44,7 +44,7 @@ public class TaskStateMachineTests
     }
 
     /// <summary>
-    /// TEAM_013: không còn nhánh "chưa giao" và "đã giao mà chưa làm", nên mọi task chưa đạt
+    /// không còn nhánh "chưa giao" và "đã giao mà chưa làm", nên mọi task chưa đạt
     /// chỉ tiêu đều là một trạng thái — kể cả task vừa tạo ra chưa gán ai, và kể cả task
     /// Task Manager vừa mở lại bằng tay.
     /// </summary>
@@ -100,7 +100,7 @@ public class TaskStateMachineTests
     }
 
     /// <summary>
-    /// TEAM_013: Task Manager bấm tay chốt Completed, rồi có việc mới nộp vào làm chỉ tiêu
+    /// Task Manager bấm tay chốt Completed, rồi có việc mới nộp vào làm chỉ tiêu
     /// tụt — hệ thống ghi đè về InProgress. Đây là điều user chốt: bấm tay giữ tới lúc có
     /// việc thật xảy ra, không phải vĩnh viễn.
     /// </summary>
@@ -210,7 +210,7 @@ public class CampaignStateMachineTests
     }
 
     /// <summary>
-    /// TEAM_013: task đã huỷ KHÔNG tính là hoàn thành. Đợt có một task xong và một task bị
+    /// task đã huỷ KHÔNG tính là hoàn thành. Đợt có một task xong và một task bị
     /// huỷ thì vẫn là "Đang thực hiện" — đó là điều user chốt: "tất cả nhiệm vụ của đợt đó
     /// có trạng thái hoàn thành". Hệ quả là đợt không bao giờ tự Completed nếu còn task huỷ.
     /// </summary>

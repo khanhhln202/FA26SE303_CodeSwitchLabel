@@ -7,7 +7,7 @@ using CodeSwitchLabel.Services.Dtos;
 namespace CodeSwitchLabel.Services.Common;
 
 /// <summary>
-/// TEAM_015: luật của một CẶP CÂU (nội dung + lời giải Anh–Việt) tách khỏi ScriptService
+/// luật của một CẶP CÂU (nội dung + lời giải Anh–Việt) tách khỏi ScriptService
 /// để hai luồng cùng dùng mà không chép luật: duyệt nội dung một lượt, và xử lý đề xuất
 /// câu của Reviewer — lượt duyệt thứ hai cũng ghi thẳng vào cặp câu. Chép luật ra hai chỗ
 /// thì sớm muộn hai đường ghi cũng chấp nhận hai bộ nội dung khác nhau.

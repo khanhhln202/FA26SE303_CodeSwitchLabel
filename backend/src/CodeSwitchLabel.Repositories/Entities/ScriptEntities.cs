@@ -21,8 +21,10 @@ public class ImportBatch
 
 /// <summary>
 /// Một CẶP CÂU: bản chen tiếng Anh và bản thuần Việt tương đương.
-/// Khoá chính là chuỗi có nghĩa s_ + 9 chữ số, do hàm fn_generate_script_id của database sinh ra:
-/// chữ số 1 = số từ tiếng Anh, chữ số 2 = chủ đề, chữ số 3 = quan hệ Anh–Việt, 6 chữ số cuối = số thứ tự.
+/// Khoá chính là chuỗi có nghĩa, do hàm fn_generate_script_id của database sinh ra:
+/// s_ + 9 chữ số cũ hoặc s_ + 12 chữ số mới (3 chữ số nghĩa + 9 chữ số thứ tự).
+/// Chữ số 1 = số từ tiếng Anh, chữ số 2 = chủ đề, chữ số 3 = quan hệ Anh–Việt;
+/// 9 chữ số cuối là bộ đếm tuần tự của tổ hợp đó (câu có > 2 từ tiếng Anh dùng bộ đếm chung).
 /// </summary>
 public class Script
 {
@@ -52,10 +54,10 @@ public class Script
     public ICollection<ScriptReview> Reviews { get; set; } = [];
     public ICollection<Recording> Recordings { get; set; } = [];
 
-    /// <summary>TEAM_010: các lượt câu này đã đi qua hàng đợi chung.</summary>
+    /// <summary>các lượt câu này đã đi qua hàng đợi chung.</summary>
     public ICollection<ScriptQueue> QueueRows { get; set; } = [];
 
-    /// <summary>TEAM_015: các đề xuất (báo lỗi / đề xuất sửa) Speaker gửi cho câu này.</summary>
+    /// <summary>các đề xuất (báo lỗi / đề xuất sửa) Speaker gửi cho câu này.</summary>
     public ICollection<ScriptProposal> Proposals { get; set; } = [];
 
     public ICollection<TaskScript> TaskScripts { get; set; } = [];
@@ -148,7 +150,7 @@ public class ScriptReview
 }
 
 /// <summary>
-/// TEAM_015: đề xuất của Speaker trên một câu ĐÃ duyệt nội dung — báo lỗi (Report) hoặc
+/// đề xuất của Speaker trên một câu ĐÃ duyệt nội dung — báo lỗi (Report) hoặc
 /// kèm bản sửa (Edit). Hàng chờ của Reviewer chính là các dòng đang Pending của bảng này.
 ///
 /// Chỉ áp dụng cho câu chưa có bản ghi âm nào, và mỗi câu tối đa MỘT đề xuất chờ —

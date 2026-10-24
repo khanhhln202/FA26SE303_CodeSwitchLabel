@@ -28,7 +28,7 @@ public class Campaign
 
     /// <summary>
     /// Người tạo phải mang vai admin hoặc task_manager, do trigger của database chặn.
-    /// TEAM_003: Task Manager tự lập kế hoạch cho đợt của mình nên cũng tạo được đợt.
+    /// Task Manager tự lập kế hoạch cho đợt của mình nên cũng tạo được đợt.
     /// </summary>
     public long CreatedBy { get; set; }
 
@@ -86,6 +86,12 @@ public class TaskAssignment
     public DateTimeOffset AssignedAt { get; set; }
     public AssignmentStatus AssignmentStatus { get; set; }
 
+    /// <summary>
+    /// Chỉ tiêu riêng của người nhận trong task. NULL = lượt giao cũ chưa có quota;
+    /// khi đọc tiến độ thì chia đều <see cref="WorkTask.TargetQty"/> cho số người nhận.
+    /// </summary>
+    public int? TargetQty { get; set; }
+
     public WorkTask Task { get; set; } = null!;
     public AppUser User { get; set; } = null!;
 }
@@ -94,11 +100,16 @@ public class TaskScript
 {
     public long TaskId { get; set; }
     public string ScriptId { get; set; } = string.Empty;
+
+    /// <summary>người nhận câu này (Recording), NULL = chưa gán / task duyệt.</summary>
+    public long? AssigneeUserId { get; set; }
+
     public TaskScriptStatus Status { get; set; }
     public DateTimeOffset IncludedAt { get; set; }
 
     public WorkTask Task { get; set; } = null!;
     public Script Script { get; set; } = null!;
+    public AppUser? AssigneeUser { get; set; }
 }
 
 public class TaskRecording

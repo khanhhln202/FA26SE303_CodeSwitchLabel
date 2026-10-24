@@ -64,7 +64,7 @@ public class SpeakerController(
 
     /// <summary>Gửi đề xuất cho một câu đã duyệt: báo lỗi (Report) hoặc kèm bản sửa (Edit).</summary>
     /// <remarks>
-    /// TEAM_015: đề xuất rơi thẳng vào hàng chờ của Reviewer, **không** đi qua hàng đợi
+    /// đề xuất rơi thẳng vào hàng chờ của Reviewer, **không** đi qua hàng đợi
     /// `script_queue`. Trong lúc chờ, câu tạm bị rút khỏi hàng đợi ghi âm; Reviewer xử lý
     /// xong (duyệt hoặc từ chối) thì câu tự quay lại hàng đợi ghi âm.
     ///
@@ -98,7 +98,12 @@ public class SpeakerController(
     public async Task<ActionResult<SpeakerProgressDto>> Progress(CancellationToken ct)
         => Ok(await taskService.GetSpeakerProgressAsync(User.GetUserId(), ct));
 
-    /// <summary>Đợt đang tham gia (chiến dịch của task thu âm đang giao). 204 = chưa tham gia đợt nào.</summary>
+    /// <summary>
+    /// Đợt đang tham gia (chiến dịch của task thu âm đang giao). 204 = chưa tham gia đợt nào.
+    /// <c>target</c> là chỉ tiêu RIÊNG của người gọi — tổng quota trên các lượt giao task thu âm
+    /// trong đợt, không phải chỉ tiêu cả chiến dịch. <c>submitted</c> là số bản đã nộp thật và
+    /// có thể vượt <c>target</c>.
+    /// </summary>
     [HttpGet("rounds/current")]
     [ProducesResponseType(typeof(SpeakerRoundDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -114,7 +119,11 @@ public class SpeakerController(
     public async Task<ActionResult<IEnumerable<UpcomingRoundDto>>> UpcomingRounds(CancellationToken ct)
         => Ok(await roundsService.GetUpcomingAsync(User.GetUserId(), ct));
 
-    /// <summary>Bảng xếp hạng của một đợt, xếp theo số bản đã nộp (không tính bản trượt kiểm tra tự động).</summary>
+    /// <summary>
+    /// Bảng xếp hạng của một đợt, xếp theo số bản đã nộp (không tính bản trượt kiểm tra tự động).
+    /// Mỗi dòng kèm <c>targetQty</c> — quota riêng của người đó trên các lượt giao trong đợt,
+    /// 0 nếu không còn nhiệm vụ — và <c>submittedCapped</c> để vẽ tiến độ.
+    /// </summary>
     [HttpGet("rounds/{campaignId:long}/leaderboard")]
     [ProducesResponseType(typeof(LeaderboardDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -152,7 +161,7 @@ public class SpeakerController(
     /// <remarks>
     /// Mỗi dòng là MỘT CẶP bản ghi.
     ///
-    /// TEAM_012: `?sort=` chỉ nhận `lastRecordedAt` và `scriptId` — trạng thái và thời lượng của
+    /// `?sort=` chỉ nhận `lastRecordedAt` và `scriptId` — trạng thái và thời lượng của
     /// cặp là thứ tính ra sau khi đã cắt trang, nên không sắp xếp được trước đó.
     /// </remarks>
     [HttpGet("recordings/history")]
@@ -162,12 +171,32 @@ public class SpeakerController(
         => Ok(await roundsService.GetRecordingHistoryAsync(User.GetUserId(), query, ct));
 
     /// <summary>Lịch sử đóng góp câu của chính mình.</summary>
-    /// <remarks>TEAM_012: `?sort=` nhận `createdAt`, `scriptId`, `domain`, `status`.</remarks>
+    /// <remarks>`?sort=` nhận `createdAt`, `scriptId`, `domain`, `status`.</remarks>
     [HttpGet("contributions/history")]
     [ProducesResponseType(typeof(PagedResult<SpeakerContributionHistoryDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<PagedResult<SpeakerContributionHistoryDto>>> ContributionHistory(
         [FromQuery] SpeakerContributionHistoryQuery query, CancellationToken ct)
         => Ok(await roundsService.GetContributionHistoryAsync(User.GetUserId(), query, ct));
+
+    /// <summary>Lịch sử đề xuất của chính mình: câu báo lỗi (Report) và câu chỉnh sửa (Edit).</summary>
+    /// <remarks>
+    /// Mọi trạng thái, **mới nhất trước** — khác hàng chờ của Reviewer (chỉ `Pending`, cũ nhất
+    /// trước), nên đề xuất đã bị từ chối vẫn xem lại được.
+    ///
+    /// Lọc bằng `?kind=Report|Edit` và `?status=Pending|Accepted|Rejected`.
+    /// `?sort=` nhận `createdAt`, `proposalId`, `kind`, `scriptId`.
+    ///
+    /// `original` là câu **đang** có trong kho chứ không phải bản chụp lúc gửi đề xuất: đề xuất
+    /// Edit đã duyệt thì `original` chính là bản sửa đã ghi vào câu.
+    ///
+    /// `decidedAt` có mà `decidedByName` trống nghĩa là câu đã bị loại khỏi kho và đề xuất
+    /// tự đóng theo, không phải Reviewer nào xử lý.
+    /// </remarks>
+    [HttpGet("proposals/history")]
+    [ProducesResponseType(typeof(PagedResult<SpeakerProposalHistoryDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResult<SpeakerProposalHistoryDto>>> ProposalHistory(
+        [FromQuery] SpeakerProposalHistoryQuery query, CancellationToken ct)
+        => Ok(await proposalService.ListForProposerAsync(User.GetUserId(), query, ct));
 
     /// <summary>Tổng hợp số bản đã nộp / đạt / bị từ chối / đang chờ của chính mình.</summary>
     [HttpGet("stats")]

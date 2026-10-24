@@ -18,9 +18,10 @@ CREATE TYPE script_domain         AS ENUM ('it_technology','education','daily_li
 CREATE TYPE script_review_action  AS ENUM ('accepted','edited','rejected');
 CREATE TYPE script_word_relation  AS ENUM ('semantic_equivalent','proper_noun');
 CREATE TYPE task_type             AS ENUM ('recording','review');
--- TEAM_013: task còn ba trạng thái. Đợt còn ba trạng thái và là HÀM của task, không bấm tay.
+-- task còn ba trạng thái. Đợt còn ba trạng thái và là HÀM của task, không bấm tay.
 CREATE TYPE campaign_status         AS ENUM ('open','in_progress','completed');
 CREATE TYPE task_status           AS ENUM ('in_progress','completed','cancelled');
+-- 'completed' = người nhận đã đạt quota riêng; lượt giao vẫn còn hiệu lực (xem V17).
 CREATE TYPE assignment_status     AS ENUM ('active','completed','reassigned','cancelled');
 CREATE TYPE task_script_status    AS ENUM ('pending','completed','rejected');
 CREATE TYPE sentence_variant      AS ENUM ('code_switching','pure_vietnamese');
@@ -29,12 +30,12 @@ CREATE TYPE task_recording_status AS ENUM ('queued','reviewed','skipped');
 CREATE TYPE review_decision       AS ENUM ('approved','rejected');
 CREATE TYPE rejection_category    AS ENUM ('content','audio_quality','pronunciation','other');
 
--- TEAM_010: Một hàng đợi chung cho MỌI câu văn bản (yêu cầu 2.1). Mỗi câu đi qua
+-- Một hàng đợi chung cho MỌI câu văn bản (yêu cầu 2.1). Mỗi câu đi qua
 -- hai chặng theo thứ tự: text_review -> recording. enqueued_at là mốc FIFO.
 CREATE TYPE queue_stage           AS ENUM ('text_review','recording');
 CREATE TYPE queue_state           AS ENUM ('queued','claimed','done','dropped');
 
--- TEAM_015: đề xuất của Speaker trên một câu ĐÃ duyệt nội dung — báo lỗi (report) hoặc
+-- đề xuất của Speaker trên một câu ĐÃ duyệt nội dung — báo lỗi (report) hoặc
 -- kèm bản sửa (edit). Hàng chờ của Reviewer là truy vấn trên bảng script_proposal,
 -- không phải một chặng của script_queue: đề xuất là VIỆC RIÊNG chờ quyết định,
 -- không phải bước bắt buộc mà mọi câu đều phải đi qua.
@@ -50,8 +51,27 @@ CREATE TYPE dataset_file_format   AS ENUM ('json','csv');
 -- PostgreSQL < 17, where partitioned tables cannot own identity columns.
 CREATE SEQUENCE audit_log_audit_id_seq;
 
--- Global serial for digits 4-9 of script_id (sequential, not random).
+-- Legacy global serial for old 9-digit script IDs. Giữ lại để dữ liệu cũ đọc được;
+-- ID mới dùng 13 bộ đếm riêng bên dưới.
 CREATE SEQUENCE script_serial_seq AS BIGINT START WITH 1;
+
+-- 12 bộ đếm chính: 1/2 từ tiếng Anh x 3 chủ đề x 2 kiểu quan hệ.
+-- Mỗi bộ đếm chạy độc lập, sinh phần serial 9 chữ số của script_id mới.
+CREATE SEQUENCE script_serial_1_1_1 AS BIGINT START WITH 1;
+CREATE SEQUENCE script_serial_1_1_2 AS BIGINT START WITH 1;
+CREATE SEQUENCE script_serial_1_2_1 AS BIGINT START WITH 1;
+CREATE SEQUENCE script_serial_1_2_2 AS BIGINT START WITH 1;
+CREATE SEQUENCE script_serial_1_3_1 AS BIGINT START WITH 1;
+CREATE SEQUENCE script_serial_1_3_2 AS BIGINT START WITH 1;
+CREATE SEQUENCE script_serial_2_1_1 AS BIGINT START WITH 1;
+CREATE SEQUENCE script_serial_2_1_2 AS BIGINT START WITH 1;
+CREATE SEQUENCE script_serial_2_2_1 AS BIGINT START WITH 1;
+CREATE SEQUENCE script_serial_2_2_2 AS BIGINT START WITH 1;
+CREATE SEQUENCE script_serial_2_3_1 AS BIGINT START WITH 1;
+CREATE SEQUENCE script_serial_2_3_2 AS BIGINT START WITH 1;
+
+-- 13th counter: mọi câu có > 2 từ tiếng Anh dùng chung một dãy.
+CREATE SEQUENCE script_serial_other AS BIGINT START WITH 1;
 
 -- ============================================================
 -- 3. TABLES  (FK dependency order)
@@ -111,7 +131,7 @@ CREATE TABLE audit_log (
     changed_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     user_id     BIGINT REFERENCES app_user(user_id) ON DELETE SET NULL,  -- NULL = system action
     entity_type VARCHAR(50) NOT NULL,
-    entity_id   VARCHAR(20) NOT NULL,   -- polymorphic: numeric ID or s_/r_ code
+    entity_id   VARCHAR(32) NOT NULL,   -- polymorphic: numeric ID or s_/r_ code
     action      audit_action NOT NULL,
     old_value   JSONB,
     new_value   JSONB,
@@ -134,7 +154,7 @@ CREATE TABLE import_batch (
 );
 
 CREATE TABLE script (
-    script_id       VARCHAR(11) PRIMARY KEY,       -- natural key: s_ + 9 meaningful digits
+    script_id       VARCHAR(16) PRIMARY KEY,       -- natural key: s_ + 9 legacy digits or 12 new digits
     cs_content      TEXT NOT NULL,                 -- code-switching sentence
     vi_content      TEXT NOT NULL,                 -- pure Vietnamese equivalent
     status          script_status NOT NULL DEFAULT 'pending_validation',
@@ -145,7 +165,8 @@ CREATE TABLE script (
     import_batch_id BIGINT REFERENCES import_batch(batch_id),  -- NULL = manual entry
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT ck_script_id_format  CHECK (script_id ~ '^s_[0-9]{9}$'),
+    -- Legacy: s_ + 9 digits. New: s_ + 3 meaningful + 9 serial digits.
+    CONSTRAINT ck_script_id_format  CHECK (script_id ~ '^s_([0-9]{9}|[0-9]{12})$'),
     -- ID digits must stay meaningful (teacher's rule):
     --   digit 1 (pos 3) = number of embedded English words
     --   digit 2 (pos 4) = domain code (1 IT / 2 education / 3 daily life)
@@ -153,6 +174,8 @@ CREATE TABLE script (
     --   row in script_word, else 1. The relation is stored per word in
     --   script_word, so digits 1 and 3 are checked at COMMIT by the deferred
     --   constraint trigger trg_script_word_consistency (section 5).
+    --   digits 4-12 = 9-digit counter serial for new IDs; old IDs keep their
+    --   6-digit global serial after digit 3.
     CONSTRAINT ck_script_id_word_digit   CHECK (substr(script_id, 3, 1) = en_word_count::text),
     CONSTRAINT ck_script_id_domain_digit CHECK (substr(script_id, 4, 1) =
         CASE domain WHEN 'it_technology' THEN '1'
@@ -173,7 +196,7 @@ CREATE UNIQUE INDEX uq_script_cs_content_md5 ON script (md5(cs_content));
 -- (English word + Vietnamese counterpart) and how they relate. Mirrors the
 -- "alignment" block of input_text.json. Words without a row are Vietnamese.
 CREATE TABLE script_word (
-    script_id     VARCHAR(11) NOT NULL REFERENCES script(script_id) ON DELETE CASCADE,
+    script_id     VARCHAR(16) NOT NULL REFERENCES script(script_id) ON DELETE CASCADE,
     word_position SMALLINT NOT NULL,               -- 1-based position in cs_content
     en_word       VARCHAR(100) NOT NULL,
     vi_word       VARCHAR(100) NOT NULL,           -- = en_word when proper_noun
@@ -193,7 +216,7 @@ CREATE TABLE script_error_reason (
 
 CREATE TABLE script_review (
     script_review_id  BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,  -- surrogate; re-review allowed
-    script_id         VARCHAR(11) NOT NULL REFERENCES script(script_id),
+    script_id         VARCHAR(16) NOT NULL REFERENCES script(script_id),
     user_id           BIGINT NOT NULL REFERENCES app_user(user_id),
     error_reason_id   SMALLINT REFERENCES script_error_reason(reason_id),
     action            script_review_action NOT NULL,
@@ -223,7 +246,7 @@ CREATE INDEX idx_script_review_user   ON script_review (user_id);
 -- trên cùng một câu thì Reviewer không biết lấy bản nào làm gốc.
 CREATE TABLE script_proposal (
     proposal_id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    script_id           VARCHAR(11) NOT NULL REFERENCES script(script_id),
+    script_id           VARCHAR(16) NOT NULL REFERENCES script(script_id),
     proposer_id         BIGINT NOT NULL REFERENCES app_user(user_id),
     kind                proposal_kind NOT NULL,
 
@@ -263,7 +286,7 @@ CREATE INDEX idx_script_proposal_queue ON script_proposal (created_at) WHERE sta
 -- ------------------------------------------------------------
 -- A campaign is the planning unit created by the Task Manager for a
 -- collection period (typically 1-2 weeks / month).
--- TEAM_003: domain = chủ đề của cả đợt. Một đợt chỉ đi trên MỘT chủ đề;
+-- domain = chủ đề của cả đợt. Một đợt chỉ đi trên MỘT chủ đề;
 -- trg_task_campaign_domain chặn gắn task khác chủ đề vào đợt này.
 CREATE TABLE campaign (
     campaign_id   BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -299,7 +322,7 @@ CREATE INDEX idx_campaign_registration_speaker ON campaign_registration (speaker
 -- attached to a campaign later, or detached back). Deleting a campaign
 -- keeps its tasks: FK is ON DELETE SET NULL; use the campaign-scoped
 -- detach endpoint to remove a task from a campaign without deleting it.
--- TEAM_003: domain = chủ đề của nhiệm vụ. Task độc lập thì tự do; task gắn
+-- domain = chủ đề của nhiệm vụ. Task độc lập thì tự do; task gắn
 -- vào đợt thì phải trùng chủ đề với đợt (trg_task_campaign_domain).
 CREATE TABLE task (
     task_id      BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -322,24 +345,36 @@ CREATE TABLE task_assignment (
     task_id           BIGINT NOT NULL REFERENCES task(task_id) ON DELETE CASCADE,
     user_id           BIGINT NOT NULL REFERENCES app_user(user_id),
     assigned_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    assignment_status assignment_status NOT NULL DEFAULT 'active'
+    assignment_status assignment_status NOT NULL DEFAULT 'active',
+    -- Chỉ tiêu riêng của người nhận. NULL = lượt giao cũ trước V12, đọc lên thì
+    -- chia đều task.target_qty cho số người nhận. Tổng quota do service bảo đảm
+    -- không vượt target_qty; database chỉ chặn số 0/âm.
+    target_qty        INT,
+    CONSTRAINT ck_task_assignment_target_qty
+        CHECK (target_qty IS NULL OR target_qty > 0)
 );
 
--- TEAM_010: Một task giao được cho NHIỀU người cùng lúc. Chỉ tiêu target_qty là của
+-- Một task giao được cho NHIỀU người cùng lúc. Chỉ tiêu target_qty là của
 -- CẢ NHÓM (không nhân theo số người), nên quota đợt vẫn cộng đúng một lần.
--- Ràng buộc còn lại: cùng một người không được có hai lượt giao active trên một task.
+-- Mỗi người nhận có quota riêng trong task_assignment.target_qty.
+-- Ràng buộc còn lại: cùng một người không được có hai lượt giao còn hiệu lực trên một
+-- task. V17: Completed vẫn là lượt giao còn hiệu lực (đã đạt quota nhưng chưa rời task),
+-- nên index phải chặn trùng trên cả Active lẫn Completed.
 CREATE UNIQUE INDEX uq_task_assignment_active_user
-    ON task_assignment (task_id, user_id) WHERE assignment_status = 'active';
+    ON task_assignment (task_id, user_id)
+    WHERE assignment_status IN ('active', 'completed');
 CREATE INDEX idx_task_assignment_user ON task_assignment (user_id);
 
 CREATE TABLE task_script (
-    task_id     BIGINT NOT NULL REFERENCES task(task_id) ON DELETE CASCADE,
-    script_id   VARCHAR(11) NOT NULL REFERENCES script(script_id),
-    status      task_script_status NOT NULL DEFAULT 'pending',
-    included_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    task_id         BIGINT NOT NULL REFERENCES task(task_id) ON DELETE CASCADE,
+    script_id       VARCHAR(16) NOT NULL REFERENCES script(script_id),
+    assignee_user_id BIGINT REFERENCES app_user(user_id),   -- người nhận câu này (Recording), NULL = chưa gán / task duyệt
+    status          task_script_status NOT NULL DEFAULT 'pending',
+    included_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (task_id, script_id)
 );
 CREATE INDEX idx_task_script_script ON task_script (script_id);
+CREATE INDEX idx_task_script_assignee ON task_script (assignee_user_id);
 
 -- TEAM_010 — HÀNG ĐỢI CHUNG cho mọi câu văn bản (yêu cầu 2.1).
 --
@@ -357,7 +392,7 @@ CREATE INDEX idx_task_script_script ON task_script (script_id);
 -- (claim_expires_at) để người mở rồi bỏ ngang không giữ câu vĩnh viễn.
 CREATE TABLE script_queue (
     queue_id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    script_id        VARCHAR(11) NOT NULL REFERENCES script(script_id) ON DELETE CASCADE,
+    script_id        VARCHAR(16) NOT NULL REFERENCES script(script_id) ON DELETE CASCADE,
     stage            queue_stage NOT NULL,
 
     -- Mốc vào hàng đợi = thứ tự FIFO. Tách khỏi script.created_at vì một câu có thể
@@ -398,9 +433,9 @@ CREATE UNIQUE INDEX uq_script_queue_open
 -- RECORDING / REVIEW  (the two protagonists)
 -- ------------------------------------------------------------
 CREATE TABLE recording (
-    recording_id     VARCHAR(20) PRIMARY KEY,      -- natural key: r_cs_/r_vi_ + serial (+ _tN)
+    recording_id     VARCHAR(32) PRIMARY KEY,      -- natural key: r_cs_/r_vi_ + 9 or 12 digits (+ _tN)
     sentence_variant sentence_variant NOT NULL,
-    script_id        VARCHAR(11) NOT NULL REFERENCES script(script_id),
+    script_id        VARCHAR(16) NOT NULL REFERENCES script(script_id),
     speaker_id       BIGINT NOT NULL REFERENCES app_user(user_id),
     task_id          BIGINT REFERENCES task(task_id) ON DELETE SET NULL,  -- NULL = ad-hoc
     cloud_link       VARCHAR(1024) NOT NULL UNIQUE,   -- 3rd-party object storage link
@@ -421,14 +456,15 @@ CREATE TABLE recording (
 
     recorded_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT ck_recording_id_format CHECK
-        (recording_id ~ '^r_(cs|vi)_[0-9]{9}(_t([2-9]|[1-9][0-9]+))?$'),
+        (recording_id ~ '^r_(cs|vi)_([0-9]{9}|[0-9]{12})(_t([2-9]|[1-9][0-9]+))?$'),
     -- sentence_variant must mirror the prefix
     CONSTRAINT ck_recording_variant_prefix CHECK (
         (sentence_variant = 'code_switching'   AND recording_id ~ '^r_cs_') OR
         (sentence_variant = 'pure_vietnamese' AND recording_id ~ '^r_vi_')),
-    -- the 9-digit serial inside recording_id must equal the script's serial
+    -- the serial inside recording_id must equal the script's serial:
+    -- legacy 9 digits or new 12 digits, same as substr(script_id, 3)
     CONSTRAINT ck_recording_script_serial CHECK
-        (regexp_replace(recording_id, '^r_(cs|vi)_([0-9]{9})(_t([2-9]|[1-9][0-9]+))?$', '\2')
+        (regexp_replace(recording_id, '^r_(cs|vi)_([0-9]{9}|[0-9]{12})(_t([2-9]|[1-9][0-9]+))?$', '\2')
          = substr(script_id, 3))
 );
 
@@ -447,7 +483,7 @@ CREATE UNIQUE INDEX uq_recording_active_variant
 -- chưa huỷ của đợt X (RecordingService → TaskProgressTracker, cùng transaction với lúc lưu bản ghi).
 CREATE TABLE task_recording (
     task_id      BIGINT NOT NULL REFERENCES task(task_id) ON DELETE CASCADE,
-    recording_id VARCHAR(20) NOT NULL REFERENCES recording(recording_id),
+    recording_id VARCHAR(32) NOT NULL REFERENCES recording(recording_id),
     status       task_recording_status NOT NULL DEFAULT 'queued',
     included_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (task_id, recording_id)
@@ -464,7 +500,7 @@ CREATE TABLE rejection_reason (
 
 CREATE TABLE review (
     review_id    BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    recording_id VARCHAR(20) NOT NULL REFERENCES recording(recording_id),
+    recording_id VARCHAR(32) NOT NULL REFERENCES recording(recording_id),
     reviewer_id  BIGINT NOT NULL REFERENCES app_user(user_id),
     task_id      BIGINT REFERENCES task(task_id) ON DELETE SET NULL,   -- NULL = spot-check
     review_round SMALLINT NOT NULL CHECK (review_round >= 1),
@@ -510,7 +546,7 @@ CREATE INDEX idx_dataset_filter ON dataset USING GIN (filter_criteria);
 
 CREATE TABLE dataset_recording (
     dataset_id   BIGINT NOT NULL REFERENCES dataset(dataset_id) ON DELETE CASCADE,
-    recording_id VARCHAR(20) NOT NULL REFERENCES recording(recording_id),
+    recording_id VARCHAR(32) NOT NULL REFERENCES recording(recording_id),
     included_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (dataset_id, recording_id)
 );
@@ -557,7 +593,7 @@ CREATE TRIGGER trg_system_config_touch BEFORE UPDATE ON system_config
 
 -- [ERD / CAMPAIGN] Campaign creators must be Admin or Task Manager.
 -- Task creators must be Task Manager.
--- TEAM_003: Task Manager tự lập kế hoạch cho đợt của mình nên cũng được
+-- Task Manager tự lập kế hoạch cho đợt của mình nên cũng được
 -- tạo chiến dịch. Việc gán đợt cho ai vẫn do trg_task_creator_assigned
 -- kiểm tra tầng dưới (task trong đợt do đúng người được giao đợt tạo).
 CREATE OR REPLACE FUNCTION fn_require_task_manager_creator() RETURNS trigger AS $$
@@ -993,7 +1029,7 @@ CREATE TRIGGER trg_script_validated_domain
 -- inside one transaction (import / edit-regenerate).
 CREATE OR REPLACE FUNCTION fn_script_word_consistency() RETURNS trigger AS $$
 DECLARE
-    v_script_id VARCHAR(11);
+    v_script_id VARCHAR(16);
     v_en_count  INT;
     v_has_proper BOOLEAN;
     v_expected_relation CHAR(1);
@@ -1216,15 +1252,27 @@ BEGIN
                      OR EXISTS (SELECT 1 FROM task_assignment a
                                  WHERE a.task_id = q.task_id
                                    AND a.user_id = p_user_id
-                                   AND a.assignment_status = 'active')
+                                   AND a.assignment_status IN ('active', 'completed'))
                  )
                  ELSE EXISTS (SELECT 1 FROM task_script ts
                                WHERE ts.script_id = q.script_id
                                  AND ts.task_id = p_task_id
-                                 AND ts.status = 'pending')
+                                 AND ts.status = 'pending'
+                                 -- chỉ phát cặp đã gán cho đúng Speaker;
+                                 -- NULL là mục cũ chưa gán nên giữ hành vi cũ.
+                                 AND (ts.assignee_user_id IS NULL OR ts.assignee_user_id = p_user_id))
                END
            )
-     ORDER BY q.enqueued_at, q.queue_id
+     -- cặp đã gán cho Speaker khác thì không phát cho người này, kể cả
+       -- khi gọi không kèm task_id. Mục cũ assignee_user_id NULL vẫn dùng chung.
+       AND (
+            q.stage <> 'recording'
+            OR NOT EXISTS (SELECT 1 FROM task_script ts
+                            WHERE ts.script_id = q.script_id
+                              AND ts.assignee_user_id IS NOT NULL
+                              AND ts.assignee_user_id <> p_user_id)
+           )
+      ORDER BY q.enqueued_at, q.queue_id
      FOR UPDATE OF q SKIP LOCKED
      LIMIT 1;
 
@@ -1347,7 +1395,7 @@ CREATE TRIGGER trg_review_no_self BEFORE INSERT OR UPDATE ON review
 -- qc_failed takes do not claim ownership: a failed take by another speaker must not
 -- permanently block reuse.
 CREATE OR REPLACE FUNCTION fn_recording_single_speaker() RETURNS trigger AS $$ BEGIN
-    -- TEAM_007: Khóa cấp giao dịch theo băm script_id để ngăn race condition
+    -- Khóa cấp giao dịch theo băm script_id để ngăn race condition
     PERFORM pg_advisory_xact_lock(hashtext(NEW.script_id));
 
     IF EXISTS (SELECT 1 FROM recording r
@@ -1401,8 +1449,10 @@ CREATE TRIGGER trg_dataset_recording_immutable
 -- [ERD] after independent reviews, final status = majority decision (reads review.rounds_required from config)
 CREATE OR REPLACE FUNCTION fn_review_majority_status() RETURNS trigger AS $$ DECLARE
     v_rounds_required INT;
+    v_majority        INT;
     v_total           INT;
     v_approved        INT;
+    v_rejected        INT;
     v_final           recording_status;
 BEGIN
     SELECT COALESCE(NULLIF(config_value, '')::int, 3)
@@ -1414,36 +1464,52 @@ BEGIN
         v_rounds_required := 3;
     END IF;
 
+    v_majority := (v_rounds_required / 2) + 1;
+
     SELECT COUNT(*), COUNT(*) FILTER (WHERE decision = 'approved')
       INTO v_total, v_approved
       FROM review WHERE recording_id = NEW.recording_id;
 
-    IF v_total >= v_rounds_required THEN
-        v_final := CASE WHEN v_approved >= (v_rounds_required / 2) + 1 THEN 'approved' ELSE 'rejected' END;
-        UPDATE recording SET status = v_final
-         WHERE recording_id = NEW.recording_id AND status = 'pending_review';
+    v_rejected := v_total - v_approved;
 
-        -- TEAM_007: Chỉ khi đa số từ chối bản ghi VÀ có lý do thuộc nhóm 'content' mới trả câu về pending_validation
-        IF v_final = 'rejected' THEN
-            IF EXISTS (
-                SELECT 1
-                  FROM review_rejection_reason rrr
-                  JOIN rejection_reason rr ON rr.reason_id = rrr.reason_id
-                  JOIN review rv ON rv.review_id = rrr.review_id
-                 WHERE rv.recording_id = NEW.recording_id
-                   AND rr.category = 'content'
-            ) THEN
-                UPDATE script SET status = 'pending_validation'
-                 WHERE script_id = (SELECT script_id FROM recording WHERE recording_id = NEW.recording_id)
-                   AND status = 'validated';
+    -- Chốt NGAY khi một bên đã quá bán: những lượt còn lại không lật được kết quả nữa,
+    -- nên bắt người đọc chờ thêm chỉ làm chậm việc thu lại. Trước đây phải đủ
+    -- v_rounds_required lượt mới chốt, nên bản bị hai người từ chối vẫn nằm "chờ duyệt".
+    IF v_approved >= v_majority THEN
+        v_final := 'approved';
+    ELSIF v_rejected >= v_majority THEN
+        v_final := 'rejected';
+    ELSIF v_total >= v_rounds_required THEN
+        -- Chỉ xảy ra khi số vòng là số CHẴN và hai bên hoà (2-2 khi cần 4 lượt):
+        -- không đủ phiếu đạt thì trượt, đúng như nhánh cũ.
+        v_final := 'rejected';
+    ELSE
+        RETURN NEW;
+    END IF;
 
-                -- TEAM_010: câu quay về bước duyệt nội dung thì không còn là mục công việc
-                -- nữa. Trước đây trigger để nguyên task_script ở 'pending' nên task treo
-                -- vĩnh viễn, không bao giờ đạt chỉ tiêu.
-                UPDATE task_script SET status = 'rejected'
-                 WHERE script_id = (SELECT script_id FROM recording WHERE recording_id = NEW.recording_id)
-                   AND status = 'pending';
-            END IF;
+    UPDATE recording SET status = v_final
+     WHERE recording_id = NEW.recording_id AND status = 'pending_review';
+
+    -- Chỉ khi đa số từ chối bản ghi VÀ có lý do thuộc nhóm 'content' mới trả câu về pending_validation
+    IF v_final = 'rejected' THEN
+        IF EXISTS (
+            SELECT 1
+              FROM review_rejection_reason rrr
+              JOIN rejection_reason rr ON rr.reason_id = rrr.reason_id
+              JOIN review rv ON rv.review_id = rrr.review_id
+             WHERE rv.recording_id = NEW.recording_id
+               AND rr.category = 'content'
+        ) THEN
+            UPDATE script SET status = 'pending_validation'
+             WHERE script_id = (SELECT script_id FROM recording WHERE recording_id = NEW.recording_id)
+               AND status = 'validated';
+
+            -- câu quay về bước duyệt nội dung thì không còn là mục công việc
+            -- nữa. Trước đây trigger để nguyên task_script ở 'pending' nên task treo
+            -- vĩnh viễn, không bao giờ đạt chỉ tiêu.
+            UPDATE task_script SET status = 'rejected'
+             WHERE script_id = (SELECT script_id FROM recording WHERE recording_id = NEW.recording_id)
+               AND status = 'pending';
         END IF;
     END IF;
 
@@ -1554,11 +1620,34 @@ BEGIN
         (CASE TG_OP WHEN 'INSERT' THEN 'create'
                     WHEN 'UPDATE' THEN 'update'
                     ELSE 'delete' END)::audit_action,
-        CASE WHEN TG_OP = 'INSERT' THEN NULL ELSE to_jsonb(OLD) END,
-        CASE WHEN TG_OP = 'DELETE' THEN NULL ELSE to_jsonb(NEW) END
+        CASE WHEN TG_OP = 'INSERT' THEN NULL ELSE to_jsonb(OLD) - 'password_hash' END,
+        CASE WHEN TG_OP = 'DELETE' THEN NULL ELSE to_jsonb(NEW) - 'password_hash' END
     );
     RETURN NULL;   -- AFTER trigger
 END $$ LANGUAGE plpgsql;
+
+-- V16: audit trail also covers recording, review, dataset, script_proposal and app_user
+-- (registration NFR: complete history of recordings, reviews and data changes).
+-- fn_audit strips 'password_hash' from old/new JSON, so app_user can be audited safely.
+CREATE TRIGGER trg_audit_recording
+    AFTER INSERT OR UPDATE OR DELETE ON recording
+    FOR EACH ROW EXECUTE FUNCTION fn_audit('recording', 'recording_id');
+
+CREATE TRIGGER trg_audit_review
+    AFTER INSERT OR UPDATE OR DELETE ON review
+    FOR EACH ROW EXECUTE FUNCTION fn_audit('review', 'review_id');
+
+CREATE TRIGGER trg_audit_dataset
+    AFTER INSERT OR UPDATE OR DELETE ON dataset
+    FOR EACH ROW EXECUTE FUNCTION fn_audit('dataset', 'dataset_id');
+
+CREATE TRIGGER trg_audit_script_proposal
+    AFTER INSERT OR UPDATE OR DELETE ON script_proposal
+    FOR EACH ROW EXECUTE FUNCTION fn_audit('script_proposal', 'proposal_id');
+
+CREATE TRIGGER trg_audit_app_user
+    AFTER INSERT OR UPDATE OR DELETE ON app_user
+    FOR EACH ROW EXECUTE FUNCTION fn_audit('app_user', 'user_id');
 
 -- Example attachment — replicate this line for other tables:
 CREATE TRIGGER trg_audit_script
@@ -1577,35 +1666,60 @@ CREATE TRIGGER trg_audit_task
 -- 6. ID GENERATION HELPERS (call from backend/API)
 -- ============================================================
 
--- script_id = s_ + d1(en words) + d2(domain) + d3(relation) + 6-digit serial
--- serial is GLOBAL and sequential ("tăng dần, không random").
+-- script_id = s_ + d1(en words) + d2(domain) + d3(relation) + 9-digit serial.
+-- New IDs are 12 digits after s_; old 9-digit IDs remain valid.
+-- Serial is sequential per counter, never random:
+--   12 counters = en_word_count 1/2 x 3 domains x 2 relation codes
+--   1 fallback counter for en_word_count > 2
 CREATE OR REPLACE FUNCTION fn_generate_script_id(
     p_en_word_count INT,            -- 1..9
     p_domain        script_domain,
     p_relation_code INT             -- 1 = direct translation, 2 = proper noun
-) RETURNS VARCHAR(11) AS $$ BEGIN
+) RETURNS VARCHAR(16) AS $$
+DECLARE
+    v_domain_digit CHAR(1);
+    v_serial       BIGINT;
+BEGIN
     IF p_en_word_count NOT BETWEEN 1 AND 9 THEN
         RAISE EXCEPTION 'en_word_count must be 1..9 (single ID digit)';
     END IF;
     IF p_relation_code NOT IN (1, 2) THEN
         RAISE EXCEPTION 'relation_code must be 1 (direct translation) or 2 (proper noun)';
     END IF;
+
+    v_domain_digit := CASE p_domain WHEN 'it_technology' THEN '1'
+                                    WHEN 'education'     THEN '2'
+                                    WHEN 'daily_life'    THEN '3' END;
+    IF v_domain_digit IS NULL THEN
+        RAISE EXCEPTION 'unknown script domain %', p_domain;
+    END IF;
+
+    IF p_en_word_count IN (1, 2) THEN
+        v_serial := nextval(format('script_serial_%s_%s_%s',
+            p_en_word_count, v_domain_digit, p_relation_code)::regclass);
+    ELSE
+        v_serial := nextval('script_serial_other'::regclass);
+    END IF;
+
+    IF v_serial > 999999999 THEN
+        RAISE EXCEPTION 'script serial counter exhausted 9 digits for en_word_count %', p_en_word_count;
+    END IF;
+
     RETURN 's_'
         || p_en_word_count::text
-        || (CASE p_domain WHEN 'it_technology' THEN '1'
-                          WHEN 'education'     THEN '2'
-                          WHEN 'daily_life'    THEN '3' END)
+        || v_domain_digit
         || p_relation_code::text
-        || lpad(nextval('script_serial_seq')::text, 6, '0');
+        || lpad(v_serial::text, 9, '0');
 END $$ LANGUAGE plpgsql;
 
--- recording_id from script_id: r_cs_/r_vi_ + same 9 digits (+ _tN for take N>=2)
+-- recording_id from script_id: r_cs_/r_vi_ + same 9 or 12 digits
+-- (+ _tN for take N>=2).
 CREATE OR REPLACE FUNCTION fn_generate_recording_id(
-    p_script_id VARCHAR(11),
+    p_script_id VARCHAR(16),
     p_variant   sentence_variant,
     p_take      INT DEFAULT 1
-) RETURNS VARCHAR(20) AS $$ BEGIN
-    IF p_script_id !~ '^s_[0-9]{9}$' THEN
+) RETURNS VARCHAR(32) AS $$ BEGIN
+    IF p_script_id !~ '^s_([0-9]{9}|[0-9]{12})$' THEN
         RAISE EXCEPTION 'invalid script_id %', p_script_id;
     END IF;
     IF p_take < 1 THEN
@@ -1637,7 +1751,7 @@ INSERT INTO script_error_reason (reason_code, description, sort_order) VALUES
     ('duplicate',      'Câu này đã có trong dữ liệu — không cần gửi lại', 60),
     ('other',          'Lỗi văn bản khác — ghi rõ ở ô bình luận', 99);
 
--- TEAM_016: lý do từ chối bản ghi còn ĐÚNG 4 lý do — mỗi nhóm một mã.
+-- lý do từ chối bản ghi còn ĐÚNG 4 lý do — mỗi nhóm một mã.
 -- Các mã cũ cùng nhóm (script_text_error, word_skipped_added, low_volume,
 -- clipping_distortion, excess_silence) bị ẩn ở migrations/V10__four_rejection_reasons.sql.
 INSERT INTO rejection_reason (reason_code, category, description) VALUES
@@ -1664,16 +1778,18 @@ INSERT INTO system_config (config_key, config_value, value_type, description) VA
     ('quality.speaker_min_approval_rate',        '60', 'int', 'Min approval rate (%) before a speaker is flagged'),
     ('quality.speaker_max_consecutive_qc_fail',  '5',  'int', 'Consecutive qc_failed recordings before warning/suspension'),
     ('quality.min_recordings_before_eval',       '20', 'int', 'Recordings needed before approval rate is evaluated'),
-    -- TEAM_010: hạn claim của hàng đợi. Người mở câu rồi bỏ ngang sẽ trả câu về
+    -- hạn claim của hàng đợi. Người mở câu rồi bỏ ngang sẽ trả câu về
     -- hàng đợi sau tối đa số phút này, thay vì giữ mãi.
     ('queue.claim_ttl_minutes',                  '30',  'int', 'Minutes before an unclaimed queue item becomes claimable again'),
-    -- TEAM_010: lô câu văn bản Task Manager giao cho mỗi người duyệt (yêu cầu 2.2).
+    -- lô câu văn bản Task Manager giao cho mỗi người duyệt (yêu cầu 2.2).
     ('text_review.batch_size',                   '100', 'int', 'Default number of pending sentences claimed per reviewer');
 
--- Bootstrap admin — valid bcrypt hash for initial password 'Codeswitch@2026'
+-- Bootstrap admin — KHÔNG lưu mã hash mật khẩu trong SQL seed.
+-- DatabaseSeeder gán hash thật (từ Seed:DefaultPassword) khi ứng dụng khởi động,
+-- nên không cần—and không nên—để hash cứng trong file lược đồ.
 INSERT INTO app_user (role_id, full_name, email, password_hash, status)
 SELECT role_id, 'System Admin', 'admin@codeswitchlabel.local',
-       '$2a$11$eUoiC4zG9UaJtJ6lY6qZ3.gQ3uRz5i0/7m6Fq5W2qXgC5S5wZ4mO', 'active'
+       '', 'active'
 FROM role WHERE role_name = 'admin';
 
 -- ============================================================
@@ -1742,10 +1858,10 @@ SELECT
     t.status        AS task_status,
     t.target_qty,
     t.deadline,
-    -- TEAM_010: một task có thể giao cho nhiều người. Chỉ tiêu là của cả nhóm nên
+    -- một task có thể giao cho nhiều người. Chỉ tiêu là của cả nhóm nên
     -- không nhân theo số này — chỉ để báo cáo biết đang chia việc cho bao nhiêu người.
     (SELECT COUNT(*) FROM task_assignment a
-        WHERE a.task_id = t.task_id AND a.assignment_status = 'active') AS assignee_count,
+        WHERE a.task_id = t.task_id AND a.assignment_status IN ('active', 'completed')) AS assignee_count,
     (SELECT COUNT(*) FROM task_script ts WHERE ts.task_id = t.task_id) AS scripts_assigned,
     (SELECT COUNT(*) FROM task_script ts
         WHERE ts.task_id = t.task_id AND ts.status = 'completed')      AS scripts_completed,

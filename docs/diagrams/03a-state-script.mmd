@@ -1,0 +1,9 @@
+stateDiagram-v2
+  [*] --> pending_validation: import / contribute
+  pending_validation --> validated: accepted or edited by domain reviewer
+  pending_validation --> rejected: rejected with reason
+  validated --> pending_validation: content rejection by majority
+  pending_validation --> deactivated: discard
+  validated --> deactivated: discard-pair
+  rejected --> deactivated: discard
+  deactivated --> [*]

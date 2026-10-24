@@ -198,6 +198,8 @@ public sealed class DatabaseFixture : IAsyncLifetime
                         .Returns((string key) => $"http://localhost:9000/recordings/{key}");
                     mockStorage.Setup(s => s.GetObjectKey(It.IsAny<string>()))
                         .Returns("test.wav");
+                    mockStorage.Setup(s => s.OpenReadAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                        .Returns(() => Task.FromResult<Stream>(new MemoryStream([0x52, 0x49, 0x46, 0x46])));
                     services.AddSingleton(mockStorage.Object);
 
                     var mockAudio = new Mock<IAudioProcessor>();
@@ -470,6 +472,14 @@ private async Task SeedTestDataAsync()
 
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
+            // Đảm bảo mọi tài khoản prod đều có hash thật, kể cả hàng admin SQL seed
+            // để trống password_hash (gap #3: không lưu hash cứng trong lược đồ).
+            foreach (var u in new[] { prodAdmin, prodManager, prodReviewer, prodReviewer2, prodReviewer3, prodSpeaker1, prodSpeaker2 })
+            {
+                u.PasswordHash = hasher.Hash("Codeswitch@2026");
+            }
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
             admin = await db.AppUsers.FirstAsync(u => u.Email == "admin@test.local", TestContext.Current.CancellationToken);
             manager = await db.AppUsers.FirstAsync(u => u.Email == "manager@test.local", TestContext.Current.CancellationToken);
             reviewer = await db.AppUsers.FirstAsync(u => u.Email == "reviewer@test.local", TestContext.Current.CancellationToken);
@@ -580,6 +590,8 @@ private async Task SeedTestDataAsync()
             .Returns((string key) => $"http://localhost:9000/recordings/{key}");
         mockStorage.Setup(s => s.GetObjectKey(It.IsAny<string>()))
             .Returns("test.wav");
+        mockStorage.Setup(s => s.OpenReadAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(() => Task.FromResult<Stream>(new MemoryStream([0x52, 0x49, 0x46, 0x46])));
 
         services.AddSingleton(mockStorage.Object);
 

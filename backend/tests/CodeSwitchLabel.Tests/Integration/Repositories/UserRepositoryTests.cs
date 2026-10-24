@@ -88,7 +88,7 @@ public class UserRepositoryTests : IntegrationTestBase
         Assert.True(total >= 4); // 4 seeded users
     }
 
-    // ---------------------------------------------------------------- TEAM_012: sắp xếp
+    // ---------------------------------------------------------------- sắp xếp
 
     /// <summary>Ba tài khoản của riêng test này, họ tên cùng gốc để lọc và so thứ tự.</summary>
     private async Task<(string Keyword, AppUser[] Users)> CreateThreeSortedUsersAsync()
@@ -108,7 +108,7 @@ public class UserRepositoryTests : IntegrationTestBase
     [Fact]
     public async Task SearchAsync_KhongTruyenSort_GiuNguyenThuTuHoTenAZ()
     {
-        // Regression TEAM_012: mặc định của /api/users là họ tên A-Z, không phải mới nhất trước.
+        // Regression mặc định của /api/users là họ tên A-Z, không phải mới nhất trước.
         var (keyword, users) = await CreateThreeSortedUsersAsync();
 
         var (items, _) = await Users.SearchAsync(

@@ -5,6 +5,7 @@ using CodeSwitchLabel.Repositories.Storage;
 using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Common;
 using CodeSwitchLabel.Services.Dtos;
+using CodeSwitchLabel.Services.Reviews;
 using Microsoft.EntityFrameworkCore;
 
 namespace CodeSwitchLabel.Services.Implementations;
@@ -12,17 +13,22 @@ namespace CodeSwitchLabel.Services.Implementations;
 public class SpeakerRoundsService(
     CodeSwitchLabelDbContext db,
     IObjectStorage storage,
+    ISystemConfigService config,
     TimeProvider clock) : ISpeakerRoundsService
 {
     public async Task<SpeakerRoundDto?> GetCurrentAsync(long speakerId, CancellationToken ct = default)
     {
         // Đợt đang làm = chiến dịch của task thu âm còn nhận việc, hạn gần nhất trước.
-        // TEAM_016: task đã đủ chỉ tiêu vẫn còn nhận việc nên vẫn nằm trong danh sách,
+        // task đã đủ chỉ tiêu vẫn còn nhận việc nên vẫn nằm trong danh sách,
         // nhưng xếp SAU các task còn dở để hero không nhảy sang đợt đã xong khi còn việc khác.
         var task = await db.TaskAssignments.AsNoTracking()
-            .Where(a => a.UserId == speakerId && a.AssignmentStatus == AssignmentStatus.Active)
+            .Where(a => a.UserId == speakerId && a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled)
             .Where(a => a.Task.TaskType == TaskType.Recording)
             .Where(a => a.Task.Status != WorkTaskStatus.Cancelled)
+            // Chỉ xét task THUỘC MỘT ĐỢT. Trước đây lấy task hạn gần nhất rồi mới đọc
+            // campaignId, nên ai có một task lẻ (không thuộc đợt nào) đến hạn sớm hơn là
+            // mất sạch khối "đợt đang tham gia", dù đang nhận việc trong hai đợt khác.
+            .Where(a => a.Task.CampaignId != null)
             .OrderBy(a => a.Task.Status == WorkTaskStatus.Completed)
             .ThenBy(a => a.Task.Deadline)
             .Select(a => a.Task)
@@ -47,7 +53,7 @@ public class SpeakerRoundsService(
             .Select(r => r.CampaignId)
             .ToListAsync(ct);
 
-        // TEAM_013: đợt chưa có nhiệm vụ nào (Open) thì người đọc còn đăng ký được;
+        // đợt chưa có nhiệm vụ nào (Open) thì người đọc còn đăng ký được;
         // đợt đã có nhiệm vụ rồi thì việc đến từ task, không phải từ đăng ký.
         // Trước đây lọc cả `Draft` — trạng thái đó không tồn tại nữa, và đợt mới tạo đã là Open.
         var campaigns = await db.Campaigns.AsNoTracking()
@@ -83,20 +89,48 @@ public class SpeakerRoundsService(
             .Where(t => t.CampaignId == campaignId && t.TaskType == TaskType.Recording)
             .SumAsync(t => (int?)t.TargetQty, ct) ?? 0;
 
-        // TEAM_016: xếp hạng theo CÂU ĐÃ NỘP — đếm mọi bản ghi đã qua kiểm tra tự động
+        // xếp hạng theo CÂU ĐÃ NỘP — đếm mọi bản ghi đã qua kiểm tra tự động
         // (chờ duyệt / đạt / bị từ chối), không chỉ bản được duyệt. Bản trượt QC không tính.
-        var rows = await db.Recordings.AsNoTracking()
+        var daNop = await db.Recordings.AsNoTracking()
             .Where(r => r.Status != RecordingStatus.QcFailed)
             .Where(r => r.Task != null && r.Task.CampaignId == campaignId)
             .GroupBy(r => new { r.SpeakerId, r.Speaker.FullName })
             .Select(g => new { g.Key.SpeakerId, g.Key.FullName, Submitted = g.Count() })
-            .OrderByDescending(x => x.Submitted)
-            .Take(Math.Clamp(top, 1, 50))
             .ToListAsync(ct);
 
+        // Chỉ tiêu riêng từng người: quota trên từng lượt giao, không phải chỉ tiêu cả task.
+        var chiTieuRieng = await PersonalTargetsAsync(campaignId, ct);
+
+        // Người ĐƯỢC GIAO việc trong đợt nhưng chưa thu câu nào vẫn có mặt, với 0 bản đã nộp.
+        // Không có họ thì đợt vừa mở ra bảng rỗng trơn, trong khi cả nhóm đã nhận chỉ tiêu —
+        // màn hình không nói được "bạn mới làm 0/625" cho tới khi ai đó thu bản đầu tiên.
+        var chuaThu = chiTieuRieng.Keys.Except(daNop.Select(x => x.SpeakerId)).ToArray();
+
+        var tenNguoiChuaThu = chuaThu.Length == 0
+            ? []
+            : await db.AppUsers.AsNoTracking()
+                .Where(u => chuaThu.Contains(u.UserId))
+                .Select(u => new { SpeakerId = u.UserId, u.FullName, Submitted = 0 })
+                .ToListAsync(ct);
+
+        // Xếp theo số đã nộp; bằng nhau thì theo tên, để thứ tự không đổi giữa hai lần gọi
+        // (giờ có cả một nhóm cùng đứng ở 0).
+        var rows = daNop.Concat(tenNguoiChuaThu)
+            .OrderByDescending(x => x.Submitted)
+            .ThenBy(x => x.FullName)
+            .Take(Math.Clamp(top, 1, 50))
+            .ToList();
+
         return new LeaderboardDto(chiTieu, daChia,
-            [.. rows.Select((x, i) => new LeaderboardEntryDto(
-                i + 1, x.SpeakerId, x.FullName, x.Submitted, x.SpeakerId == speakerId))]);
+            [.. rows.Select((x, i) =>
+            {
+                var target = chiTieuRieng.GetValueOrDefault(x.SpeakerId);
+
+                return new LeaderboardEntryDto(
+                    i + 1, x.SpeakerId, x.FullName, x.Submitted, x.SpeakerId == speakerId,
+                    target,
+                    target > 0 ? Math.Min(x.Submitted, target) : x.Submitted);
+            })]);
     }
 
     public async Task<SpeakerRoundDto> RegisterAsync(
@@ -105,7 +139,7 @@ public class SpeakerRoundsService(
         var campaign = await db.Campaigns.FirstOrDefaultAsync(c => c.CampaignId == campaignId, ct)
             ?? throw new NotFoundException("campaign_not_found", $"Không tìm thấy chiến dịch #{campaignId}.");
 
-        // TEAM_013: đợt chỉ còn Open/InProgress/Completed, và trạng thái đợt là hàm của task —
+        // đợt chỉ còn Open/InProgress/Completed, và trạng thái đợt là hàm của task —
         // đăng ký là việc của người đọc chứ không phải việc của task, nên đợt đang chạy hay
         // đã xong đều không chặn. Luật cũ chặn cả Completed lẫn Cancelled đã bị gỡ.
         var exists = await db.CampaignRegistrations.AnyAsync(
@@ -180,8 +214,13 @@ public class SpeakerRoundsService(
         var q = db.Recordings.AsNoTracking()
             .Include(r => r.Script)
             .Include(r => r.Task)
-            .Include(r => r.Reviews)
+            .Include(r => r.Reviews).ThenInclude(v => v.RejectionReasons).ThenInclude(rr => rr.Reason)
             .Where(r => r.SpeakerId == speakerId);
+
+        // Cùng tham số mà ReviewService và trigger trg_review_majority đọc, nên "x/3" ở đây
+        // không thể lệch với số vòng thật.
+        var soVongCan = await config.GetIntAsync(
+            ConfigKeys.ReviewRoundsRequired, ReviewRules.DefaultRoundsRequired, ct);
 
         if (query.Status.HasValue) q = q.Where(r => r.Status == query.Status.Value);
         if (query.TaskId.HasValue) q = q.Where(r => r.TaskId == query.TaskId.Value);
@@ -205,7 +244,7 @@ public class SpeakerRoundsService(
 
         var sort = query.ToSort<SpeakerPairSortField>();
 
-        // TEAM_012: chỉ hai cột của cặp là sắp xếp được trước khi cắt trang. Trạng thái và
+        // chỉ hai cột của cặp là sắp xếp được trước khi cắt trang. Trạng thái và
         // thời lượng của cặp là thứ TÍNH RA ở dưới, nên không có trong SpeakerPairSortField.
         var orderedPairs = sort.Field switch
         {
@@ -235,7 +274,7 @@ public class SpeakerRoundsService(
         // hỏng cả dòng lịch sử.
         var items = new List<SpeakerRecordingHistoryDto>(pageScripts.Count);
 
-        // TEAM_012: dựng dòng theo đúng thứ tự pageScripts đã cắt trang, KHÔNG theo thứ tự
+        // dựng dòng theo đúng thứ tự pageScripts đã cắt trang, KHÔNG theo thứ tự
         // của `rows` — `rows` xếp theo thời điểm thu, nên `?sort=scriptId` sẽ trả về thứ tự
         // khác hẳn thứ tự client yêu cầu.
         var rowsByScript = rows.ToLookup(r => r.ScriptId);
@@ -271,15 +310,22 @@ public class SpeakerRoundsService(
                             ? RecordingStatus.QcFailed
                             : RecordingStatus.PendingReview,
                 takes.Max(r => r.RecordedAt),
-                // Giống GET /api/recordings/{id}/reviews: chỉ hiện lượt duyệt khi bản đã chốt.
-                // Hai bản có thể chốt ở hai trạng thái khác nhau, nên mỗi lượt tính một lần.
+                // Hiện lượt duyệt NGAY, không chờ bản ghi chốt: người đọc cần biết đã có ai
+                // xem bản của mình chưa. Trước đây chỉ hiện khi đã chốt nên bản đang ở 1/3
+                // trả về mảng rỗng, nhìn như chưa ai duyệt.
+                //
+                // Giữ đủ lượt của CẢ HAI bản, mỗi lượt kèm recordingId. Bản cũ gom theo số
+                // vòng rồi lấy một dòng, nên lượt vòng 1 của bản vi bị lượt vòng 1 của bản cs
+                // nuốt mất — hai bản là hai cuộc duyệt riêng, không phải một.
                 [.. takes
-                    .Where(r => r.Status is RecordingStatus.Approved or RecordingStatus.Rejected)
                     .SelectMany(r => r.Reviews)
-                    .GroupBy(v => v.ReviewRound)
-                    .Select(g => g.First())
-                    .OrderBy(v => v.ReviewRound)
-                    .Select(v => new HistoryReviewDto(v.ReviewRound, v.Decision.ToString(), v.Comment))]));
+                    .OrderBy(v => v.RecordingId)
+                    .ThenBy(v => v.ReviewRound)
+                    .Select(v => new HistoryReviewDto(
+                        v.ReviewRound, v.Decision.ToString(), ReviewDisplay.ReasonOf(v),
+                        v.RecordingId, v.ReviewedAt))],
+                takes.Length > 0 ? takes.Min(r => r.Reviews.Count) : 0,
+                soVongCan));
         }
 
         return new PagedResult<SpeakerRecordingHistoryDto>(items, query.Page, query.PageSize, total);
@@ -303,6 +349,7 @@ public class SpeakerRoundsService(
         var q = db.Scripts.AsNoTracking()
             .Include(s => s.Words)
             .Include(s => s.Reviews).ThenInclude(r => r.ErrorReason)
+            .Include(s => s.Reviews).ThenInclude(r => r.User)
             .Where(s => s.CreatedBy == speakerId);
 
         if (!string.IsNullOrWhiteSpace(query.Search))
@@ -321,7 +368,7 @@ public class SpeakerRoundsService(
 
         var sort = query.ToSort<ScriptSortField>();
 
-        // TEAM_012: cùng bộ cột với GET /api/scripts vì hai danh sách này đọc cùng bảng.
+        // cùng bộ cột với GET /api/scripts vì hai danh sách này đọc cùng bảng.
         var ordered = sort.Field switch
         {
             ScriptSortField.ScriptId => sort.Descending
@@ -360,7 +407,16 @@ public class SpeakerRoundsService(
             })],
             s.CreatedAt,
             s.Status,
-            [.. s.Reviews.Select(r => new HistoryReviewDto(0, r.Action.ToString(), r.Comment))])).ToList();
+            // Một câu chỉ một lượt duyệt. Vài câu cũ còn hai lượt từ trước khi siết luật,
+            // nên lấy lượt mới nhất thay vì giả định chỉ có một dòng.
+            s.Reviews
+                .OrderByDescending(r => r.ReviewedAt)
+                .ThenByDescending(r => r.ScriptReviewId)
+                .Select(r => new ContributionReviewDto(
+                    r.ScriptReviewId, r.Action.ToString(), r.UserId, r.User.FullName,
+                    r.ErrorReason?.ReasonCode, r.ErrorReason?.Description,
+                    r.Comment, r.ReviewedAt))
+                .FirstOrDefault())).ToList();
 
         return new PagedResult<SpeakerContributionHistoryDto>(items, query.Page, query.PageSize, total);
     }
@@ -440,6 +496,9 @@ public class SpeakerRoundsService(
 
         var topic = await DominantTopicAsync(campaignId, ct);
 
+        // Trang chủ hiện tiến độ của chính người đọc, nên chỉ tiêu cũng phải là quota cá nhân.
+        var target = (await PersonalTargetsAsync(campaignId, ct)).GetValueOrDefault(speakerId);
+
         return new SpeakerRoundDto(
             campaign.CampaignId,
             campaign.CampaignName,
@@ -449,11 +508,47 @@ public class SpeakerRoundsService(
             campaign.EndDate,
             HumanizeDays((campaign.EndDate.ToDateTime(TimeOnly.MinValue) - today.ToDateTime(TimeOnly.MinValue)).Days),
             Math.Max(speakersInCampaign, registered),
-            campaign.TargetQty,
+            target,
             submitted,
             approved,
             pending,
             isRegistered);
+    }
+
+    /// <summary>
+    /// Chỉ tiêu riêng của từng người trong đợt: cộng quota trên các lượt giao task thu âm
+    /// còn hiệu lực. Dùng đúng quy tắc của API tiến độ Speaker — lượt giao cũ chưa có quota
+    /// thì chia theo vị trí trong danh sách người nhận (sắp theo tên) để hai màn hình khớp nhau.
+    /// </summary>
+    private async Task<Dictionary<long, int>> PersonalTargetsAsync(
+        long campaignId, CancellationToken ct)
+    {
+        var assignments = await db.TaskAssignments.AsNoTracking()
+            .Where(a => a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled)
+            .Where(a => a.Task.Status != WorkTaskStatus.Cancelled)
+            .Where(a => a.Task.CampaignId == campaignId && a.Task.TaskType == TaskType.Recording)
+            .Select(a => new
+            {
+                a.UserId,
+                a.TargetQty,
+                TaskTargetQty = a.Task.TargetQty,
+                Assignees = a.Task.Assignments
+                    .Where(x => x.AssignmentStatus != AssignmentStatus.Reassigned && x.AssignmentStatus != AssignmentStatus.Cancelled)
+                    .OrderBy(x => x.User.FullName)
+                    .ThenBy(x => x.UserId)
+                    .Select(x => new { x.UserId, x.TargetQty })
+                    .ToList()
+            })
+            .ToListAsync(ct);
+
+        return assignments
+            .GroupBy(a => a.UserId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Sum(a => a.TargetQty ?? TaskService.SplitQuotaAt(
+                    a.TaskTargetQty,
+                    a.Assignees.Count,
+                    a.Assignees.FindIndex(x => x.UserId == g.Key))));
     }
 
     private async Task<string?> DominantTopicAsync(long campaignId, CancellationToken ct)

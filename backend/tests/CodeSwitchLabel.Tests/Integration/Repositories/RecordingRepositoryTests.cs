@@ -52,7 +52,7 @@ public class RecordingRepositoryTests : IntegrationTestBase
         Assert.True(total >= 1);
     }
 
-    // ---------------------------------------------------------------- TEAM_012: sắp xếp
+    // ---------------------------------------------------------------- sắp xếp
 
     /// <summary>
     /// Ba bản ghi của một người đọc riêng, đặt mốc thu và thời lượng khác nhau. Mốc đặt tay
@@ -85,7 +85,7 @@ public class RecordingRepositoryTests : IntegrationTestBase
     [Fact]
     public async Task SearchAsync_KhongTruyenSort_GiuNguyenThuTuBanGhiMoiNhatTruoc()
     {
-        // Regression TEAM_012: không gửi sort thì phải y hệt trước khi có tính năng này.
+        // Regression không gửi sort thì phải y hệt trước khi có tính năng này.
         var (speakerId, recordings) = await CreateThreeSortedRecordingsAsync();
 
         var (items, total) = await Recordings.SearchAsync(

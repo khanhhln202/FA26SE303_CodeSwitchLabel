@@ -17,6 +17,7 @@ public class DatasetsController(IDatasetService datasets) : ControllerBase
     [HttpPost]
     [ProducesResponseType(typeof(CreateDatasetResult), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<CreateDatasetResult>> Create(
         [FromBody] CreateDatasetRequest request, CancellationToken ct)
     {
@@ -26,7 +27,7 @@ public class DatasetsController(IDatasetService datasets) : ControllerBase
 
     /// <summary>Danh sách dataset, mới nhất trước.</summary>
     /// <remarks>
-    /// TEAM_012: `?sort=` nhận `datasetId`, `createdAt`, `status`, `datasetName`, `recordingCount`;
+    /// `?sort=` nhận `datasetId`, `createdAt`, `status`, `datasetName`, `recordingCount`;
     /// `?dir=asc|desc` (mặc định `asc`). Bỏ trống `sort` thì ra mới nhất trước.
     /// </remarks>
     [HttpGet]
@@ -59,14 +60,30 @@ public class DatasetsController(IDatasetService datasets) : ControllerBase
     public async Task<ActionResult<DatasetDto>> Archive(long id, CancellationToken ct)
         => Ok(await datasets.ArchiveAsync(id, ct));
 
-    /// <summary>Tải dataset đã phát hành (ZIP gồm manifest.json + metadata.csv, link nghe 15 phút).</summary>
+    /// <summary>Xoá dataset nháp. Dataset đã phát hành hoặc lưu trữ thì không xoá được.</summary>
+    [HttpDelete("{id:long}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Delete(long id, CancellationToken ct)
+    {
+        await datasets.DeleteAsync(id, ct);
+        return NoContent();
+    }
+
+    /// <summary>Tải dataset đã phát hành (ZIP gồm manifest.json, metadata.csv và audio/ nếu includeAudio=true).</summary>
+    /// <remarks>
+    /// `?includeAudio=true` (mặc định): đóng gói cả file ghi âm vào thư mục `audio/`.
+    /// `?includeAudio=false`: chỉ lấy metadata kèm link nghe tạm 15 phút.
+    /// </remarks>
     [HttpGet("{id:long}/download")]
     [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> Download(long id, CancellationToken ct)
+    public async Task<IActionResult> Download(
+        long id, [FromQuery] bool includeAudio = true, CancellationToken ct = default)
     {
-        var file = await datasets.DownloadAsync(id, ct);
+        var file = await datasets.DownloadAsync(id, includeAudio, ct);
         return File(file.Content, file.ContentType, file.FileName);
     }
 }

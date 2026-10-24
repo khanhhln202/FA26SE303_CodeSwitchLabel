@@ -1,0 +1,6 @@
+stateDiagram-v2
+  [*] --> pending: speaker reports/edits a validated, unrecorded script
+  pending --> accepted: reviewer accepts (script back to recording queue)
+  pending --> rejected: reviewer rejects, or script deactivated
+  accepted --> [*]
+  rejected --> [*]

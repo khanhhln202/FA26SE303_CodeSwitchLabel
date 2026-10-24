@@ -108,6 +108,25 @@ public class ScriptRepositoryTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task ContentExistsAsync_IgnoresCaseAndWhitespace()
+    {
+        // Arrange
+        await CreateScriptAsync(
+            "[vi]Em nên [en]scan [vi]tài liệu này.",
+            "[vi]Em nên quét tài liệu này.",
+            ScriptDomain.ItTechnology,
+            AdminUserId);
+
+        // Act — khác hoa/thường và gộp nhiều khoảng trắng.
+        var exists = await Scripts.ContentExistsAsync(
+            "  [vi]EM NÊN [en]SCAN [vi]TÀI   LIỆU NÀY.  ",
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(exists);
+    }
+
+    [Fact]
     public async Task ContentExistsAsync_ReturnsFalse_WhenContentDoesNotExist()
     {
         // Act
@@ -117,7 +136,7 @@ public class ScriptRepositoryTests : IntegrationTestBase
         Assert.False(exists);
     }
 
-    // ---------------------------------------------------------------- TEAM_012: sắp xếp
+    // ---------------------------------------------------------------- sắp xếp
 
     /// <summary>
     /// Ba câu của riêng test này (kèm từ khoá chỉ chúng có) và mốc thời gian cách nhau rõ.
@@ -147,7 +166,7 @@ public class ScriptRepositoryTests : IntegrationTestBase
     [Fact]
     public async Task SearchAsync_KhongTruyenSort_GiuNguyenThuTuMoiNhatTruoc()
     {
-        // Regression TEAM_012: client cũ không gửi sort thì phải y hệt trước khi có tính năng này.
+        // Regression client cũ không gửi sort thì phải y hệt trước khi có tính năng này.
         var (keyword, scripts) = await CreateThreeSortedScriptsAsync();
 
         var (items, total) = await Scripts.SearchAsync(

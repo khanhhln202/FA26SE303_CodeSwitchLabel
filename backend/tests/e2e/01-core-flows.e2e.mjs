@@ -124,7 +124,7 @@ record('2.2', 'Mã sinh đúng quy tắc: 2 từ tiếng Anh, chủ đề IT, qu
   { status: 200, check: (b) => /^s_211\d{6}$/.test(b.scriptId ?? '') }, (b) => b);
 
 r = record('2.3', 'Chi tiết câu vừa nhập', await call(T.admin, 'GET', `/api/scripts/${ID.imported}`),
-  // TEAM_010: câu nhập từ file vào thẳng hàng đợi chờ duyệt (PendingValidation), không tự
+  // câu nhập từ file vào thẳng hàng đợi chờ duyệt (PendingValidation), không tự
   // sang Validated như trước — người nhập không tự duyệt được câu của chính mình.
   { status: 200, check: (b) => b.status === 'PendingValidation' && b.enWordCount === 2 && b.alignment.length === 2 },
   (b) => ({ status: b.status, wordCount: b.wordCount, enWordCount: b.enWordCount, csPlain: b.csPlain, alignment: b.alignment.map((a) => `${a.source}→${a.target}`) }));
@@ -273,7 +273,7 @@ record('6.0b', 'Chỉ tiêu chiến dịch dưới 2000 bị chặn',
 record('6.0c', 'task manager tạo được chiến dịch và tự giao cho mình',
   await call(T.manager, 'POST', '/api/campaigns',
     { campaignName: 'Chiến dịch của manager', targetQty: 2000, domain: 'ItTechnology', startDate: isoDate(0), endDate: isoDate(30) }),
-  // TEAM_003: quyền tạo/sửa đợt nới cho TaskManager, tạo xong tự giao đợt cho chính mình
+  // quyền tạo/sửa đợt nới cho TaskManager, tạo xong tự giao đợt cho chính mình
   // nên manager tạo task trong đợt đó được (6.0d kiểm đúng nhánh "chưa giao" là đợt của Admin).
   { status: 201, check: (b) => b.assignedTo === ID.manager && b.createdBy === ID.manager },
   (b) => ({ campaignId: b.campaignId, assignedTo: b.assignedTo, status: b.status }));

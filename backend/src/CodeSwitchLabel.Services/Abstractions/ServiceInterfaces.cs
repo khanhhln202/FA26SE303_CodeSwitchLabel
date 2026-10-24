@@ -33,6 +33,16 @@ public interface IScriptService
     Task<ImportResultDto> ImportAsync(
         Stream jsonFile, string fileName, long importedById, CancellationToken ct = default);
 
+    /// <summary>Chấp nhận hàng loạt câu đang chờ duyệt của một batch nhập.</summary>
+    /// <remarks>
+    /// Người gọi (Admin) là người duyệt của từng lượt `Accepted`. Dùng luồng duyệt hiện có
+    /// (`ReviewAsync`) nên vẫn giữ đủ quy tắc: chủ đề, phân công hàng đợi, lịch sử duyệt và
+    /// trạng thái câu. Lỗi của từng câu được ghi lại, không rollback các câu đã duyệt.
+    /// Ném `NotFoundException` (`batch_not_found`) nếu batch không tồn tại.
+    /// </remarks>
+    Task<BatchValidateResultDto> ValidateBatchAsync(
+        long batchId, long reviewerId, CancellationToken ct = default);
+
     Task<PagedResult<ImportBatchDto>> ListBatchesAsync(PageRequest request, CancellationToken ct = default);
 
     Task<ImportBatchDetailDto> GetBatchAsync(long batchId, CancellationToken ct = default);
@@ -113,9 +123,16 @@ public interface ICampaignService
     Task DeleteAsync(
         long campaignId, long? callerId, bool isAdmin, CancellationToken ct = default);
 
-    /// <summary>Gỡ task khỏi chiến dịch (detach, giữ lại task).</summary>
-    Task<TaskDetailDto> DetachTaskAsync(
+    /// <summary>Xoá vĩnh viễn một task khỏi chiến dịch; bản ghi thu âm và lượt duyệt được giữ lại.</summary>
+    Task DeleteTaskAsync(
         long campaignId, long taskId, long? callerId, bool isAdmin, CancellationToken ct = default);
+
+    /// <summary>
+    /// Lấy task thu âm duy nhất của chiến dịch; chưa có thì tạo với chỉ tiêu bằng cả chiến dịch.
+    /// Idempotent và có thể tự lấp cặp câu đã duyệt nội dung.
+    /// </summary>
+    Task<TaskDetailDto> GetOrCreateRecordingTaskAsync(
+        long campaignId, bool autoFill, long callerId, bool isAdmin, CancellationToken ct = default);
 }
 
 public record SystemConfigDto(

@@ -3,7 +3,7 @@ using CodeSwitchLabel.Repositories.Enums;
 namespace CodeSwitchLabel.Repositories.Entities;
 
 /// <summary>
-/// Một lần thu. Khoá chính là chuỗi r_cs_ hoặc r_vi_ + 9 chữ số của script, thu lại thì thêm _tN.
+/// Một lần thu. Khoá chính là chuỗi r_cs_ hoặc r_vi_ + 9/12 chữ số của script, thu lại thì thêm _tN.
 /// Lược đồ chặn: mỗi cặp câu chỉ một người đọc, và mỗi (câu, biến thể) chỉ một bản được duyệt đạt.
 /// </summary>
 public class Recording
@@ -31,7 +31,7 @@ public class Recording
     public string? QcMetrics { get; set; }
 
     /// <summary>
-    /// TEAM_010: dấu vết cho nút "Chỉ xóa audio" / "Xóa hoàn toàn" (yêu cầu 2.4).
+    /// dấu vết cho nút "Chỉ xóa audio" / "Xóa hoàn toàn" (yêu cầu 2.4).
     ///
     /// CỐ Ý không nằm ở bảng review: hai hành động đó là quyết định dứt điểm, không
     /// phải phiếu bầu. Ghi vào review sẽ làm lệch bộ đếm 3 lượt và kích hoạt
