@@ -143,6 +143,16 @@ public record ReviewTaskProgressDto(
 public record ReviewerProgressDto(int TotalReviews, IReadOnlyList<ReviewTaskProgressDto> ActiveTasks);
 
 /// <summary>Tham số của danh sách bản ghi trong một task duyệt.</summary>
+/// <summary>Một dòng là một bản ghi, hay là một cặp câu.</summary>
+public enum TaskReviewGrouping
+{
+    /// <summary>Mặc định: mỗi bản thu một dòng, nên một cặp câu cho ra hai dòng.</summary>
+    Recording,
+
+    /// <summary>Mỗi cặp câu MỘT dòng; bản còn lại nằm trong <c>sibling</c>.</summary>
+    Pair
+}
+
 public record TaskReviewQuery : PageRequest
 {
     /// <summary>
@@ -150,6 +160,12 @@ public record TaskReviewQuery : PageRequest
     /// Đặt true thì chỉ còn những bản bấm vào duyệt được ngay.
     /// </summary>
     public bool OnlyReviewable { get; init; }
+
+    /// <summary>
+    /// `Pair` gom hai bản của một cặp vào một dòng và phân trang THEO CẶP. Dòng mang bản đang
+    /// cần tay người duyệt, bản còn lại nằm trong `sibling` với đủ trạng thái riêng.
+    /// </summary>
+    public TaskReviewGrouping GroupBy { get; init; } = TaskReviewGrouping.Recording;
 }
 
 /// <summary>
@@ -185,9 +201,16 @@ public record TaskReviewItemDto(
 }
 
 /// <summary>Bản anh em của một bản ghi trong cặp câu, xem từ danh sách task duyệt.</summary>
+/// <param name="MyReviewDone">Người đang xem đã duyệt bản này chưa.</param>
+/// <param name="Blocker">Vì sao chưa duyệt được bản này; <c>None</c> là bấm vào duyệt được ngay.</param>
 public record ReviewSiblingDto(
     string RecordingId,
     SentenceVariant SentenceVariant,
     string ScriptText,
     RecordingStatus? Status,
-    int ReviewsDone);
+    int ReviewsDone,
+    bool MyReviewDone,
+    ReviewBlocker Blocker)
+{
+    public bool CanReview => Blocker == ReviewBlocker.None;
+}

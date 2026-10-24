@@ -3,6 +3,7 @@ using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Common;
 using CodeSwitchLabel.Services.Dtos;
+using CodeSwitchLabel.Services.Reviews;
 using CodeSwitchLabel.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -275,5 +276,88 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
         // Bản ghi vẫn đang chờ hai lượt nữa — lượt duyệt hiện ra không có nghĩa là đã chốt.
         Assert.Equal(RecordingStatus.PendingReview, dong.Status);
         Assert.Equal(vi.RecordingId, dong.ViRecordingId);
+    }
+
+    /// <summary>
+    /// `groupBy=pair` gom hai bản của một cặp vào MỘT dòng. Mặc định mỗi bản một dòng, nên màn
+    /// hình nào vẽ mỗi dòng thành một thẻ cặp sẽ thấy cặp nào cũng hiện hai lần — đúng chỗ đội
+    /// frontend báo. Dòng gom phải mang bản đang cần tay người duyệt, không phải bản bất kỳ.
+    /// </summary>
+    [Fact]
+    public async Task GomTheoCap_MoiCapMotDong_MangBanDangCanDuyet()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var dau = Dau();
+
+        var (manager, campaign) = await TaoDotAsync(dau, ct);
+        var speaker = await CreateUserAsync($"sp-gom-{dau}@test.local", RoleName.Speaker);
+        var reviewer = await CreateUserAsync($"rv-gom-{dau}@test.local", RoleName.Reviewer);
+
+        var task = await CreateTaskAsync(campaign.CampaignId, TaskType.Review, 4,
+            manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
+
+        Db.TaskAssignments.Add(new TaskAssignment
+        {
+            TaskId = task.TaskId,
+            UserId = reviewer.UserId,
+            AssignmentStatus = AssignmentStatus.Active,
+            AssignedAt = DateTimeOffset.UtcNow
+        });
+
+        var scriptIds = new List<string>();
+
+        foreach (var i in new[] { 1, 2 })
+        {
+            var script = await CreateValidatedScriptAsync(
+                $"[vi]Cả nhóm đã [en]deploy{dau}{i} [vi]xong rồi.",
+                $"[vi]Cả nhóm đã triển khai xong rồi {dau}{i}.",
+                ScriptDomain.ItTechnology, speaker.UserId);
+
+            scriptIds.Add(script.ScriptId);
+
+            foreach (var variant in new[] { SentenceVariant.CodeSwitching, SentenceVariant.PureVietnamese })
+            {
+                var recording = await CreateRecordingAsync(script.ScriptId, speaker.UserId, variant);
+
+                Db.TaskRecordings.Add(new TaskRecording
+                {
+                    TaskId = task.TaskId,
+                    RecordingId = recording.RecordingId,
+                    Status = TaskRecordingStatus.Queued
+                });
+            }
+        }
+
+        await Db.SaveChangesAsync(ct);
+
+        // Mặc định: hai cặp ra BỐN dòng.
+        var theoBanGhi = await ReviewService.GetTaskRecordingsAsync(
+            task.TaskId, reviewer.UserId, new TaskReviewQuery { PageSize = 50 }, ct);
+
+        Assert.Equal(4, theoBanGhi.Total);
+        Assert.Equal(4, theoBanGhi.Items.Count);
+        Assert.Equal(2, theoBanGhi.Items.Select(i => i.ScriptId).Distinct().Count());
+
+        // Gom theo cặp: hai cặp ra HAI dòng, và tổng cũng đếm theo cặp.
+        var theoCap = await ReviewService.GetTaskRecordingsAsync(
+            task.TaskId, reviewer.UserId,
+            new TaskReviewQuery { PageSize = 50, GroupBy = TaskReviewGrouping.Pair }, ct);
+
+        Assert.Equal(2, theoCap.Total);
+        Assert.Equal(2, theoCap.Items.Count);
+        Assert.Equal([.. scriptIds.OrderBy(x => x)], [.. theoCap.Items.Select(i => i.ScriptId).OrderBy(x => x)]);
+
+        foreach (var dong in theoCap.Items)
+        {
+            // Dòng mang bản duyệt được ngay, và bản còn lại nằm trong sibling với trạng thái riêng.
+            Assert.True(dong.CanReview);
+            Assert.Equal(ReviewBlocker.None, dong.Blocker);
+
+            var kia = Assert.IsType<ReviewSiblingDto>(dong.Sibling);
+            Assert.NotEqual(dong.SentenceVariant, kia.SentenceVariant);
+            Assert.NotEqual(dong.RecordingId, kia.RecordingId);
+            Assert.False(kia.MyReviewDone);
+            Assert.True(kia.CanReview);
+        }
     }
 }
