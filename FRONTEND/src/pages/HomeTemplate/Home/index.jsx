@@ -171,8 +171,7 @@ function CurrentRoundCard({ round }) {
 /* ─────────────────────────── Bảng xếp hạng ─────────────────────────── */
 
 function Leaderboard({ rows, hasRound }) {
-  // API xếp hạng theo số bản đã nộp (submitted, không tính bản trượt kiểm tra tự động)
-  const maxSubmitted = Math.max(1, ...rows.map((r) => r.submitted));
+  // API xếp hạng theo số bản đã nộp (submitted); thanh = submittedCapped / targetQty (chỉ tiêu riêng của từng người)
   const meIndex = rows.findIndex((r) => r.isMe);
   const me = rows[meIndex];
   const ahead = meIndex > 0 ? rows[meIndex - 1] : null;
@@ -180,9 +179,15 @@ function Leaderboard({ rows, hasRound }) {
   // API chỉ trả người đã có bản nộp, tối đa top 5 -> chưa có tên mình thì nhắc theo từng trường hợp
   let footer = 'Tham gia một đợt để có tên trong bảng xếp hạng.';
   if (hasRound && me) {
+    const leftToTarget = me.targetQty ? me.targetQty - me.submitted : 0;
+    const targetNote = me.targetQty
+      ? leftToTarget > 0
+        ? <> · còn <span style={{ color: HOME_ACCENT_HOVER }}>{leftToTarget} bản</span> nữa là đạt chỉ tiêu.</>
+        : ' · Bạn đã đạt chỉ tiêu đợt này.'
+      : null;
     footer = ahead
-      ? <>Còn <span style={{ color: HOME_ACCENT_HOVER }}>{ahead.submitted - me.submitted + 1} bản nộp</span> nữa là bạn vượt hạng {ahead.rank}.</>
-      : 'Bạn đang dẫn đầu đợt này.';
+      ? <>Còn <span style={{ color: HOME_ACCENT_HOVER }}>{ahead.submitted - me.submitted + 1} bản nộp</span> nữa là bạn vượt hạng {ahead.rank}{targetNote ?? '.'}</>
+      : <>Bạn đang dẫn đầu đợt này{targetNote ?? '.'}</>;
   } else if (hasRound) {
     // Bảng trống thì không hiện dòng chú thích
     footer = rows.length === 0 ? null : 'Nộp thêm bản ghi để có tên trong top đợt này.';
@@ -202,6 +207,9 @@ function Leaderboard({ rows, hasRound }) {
             return <div key={`empty-${i}`} className="flex-1 min-h-[44px]" style={{ borderTop: i > 0 && !rows[i - 1]?.isMe ? `1px dashed ${HOME_BORDER}` : '1px solid transparent' }} />;
           }
           const medal = MEDALS[user.rank];
+          // Không có chỉ tiêu (targetQty null/0) -> thanh trống, chỉ hiện số đã nộp
+          const percent = user.targetQty ? Math.min(100, Math.round((user.submittedCapped / user.targetQty) * 100)) : 0;
+          const reached = Boolean(user.targetQty) && user.submitted >= user.targetQty;
           const prevIsMe = i > 0 && rows[i - 1].isMe;
           return (
             <div
@@ -227,10 +235,12 @@ function Leaderboard({ rows, hasRound }) {
                 )}
               </span>
               <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: HOME_TRACK }}>
-                <div className="h-full rounded-full" style={{ width: `${Math.round((user.submitted / maxSubmitted) * 100)}%`, background: user.isMe ? HOME_ACCENT : HOME_BAR }} />
+                <div className="h-full rounded-full" style={{ width: `${percent}%`, background: user.isMe ? HOME_ACCENT : HOME_BAR }} />
               </div>
-              <span className="w-10 text-right text-body font-emphasis tabular-nums" style={{ color: user.isMe ? HOME_ACCENT : HOME_TEXT_HEADING }}>
+              <span className="w-[92px] shrink-0 inline-flex items-center justify-end gap-1 text-body font-emphasis tabular-nums whitespace-nowrap" style={{ color: user.isMe ? HOME_ACCENT : HOME_TEXT_HEADING }}>
                 {user.submitted}
+                {user.targetQty ? <span className="font-regular" style={{ color: HOME_TEXT_FAINT }}>/{user.targetQty}</span> : null}
+                {reached && <CircleCheck className="w-3.5 h-3.5 shrink-0" style={{ color: HOME_ACCENT }} />}
               </span>
             </div>
           );
@@ -288,9 +298,9 @@ function RejectedList({ items }) {
                   </p>
                   <p className="text-caption font-regular mt-0.5" style={{ color: HOME_URGENT_TEXT }}>{item.reason ?? 'Bị từ chối'}</p>
                 </div>
-                {/* TODO: trang Ghi âm nhận state.rerecordId để mở đúng câu cần ghi lại */}
+                {/* Mở trang Ghi âm ở chế độ ghi lại đúng bản bị từ chối */}
                 <button
-                  onClick={() => navigate('/speaker/record-speech', { state: { rerecordId: item.recordingId } })}
+                  onClick={() => navigate(`/speaker/record-speech?rerecord=${item.recordingId}`)}
                   aria-label="Ghi lại"
                   className="w-8 h-8 rounded-[10px] shrink-0 flex items-center justify-center cursor-pointer transition-colors bg-[var(--soft)] hover:bg-[var(--soft-border)]"
                   style={{ '--soft': HOME_ACCENT_SOFT_BG, '--soft-border': HOME_ACCENT_SOFT_BORDER, color: HOME_ACCENT_HOVER }}
