@@ -73,10 +73,20 @@ public class ScriptService(
     /// Câu nào đã có lượt duyệt rồi thì câu đó không còn trong hàng đợi nữa, nên chặn
     /// ở đây là chốt cuối cho trường hợp hai người cùng bấm duyệt trong khoảng
     /// mili-giây — không có chốt này thì lượt sau âm thầm ghi đè lượt trước.
+    ///
+    /// "Một lượt" tính theo VÒNG, không theo cả đời câu. Mỗi lần câu quay về chờ duyệt (đa số từ
+    /// chối bản ghi vì lý do nội dung, khôi phục câu bị loại/ngừng dùng) là một vòng mới, và trigger
+    /// fn_script_validated_by_domain_reviewer đòi một lượt duyệt MỚI sau lần đặt lại đó. Nếu chặn
+    /// theo mọi lượt từng có thì câu kẹt ở giữa: không duyệt lại được (409) mà cũng không thể
+    /// validated lại (trigger). Vì vậy: câu đang Validated là vòng này đã có lượt; câu đang chờ duyệt
+    /// chỉ bị chặn khi đã có lượt đóng dấu từ mốc <c>updated_at</c> trở đi (người kia đang dở tay).
     /// </summary>
-    private async Task EnsureTextReviewAllowedAsync(string scriptId, long userId, CancellationToken ct)
+    private async Task EnsureTextReviewAllowedAsync(Script script, long userId, CancellationToken ct)
     {
-        var alreadyReviewed = await repository.HasAcceptedReviewAsync(scriptId, ct);
+        var scriptId = script.ScriptId;
+
+        var alreadyReviewed = script.Status == ScriptStatus.Validated
+            || await repository.HasReviewInCurrentRoundAsync(scriptId, ct);
 
         if (alreadyReviewed)
         {
@@ -430,7 +440,7 @@ public class ScriptService(
         // Không có hai chốt này thì nhiều người mở cùng một câu đều thấy nó "chưa ai
         // duyệt" rồi cùng gửi quyết định — lượt sau ghi đè lượt trước, và câu đã
         // sửa xong lại bị sửa ngược.
-        await EnsureTextReviewAllowedAsync(scriptId, userId, ct);
+        await EnsureTextReviewAllowedAsync(script, userId, ct);
 
         var review = new ScriptReview
         {

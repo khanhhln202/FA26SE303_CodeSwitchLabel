@@ -1,6 +1,10 @@
 stateDiagram-v2
+  %% Source: CampaignStateMachine.Evaluate(taskCount, completedTaskCount), recomputed by
+  %% CampaignRepository.RefreshStatusAsync. The state is a pure function of the campaign's tasks.
+  %% A cancelled task does not count as completed, so a campaign that holds one stays in_progress.
   [*] --> open: campaign created, no tasks
   open --> in_progress: first task added
   in_progress --> completed: all tasks completed
-  completed --> in_progress: a task reopens
+  completed --> in_progress: a task reopens or a new task is added
   in_progress --> open: all tasks detached/deleted
+  completed --> open: all tasks detached/deleted

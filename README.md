@@ -54,7 +54,7 @@ Phụ thuộc backend đi một chiều: **Api → Services → Repositories**.
 ```
 FA26SE303_CodeSwitchLabel/
 ├── docker-compose.yml            # dev: postgres + minio (+ api profile cho FE)
-├── docker-compose.local.yml      # bản đè image MinIO, dùng cho e2e 03 (tắt bật lại hệ thống)
+├── docker-compose.local.yml      # bản đè image MinIO, dùng cho e2e 03 (tắt bật lại hệ thống) — chỉ có trên máy cá nhân, .gitignore loại ra
 ├── backend/
 │   ├── CodeSwitchLabel.sln
 │   ├── Dockerfile                # build SDK 10 + runtime aspnet 10 + ffmpeg
@@ -76,7 +76,7 @@ FA26SE303_CodeSwitchLabel/
 │   └── demo-test-api.html
 ├── migrations/                   # V2..V17 (task độc lập, hàng đợi văn bản, đề xuất câu, quota, phân câu theo người nhận, hàng đợi ghi âm có người nhận, lượt giao tự Completed khi đạt quota)
 ├── deploy/                       # prod: docker-compose.prod.yml, Caddyfile, deploy.sh, .env.example, README.md
-├── demo/                         # input_text_demo.json + demo-live-import.json (7 câu, 3 câu lỗi cố ý) + wav/m4a mẫu + test-them/
+├── demo/                         # input_text_demo.json + wav/m4a mẫu + test-them/; demo-live-import.json (7 câu, 3 câu lỗi cố ý) do kịch bản demo tự sinh, .gitignore loại ra
 └── .github/workflows/            # backend.yml (CI build + test), deploy.yml (tự động lên máy chủ)
 ```
 
@@ -188,7 +188,7 @@ Luồng chính (7 bước):
 - **HÀNG ĐỢI CHUNG (`script_queue`)** — mọi câu văn bản đi qua hai chặng: `text_review` → `recording`. Hàng do **trigger** sinh chứ không phải service, nên không đường ghi nào (kể cả SQL thẳng) tạo được câu lọt qua việc duyệt. Thứ tự lấy là FIFO theo `enqueued_at`.
   - **Giữ chỗ bằng `fn_queue_claim_next`** — đọc hàng và ghi chủ nằm trong cùng một transaction, dùng `FOR UPDATE SKIP LOCKED`. Đây là chốt chặn "hai người không được cùng nhận một câu": nếu làm bằng EF thì khoảng giữa SELECT và UPDATE là lúc trống để người khác chen vào.
   - Claim có hạn (`queue.claim_ttl_minutes`, mặc định 30). Người mở câu rồi đóng tab không giữ câu vĩnh viễn.
-- **Duyệt văn bản chỉ MỘT lượt**, và chỉ người Task Manager giao câu đó trong lô mới được duyệt (`text_review.batch_size`, mặc định 100 câu/người).
+- **Duyệt văn bản chỉ MỘT lượt mỗi vòng.** Câu đã chia lô (`text_review.batch_size`, mặc định 100 câu/người) thì chỉ người nhận lô đó được duyệt; câu còn trong hàng đợi chung thì Reviewer đủ chủ đề nào cũng duyệt được. Câu bị đa số từ chối bản ghi vì lý do nội dung quay về chờ duyệt là một **vòng mới**: lượt duyệt cũ không còn tính và câu duyệt lại được.
 - **Mã câu có nghĩa** do DB sinh (`fn_generate_script_id`): `s_211000000001` = 3 chữ số nghĩa (số từ EN + domain + quan hệ Anh–Việt) + 9 chữ số thứ tự. CHECK constraint chặn mã sai ý nghĩa. ID cũ 9 chữ số (`s_211000001`) vẫn hợp lệ; frontend coi ID là chuỗi mờ, đừng cắt theo độ dài.
 - **Mỗi cặp cần 2 bản ghi âm**: `r_cs_…` + `r_vi_…` (`_t2` khi thu lại). Trigger `trg_recording_single_speaker` bắt 1 cặp chỉ 1 người đọc (cùng giọng/buổi) — **kể cả sau khi bản ghi bị loại**, nên câu quay lại hàng đợi thu lại với chính người đọc cũ.
 - **Duyệt mù tối đa 3 lượt của 3 người khác nhau, chốt ngay khi một bên đủ 2 phiếu** bởi trigger `trg_review_majority`. Lượt thứ ba chỉ cần khi hai phiếu đầu lệch nhau; hoà ở số vòng chẵn thì tính là trượt. Từ chối bắt buộc ≥1 lý do; lý do nhóm `content` kéo cặp câu về `pending_validation`. **Trạng thái do DATABASE chốt, code chỉ ghi lượt rồi đọc lại.** Trong vòng duyệt **không có kiểm tra tự động nào** — auto-QC chỉ chạy lúc nộp bản ghi.
@@ -215,8 +215,8 @@ Lưu ý `ObjectStorage:ServiceUrl` (API gọi MinIO trong mạng Docker, `http:/
 
 | Loại | Lệnh |
 |---|---|
-| Backend unit + integration | `dotnet test backend/CodeSwitchLabel.sln` |
-| Bỏ qua nhóm cần ffmpeg | `dotnet test backend/CodeSwitchLabel.sln --filter "Category!=RequiresFfmpeg"` |
+| Backend unit + integration | `dotnet run --project backend/tests/CodeSwitchLabel.Tests/CodeSwitchLabel.Tests.csproj -c Release` (xunit.v3 chạy trên Microsoft.Testing.Platform nên `dotnet test` báo "Zero tests ran"; CI cũng chạy đúng lệnh này) |
+| Bỏ qua nhóm cần ffmpeg | thêm `-- --filter-not-trait "Category=RequiresFfmpeg"` vào lệnh trên |
 | E2E (cần hệ thống chạy + DB mới) | `docker compose --profile api down -v; docker compose --profile api up -d --build` rồi `node backend/tests/e2e/01-core-flows.e2e.mjs`, `node backend/tests/e2e/02-users.e2e.mjs`, `node backend/tests/e2e/03-demo-scenario.e2e.mjs`, `node backend/tests/e2e/04-import-task-record.e2e.mjs`, `node backend/tests/e2e/05-proposals.e2e.mjs` (mặc định `BASE=http://localhost:5053`; riêng bộ 04 và 05 tự sinh dữ liệu riêng nên chạy lại không cần dựng lại DB) |
 | Nghiệm thu prod | `PASSWORD='<SEED_PASSWORD>' BASE=https://api.<domain> node backend/tests/e2e/01-core-flows.e2e.mjs` |
 

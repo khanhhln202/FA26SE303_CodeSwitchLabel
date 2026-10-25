@@ -5,12 +5,12 @@ flowchart LR
   subgraph Vercel
     FE["React 19 SPA (Vite, TanStack Query)"]
   end
-  subgraph AzureVM["Azure VM (Docker Compose)"]
-    CADDY["Caddy 2 (TLS, Let's Encrypt)"]
+  subgraph AzureVM["Azure for Students VM (Docker Compose)"]
+    CADDY["Caddy 2<br/>TLS via Let's Encrypt, auto-renewed<br/>api.DOMAIN + files.DOMAIN, or one host with a /recordings path"]
     API["ASP.NET Core API (.NET 10)<br/>Api -> Services -> Repositories"]
     FFMPEG["ffmpeg / ffprobe<br/>normalize 16 kHz mono WAV + auto-QC"]
     DB[("PostgreSQL 16<br/>triggers, queue, views")]
-    S3[("MinIO (S3-compatible)<br/>WAV files, dataset files")]
+    S3[("MinIO (S3-compatible)<br/>WAV files")]
   end
   GH["GitHub + GitHub Actions<br/>CI build/test, deploy.sh"]
   Users --> FE
@@ -18,5 +18,6 @@ flowchart LR
   API -- "EF Core / Npgsql" --> DB
   API -- "AWSSDK.S3 (signed URLs)" --> S3
   API --> FFMPEG
-  FE -. "audio via signed URL (15 min)" .-> S3
-  GH -- "deploy on push to main" --> AzureVM
+  FE -. "audio via signed URL (15 min)" .-> CADDY
+  CADDY -. "files.DOMAIN or /recordings/*" .-> S3
+  GH -- "deploy on push to main, after Backend CI is green (SSH + deploy.sh)" --> AzureVM

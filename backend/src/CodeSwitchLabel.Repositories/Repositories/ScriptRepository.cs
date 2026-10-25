@@ -23,6 +23,16 @@ public interface IScriptRepository
     Task<bool> HasAcceptedReviewAsync(string scriptId, CancellationToken ct = default);
 
     /// <summary>
+    /// Câu đã có lượt duyệt nội dung (Accepted/Edited) trong VÒNG HIỆN TẠI chưa: lượt đóng dấu
+    /// từ lần cuối câu bị ghi (<c>script.updated_at</c>) trở đi. Cùng mốc với trigger
+    /// fn_script_validated_by_domain_reviewer ("after last reset"), nên câu bị đa số từ chối bản
+    /// ghi vì lý do nội dung và quay về chờ duyệt thì lượt duyệt cũ không còn tính — nếu tính thì
+    /// câu không bao giờ duyệt lại được (SR-16). Câu đã Validated có <c>updated_at</c> nhảy qua
+    /// lượt duyệt vừa chốt nó, nên chặn lượt thứ hai ở trạng thái, không ở phép so này.
+    /// </summary>
+    Task<bool> HasReviewInCurrentRoundAsync(string scriptId, CancellationToken ct = default);
+
+    /// <summary>
     /// Câu đã có trong kho chưa, so theo khoá chuẩn hoá: bỏ nhãn ngôn ngữ, gộp khoảng
     /// trắng, không phân biệt hoa thường.
     /// </summary>
@@ -151,6 +161,12 @@ public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
         db.ScriptReviews.AsNoTracking().AnyAsync(
             r => r.ScriptId == scriptId &&
                  (r.Action == ScriptReviewAction.Accepted || r.Action == ScriptReviewAction.Edited), ct);
+
+    public Task<bool> HasReviewInCurrentRoundAsync(string scriptId, CancellationToken ct = default) =>
+        db.ScriptReviews.AsNoTracking().AnyAsync(
+            r => r.ScriptId == scriptId &&
+                 (r.Action == ScriptReviewAction.Accepted || r.Action == ScriptReviewAction.Edited) &&
+                 r.ReviewedAt >= r.Script.UpdatedAt, ct);
 
     public async Task<bool> ContentExistsAsync(string csContent, CancellationToken ct = default) =>
         (await FindExistingContentsAsync([csContent], ct)).Count > 0;
