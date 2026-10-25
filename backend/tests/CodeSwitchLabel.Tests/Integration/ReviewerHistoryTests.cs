@@ -327,4 +327,55 @@ public sealed class ReviewerHistoryTests : IntegrationTestBase
         Assert.Equal("Câu thiếu tự nhiên, cần viết lại.", reported.Comment);
         Assert.Empty(reported.Alignment);
     }
+
+    /// <summary>
+    /// Cặp có bản cs ĐÃ đạt mà bản vi chưa ai duyệt: trạng thái gộp của cặp vẫn là "đang chờ"
+    /// (cặp chỉ xong khi cả hai bản xong), nhưng hai trường riêng phải nói đúng bản nào đã
+    /// xong. Thiếu chúng thì màn hình chỉ ghi "Chờ duyệt" và giấu mất một nửa đã được duyệt.
+    /// </summary>
+    [Fact]
+    public async Task CapNuaChung_TrangThaiTungBanNoiDungBanNaoDaXong()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var speaker = await CreateUserAsync(NewUniqueEmail("nua"), RoleName.Speaker);
+        var nguoiKhac = await CreateUserWithBuilderAsync(RoleName.Reviewer, fullName: "Người duyệt thứ hai");
+
+        var script = await CreateScriptAsync(
+            "[vi]Tối nay bên kỹ thuật sẽ [en]update [vi]máy chủ.",
+            "[vi]Tối nay bên kỹ thuật sẽ cập nhật máy chủ.",
+            ScriptDomain.ItTechnology, AdminUserId);
+
+        var cs = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
+        var vi = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.PureVietnamese);
+
+        // Hai phiếu đạt trên bản cs là quá bán — trigger chốt bản đó ngay. Bản vi không ai duyệt.
+        Db.Reviews.Add(new TestDataBuilders.ReviewBuilder()
+            .WithRecordingId(cs.RecordingId).WithReviewerId(ReviewerUserId).WithRound(1).Build());
+        Db.Reviews.Add(new TestDataBuilders.ReviewBuilder()
+            .WithRecordingId(cs.RecordingId).WithReviewerId(nguoiKhac.UserId).WithRound(2).Build());
+        await Db.SaveChangesAsync(ct);
+
+        await Db.Entry(cs).ReloadAsync(ct);
+        Assert.Equal(RecordingStatus.Approved, cs.Status);
+
+        // --- lịch sử của Reviewer
+        var cuaReviewer = await _stats.GetHistoryAsync(
+            ReviewerUserId, new ReviewerHistoryQuery { PageSize = 50 }, ct);
+
+        var dongRv = Assert.Single(cuaReviewer.Items, i => i.ScriptId == script.ScriptId);
+        Assert.Equal(RecordingStatus.PendingReview, dongRv.RecordingStatus);
+        Assert.Equal(RecordingStatus.Approved, dongRv.CsStatus);
+        Assert.Equal(RecordingStatus.PendingReview, dongRv.ViStatus);
+
+        // --- lịch sử của Speaker
+        var rounds = Services.GetRequiredService<ISpeakerRoundsService>();
+        var cuaSpeaker = await rounds.GetRecordingHistoryAsync(
+            speaker.UserId, new SpeakerHistoryQuery { PageSize = 50 }, ct);
+
+        var dongSp = Assert.Single(cuaSpeaker.Items, i => i.ScriptId == script.ScriptId);
+        Assert.Equal(RecordingStatus.PendingReview, dongSp.Status);
+        Assert.Equal(RecordingStatus.Approved, dongSp.CsStatus);
+        Assert.Equal(RecordingStatus.PendingReview, dongSp.ViStatus);
+        Assert.Equal(vi.RecordingId, dongSp.ViRecordingId);
+    }
 }

@@ -257,7 +257,10 @@ public class ReviewerStatsService(
                         v.ReviewRound, v.Decision.ToString(), ReviewDisplay.ReasonOf(v),
                         v.RecordingId, v.ReviewedAt))],
                 both.Length > 0 ? both.Min(r => r.Reviews.Count) : 0,
-                soVongCan));
+                soVongCan,
+                // Trạng thái RIÊNG của từng bản — xem ghi chú ở lịch sử ghi âm của Speaker.
+                cs?.Status,
+                vi?.Status));
         }
 
         return new PagedResult<ReviewerHistoryItemDto>(items, query.Page, query.PageSize, total);
