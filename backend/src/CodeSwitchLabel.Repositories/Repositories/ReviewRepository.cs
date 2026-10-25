@@ -104,6 +104,15 @@ public interface IReviewRepository
         long taskId, long reviewerId, bool onlyReviewable, int roundsRequired,
         int page, int pageSize, SortSpec<TaskReviewSortField> sort, CancellationToken ct = default);
 
+    /// <summary>
+    /// Như <see cref="GetTaskReviewRowsAsync"/> nhưng phân trang THEO CẶP CÂU: gom trước rồi mới
+    /// cắt trang, nếu không hai bản của một cặp có thể rơi về hai trang và cặp đó hiện hai lần.
+    /// Trả kèm thứ tự cặp của trang, vì các dòng lấy về không giữ thứ tự đó.
+    /// </summary>
+    Task<(List<TaskReviewRow> Rows, int Total, List<string> ScriptOrder)> GetTaskReviewPairsAsync(
+        long taskId, long reviewerId, bool onlyReviewable, int roundsRequired,
+        int page, int pageSize, SortSpec<TaskReviewSortField> sort, CancellationToken ct = default);
+
     Task<List<Recording>> GetByScriptAsync(string scriptId, CancellationToken ct = default);
 
     /// <summary>
@@ -235,17 +244,7 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
         long taskId, long reviewerId, bool onlyReviewable, int roundsRequired,
         int page, int pageSize, SortSpec<TaskReviewSortField> sort, CancellationToken ct = default)
     {
-        var query = db.TaskRecordings.AsNoTracking().Where(tr => tr.TaskId == taskId);
-
-        if (onlyReviewable)
-        {
-            // Giống hệt bộ lọc của GetNextForReviewerAsync, để danh sách và GET next không nói khác nhau.
-            query = query
-                .Where(tr => tr.Recording.Status == RecordingStatus.PendingReview)
-                .Where(tr => tr.Recording.SpeakerId != reviewerId)
-                .Where(tr => !tr.Recording.Reviews.Any(v => v.ReviewerId == reviewerId))
-                .Where(tr => tr.Recording.Reviews.Count < roundsRequired);
-        }
+        var query = TaskReviewQueryable(taskId, reviewerId, onlyReviewable, roundsRequired);
 
         var total = await query.CountAsync(ct);
 
@@ -268,29 +267,101 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
             _ => query.OrderByDescending(tr => tr.Recording.Reviews.Count)
         };
 
-        var rows = await ordered
-            // ThenBy thời điểm thu giữ nguyên thứ tự cũ, ThenBy mã bản ghi chốt
-            // chặn cuối — hai bản của cùng một cặp có thể trùng thời điểm thu.
-            .ThenBy(tr => tr.Recording.RecordedAt)
-            .ThenBy(tr => tr.RecordingId)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(tr => new TaskReviewRow(
-                tr.RecordingId,
-                tr.Recording.SpeakerId,
-                tr.Recording.ScriptId,
-                tr.Recording.SentenceVariant,
-                tr.Recording.SentenceVariant == SentenceVariant.CodeSwitching
-                    ? tr.Recording.Script.CsContent
-                    : tr.Recording.Script.ViContent,
-                tr.Recording.DurationSec,
-                tr.Recording.Status,
-                tr.Status,
-                tr.Recording.Reviews.Count,
-                tr.Recording.Reviews.Any(v => v.ReviewerId == reviewerId)))
+        var rows = await TaskReviewRows(
+                ordered
+                    // ThenBy thời điểm thu giữ nguyên thứ tự cũ, ThenBy mã bản ghi chốt
+                    // chặn cuối — hai bản của cùng một cặp có thể trùng thời điểm thu.
+                    .ThenBy(tr => tr.Recording.RecordedAt)
+                    .ThenBy(tr => tr.RecordingId)
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize),
+                reviewerId)
             .ToListAsync(ct);
 
         return (rows, total);
+    }
+
+    /// <summary>Bộ lọc dùng chung cho danh sách theo bản ghi và danh sách theo cặp.</summary>
+    private IQueryable<TaskRecording> TaskReviewQueryable(
+        long taskId, long reviewerId, bool onlyReviewable, int roundsRequired)
+    {
+        var query = db.TaskRecordings.AsNoTracking().Where(tr => tr.TaskId == taskId);
+
+        if (!onlyReviewable) return query;
+
+        // Giống hệt bộ lọc của GetNextForReviewerAsync, để danh sách và GET next không nói khác nhau.
+        return query
+            .Where(tr => tr.Recording.Status == RecordingStatus.PendingReview)
+            .Where(tr => tr.Recording.SpeakerId != reviewerId)
+            .Where(tr => !tr.Recording.Reviews.Any(v => v.ReviewerId == reviewerId))
+            .Where(tr => tr.Recording.Reviews.Count < roundsRequired);
+    }
+
+    private static IQueryable<TaskReviewRow> TaskReviewRows(
+        IQueryable<TaskRecording> query, long reviewerId) =>
+        query.Select(tr => new TaskReviewRow(
+            tr.RecordingId,
+            tr.Recording.SpeakerId,
+            tr.Recording.ScriptId,
+            tr.Recording.SentenceVariant,
+            tr.Recording.SentenceVariant == SentenceVariant.CodeSwitching
+                ? tr.Recording.Script.CsContent
+                : tr.Recording.Script.ViContent,
+            tr.Recording.DurationSec,
+            tr.Recording.Status,
+            tr.Status,
+            tr.Recording.Reviews.Count,
+            tr.Recording.Reviews.Any(v => v.ReviewerId == reviewerId)));
+
+    public async Task<(List<TaskReviewRow> Rows, int Total, List<string> ScriptOrder)> GetTaskReviewPairsAsync(
+        long taskId, long reviewerId, bool onlyReviewable, int roundsRequired,
+        int page, int pageSize, SortSpec<TaskReviewSortField> sort, CancellationToken ct = default)
+    {
+        var query = TaskReviewQueryable(taskId, reviewerId, onlyReviewable, roundsRequired);
+
+        var total = await query.Select(tr => tr.Recording.ScriptId).Distinct().CountAsync(ct);
+
+        var pairs = query
+            .GroupBy(tr => tr.Recording.ScriptId)
+            .Select(g => new
+            {
+                ScriptId = g.Key,
+                MaxReviews = g.Max(tr => tr.Recording.Reviews.Count),
+                LastRecordedAt = g.Max(tr => tr.Recording.RecordedAt)
+            });
+
+        // `status` không sắp theo cặp được — cặp có hai bản ở hai trạng thái khác nhau — nên
+        // nó rơi về thứ tự mặc định: cặp gần đủ lượt duyệt lên trước, giống GET next.
+        var ordered = sort.Field switch
+        {
+            TaskReviewSortField.RecordedAt => sort.Descending
+                ? pairs.OrderByDescending(x => x.LastRecordedAt)
+                : pairs.OrderBy(x => x.LastRecordedAt),
+            TaskReviewSortField.ReviewCount => sort.Descending
+                ? pairs.OrderByDescending(x => x.MaxReviews)
+                : pairs.OrderBy(x => x.MaxReviews),
+            TaskReviewSortField.ScriptId => sort.Descending
+                ? pairs.OrderByDescending(x => x.ScriptId)
+                : pairs.OrderBy(x => x.ScriptId),
+            _ => pairs.OrderByDescending(x => x.MaxReviews)
+        };
+
+        var scriptOrder = await ordered
+            .ThenBy(x => x.ScriptId)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(x => x.ScriptId)
+            .ToListAsync(ct);
+
+        // Mới nhất trước: người gọi lấy lần thu mới nhất của mỗi biến thể bằng cách lấy dòng đầu.
+        var rows = await TaskReviewRows(
+                query.Where(tr => scriptOrder.Contains(tr.Recording.ScriptId))
+                    .OrderByDescending(tr => tr.Recording.RecordedAt)
+                    .ThenByDescending(tr => tr.RecordingId),
+                reviewerId)
+            .ToListAsync(ct);
+
+        return (rows, total, scriptOrder);
     }
 
     public async Task<List<Recording>> GetByScriptAsync(

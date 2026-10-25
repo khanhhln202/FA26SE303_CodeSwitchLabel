@@ -14,8 +14,10 @@ namespace CodeSwitchLabel.Api.Controllers;
 /// <remarks>
 /// Hai loại task:
 ///
-/// - **Recording** — danh sách script giao cho một Speaker thu âm.
-/// - **Review** — danh sách bản ghi vòng 1 giao cho một Reviewer duyệt.
+/// - **Recording** — danh sách cặp câu (script) giao cho một hoặc nhiều Speaker thu âm. Đếm theo cặp: đủ cả hai bản cs + vi đạt mới tính.
+/// - **Review** — danh sách bản ghi chờ duyệt giao cho một hoặc nhiều Reviewer. Đếm theo bản ghi. Mỗi bản ghi
+///   duyệt mù tối đa 3 lượt của 3 người khác nhau và chốt ngay khi một bên đủ 2 phiếu, nên mục không gắn với "vòng 1".
+///   Task duyệt cũng là nơi chia lô câu văn bản cho từng Reviewer duyệt nội dung (`text_review.batch_size`).
 ///
 /// Trạng thái **tự chạy theo công việc thật**: đạt chỉ tiêu thì Completed, chưa đạt thì
 /// InProgress, đã huỷ thì giữ nguyên.

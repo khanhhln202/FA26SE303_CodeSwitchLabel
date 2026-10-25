@@ -6,19 +6,23 @@ erDiagram
   APP_USER ||--o{ SYSTEM_CONFIG : updates
   APP_USER ||--o{ IMPORT_BATCH : imports
   IMPORT_BATCH ||--o{ SCRIPT : contains
+  APP_USER ||--o{ SCRIPT : creates
   SCRIPT ||--o{ SCRIPT_WORD : alignment
   SCRIPT ||--o{ SCRIPT_REVIEW : reviewed_by
   APP_USER ||--o{ SCRIPT_REVIEW : writes
   SCRIPT_ERROR_REASON ||--o{ SCRIPT_REVIEW : reason
   SCRIPT ||--o{ SCRIPT_PROPOSAL : proposed_on
   APP_USER ||--o{ SCRIPT_PROPOSAL : proposes
+  APP_USER |o--o{ SCRIPT_PROPOSAL : "decides (reviewer)"
   SCRIPT_ERROR_REASON ||--o{ SCRIPT_PROPOSAL : reason
   SCRIPT ||--o{ SCRIPT_QUEUE : queued_as
   APP_USER ||--o{ SCRIPT_QUEUE : claims
   CAMPAIGN ||--o{ TASK : groups
+  APP_USER ||--o{ TASK : "creates (task manager)"
   CAMPAIGN ||--o{ CAMPAIGN_REGISTRATION : joined_by
   APP_USER ||--o{ CAMPAIGN_REGISTRATION : registers
   APP_USER ||--o{ CAMPAIGN : "assigned_to (task manager)"
+  APP_USER ||--o{ CAMPAIGN : "creates (admin or task manager)"
   TASK ||--o{ TASK_ASSIGNMENT : assigned
   APP_USER ||--o{ TASK_ASSIGNMENT : receives
   TASK ||--o{ TASK_SCRIPT : includes
@@ -30,6 +34,7 @@ erDiagram
   TASK ||--o{ RECORDING : produced_in
   SCRIPT ||--o{ RECORDING : recorded_as
   APP_USER ||--o{ RECORDING : speaks
+  APP_USER |o--o{ RECORDING : "discards (reviewer)"
   RECORDING ||--o{ REVIEW : receives
   APP_USER ||--o{ REVIEW : reviews
   TASK ||--o{ REVIEW : "review task"

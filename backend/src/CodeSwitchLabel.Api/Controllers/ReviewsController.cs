@@ -52,9 +52,13 @@ public class ReviewsController(IReviewService reviewService, IReviewerStatsServi
     /// file âm thanh riêng, mỗi bản cần đủ `roundsRequired` lượt duyệt của riêng nó, và duyệt là
     /// gọi `POST /api/reviewer/recordings/{id}/review` cho TỪNG bản.
     ///
-    /// Muốn hiện mỗi cặp một thẻ thì gom các dòng theo `scriptId`; `sibling` cho biết dòng này đi
-    /// cặp với bản nào, còn `myReviewDone` / `blocker` / `reviewsDone` thì mỗi dòng mang riêng vì
-    /// hai bản có thể ở hai tình trạng khác nhau.
+    /// Muốn hiện mỗi cặp một thẻ thì có hai cách. Gọn nhất là **`?groupBy=pair`**: mỗi cặp đúng
+    /// MỘT dòng, phân trang theo cặp, và `sibling` mang đủ trạng thái riêng của bản còn lại
+    /// (`status`, `reviewsDone`, `myReviewDone`, `blocker`, `canReview`). Dòng trả về là bản
+    /// **đang cần tay bạn**: ưu tiên bản bấm duyệt được ngay, rồi tới bản còn chờ duyệt.
+    /// Duyệt vẫn là `POST /api/recordings/{id}/reviews` cho TỪNG bản — một cặp hai lần gọi.
+    ///
+    /// Cách còn lại là tự gom các dòng theo `scriptId` ở phía giao diện.
     ///
     /// task đã đủ chỉ tiêu (Completed) vẫn duyệt tiếp được — KPI không chặn.
     /// Chỉ task đã huỷ (Cancelled) mới khoá: các dòng khi đó có `canReview: false` và

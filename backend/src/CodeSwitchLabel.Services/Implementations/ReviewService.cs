@@ -74,9 +74,22 @@ public class ReviewService(
 
         var roundsRequired = await RoundsRequiredAsync(ct);
 
-        var (rows, total) = await reviews.GetTaskReviewRowsAsync(
-            taskId, reviewerId, query.OnlyReviewable, roundsRequired, query.Page, query.PageSize,
-            query.ToSort<TaskReviewSortField>(), ct);
+        List<TaskReviewRow> rows;
+        int total;
+        List<string>? thuTuCap = null;
+
+        if (query.GroupBy == TaskReviewGrouping.Pair)
+        {
+            (rows, total, thuTuCap) = await reviews.GetTaskReviewPairsAsync(
+                taskId, reviewerId, query.OnlyReviewable, roundsRequired, query.Page, query.PageSize,
+                query.ToSort<TaskReviewSortField>(), ct);
+        }
+        else
+        {
+            (rows, total) = await reviews.GetTaskReviewRowsAsync(
+                taskId, reviewerId, query.OnlyReviewable, roundsRequired, query.Page, query.PageSize,
+                query.ToSort<TaskReviewSortField>(), ct);
+        }
 
         // Một lần lấy đủ hai bản của mọi cặp câu trên trang, thay vì gọi N lần cho từng dòng.
         // Cùng một biến thể có thể có NHIỀU lần thu (bản cũ trượt QC / bị bỏ audio rồi thu lại
@@ -91,6 +104,18 @@ public class ReviewService(
                 g => g.OrderByDescending(r => r.RecordedAt)
                     .GroupBy(r => r.SentenceVariant)
                     .ToDictionary(v => v.Key, v => v.First()));
+
+        // Gom theo cặp: mỗi cặp một dòng, mang bản ĐANG CẦN TAY người duyệt. Bản kia nằm ở
+        // `sibling` với đủ trạng thái riêng của nó. Trước đây mỗi bản một dòng, nên màn hình
+        // vẽ mỗi dòng thành một thẻ cặp là cặp nào cũng hiện hai lần, nội dung y hệt.
+        if (thuTuCap is not null)
+        {
+            var theoCap = rows.GroupBy(r => r.ScriptId).ToDictionary(g => g.Key, g => g.ToList());
+
+            rows = [.. thuTuCap
+                .Where(theoCap.ContainsKey)
+                .Select(scriptId => ChonBanDaiDien(theoCap[scriptId], reviewerId, roundsRequired))];
+        }
 
         var items = rows
             .Select(x =>
@@ -117,7 +142,11 @@ public class ReviewService(
                         ? new ReviewSiblingDto(
                             sibling.RecordingId, sibling.SentenceVariant,
                             CodeSwitchText.Strip(sibling.ScriptTagged),
-                            sibling.Status, sibling.ReviewsDone)
+                            sibling.Status, sibling.ReviewsDone,
+                            sibling.MyReviewDone,
+                            ReviewRules.BlockerFor(
+                                x.SpeakerId == reviewerId, sibling.MyReviewDone,
+                                sibling.Status, sibling.ReviewsDone, roundsRequired))
                         : null);
             })
             .ToList();
@@ -608,6 +637,30 @@ public class ReviewService(
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// Bản đại diện cho một cặp khi gom theo cặp: ưu tiên bản người đang xem BẤM DUYỆT ĐƯỢC
+    /// NGAY, rồi tới bản còn chờ duyệt, cuối cùng mới tới bản chen tiếng Anh.
+    ///
+    /// Lấy bừa một bản thì gặp cảnh dòng hiện `canReview: false` trong khi bản kia của chính
+    /// cặp đó đang chờ chính người này duyệt — màn hình sẽ bảo "không duyệt được" một cách sai.
+    /// Mỗi biến thể lấy lần thu MỚI NHẤT; các dòng đã được xếp mới nhất trước từ repository.
+    /// </summary>
+    private static TaskReviewRow ChonBanDaiDien(
+        List<TaskReviewRow> cuaCap, long reviewerId, int roundsRequired)
+    {
+        var moiNhat = cuaCap
+            .GroupBy(r => r.SentenceVariant)
+            .Select(g => g.First())
+            .ToList();
+
+        return moiNhat.FirstOrDefault(r => ReviewRules.BlockerFor(
+                   r.SpeakerId == reviewerId, r.MyReviewDone, r.Status, r.ReviewsDone, roundsRequired)
+               == ReviewBlocker.None)
+               ?? moiNhat.FirstOrDefault(r => r.Status == RecordingStatus.PendingReview)
+               ?? moiNhat.FirstOrDefault(r => r.SentenceVariant == SentenceVariant.CodeSwitching)
+               ?? moiNhat[0];
     }
 
     /// <summary>Câu của bản ghi này, tuỳ biến thể: cs đọc câu chen, vi đọc câu thuần Việt.</summary>

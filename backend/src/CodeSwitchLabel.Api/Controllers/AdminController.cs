@@ -41,8 +41,11 @@ public class SystemConfigController(ISystemConfigService configService) : Contro
 {
     /// <summary>Toàn bộ tham số hệ thống.</summary>
     /// <remarks>
-    /// Bảy tham số đầu do lược đồ của nhóm tạo sẵn. Hai tham số thời lượng bản ghi là đề xuất
-    /// của nhóm backend, **chưa được giảng viên duyệt**.
+    /// Các tham số do lược đồ (`docs/codeswitchlabel.sql`) tạo sẵn, gom theo tiền tố khoá: `review.*`,
+    /// `recording.*` (ngưỡng auto-QC), `import.*`, `quality.*`, `queue.*`, `text_review.*`. Danh sách đầy đủ là
+    /// kết quả của chính endpoint này nên không đếm cứng ở đây. Ba khoá `quality.*` (ngưỡng chống rác) là
+    /// GIÁ TRỊ TẠM chờ giảng viên xác nhận; ngưỡng thời lượng bản ghi cũng là đề xuất của nhóm backend
+    /// và **chưa được giảng viên duyệt**.
     ///
     /// Lưu ý: `review.rounds_required` đổi được, trigger `trg_review_majority` đọc cùng tham số
     /// đó nên hai bên không lệch nhau. Lưu ý thứ hai: đổi nó là mọi chỗ đang giả định
