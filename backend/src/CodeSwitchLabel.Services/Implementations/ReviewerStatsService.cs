@@ -217,6 +217,22 @@ public class ReviewerStatsService(
             // Cặp có mặt trong lịch sử nghĩa là tôi đã duyệt một bản của nó, nên chắc chắn có ít nhất một bản.
             var take = (cs ?? vi)!;
             var both = new[] { cs, vi }.OfType<Recording>().ToArray();
+            // Migration V11 chốt trạng thái trong database. Tính thêm kết quả từ các phiếu
+            // để lịch sử vẫn hiện đúng cho bản cũ chưa được trigger chốt lại.
+            var statusOf = (Recording recording) => recording.Status == RecordingStatus.PendingReview
+                ? ReviewRules.Outcome(
+                    recording.Reviews.Select(review => review.Decision).ToArray(), soVongCan)
+                    ?? RecordingStatus.PendingReview
+                : recording.Status;
+            var csStatus = cs is null ? (RecordingStatus?)null : statusOf(cs);
+            var viStatus = vi is null ? (RecordingStatus?)null : statusOf(vi);
+            var pairStatus = both.Any(r => statusOf(r) == RecordingStatus.Rejected)
+                ? RecordingStatus.Rejected
+                : csStatus == RecordingStatus.Approved && viStatus == RecordingStatus.Approved
+                    ? RecordingStatus.Approved
+                    : both.Length > 0 && both.All(r => statusOf(r) == RecordingStatus.QcFailed)
+                        ? RecordingStatus.QcFailed
+                        : RecordingStatus.PendingReview;
 
             items.Add(new ReviewerHistoryItemDto(
                 pair.ScriptId,
@@ -231,16 +247,8 @@ public class ReviewerStatsService(
                 await SignAsync(vi, ct),
                 cs?.DurationSec ?? vi?.DurationSec ?? 0,
                 (pair.HasReject == 1 ? ReviewDecision.Rejected : ReviewDecision.Approved).ToString(),
-                // Trạng thái của cặp, cùng luật với lịch sử ghi âm của Speaker: có bản bị từ
-                // chối thì cặp đó từ chối; đủ cả hai bản đạt thì mới là đạt; trượt QC hết thì
-                // báo lỗi chất lượng; còn lại là đang chờ.
-                both.Any(r => r.Status == RecordingStatus.Rejected)
-                    ? RecordingStatus.Rejected
-                    : cs?.Status == RecordingStatus.Approved && vi?.Status == RecordingStatus.Approved
-                        ? RecordingStatus.Approved
-                        : both.Length > 0 && both.All(r => r.Status == RecordingStatus.QcFailed)
-                            ? RecordingStatus.QcFailed
-                            : RecordingStatus.PendingReview,
+                // Có bản bị từ chối thì cả cặp từ chối; cả hai đạt thì cặp đạt.
+                pairStatus,
                 pair.LastReviewedAt,
                 // Lịch sử chỉ hiện cặp mà người xem ĐÃ có phiếu (query lọc ReviewerId ở trên),
                 // nên sau khi đã bỏ phiếu thì được xem đủ phiếu của cả hai bản — kể cả khi
@@ -259,8 +267,8 @@ public class ReviewerStatsService(
                 both.Length > 0 ? both.Min(r => r.Reviews.Count) : 0,
                 soVongCan,
                 // Trạng thái RIÊNG của từng bản — xem ghi chú ở lịch sử ghi âm của Speaker.
-                cs?.Status,
-                vi?.Status));
+                csStatus,
+                viStatus));
         }
 
         return new PagedResult<ReviewerHistoryItemDto>(items, query.Page, query.PageSize, total);
