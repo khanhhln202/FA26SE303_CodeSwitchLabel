@@ -146,10 +146,10 @@ public record ReviewerProgressDto(int TotalReviews, IReadOnlyList<ReviewTaskProg
 /// <summary>Một dòng là một bản ghi, hay là một cặp câu.</summary>
 public enum TaskReviewGrouping
 {
-    /// <summary>Mặc định: mỗi bản thu một dòng, nên một cặp câu cho ra hai dòng.</summary>
+    /// <summary>Mỗi bản thu một dòng, nên một cặp câu cho ra HAI dòng.</summary>
     Recording,
 
-    /// <summary>Mỗi cặp câu MỘT dòng; bản còn lại nằm trong <c>sibling</c>.</summary>
+    /// <summary>Mặc định: mỗi cặp câu MỘT dòng; bản còn lại nằm trong <c>sibling</c>.</summary>
     Pair
 }
 
@@ -162,10 +162,13 @@ public record TaskReviewQuery : PageRequest
     public bool OnlyReviewable { get; init; }
 
     /// <summary>
-    /// `Pair` gom hai bản của một cặp vào một dòng và phân trang THEO CẶP. Dòng mang bản đang
-    /// cần tay người duyệt, bản còn lại nằm trong `sibling` với đủ trạng thái riêng.
+    /// Mặc định `Pair`: mỗi cặp một dòng, phân trang theo cặp, bản còn lại nằm trong `sibling`
+    /// với đủ trạng thái riêng. Người duyệt làm việc theo cặp — nghe cả hai bản rồi mới quyết —
+    /// nên đó mới là đơn vị của màn hình này.
+    ///
+    /// `Recording` trả lại hình dạng cũ: mỗi bản thu một dòng, dùng khi cần soi từng bản.
     /// </summary>
-    public TaskReviewGrouping GroupBy { get; init; } = TaskReviewGrouping.Recording;
+    public TaskReviewGrouping GroupBy { get; init; } = TaskReviewGrouping.Pair;
 }
 
 /// <summary>
