@@ -154,17 +154,21 @@ export default function ReviewRecording() {
   const { mutate: submitReview, isPending: isSubmitting } = useMutation({
     mutationKey: [SUBMIT_REVIEW_API],
     mutationFn: submitReviewApi,
-    onSuccess: (result, variables) => {
+    onSuccess: async (result, variables) => {
       setSessionDecisions((prev) => ({ ...prev, [variables.recordingId]: variables.decision }));
       toast.success(variables.decision === "Approved" ? "Đã duyệt bản ghi" : "Đã từ chối bản ghi", {
         description: result.isFinal ? "Bản ghi đã đủ lượt duyệt và được chốt." : `Lượt ${result.reviewsSoFar}/${result.roundsRequired}.`,
       });
+      // Wait for the new vote/counts before switching to the next recording (or
+      // keeping this one selected when there is no other reviewable item).
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: [GET_REVIEW_TASK_RECORDINGS_API] }),
+        queryClient.invalidateQueries({ queryKey: [GET_REVIEWER_PROGRESS_API] }),
+      ]);
       // Chuyển sang bản còn duyệt được kế tiếp trong danh sách
       const idx = list.findIndex((r) => r.recordingId === variables.recordingId);
       const next = [...list.slice(idx + 1), ...list.slice(0, idx)].find((r) => r.canReview && r.recordingId !== variables.recordingId);
       setSelectedId(next?.recordingId ?? variables.recordingId);
-      queryClient.invalidateQueries({ queryKey: [GET_REVIEW_TASK_RECORDINGS_API] });
-      queryClient.invalidateQueries({ queryKey: [GET_REVIEWER_PROGRESS_API] });
     },
     // 409 round_changed / already_reviewed...: người khác vừa duyệt -> tải lại danh sách để lấy lượt mới
     onError: (error) => {
