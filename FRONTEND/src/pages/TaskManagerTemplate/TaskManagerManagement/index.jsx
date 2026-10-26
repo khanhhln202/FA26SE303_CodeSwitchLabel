@@ -524,7 +524,8 @@ export default function TaskManagerManagement() {
         }
       }
 
-      toast.success(`Đã tạo và tự động chia lại chỉ tiêu (${targetPerTask} câu/nhiệm vụ) thành công!`);
+      const unitText = isSpeaker ? "câu" : "bản";
+      toast.success(`Đã tạo và tự động chia lại chỉ tiêu (${targetPerTask} ${unitText}/nhiệm vụ) thành công!`);
       setIsAssignModalOpen(false);
       await loadDataFromApi();
     } catch (err) {
@@ -875,6 +876,8 @@ export default function TaskManagerManagement() {
 
     const taskTargetQty = Number(viewingAssignedTask.targetQty || calculatedTargetPerTask || 0);
     const assignedUsers = viewingAssignedTask.assignedUsers || [];
+    const isReviewerRole = viewingAssignedTask.role === "Reviewer";
+    const unitLabel = isReviewerRole ? "bản" : "câu";
 
     // Tính tổng chỉ tiêu hiện tại người dùng nhập cho các thành viên
     const currentTotalAllocated = assignedUsers.reduce((sum, userName) => {
@@ -885,7 +888,7 @@ export default function TaskManagerManagement() {
     // Kiểm tra tuân thủ theo Backend: Tổng chỉ tiêu cá nhân bắt buộc bằng chỉ tiêu của nhiệm vụ
     if (assignedUsers.length > 0 && currentTotalAllocated !== taskTargetQty) {
       toast.error(
-        `Tổng chỉ tiêu người thực hiện (${currentTotalAllocated} câu) phải bằng chỉ tiêu nhiệm vụ (${taskTargetQty} câu)!`
+        `Tổng chỉ tiêu người thực hiện (${currentTotalAllocated} ${unitLabel}) phải bằng chỉ tiêu nhiệm vụ (${taskTargetQty} ${unitLabel})!`
       );
       return;
     }
@@ -1521,7 +1524,9 @@ export default function TaskManagerManagement() {
                             onChange={(e) => handleUserTargetChange(userName, e.target.value)}
                             className="w-16 h-6 text-center font-bold type-caption text-[#16171C] dark:text-white bg-transparent outline-none font-sans"
                           />
-                          <span className="type-caption text-[#6E7078] dark:text-gray-400 font-medium">câu</span>
+                          <span className="type-caption text-[#6E7078] dark:text-gray-400 font-medium">
+                            {viewingAssignedTask.role === "Reviewer" ? "bản" : "câu"}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -1778,7 +1783,7 @@ export default function TaskManagerManagement() {
                     <th className="py-2 px-3 min-w-[200px]">Nhiệm vụ</th>
                     <th className="py-2 px-3 text-center w-[100px]">Vai trò</th>
                     <th className="py-2 px-3 text-center w-[200px]">Người được phân công</th>
-                    <th className="py-2 px-3 text-center w-[150px] whitespace-nowrap">Mục tiêu (Số câu)</th>
+                    <th className="py-2 px-3 text-center w-[150px] whitespace-nowrap">Mục tiêu</th>
                     <th className="py-2 px-3 text-center w-[130px]">Trạng thái</th>
                     <th className="py-2 px-3 text-center w-[100px]">Thao tác</th>
                   </tr>
@@ -1845,7 +1850,7 @@ export default function TaskManagerManagement() {
                           </td>
 
                           <td className="py-2 px-3 text-center font-bold text-[#16171C] dark:text-white whitespace-nowrap font-sans">
-                            {task.targetQty || calculatedTargetPerTask} câu
+                            {task.targetQty || calculatedTargetPerTask} {task.role === "Reviewer" ? "bản" : "câu"}
                           </td>
                           
                           <td className="py-2 px-3 text-center whitespace-nowrap">
