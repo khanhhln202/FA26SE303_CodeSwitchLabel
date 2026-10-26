@@ -6,9 +6,9 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
-  AlertCircle,
   Eye,
   X,
+  Check,
   BarChart3,
   Search,
 } from "lucide-react";
@@ -87,27 +87,92 @@ function StatCard({ icon: Icon, label, value, pct, accent, bg }) {
   );
 }
 
-// Trạng thái bản ghi đúng theo API: QcFailed | PendingReview | Approved | Rejected
+// Trạng thái hiển thị: chỉ 3 loại. API: QcFailed | PendingReview | Approved | Rejected - QcFailed (trượt kiểm tra tự động) tính là Từ chối
+const displayStatus = (status) => (status === "QcFailed" ? "Rejected" : status);
+
 const STATUS_STYLE = {
   Approved: { bg: "#EAF7EF", border: "rgba(63,166,107,0.25)", text: "#1F5C3F", accent: "#3FA66B", icon: CheckCircle2, label: "Đã duyệt" },
   Rejected: { bg: "#FDEAEA", border: "#F3C9C9", text: "#C63B3B", accent: "#C63B3B", icon: XCircle, label: "Từ chối" },
   PendingReview: { bg: "#FFF1DE", border: "#F5DFC0", text: "#A85E12", accent: "#A85E12", icon: Clock, label: "Chờ duyệt" },
-  QcFailed: { bg: "#F0EEE6", border: "#E5E2D8", text: "#6E7078", accent: "#6E7078", icon: AlertCircle, label: "Lỗi chất lượng" },
 };
 
-// Kết quả (trạng thái + số lượt duyệt API trả về), bấm để xem chi tiết
-function ResultButton({ status, votedCount, onClick, ariaLabel }) {
-  const s = STATUS_STYLE[status];
+// Trạng thái của cặp, bấm để xem chi tiết
+function StatusButton({ status, onClick, ariaLabel }) {
+  const s = STATUS_STYLE[displayStatus(status)];
   const Icon = s.icon;
   return (
     <button
       onClick={onClick}
       aria-label={ariaLabel}
-      className="w-[128px] h-6 inline-flex items-center justify-center gap-1 rounded-full border type-caption transition-colors cursor-pointer whitespace-nowrap hover:opacity-80"
+      className="w-[104px] h-6 inline-flex items-center justify-center gap-1 rounded-full border type-caption transition-colors cursor-pointer whitespace-nowrap hover:opacity-80"
       style={{ background: s.bg, borderColor: s.border, color: s.text }}
     >
       <Icon className="w-3 h-3 shrink-0" />
-      <span>{status === "QcFailed" ? s.label : `${s.label} · ${votedCount}/3`}</span>
+      <span>{s.label}</span>
+    </button>
+  );
+}
+
+// Kết quả của cặp: Đạt / Không đạt, còn chờ duyệt thì "—"
+function ResultTag({ status }) {
+  const shown = displayStatus(status);
+  if (shown === "PendingReview") return <span className="type-meta text-[#9A9CA3]">—</span>;
+  const pass = shown === "Approved";
+  return (
+    <span
+      className="w-[92px] h-6 inline-flex items-center justify-center gap-1 rounded-full border type-caption whitespace-nowrap"
+      style={pass ? { background: "#EAF7EF", borderColor: "rgba(63,166,107,0.3)", color: "#1F5C3F" } : { background: "#FDEAEA", borderColor: "#F3C9C9", color: "#C63B3B" }}
+    >
+      {pass ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
+      {pass ? "Đạt" : "Không đạt"}
+    </span>
+  );
+}
+
+/**
+ * Gom lượt duyệt theo cặp: API trả từng lượt của từng bản (reviews[].recordingId, round) -> mỗi round là 1 lượt duyệt cả cặp.
+ * Lượt có bản bị từ chối = Rejected; mọi bản có audio đều đạt = Approved; mới có 1 bản được duyệt = chưa xong (Partial).
+ */
+function pairRounds(item) {
+  const variantOfId = (id) => (id === item.csRecordingId ? "cs" : "vi");
+  const needed = [item.csAudioUrl, item.viAudioUrl].filter(Boolean).length || 1;
+  const byRound = new Map();
+  (item.reviews ?? []).forEach((r) => {
+    if (!byRound.has(r.round)) byRound.set(r.round, []);
+    byRound.get(r.round).push({ ...r, variant: variantOfId(r.recordingId) });
+  });
+  return [...byRound.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([round, list]) => {
+      let decision = "Partial";
+      if (list.some((r) => r.decision === "Rejected")) decision = "Rejected";
+      else if (list.filter((r) => r.decision === "Approved").length >= needed) decision = "Approved";
+      return { round, decision, reviews: list.sort((a, b) => (a.variant === "cs" ? 0 : 1) - (b.variant === "cs" ? 0 : 1)) };
+    });
+}
+
+/** 1 hàng ô lượt duyệt cho cả cặp (roundsRequired ô): đạt = tick, từ chối = x, chưa xong = ô trống; đã chốt thì ô còn lại gạch đứt. Bấm để xem lý do. */
+function ReviewBoxes({ item, onOpen }) {
+  const rounds = pairRounds(item);
+  const closed = item.status !== "PendingReview";
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={`Xem lý do các lượt duyệt ${item.scriptId}`}
+      title="Xem lý do từng lượt duyệt"
+      className="h-6 inline-flex items-center gap-1 px-1 -mx-1 rounded-md cursor-pointer hover:bg-[#F0EEE6] transition-colors"
+    >
+      {Array.from({ length: item.roundsRequired ?? 3 }, (_, i) => {
+        const r = rounds[i];
+        if (r?.decision === "Approved") {
+          return <span key={i} className="w-4 h-4 rounded flex items-center justify-center border bg-[#EAF7EF] border-[#9CD3B2] text-[#3FA66B]"><Check className="w-3 h-3" strokeWidth={3} /></span>;
+        }
+        if (r?.decision === "Rejected") {
+          return <span key={i} className="w-4 h-4 rounded flex items-center justify-center border bg-[#FDEAEA] border-[#EDB1B1] text-[#C63B3B]"><X className="w-3 h-3" strokeWidth={3} /></span>;
+        }
+        return <span key={i} className={`w-4 h-4 rounded border ${closed && !r ? "border-dashed border-[#D6D3C8] bg-[#FAF9F5]" : "border-[#D6D3C8] bg-white"}`} />;
+      })}
     </button>
   );
 }
@@ -117,7 +182,6 @@ const FILTER_OPTIONS = [
   { value: "Approved", label: "Đã duyệt" },
   { value: "Rejected", label: "Từ chối" },
   { value: "PendingReview", label: "Chờ duyệt" },
-  { value: "QcFailed", label: "Lỗi chất lượng" },
 ];
 
 export default function RecordingHistory() {
@@ -154,7 +218,7 @@ export default function RecordingHistory() {
     const query = searchTerm.trim().toLocaleLowerCase("vi");
     return (recordings ?? []).filter(
       (item) =>
-        (statusFilter === "all" || item.status === statusFilter) &&
+        (statusFilter === "all" || displayStatus(item.status) === statusFilter) &&
         (taskFilter === "all" || taskOf(item) === taskFilter) &&
         [taskOf(item), stripTags(item.csText ?? ""), stripTags(item.viText ?? "")].some(
           (value) => value.toLocaleLowerCase("vi").includes(query),
@@ -265,20 +329,22 @@ export default function RecordingHistory() {
           >
             <colgroup>
               <col className="w-[4%]" />
-              <col className="w-[13%]" />
-              <col className="w-[17%]" />
+              <col className="w-[12%]" />
               <col className="w-[32%]" />
-              <col className="w-[20%]" />
-              <col className="w-[14%]" />
+              <col className="w-[21%]" />
+              <col className="w-[9%]" />
+              <col className="w-[11%]" />
+              <col className="w-[11%]" />
             </colgroup>
             <thead className="bg-[#F7F5EF] type-label text-[#9A9CA3] border-b border-[#E5E2D8]">
               <tr>
                 {[
                   "STT",
                   "Ngày nộp",
-                  "Nhiệm vụ",
                   "Nội dung",
                   "Đoạn ghi âm",
+                  "Lượt duyệt",
+                  "Trạng thái",
                   "Kết quả",
                 ].map((heading) => (
                   <th
@@ -295,7 +361,7 @@ export default function RecordingHistory() {
             {pageItems.length === 0 ? (
               <tbody className="type-ui">
                 <tr>
-                  <td colSpan={6}>
+                  <td colSpan={7}>
                     {allRecordings.length === 0 ? (
                       <EmptyState title="Chưa có bản ghi nào" description="Ghi âm câu đầu tiên ở mục Câu chờ ghi âm." />
                     ) : (
@@ -320,11 +386,6 @@ export default function RecordingHistory() {
                       <p className="type-meta text-[#6E7078] tabular-nums whitespace-nowrap">{formatDateTime(item.recordedAt)}</p>
                     </td>
                     <td className="px-3">
-                      <span title={taskOf(item)} className="flex w-full h-6 items-center justify-center rounded-md border border-[#E5E2D8] bg-[#F0EEE6] px-2 type-caption text-[#6E7078]"><span className="truncate">
-                        {taskOf(item)}</span>
-                      </span>
-                    </td>
-                    <td className="px-3 py-1">
                       {/* Căn icon mắt về cùng một mép cột như bảng lịch sử câu đóng góp. */}
                       <div className="flex items-center gap-2">
                         <div className="min-w-0 flex-1">
@@ -357,12 +418,18 @@ export default function RecordingHistory() {
                       </div>
                     </td>
                     <td className="px-3">
-                      <ResultButton
+                      {/* 1 hàng ô cho cả cặp, bấm để xem lý do từng lượt */}
+                      <ReviewBoxes item={item} onOpen={() => setDetailItem(item)} />
+                    </td>
+                    <td className="px-3">
+                      <StatusButton
                         status={item.status}
-                        votedCount={item.reviews?.length ?? 0}
                         onClick={() => setDetailItem(item)}
                         ariaLabel={`Xem kết quả kiểm duyệt ${item.scriptId}`}
                       />
+                    </td>
+                    <td className="px-3">
+                      <ResultTag status={item.status} />
                     </td>
                   </tr>
                 ))}
@@ -438,8 +505,8 @@ export default function RecordingHistory() {
       {/* POPUP PHẢN HỒI - 3 reviewer */}
       {detailItem &&
         (() => {
-          const { icon: ResultIcon, accent } = STATUS_STYLE[detailItem.status];
-          const reviews = detailItem.reviews ?? [];
+          const { icon: ResultIcon, accent } = STATUS_STYLE[displayStatus(detailItem.status)];
+          const rounds = pairRounds(detailItem);
           return (
             <div
               className="fixed inset-0 z-50 flex items-center justify-center p-4 lg:pl-64"
@@ -494,56 +561,35 @@ export default function RecordingHistory() {
                     <InlineLabel variant="vi" />
                     <p className="type-body text-[#16171C] break-words min-w-0">{stripTags(detailItem.viText ?? "")}</p>
                   </div>
-                  {reviews.length === 0 && (
+                  {rounds.length === 0 && (
                     <p className="type-meta text-[#6E7078]">
                       {detailItem.status === "QcFailed"
                         ? "Bản ghi không đạt kiểm tra chất lượng tự động nên chưa được gửi đi duyệt."
-                        : "Bản ghi đang chờ duyệt. Kết quả và nhận xét hiện khi đủ lượt duyệt."}
+                        : "Cặp câu đang chờ duyệt, chưa có lượt duyệt nào."}
                     </p>
                   )}
+                  {/* Mỗi lượt duyệt cả cặp: kết quả của lượt + lý do theo từng câu (nếu có) */}
                   <div className="flex flex-col gap-2">
-                    {reviews.map((r, i) => {
+                    {rounds.map((r, i) => {
                       const isReject = r.decision === "Rejected";
                       const isApprove = r.decision === "Approved";
-                      const c = isReject
-                        ? "#C63B3B"
-                        : isApprove
-                          ? "#3FA66B"
-                          : "#A85E12";
-                      const rowBg = isReject
-                        ? "#FDEAEA"
-                        : isApprove
-                          ? "#EAF7EF"
-                          : "#FFF1DE";
-                      const rowBorder = isReject
-                        ? "#F3C9C9"
-                        : isApprove
-                          ? "rgba(63,166,107,0.2)"
-                          : "#F5DFC0";
+                      const c = isReject ? "#C63B3B" : isApprove ? "#3FA66B" : "#A85E12";
+                      const rowBg = isReject ? "#FDEAEA" : isApprove ? "#EAF7EF" : "#FFF1DE";
+                      const rowBorder = isReject ? "#F3C9C9" : isApprove ? "rgba(63,166,107,0.2)" : "#F5DFC0";
+                      // Lý do của các câu trong lượt (bỏ trùng); không có lý do thì chỉ hiện kết quả
+                      const reasons = [...new Set(r.reviews.map((rv) => rv.reason).filter(Boolean))];
                       return (
-                        <div
-                          key={i}
-                          className="flex gap-2.5 px-3 py-2.5 rounded-xl border"
-                          style={{ background: rowBg, borderColor: rowBorder }}
-                        >
-                          <span
-                            className="w-6 h-6 rounded-full text-white text-caption font-label flex items-center justify-center flex-shrink-0"
-                            style={{ background: c }}
-                          >
-                            R{r.round}
+                        <div key={r.round} className="flex gap-2.5 px-3 py-2.5 rounded-xl border" style={{ background: rowBg, borderColor: rowBorder }}>
+                          <span className="w-6 h-6 rounded-full text-white text-caption font-label flex items-center justify-center flex-shrink-0" style={{ background: c }}>
+                            R{i + 1}
                           </span>
                           <div className="min-w-0">
-                            <p
-                              className="type-label"
-                              style={{ color: isApprove ? "#1F5C3F" : c }}
-                            >
-                              {isReject ? "Từ chối" : isApprove ? "Đã duyệt" : r.decision}
+                            <p className="text-meta font-label" style={{ color: isApprove ? "#1F5C3F" : c }}>
+                              {isReject ? "Từ chối" : isApprove ? "Đã duyệt" : "Đang duyệt"}
                             </p>
-                            {r.reason && (
-                              <p className="text-meta text-[#6E7078] mt-0.5">
-                                {r.reason}
-                              </p>
-                            )}
+                            {reasons.map((reason) => (
+                              <p key={reason} className="text-meta text-[#6E7078] mt-0.5">{reason}</p>
+                            ))}
                           </div>
                         </div>
                       );
