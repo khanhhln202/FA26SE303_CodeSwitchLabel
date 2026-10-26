@@ -332,6 +332,14 @@ public class ReviewService(
 
         await taskTracker.OnReviewSubmittedAsync(recording, status, taskRecording?.TaskId, ct);
 
+        // Từ chối là từ chối CẢ CẶP. Bản còn lại cũng phải thu lại, nếu không người đọc chỉ
+        // thu một nửa và cặp vẫn không dùng được: bộ dữ liệu cần cả câu chen tiếng Anh lẫn
+        // câu thuần Việt tương đương, cùng một giọng, mới thành một mẫu.
+        if (status == RecordingStatus.Rejected)
+        {
+            await LoaiBanConLaiCuaCapAsync(recording, reviewerId, ct);
+        }
+
         if (transaction is not null) await transaction.CommitAsync(ct);
 
         return new SubmitReviewResult(
@@ -432,6 +440,37 @@ public class ReviewService(
         if (transaction is not null) await transaction.CommitAsync(ct);
 
         return new DiscardPairResult(recordingId, recording.ScriptId, script.Status, removed);
+    }
+
+    /// <summary>
+    /// Loại nốt bản còn lại của cặp khi một bản đã bị từ chối, để người đọc thu lại NGUYÊN CẶP.
+    ///
+    /// Không ghi thêm phiếu duyệt nào cho bản đó — đây là hệ quả của quyết định đã có, không
+    /// phải một lá phiếu mới; thêm phiếu sẽ làm lệch bộ đếm vòng và kích hoạt lại trigger chốt
+    /// đa số. Đánh dấu đúng kiểu "gỡ bản ghi" như nút chỉ xoá audio: giữ dòng, ghi ai gỡ và vì
+    /// sao, rồi đẩy câu về hàng đợi ghi âm cho chính người đọc cũ.
+    ///
+    /// Bản còn lại đang trống (chưa thu, hoặc đã bị loại trước đó) thì không có gì để làm.
+    /// </summary>
+    private async Task LoaiBanConLaiCuaCapAsync(
+        Recording recording, long reviewerId, CancellationToken ct)
+    {
+        var banConLai = recording.SentenceVariant == SentenceVariant.CodeSwitching
+            ? SentenceVariant.PureVietnamese
+            : SentenceVariant.CodeSwitching;
+
+        var kia = await recordings.GetActiveTakeAsync(recording.ScriptId, banConLai, ct);
+        if (kia is null) return;
+
+        kia.Status = RecordingStatus.Rejected;
+        kia.DiscardedAt = clock.GetUtcNow();
+        kia.DiscardedBy = reviewerId;
+        kia.DiscardNote = $"Loại theo cặp: bản {recording.RecordingId} bị từ chối nên thu lại cả cặp.";
+
+        await recordings.SaveChangesAsync(ct);
+
+        await queue.RequeueAsync(recording.ScriptId, QueueStage.Recording, ct);
+        await taskTracker.OnRecordingReturnedAsync(kia, kia.TaskId, ct);
     }
 
     /// <summary>Gộp mã lý do và bình luận thành một chuỗi để lưu vào cột discard_note.</summary>
