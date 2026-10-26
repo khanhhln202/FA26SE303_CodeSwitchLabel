@@ -91,7 +91,7 @@ const STATUS_STYLE = {
 const styleOf = (status) => STATUS_STYLE[status] ?? STATUS_STYLE.PendingReview;
 
 // Kết quả (trạng thái cặp + số lượt duyệt API trả - chỉ có khi bản đã chốt), bấm để xem chi tiết
-function ResultButton({ status, votedCount, onClick, ariaLabel }) {
+function ResultButton({ status, votedCount, roundsRequired, onClick, ariaLabel }) {
   const s = styleOf(status);
   const Icon = s.icon;
   return (
@@ -102,7 +102,7 @@ function ResultButton({ status, votedCount, onClick, ariaLabel }) {
       style={{ background: s.bg, borderColor: s.border, color: s.text }}
     >
       <Icon className="w-3 h-3 shrink-0" />
-      <span>{votedCount > 0 ? `${s.label} · ${votedCount}/3` : s.label}</span>
+      <span>{votedCount > 0 ? `${s.label} · ${votedCount}/${roundsRequired}` : s.label}</span>
     </button>
   );
 }
@@ -317,7 +317,9 @@ export default function ReviewHistoryRecording() {
             ) : (
               pageItems.map((item, index) => {
                 const [date, time] = splitDateTime(item.reviewedAt);
-                const votedCount = item.reviews?.length ?? 0;
+                // API trả số vòng của một bản thu (lấy min trong cặp); `reviews` chứa
+                // phiếu của cả hai bản nên đếm mảng này sẽ tạo số sai như 4/3.
+                const votedCount = item.reviewedRounds ?? 0;
                 const task = item.taskTitle || "Thu âm tự do";
                 return (
                   <tbody
@@ -396,6 +398,7 @@ export default function ReviewHistoryRecording() {
                                 <ResultButton
                                   status={item.recordingStatus}
                                   votedCount={votedCount}
+                                  roundsRequired={item.roundsRequired ?? 3}
                                   onClick={() => setDetailItem(item)}
                                   ariaLabel={`Xem phản hồi cho ${item.speakerName}, ${item.scriptId}`}
                                 />
@@ -536,13 +539,13 @@ export default function ReviewHistoryRecording() {
                     <InlineLabel variant="vi" />
                     <p className="type-body text-[#16171C] break-words min-w-0"><TaggedText text={detailItem.viText} /></p>
                   </div>
-                  {/* Duyệt mù: API chỉ trả các lượt khi bản đã chốt */}
+                  {/* Lịch sử cho Reviewer hiện các lượt của cả hai bản thu trong cặp. */}
                   <div className="flex items-center gap-2 mb-2.5">
                     <span className="text-meta font-label text-[#16171C]">Quyết định của bạn:</span>
                     <MyDecision decision={detailItem.myDecision} />
                   </div>
-                  {reviews.length === 0 && (
-                    <p className="type-meta text-[#6E7078]">Kết quả các lượt duyệt chỉ hiện khi bản ghi đã chốt.</p>
+                    {reviews.length === 0 && (
+                    <p className="type-meta text-[#6E7078]">Chưa có lượt duyệt nào cho cặp bản ghi này.</p>
                   )}
                   <div className="flex flex-col gap-2">
                     {reviews.map((r, i) => {
@@ -576,16 +579,21 @@ export default function ReviewHistoryRecording() {
                             R{r.round}
                           </span>
                           <div className="min-w-0">
-                            <p
-                              className="text-meta font-label"
-                              style={{ color: isApprove ? "#1F5C3F" : c }}
-                            >
-                              {isReject
-                                ? "Từ chối"
-                                : isApprove
-                                  ? "Đã duyệt"
-                                  : "Chưa đánh giá"}
-                            </p>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="px-1.5 py-0.5 rounded text-caption font-label border border-[#E5E2D8] bg-white text-[#6E7078]">
+                                {r.recordingId === detailItem.viRecordingId ? "VI" : "VI-EN"}
+                              </span>
+                              <p
+                                className="text-meta font-label"
+                                style={{ color: isApprove ? "#1F5C3F" : c }}
+                              >
+                                {isReject
+                                  ? "Từ chối"
+                                  : isApprove
+                                    ? "Đã duyệt"
+                                    : "Chưa đánh giá"}
+                              </p>
+                            </div>
                             {r.reason && (
                               <p className="text-meta text-[#6E7078] mt-0.5">
                                 {r.reason}
