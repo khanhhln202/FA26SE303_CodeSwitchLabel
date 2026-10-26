@@ -31,6 +31,8 @@ const ACCENT_SOFT = 'rgba(22,163,74,0.08)';
 const ENGLISH_BLUE = AUDIO_PRIMARY;
 const ENGLISH_BLUE_SOFT = `${AUDIO_PRIMARY}1A`;
 
+// Số nhiệm vụ hiện ở khung Tiến độ nhiệm vụ
+const TASK_LIMIT = 4;
 const ITEMS_PER_PAGE = 5;
 // API top câu / top người trả tối đa 20 dòng -> phân trang 5 dòng ở FE
 const TOP_LIMIT = 20;
@@ -86,7 +88,7 @@ function SentencePair({ sentence, detail = false }) {
           >
             {label}
           </span>
-          <p className={detail ? 'type-body' : 'truncate type-ui'}>
+          <p className={detail ? 'type-body' : 'truncate text-ui leading-[18px]'}>
             {index === 0 ? <SentenceText sentence={sentence} /> : sentence.viText || sentence.text}
           </p>
         </div>
@@ -224,7 +226,8 @@ export default function ReviewDashboard() {
             {ongoingTasks.length === 0 && (
               <p className="type-meta text-[#9A9CA3] flex items-center justify-center">Chưa được giao nhiệm vụ duyệt nào.</p>
             )}
-            {[...ongoingTasks].sort((a, b) => a.daysLeft - b.daysLeft).map((task) => {
+            {/* Chỉ hiện 4 nhiệm vụ gần hạn nhất; số tổng vẫn ở góc phải tiêu đề */}
+            {[...ongoingTasks].sort((a, b) => a.daysLeft - b.daysLeft).slice(0, TASK_LIMIT).map((task) => {
               const percent = Math.min(100, task.percent);
               const urgent = task === urgentTask;
               const title = task.description || `Nhiệm vụ #${task.taskId}`;
@@ -275,22 +278,22 @@ export default function ReviewDashboard() {
             ))}
           </div>
         </div>
-        <div id="rejection-panel" role="tabpanel" aria-labelledby={`rejection-tab-${rejectionTab}`} className="min-h-[225px] flex-1 grid auto-rows-fr divide-y divide-[#F0EEE6]">
+        <div id="rejection-panel" role="tabpanel" aria-labelledby={`rejection-tab-${rejectionTab}`} className="min-h-[190px] flex-1 grid auto-rows-fr divide-y divide-[#F0EEE6]">
           {/* Luôn đủ ITEMS_PER_PAGE ô: trang cuối thiếu dòng thì thêm ô trống cùng chiều cao -> khung không đổi, các dòng không giãn */}
           {[...rejectionItems, ...Array(ITEMS_PER_PAGE).fill(null)]
             .slice(0, ITEMS_PER_PAGE)
             .map((item, idx) => !item ? (
-            <div key={`empty-${idx}`} className="px-4 py-1" aria-hidden={rejectionItems.length > 0 || idx > 0}>
+            <div key={`empty-${idx}`} className="px-4 py-0.5" aria-hidden={rejectionItems.length > 0 || idx > 0}>
               {/* Chưa có dữ liệu thì ô đầu tiên báo trống, các ô còn lại giữ chỗ */}
-              <div className="min-h-[42px] flex items-center justify-center type-meta text-[#9A9CA3]">
+              <div className="min-h-[38px] flex items-center justify-center type-meta text-[#9A9CA3]">
                 {rejectionItems.length === 0 && idx === 0 && (rejectionTab === 'sentences' ? 'Chưa có câu nào bị bạn từ chối.' : 'Chưa có người đọc nào bị bạn từ chối.')}
               </div>
             </div>
           ) : (
-            <div key={item.scriptId ?? item.speakerId} className="flex items-center gap-3 px-4 py-1 hover:bg-[#FAF9F6]">
+            <div key={item.scriptId ?? item.speakerId} className="flex items-center gap-3 px-4 py-0.5 hover:bg-[#FAF9F6]">
               <span className="w-5 text-center text-meta tabular-nums text-[#9A9CA3] shrink-0">{((rejectionTab === 'sentences' ? sentencePage : speakerPage) - 1) * ITEMS_PER_PAGE + idx + 1}</span>
-              {/* Cao tối thiểu bằng dòng "Câu" (2 câu VI-EN/VI = 42px) -> đổi tab không làm khung co/giãn, các thẻ phía trên không nhảy */}
-              <div className="min-w-0 flex-1 min-h-[42px] flex flex-col justify-center">
+              {/* Cao tối thiểu bằng dòng "Câu" (2 câu VI-EN/VI = 38px) -> đổi tab không làm khung co/giãn, các thẻ phía trên không nhảy */}
+              <div className="min-w-0 flex-1 min-h-[38px] flex flex-col justify-center">
                 {rejectionTab === 'sentences' ? (
                   <SentencePair sentence={item} />
                 ) : (
