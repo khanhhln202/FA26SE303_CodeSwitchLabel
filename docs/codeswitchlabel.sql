@@ -1473,8 +1473,7 @@ BEGIN
     v_rejected := v_total - v_approved;
 
     -- Chốt NGAY khi một bên đã quá bán: những lượt còn lại không lật được kết quả nữa,
-    -- nên bắt người đọc chờ thêm chỉ làm chậm việc thu lại. Trước đây phải đủ
-    -- v_rounds_required lượt mới chốt, nên bản bị hai người từ chối vẫn nằm "chờ duyệt".
+    -- nên bắt người đọc chờ thêm chỉ làm chậm việc thu lại.
     IF v_approved >= v_majority THEN
         v_final := 'approved';
     ELSIF v_rejected >= v_majority THEN
@@ -1490,29 +1489,7 @@ BEGIN
     UPDATE recording SET status = v_final
      WHERE recording_id = NEW.recording_id AND status = 'pending_review';
 
-    -- Chỉ khi đa số từ chối bản ghi VÀ có lý do thuộc nhóm 'content' mới trả câu về pending_validation
-    IF v_final = 'rejected' THEN
-        IF EXISTS (
-            SELECT 1
-              FROM review_rejection_reason rrr
-              JOIN rejection_reason rr ON rr.reason_id = rrr.reason_id
-              JOIN review rv ON rv.review_id = rrr.review_id
-             WHERE rv.recording_id = NEW.recording_id
-               AND rr.category = 'content'
-        ) THEN
-            UPDATE script SET status = 'pending_validation'
-             WHERE script_id = (SELECT script_id FROM recording WHERE recording_id = NEW.recording_id)
-               AND status = 'validated';
-
-            -- câu quay về bước duyệt nội dung thì không còn là mục công việc
-            -- nữa. Trước đây trigger để nguyên task_script ở 'pending' nên task treo
-            -- vĩnh viễn, không bao giờ đạt chỉ tiêu.
-            UPDATE task_script SET status = 'rejected'
-             WHERE script_id = (SELECT script_id FROM recording WHERE recording_id = NEW.recording_id)
-               AND status = 'pending';
-        END IF;
-    END IF;
-
+    -- V12: KHÔNG đẩy câu về duyệt nội dung nữa. Xem ghi chú ở đầu migration.
     RETURN NEW;
 END $$ LANGUAGE plpgsql;
 
