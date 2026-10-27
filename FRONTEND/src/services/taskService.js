@@ -78,9 +78,17 @@ export const taskService = {
 
   // Nạp items/câu vào Task cho Speaker
   addTaskItems: async (id, data) => {
-    const payload = data?.autoFill 
-      ? { autoFill: { count: data.quantity || data.count || 100 } } 
-      : data;
+    let payload;
+    if (data?.autoFill) {
+      payload = {
+        autoFill: {
+          count: Number(data.quantity || data.count || data.autoFill?.count || 100),
+          ...(data.domain || data.autoFill?.domain ? { domain: data.domain || data.autoFill?.domain } : {})
+        }
+      };
+    } else {
+      payload = data;
+    }
     const res = await apiClient.post(`/api/tasks/${id}/items`, payload);
     return res.data;
   },
@@ -98,9 +106,7 @@ export const taskService = {
   assignTask: async (id, userIds) => {
     const idsArray = Array.isArray(userIds) ? userIds.map(Number) : [Number(userIds)];
     const payload = {
-      userIds: idsArray,
-      userId: idsArray[0] || null,
-      assignedToUserId: idsArray[0] || null
+      userIds: idsArray
     };
     const res = await apiClient.post(`/api/tasks/${id}/assign`, payload);
     return res.data;

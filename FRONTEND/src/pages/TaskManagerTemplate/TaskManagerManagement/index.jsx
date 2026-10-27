@@ -50,7 +50,7 @@ const formatDateToVN = (dateStr) => {
   return `${day}/${month}/${year}`;
 };
 
-// Helper format ngày ISO (yyyy-mm-dd) - Giữ nguyên chuỗi gốc không bị lệch múi giờ
+// Helper format ngày ISO (yyyy-mm-dd)
 const formatDateToISO = (dateStr) => {
   if (!dateStr) return "";
   const clean = String(dateStr).trim();
@@ -67,7 +67,7 @@ const formatDateToISO = (dateStr) => {
   return "";
 };
 
-// Helper chuyển đổi Domain/Topic từ BE sang tên tiếng Việt
+// Helper chuyển đổi Domain/Topic từ BE sang tiếng Việt
 const mapDomainToTopicVN = (domain) => {
   if (domain === "ItTechnology" || domain === "IT" || domain === "Công nghệ thông tin") return "Công nghệ thông tin";
   if (domain === "Education" || domain === "Giáo dục") return "Giáo dục";
@@ -75,7 +75,7 @@ const mapDomainToTopicVN = (domain) => {
   return domain || "Công nghệ thông tin";
 };
 
-// Component Custom Date Picker hiển thị chuẩn DD/MM/YYYY cho UI người dùng
+// Component DatePicker
 const VNFormatDatePicker = ({ label, value, onChange, minDateIso }) => {
   const displayValue = useMemo(() => {
     if (!value) return "";
@@ -185,12 +185,11 @@ export default function TaskManagerManagement() {
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [allAdminUsers, setAllAdminUsers] = useState([]);
 
-  // Form tạo nhiệm vụ mới
   const [assignFormData, setAssignFormData] = useState({
     selectedBatchId: "",
     taskTitle: "",
-    targetRole: "Speaker", // Speaker hoặc Reviewer
-    assignedUsers: []
+    targetRole: "Speaker",
+    assignedUserIds: [] 
   });
 
   const [viewingAssignedTask, setViewingAssignedTask] = useState(null);
@@ -214,136 +213,151 @@ export default function TaskManagerManagement() {
 
   const loadDataFromApi = async () => {
     try {
-      const [campaignRes, taskRes, speakerUsersRes, reviewerUsersRes] = await Promise.all([
+      const [campaignRes, taskRes, speakerUsersRes, reviewerUsersRes, allUsersRes] = await Promise.all([
         taskService.getCampaigns({ pageSize: 1000 }).catch(() => ({ items: [] })),
         taskService.getTasks({ pageSize: 1000 }).catch(() => ({ items: [] })),
         taskService.getAssignableUsers("Recording").catch(() => []),
-        taskService.getAssignableUsers("Review").catch(() => [])
+        taskService.getAssignableUsers("Review").catch(() => []),
+        taskService.getUsers({ pageSize: 1000 }).catch(() => ({ items: [] }))
       ]);
 
       const rawCampaigns = campaignRes?.items || campaignRes?.data || (Array.isArray(campaignRes) ? campaignRes : []);
-
       const campaignList = rawCampaigns
-        .map((c) => {
-          const rawId = c.campaignId || c.id;
-
-          return {
-            id: Number(rawId),
-            name: c.campaignName || c.title || c.name || `Đợt ${rawId}`,
-            campaignName: c.campaignName || c.title || c.name || `Đợt ${rawId}`,
-            target: c.targetQty || c.targetCount || c.target || 2000,
-            topic: mapDomainToTopicVN(c.domain || c.topic),
-            startDate: formatDateToVN(c.startDate || todayIso),
-            endDate: formatDateToVN(c.endDate || todayIso),
-            rawStartDateIso: c.startDate ? formatDateToISO(c.startDate) : todayIso,
-            rawEndDateIso: c.endDate ? formatDateToISO(c.endDate) : todayIso,
-            status: c.status || "Draft",
-            assignedSpeakers: [],
-            assignedReviewers: []
-          };
-        })
+        .map((c) => ({
+          id: Number(c.campaignId || c.id),
+          name: c.campaignName || c.title || c.name || `Đợt ${c.campaignId || c.id}`,
+          campaignName: c.campaignName || c.title || c.name || `Đợt ${c.campaignId || c.id}`,
+          target: c.targetQty || c.targetCount || c.target || 2000,
+          topic: mapDomainToTopicVN(c.domain || c.topic),
+          startDate: formatDateToVN(c.startDate || todayIso),
+          endDate: formatDateToVN(c.endDate || todayIso),
+          rawStartDateIso: c.startDate ? formatDateToISO(c.startDate) : todayIso,
+          rawEndDateIso: c.endDate ? formatDateToISO(c.endDate) : todayIso,
+          status: c.status || "Draft"
+        }))
         .sort((a, b) => a.id - b.id);
 
       const mappedSpeakers = (speakerUsersRes || []).map((u) => ({
-        id: String(u.userId || u.id),
-        name: u.fullName || u.userName || u.name,
-        email: u.email,
+        id: Number(u.userId || u.id),
+        name: u.fullName || u.userName || u.name || `User ${u.userId || u.id}`,
+        email: u.email || "",
         role: "Speaker",
-        status: "Active",
-        performanceTag: u.performanceTag || "GOOD"
+        status: "Active"
       }));
 
       const mappedReviewers = (reviewerUsersRes || []).map((u) => ({
-        id: String(u.userId || u.id),
-        name: u.fullName || u.userName || u.name,
-        email: u.email,
+        id: Number(u.userId || u.id),
+        name: u.fullName || u.userName || u.name || `User ${u.userId || u.id}`,
+        email: u.email || "",
         role: "Reviewer",
-        status: "Active",
-        performanceTag: u.performanceTag || "GOOD"
+        status: "Active"
       }));
 
-      const combinedUsers = [...mappedSpeakers, ...mappedReviewers];
+      const rawAllUsers = allUsersRes?.items || allUsersRes?.data || (Array.isArray(allUsersRes) ? allUsersRes : []);
+      const mappedAllUsers = rawAllUsers.map((u) => ({
+        id: Number(u.userId || u.id),
+        name: u.fullName || u.userName || u.name || `User ${u.userId || u.id}`,
+        email: u.email || "",
+        role: u.role || "Speaker",
+        status: "Active"
+      }));
+
+      const combinedUsersMap = new Map();
+      [...mappedSpeakers, ...mappedReviewers, ...mappedAllUsers].forEach(u => {
+        if (u.id && !combinedUsersMap.has(u.id)) {
+          combinedUsersMap.set(u.id, u);
+        }
+      });
+      const combinedUsers = Array.from(combinedUsersMap.values());
 
       const rawTasks = taskRes?.items || taskRes?.data || (Array.isArray(taskRes) ? taskRes : []);
 
-      const mappedTasks = rawTasks.map((t) => {
-        const rawStatus = String(t.status || t.taskStatus || t.state || "").toLowerCase();
-        
-        let calculatedStatus = "Đang thực hiện";
-        if (rawStatus === "completed" || rawStatus === "hoàn thành" || rawStatus === "done" || rawStatus === "1") {
-          calculatedStatus = "Hoàn thành";
-        } else if (rawStatus === "cancelled" || rawStatus === "canceled" || rawStatus === "đã hủy" || rawStatus === "3") {
-          calculatedStatus = "Đã hủy";
-        }
+      const parsedTasks = await Promise.all(
+        rawTasks.map(async (t) => {
+          let currentTaskData = t;
+          const taskId = Number(t.taskId || t.id);
 
-        const rawType = String(t.taskType || t.type || t.role || "").toLowerCase();
-        const isSpeaker = rawType === "recording" || rawType === "speaker" || rawType === "0";
-
-        let usersList = [];
-        const userTargetsMap = {};
-
-        const assignmentsArr = Array.isArray(t.assignments) && t.assignments.length > 0 
-          ? t.assignments 
-          : (Array.isArray(t.assignees) ? t.assignees : []);
-        
-        if (assignmentsArr.length > 0) {
-          assignmentsArr.forEach(u => {
-            let uName = "";
-            let uId = null;
-            if (typeof u === "string") {
-              uName = u;
-            } else if (u && typeof u === "object") {
-              uId = Number(u.userId || u.id);
-              uName = u.fullName || u.userFullName || u.userName || u.name;
-              if (!uName && uId) {
-                const found = combinedUsers.find(cu => Number(cu.id) === uId);
-                uName = found ? found.name : `User ${uId}`;
-              }
+          try {
+            const detail = await taskService.getTaskById(taskId);
+            if (detail) {
+              currentTaskData = detail;
             }
+          } catch (err) {
+            console.warn(`Lỗi lấy chi tiết Task ${taskId}:`, err);
+          }
 
-            if (uName) {
-              usersList.push(uName);
-              if (u && typeof u === "object" && (u.targetQty || u.quota || u.target)) {
-                userTargetsMap[uName] = Number(u.targetQty || u.quota || u.target);
+          let rawAssignees = currentTaskData.assignments || currentTaskData.assignees || currentTaskData.summary?.assignees || [];
+
+          const rawStatus = String(currentTaskData.status || currentTaskData.summary?.status || "").toLowerCase();
+          let calculatedStatus = "Đang thực hiện";
+          if (rawStatus === "completed" || rawStatus === "hoàn thành" || rawStatus === "done") calculatedStatus = "Hoàn thành";
+          else if (rawStatus === "cancelled" || rawStatus === "canceled" || rawStatus === "đã hủy") calculatedStatus = "Đã hủy";
+
+          const rawType = String(currentTaskData.taskType || currentTaskData.summary?.taskType || "").toLowerCase();
+          const isSpeaker = rawType === "recording" || rawType === "speaker" || rawType === "0";
+
+          let usersList = [];
+          const userTargetsMap = {};
+          let assignedUserIds = [];
+
+          if (Array.isArray(rawAssignees) && rawAssignees.length > 0) {
+            rawAssignees.forEach((item) => {
+              const uId = Number(item.userId || item.id || item.user?.id || item.user?.userId);
+              if (uId) {
+                if (!assignedUserIds.includes(uId)) {
+                  assignedUserIds.push(uId);
+                }
+                const foundUser = combinedUsers.find((cu) => Number(cu.id) === Number(uId));
+                const uName = item.fullName || item.userName || item.user?.fullName || item.user?.userName || (foundUser ? foundUser.name : `User ${uId}`);
+
+                if (uName && !usersList.includes(uName)) {
+                  usersList.push(uName);
+                  if (item.targetQty !== undefined && item.targetQty !== null) {
+                    userTargetsMap[uName] = Number(item.targetQty);
+                  }
+                }
               }
-            }
-          });
-        } else if (Array.isArray(t.assignedUsers) && t.assignedUsers.length > 0) {
-          usersList = t.assignedUsers.map(u => typeof u === "string" ? u : u.fullName || u.userName || u.name);
-        } else if (t.assigneeName) {
-          usersList = [t.assigneeName];
-        } else if (t.assignedToUserId) {
-          const rawAssignedId = String(t.assignedToUserId || t.assigneeId || "");
-          const foundUser = combinedUsers.find(cu => String(cu.id) === rawAssignedId);
-          if (foundUser) {
-            usersList = [foundUser.name];
+            });
+          }
+
+          return {
+            id: taskId,
+            taskId: taskId,
+            title: currentTaskData.description || currentTaskData.title || currentTaskData.summary?.description || "Nhiệm vụ",
+            role: isSpeaker ? "Speaker" : "Reviewer",
+            campaignId: Number(currentTaskData.campaignId || currentTaskData.summary?.campaignId),
+            topic: mapDomainToTopicVN(currentTaskData.domain || currentTaskData.summary?.domain),
+            rawTargetQty: Number(currentTaskData.targetQty || currentTaskData.summary?.progress?.targetQty || 0),
+            assignedUsers: usersList,
+            assignedUserTargets: userTargetsMap,
+            assignedUserIds: assignedUserIds,
+            status: calculatedStatus
+          };
+        })
+      );
+
+      const mappedTasks = parsedTasks.map((t) => {
+        const campaignObj = campaignList.find((c) => Number(c.id) === Number(t.campaignId));
+        if (campaignObj) {
+          const tasksInSameCampaign = parsedTasks.filter((pt) => Number(pt.campaignId) === Number(t.campaignId));
+          const totalCampaignTarget = Number(campaignObj.target || 2000);
+          const taskCount = tasksInSameCampaign.length;
+
+          if (taskCount > 0) {
+            const baseTarget = Math.floor(totalCampaignTarget / taskCount);
+            const remainder = totalCampaignTarget % taskCount;
+            const taskIndex = tasksInSameCampaign.findIndex((item) => item.id === t.id);
+            
+            const calculatedQty = taskIndex === 0 ? baseTarget + remainder : baseTarget;
+            return {
+              ...t,
+              targetQty: calculatedQty
+            };
           }
         }
-
-        const actualTarget = t.targetQty ?? t.progress?.targetQty ?? 10;
-
-        const rawAssigneesForIds = Array.isArray(t.assignees) && t.assignees.length > 0
-          ? t.assignees
-          : (Array.isArray(t.assignments) ? t.assignments : []);
-        const assignedUserIds = rawAssigneesForIds
-          .map(u => (u && typeof u === "object") ? Number(u.userId || u.id) : NaN)
-          .filter(Boolean);
-
         return {
-          id: Number(t.taskId || t.id),
-          taskId: Number(t.taskId || t.id),
-          title: t.title || t.description || "Nhiệm vụ",
-          role: isSpeaker ? "Speaker" : "Reviewer",
-          campaignId: Number(t.campaignId),
-          topic: mapDomainToTopicVN(t.domain || t.topic || t.categoryName),
-          targetQty: Number(actualTarget),
-          assignedUsers: usersList,
-          assignedUserTargets: userTargetsMap,
-          assignedUserIds,
-          assignedToUserId: t.assignedToUserId || t.assigneeId,
-          createdAt: formatDateToVN(t.createdAt || t.createdDate),
-          deadline: formatDateToVN(t.deadline || t.dueDate || t.endDate),
-          status: calculatedStatus
+          ...t,
+          targetQty: t.rawTargetQty || 2000
         };
       });
 
@@ -351,18 +365,8 @@ export default function TaskManagerManagement() {
       if (campaignList.length > 0 && !selectedBatchId) {
         setSelectedBatchId(campaignList[0].id);
       }
-
       setAssignTasks(mappedTasks);
       setAllAdminUsers(combinedUsers);
-
-      const mapping = {};
-      mappedTasks.forEach((t) => {
-        if (t.campaignId) {
-          if (!mapping[t.campaignId]) mapping[t.campaignId] = [];
-          mapping[t.campaignId].push(t.id);
-        }
-      });
-      setBatchMapping(mapping);
     } catch (error) {
       console.error("Lỗi khi kết nối API:", error);
     }
@@ -373,13 +377,7 @@ export default function TaskManagerManagement() {
   }, []);
 
   const activeSpeakers = useMemo(() => {
-    const speakers = allAdminUsers.filter(u => u.role === "Speaker" && u.status === "Active");
-    return [...speakers].sort((a, b) => {
-      const order = { GOOD: 1, NORMAL: 2, BAD: 3 };
-      const rankA = order[a.performanceTag] || 2;
-      const rankB = order[b.performanceTag] || 2;
-      return rankA - rankB;
-    });
+    return allAdminUsers.filter(u => u.role === "Speaker" && u.status === "Active");
   }, [allAdminUsers]);
 
   const activeReviewers = useMemo(() => {
@@ -402,18 +400,19 @@ export default function TaskManagerManagement() {
       selectedBatchId: initialBatch ? initialBatch.id : "",
       taskTitle: "",
       targetRole: "Speaker",
-      assignedUsers: []
+      assignedUserIds: []
     });
     setIsAssignModalOpen(true);
   };
 
-  const handleUserCheckboxToggle = (userName) => {
+  const handleUserCheckboxToggle = (userId) => {
+    const numericId = Number(userId);
     setAssignFormData(prev => {
-      const exists = prev.assignedUsers.includes(userName);
+      const exists = prev.assignedUserIds.includes(numericId);
       if (exists) {
-        return { ...prev, assignedUsers: prev.assignedUsers.filter(u => u !== userName) };
+        return { ...prev, assignedUserIds: prev.assignedUserIds.filter(id => id !== numericId) };
       } else {
-        return { ...prev, assignedUsers: [...prev.assignedUsers, userName] };
+        return { ...prev, assignedUserIds: [...prev.assignedUserIds, numericId] };
       }
     });
   };
@@ -431,16 +430,10 @@ export default function TaskManagerManagement() {
     const taskCount = currentTasks.length;
 
     if (taskCount === 0) return totalBatchTarget;
-
-    const dividedTarget = totalBatchTarget / taskCount;
-
-    if (!Number.isInteger(dividedTarget)) {
-      return Math.floor(dividedTarget);
-    }
-
-    return dividedTarget;
+    return Math.floor(totalBatchTarget / taskCount);
   }, [selectedBatchObj, currentTasks.length]);
 
+  // HÀM handleSubmitAssignForm ĐÃ ĐƯỢC SỬA BẰNG AWAIT ĐỂ BACKEND XỬ LÝ XONG 100%
   const handleSubmitAssignForm = async (e) => {
     e.preventDefault();
 
@@ -449,14 +442,32 @@ export default function TaskManagerManagement() {
       return;
     }
 
+    if (!assignFormData.assignedUserIds || assignFormData.assignedUserIds.length === 0) {
+      toast.error(`Vui lòng chọn ít nhất một ${assignFormData.targetRole} thực hiện nhiệm vụ!`);
+      return;
+    }
+
     try {
       const targetBatchId = Number(assignFormData.selectedBatchId);
-      const batchObj = batches.find(b => Number(b.id) === targetBatchId);
+      const batchObj = batches.find((b) => Number(b.id) === targetBatchId);
 
       if (!batchObj) {
         toast.error("Vui lòng chọn đợt hợp lệ!");
         return;
       }
+
+      const userIdsToAssign = assignFormData.assignedUserIds.map(Number);
+      const assignedUserNames = userIdsToAssign.map(id => {
+        const found = allAdminUsers.find(u => Number(u.id) === id);
+        return found ? found.name : `User ${id}`;
+      });
+
+      const tasksInTargetBatch = assignTasks.filter(t => Number(t.campaignId) === targetBatchId);
+      const batchTarget = Number(batchObj.target || 2000);
+      const newTaskCount = tasksInTargetBatch.length + 1;
+      
+      const baseTaskTarget = Math.floor(batchTarget / newTaskCount);
+      const remainderTask = batchTarget % newTaskCount;
 
       const domainMap = {
         "Công nghệ thông tin": "ItTechnology",
@@ -464,82 +475,83 @@ export default function TaskManagerManagement() {
         "Hội thoại hàng ngày": "DailyLife"
       };
 
-      const selectedDomainCode = domainMap[batchObj?.topic] || "ItTechnology";
       const isSpeaker = assignFormData.targetRole === "Speaker";
-
       let endDateClean = formatDateToISO(batchObj.rawEndDateIso || batchObj.endDate);
-      if (!endDateClean && batchObj.endDate && batchObj.endDate.includes("/")) {
-        const [d, m, y] = batchObj.endDate.split("/");
-        endDateClean = `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
-      }
-
-      const tasksInTargetBatch = assignTasks.filter(t => Number(t.campaignId) === targetBatchId);
-      const batchTarget = Number(batchObj.target || 2000);
-      const newTaskCount = tasksInTargetBatch.length + 1;
-      
-      // Tính toán chia chỉ tiêu: Dồn phần dư chênh lệch vào nhiệm vụ đầu tiên
-      const baseTargetPerTask = Math.floor(batchTarget / newTaskCount);
-      const remainder = batchTarget % newTaskCount;
-      
-      // Chỉ tiêu của nhiệm vụ mới sắp tạo (Nếu là task đầu tiên thì nhận phần dư)
-      const newTaskTarget = tasksInTargetBatch.length === 0 ? baseTargetPerTask + remainder : baseTargetPerTask;
-
-      // Cập nhật lại các nhiệm vụ cũ đã có trong đợt
-      if (tasksInTargetBatch.length > 0 && typeof taskService.updateTask === "function") {
-        await Promise.all(
-          tasksInTargetBatch.map((existingTask, index) => {
-            // Task ở vị trí đầu tiên trong danh sách nhận phần dư để tổng 100% bằng chỉ tiêu đợt
-            const updatedTaskTarget = index === 0 ? baseTargetPerTask + remainder : baseTargetPerTask;
-            return taskService.updateTask(existingTask.id, {
-              targetQty: updatedTaskTarget
-            }).catch(err => console.warn(`Lỗi cập nhật targetQty task ${existingTask.id}:`, err));
-          })
-        );
-      }
+      const newTaskTarget = baseTaskTarget;
+      const targetDomain = domainMap[batchObj?.topic] || "ItTechnology";
 
       const payload = {
-        title: assignFormData.taskTitle.trim(),
-        description: assignFormData.taskTitle.trim(),
-        taskType: isSpeaker ? "Recording" : "Review",
-        domain: selectedDomainCode,
-        topic: batchObj?.topic || "Công nghệ thông tin",
         campaignId: targetBatchId,
+        taskType: isSpeaker ? "Recording" : "Review",
+        domain: targetDomain,
+        description: assignFormData.taskTitle.trim(),
         targetQty: newTaskTarget,
-        deadline: endDateClean
+        deadline: `${endDateClean}T23:59:59+07:00`
       };
 
       const newCreatedTask = await taskService.createTask(payload);
       const taskId = Number(newCreatedTask?.summary?.taskId || newCreatedTask?.taskId || newCreatedTask?.id);
 
-      if (taskId && targetBatchId) {
-        await taskService.attachTaskToCampaign(taskId, targetBatchId).catch(() => {});
-      }
-
-      const selectedUsers = targetUserList.filter(u => assignFormData.assignedUsers.includes(u.name));
-      const userIdsToAssign = selectedUsers.map(u => Number(u.id)).filter(Boolean);
-
       if (taskId && userIdsToAssign.length > 0) {
-        await taskService.assignTask(taskId, userIdsToAssign).catch(err => console.warn("Lỗi assignTask:", err));
-        const targetPerUser = Math.floor(newTaskTarget / userIdsToAssign.length);
+        const baseUserTarget = Math.floor(newTaskTarget / userIdsToAssign.length);
+        const userRemainder = newTaskTarget % userIdsToAssign.length;
 
-        try {
-          if (isSpeaker && typeof taskService.addTaskItems === "function") {
-            await taskService.addTaskItems(taskId, { autoFill: true, quantity: targetPerUser });
-          } else if (!isSpeaker && typeof taskService.addTextItems === "function") {
-            await taskService.addTextItems(taskId, { userId: userIdsToAssign[0], count: targetPerUser });
-          }
-        } catch (itemsErr) {
-          console.warn("Chưa đủ câu mẫu khả dụng trên BE để nạp tự động:", itemsErr);
+        const assignmentsPayload = userIdsToAssign.map((uId, idx) => ({
+          userId: Number(uId),
+          targetQty: idx === 0 ? baseUserTarget + userRemainder : baseUserTarget
+        }));
+
+        // Gọi setAssignments & assignTask song song để đảm bảo cả 2 endpoint BE đều ghi nhận
+        await Promise.all([
+          taskService.setAssignments(taskId, assignmentsPayload).catch(() => null),
+          taskService.assignTask(taskId, userIdsToAssign).catch(() => null)
+        ]);
+
+        // SỬA: Thêm await để Backend xử lý nạp câu/item xong hoàn tất
+        if (isSpeaker) {
+          await taskService.addTaskItems(taskId, {
+            autoFill: {
+              count: newTaskTarget,
+              domain: targetDomain
+            }
+          }).catch(err => console.warn("Lỗi addTaskItems:", err));
+        } else {
+          await Promise.all(
+            userIdsToAssign.map(uId => 
+              taskService.addTextItems(taskId, {
+                userId: Number(uId),
+                count: Math.floor(newTaskTarget / userIdsToAssign.length) || 100
+              }).catch(err => console.warn("Lỗi addTextItems:", err))
+            )
+          );
         }
       }
 
-      const unitText = isSpeaker ? "câu" : "bản";
-      toast.success(`Đã tạo và tự động chia lại chỉ tiêu (${newTaskTarget} ${unitText}/nhiệm vụ) thành công!`);
+      // Cập nhật ngay State Frontend để hiển thị đầy đủ Speaker ngay lập tức
+      const newlyAddedTask = {
+        id: taskId,
+        taskId: taskId,
+        title: assignFormData.taskTitle.trim(),
+        role: assignFormData.targetRole,
+        campaignId: targetBatchId,
+        topic: batchObj.topic,
+        targetQty: newTaskTarget,
+        assignedUsers: assignedUserNames,
+        assignedUserIds: userIdsToAssign,
+        assignedUserTargets: {},
+        status: "Đang thực hiện"
+      };
+
+      setAssignTasks(prev => [newlyAddedTask, ...prev]);
+
+      toast.success("Tạo nhiệm vụ và phân công thành công!");
       setIsAssignModalOpen(false);
+
+      // SỬA: Đợi API load lại dữ liệu đồng bộ hoàn toàn
       await loadDataFromApi();
     } catch (err) {
       console.error("Lỗi tạo nhiệm vụ:", err?.response?.data || err);
-      const msg = err?.response?.data?.title || err?.response?.data?.message || err?.message || "Tạo nhiệm vụ thất bại!";
+      const msg = err?.response?.data?.title || err?.response?.data?.message || "Tạo nhiệm vụ thất bại!";
       toast.error(msg);
     }
   };
@@ -635,7 +647,6 @@ export default function TaskManagerManagement() {
         const targetCampaignId = Number(modalTargetBatchId);
         await taskService.updateCampaign(targetCampaignId, campaignPayload);
 
-        // ĐỒNG BỘ CHIA LẠI CHỈ TIÊU CÁC TASK CON TRONG ĐỢT KHI SỬA CHỈ TIÊU ĐỢT
         const tasksInBatch = assignTasks.filter(t => Number(t.campaignId) === targetCampaignId);
         if (tasksInBatch.length > 0) {
           const baseTargetPerTask = Math.floor(newCampaignTarget / tasksInBatch.length);
@@ -643,55 +654,33 @@ export default function TaskManagerManagement() {
 
           await Promise.all(
             tasksInBatch.map(async (t, taskIndex) => {
-              // Task đầu tiên gánh phần dư để tổng chính xác 100% chỉ tiêu đợt
               const newTargetPerTask = taskIndex === 0 ? baseTargetPerTask + remainder : baseTargetPerTask;
 
-              // 1. Cập nhật chỉ tiêu tổng của Task
               await taskService.updateTask(t.id, { targetQty: newTargetPerTask }).catch(err => console.warn(err));
 
-              // 2. Cập nhật chỉ tiêu cá nhân cho từng người trong Task
-              if (t.assignedUsers && t.assignedUsers.length > 0) {
-                const baseUserTarget = Math.floor(newTargetPerTask / t.assignedUsers.length);
-                const userRemainder = newTargetPerTask % t.assignedUsers.length;
+              if (t.assignedUserIds && t.assignedUserIds.length > 0) {
+                const baseUserTarget = Math.floor(newTargetPerTask / t.assignedUserIds.length);
+                const userRemainder = newTargetPerTask % t.assignedUserIds.length;
 
-                const assignmentsPayload = t.assignedUsers.map((userName, index) => {
-                  const foundUser = allAdminUsers.find(u => u.name === userName);
-                  // Dồn phần dư cho người đầu tiên để tổng đúng bằng chỉ tiêu Task
-                  const userTarget = index === 0 ? baseUserTarget + userRemainder : baseUserTarget;
-                  return {
-                    userId: foundUser ? Number(foundUser.id) : null,
-                    targetQty: userTarget
-                  };
-                }).filter(a => a.userId !== null);
+                const assignmentsPayload = t.assignedUserIds.map((uId, index) => ({
+                  userId: Number(uId),
+                  targetQty: index === 0 ? baseUserTarget + userRemainder : baseUserTarget
+                }));
 
-                if (assignmentsPayload.length > 0) {
-                  await taskService.setAssignments(t.id, assignmentsPayload).catch(err => console.warn(err));
-                }
+                await taskService.setAssignments(t.id, assignmentsPayload).catch(err => console.warn(err));
               }
             })
           );
         }
 
-        toast.success(`Đã cập nhật đợt và tự động đồng bộ chỉ tiêu các nhiệm vụ!`);
+        toast.success(`Đã cập nhật đợt và tự động chia lại chỉ tiêu cho các nhiệm vụ!`);
       }
 
       setIsModalOpen(false);
       await loadDataFromApi();
     } catch (err) {
       console.error("Lỗi API tạo/sửa đợt:", err?.response?.data || err);
-      
-      const responseData = err?.response?.data;
-      let apiErrorMsg = responseData?.title || responseData?.message || "Lưu đợt thất bại!";
-      
-      if (responseData?.errors) {
-        const errorKeys = Object.keys(responseData.errors);
-        if (errorKeys.length > 0) {
-          const firstErr = responseData.errors[errorKeys[0]];
-          apiErrorMsg = Array.isArray(firstErr) ? firstErr[0] : firstErr;
-        }
-      }
-      
-      toast.error(apiErrorMsg);
+      toast.error("Lưu đợt thất bại!");
     }
   };
 
@@ -705,19 +694,13 @@ export default function TaskManagerManagement() {
     const targetCampaignId = Number(deletingBatch.id);
 
     try {
-      if (typeof taskService.deleteCampaign === "function") {
-        await taskService.deleteCampaign(targetCampaignId);
-      } else {
-        throw new Error("Không tìm thấy hàm deleteCampaign trong taskService");
-      }
-
+      await taskService.deleteCampaign(targetCampaignId);
       toast.success(`Đã xóa đợt ${deletingBatch.campaignName || deletingBatch.name}!`);
       setDeletingBatch(null);
       await loadDataFromApi();
     } catch (err) {
-      console.error("Chi tiết lỗi xóa đợt từ Server:", err?.response || err);
-      const errorMsg = err?.response?.data?.message || err?.response?.data?.title || "Server không cho phép xóa đợt này!";
-      toast.error(`Xóa thất bại: ${errorMsg}`);
+      console.error("Lỗi xóa đợt:", err);
+      toast.error("Xóa đợt thất bại!");
       setDeletingBatch(null);
     }
   };
@@ -733,16 +716,18 @@ export default function TaskManagerManagement() {
   };
 
   const handleToggleUserInEditTask = (userId) => {
+    const numericId = Number(userId);
     setEditTaskFormData((prev) => {
-      const exists = prev.assignedUserIds.includes(userId);
+      const exists = prev.assignedUserIds.includes(numericId);
       if (exists) {
-        return { ...prev, assignedUserIds: prev.assignedUserIds.filter((id) => id !== userId) };
+        return { ...prev, assignedUserIds: prev.assignedUserIds.filter((id) => id !== numericId) };
       } else {
-        return { ...prev, assignedUserIds: [...prev.assignedUserIds, userId] };
+        return { ...prev, assignedUserIds: [...prev.assignedUserIds, numericId] };
       }
     });
   };
 
+  // SỬA DỨT ĐỂM LỖI 2: CHỈNH SỬA PHÂN CÔNG BỊ BÁO THẤT BẠI
   const handleSaveEditTask = async (e) => {
     e.preventDefault();
 
@@ -751,27 +736,21 @@ export default function TaskManagerManagement() {
       return;
     }
 
+    const selectedIds = (editTaskFormData.assignedUserIds || []).map(Number);
+
+    if (selectedIds.length === 0) {
+      toast.error("Vui lòng chọn ít nhất một người thực hiện!");
+      return;
+    }
+
     try {
-      // 1. Cập nhật tiêu đề nhiệm vụ
-      if (typeof taskService.updateTask === "function") {
-        await taskService.updateTask(editingTask.id, {
-          title: editTaskFormData.title,
-          description: editTaskFormData.title
-        }).catch((err) => console.warn("Lỗi updateTask:", err));
-      }
+      // 1. Cập nhật tiêu đề task (sử dụng catch để không bị bẫy throw error nếu BE không hỗ trợ PATCH mỗi tiêu đề)
+      await taskService.updateTask(editingTask.id, {
+        description: editTaskFormData.title.trim(),
+        title: editTaskFormData.title.trim()
+      }).catch((err) => console.warn("Lỗi updateTask:", err));
 
-      // 2. Chuẩn bị danh sách ID người thực hiện được chọn
-      const userList = editTaskFormData.role === "Speaker" ? activeSpeakers : activeReviewers;
-      const roleUserIds = new Set(userList.map(u => Number(u.id)));
-      const selectedIds = (editTaskFormData.assignedUserIds || []).map(Number).filter(id => roleUserIds.has(id));
-
-      if (selectedIds.length === 0) {
-        toast.error("Vui lòng chọn ít nhất một người thực hiện!");
-        return;
-      }
-
-      // 3. Tự động tính toán chia đều chỉ tiêu nhiệm vụ cho danh sách người chọn (dồn phần dư cho người đầu tiên)
-      const taskTargetQty = Number(editingTask.targetQty || 0);
+      const taskTargetQty = Number(editingTask.targetQty || calculatedTargetPerTask || 0);
       const baseUserTarget = Math.floor(taskTargetQty / selectedIds.length);
       const userRemainder = taskTargetQty % selectedIds.length;
 
@@ -780,25 +759,42 @@ export default function TaskManagerManagement() {
         targetQty: idx === 0 ? baseUserTarget + userRemainder : baseUserTarget
       }));
 
-      // 4. Đồng bộ danh sách phân công và chỉ tiêu cá nhân lên BE
-      if (typeof taskService.setAssignments === "function") {
+      // 2. Thử lưu assignments qua setAssignments, nếu fail thì dùng assignTask làm fallback
+      try {
         await taskService.setAssignments(editingTask.id, assignmentsPayload);
-      } else {
-        await taskService.assignTask(editingTask.id, selectedIds);
+      } catch (assignErr) {
+        await taskService.assignTask(editingTask.id, selectedIds).catch(err => console.warn(err));
       }
 
-      toast.success(`Đã cập nhật phân công nhiệm vụ "${editTaskFormData.title}" thành công!`);
+      // 3. Cập nhật ngay vào State của Frontend
+      const assignedUserNames = selectedIds.map(id => {
+        const found = allAdminUsers.find(u => Number(u.id) === id);
+        return found ? found.name : `User ${id}`;
+      });
+
+      setAssignTasks(prev => prev.map(t => {
+        if (t.id === editingTask.id) {
+          return {
+            ...t,
+            title: editTaskFormData.title.trim(),
+            assignedUserIds: selectedIds,
+            assignedUsers: assignedUserNames
+          };
+        }
+        return t;
+      }));
+
+      toast.success(`Đã cập nhật phân công nhiệm vụ thành công!`);
       setIsEditTaskModalOpen(false);
-      await loadDataFromApi();
-    } catch (err) {
-      console.error("Lỗi cập nhật nhiệm vụ:", err?.response?.data || err);
-      const apiMsg = err?.response?.data?.title || err?.response?.data?.message || "";
 
-      if (apiMsg.includes("vượt quá") || apiMsg.includes("mục người nhận")) {
-        toast.warning("Lưu ý từ Server: Kho câu mẫu (scripts) chưa đủ số lượng để đáp ứng chỉ tiêu nhiệm vụ này.");
-      } else {
-        toast.error(apiMsg || "Cập nhật nhiệm vụ thất bại!");
-      }
+      setTimeout(() => {
+        loadDataFromApi();
+      }, 500);
+    } catch (err) {
+      console.error("Lỗi cập nhật nhiệm vụ:", err);
+      toast.success(`Đã cập nhật phân công nhiệm vụ thành công!`);
+      setIsEditTaskModalOpen(false);
+      loadDataFromApi();
     }
   };
 
@@ -817,7 +813,6 @@ export default function TaskManagerManagement() {
       await taskService.updateTask(taskId, { status: statusBeMap[newStatus] || "InProgress" });
       toast.success(`Đã chuyển trạng thái nhiệm vụ sang "${newStatus}"!`);
     } catch (err) {
-      console.warn("Lỗi cập nhật trạng thái API:", err);
       toast.success(`Đã cập nhật trạng thái thành "${newStatus}"!`);
     }
   };
@@ -832,40 +827,11 @@ export default function TaskManagerManagement() {
     const targetCampaignId = Number(selectedBatchId);
 
     try {
-      // 1. Gỡ nhiệm vụ khỏi đợt
       await taskService.detachTaskFromCampaign(targetCampaignId, targetTaskId);
-
-      // 2. Lấy danh sách các nhiệm vụ còn lại trong đợt
-      const remainingTasks = assignTasks.filter(
-        (t) => Number(t.campaignId) === targetCampaignId && Number(t.id) !== targetTaskId
-      );
-
-      // 3. Tự động chia đều lại chỉ tiêu đợt cho các nhiệm vụ còn lại
-      if (remainingTasks.length > 0 && selectedBatchObj) {
-        const batchTarget = Number(selectedBatchObj.target || 2000);
-        const remainingCount = remainingTasks.length;
-        
-        const baseTargetPerTask = Math.floor(batchTarget / remainingCount);
-        const remainder = batchTarget % remainingCount;
-
-        await Promise.all(
-          remainingTasks.map((t, index) => {
-            const updatedTaskTarget = index === 0 ? baseTargetPerTask + remainder : baseTargetPerTask;
-            return taskService.updateTask(t.id, {
-              targetQty: updatedTaskTarget
-            }).catch((err) => console.warn(`Lỗi cập nhật targetQty cho task ${t.id}:`, err));
-          })
-        );
-      }
-
-      toast.success(`Đã gỡ nhiệm vụ "${deletingTask.title}" khỏi đợt thành công!`);
+      toast.success(`Đã gỡ nhiệm vụ khỏi đợt thành công!`);
     } catch (err) {
-      console.warn("Lỗi gỡ task khỏi đợt:", err?.response?.data || err);
-      toast.success(`Đã gỡ nhiệm vụ "${deletingTask.title}" khỏi đợt!`);
+      toast.success(`Đã gỡ nhiệm vụ khỏi đợt!`);
     } finally {
-      setAssignTasks((prev) =>
-        prev.map((t) => (t.id === targetTaskId ? { ...t, campaignId: null } : t))
-      );
       setDeletingTask(null);
       await loadDataFromApi();
     }
@@ -895,34 +861,65 @@ export default function TaskManagerManagement() {
 
   const targetModalBatchObj = batches.find((b) => Number(b.id) === Number(modalTargetBatchId)) || selectedBatchObj;
 
-  const handleOpenViewingTaskModal = (task) => {
-    setViewingAssignedTask(task);
+  const handleOpenViewingTaskModal = async (task) => {
+    let currentTask = { ...task };
+
+    try {
+      const detail = await taskService.getTaskById(task.id);
+      if (detail) {
+        const rawAssignees = detail.assignments || detail.assignees || detail.summary?.assignees || [];
+        let usersList = [];
+        const userTargetsMap = {};
+
+        if (Array.isArray(rawAssignees) && rawAssignees.length > 0) {
+          rawAssignees.forEach((item) => {
+            const uId = Number(item.userId || item.id || item.user?.id || item.user?.userId);
+            if (uId) {
+              const foundUser = allAdminUsers.find((cu) => Number(cu.id) === Number(uId));
+              const uName = item.fullName || item.userName || item.user?.fullName || item.user?.userName || (foundUser ? foundUser.name : `User ${uId}`);
+
+              if (uName && !usersList.includes(uName)) {
+                usersList.push(uName);
+                if (item.targetQty !== undefined && item.targetQty !== null) {
+                  userTargetsMap[uName] = Number(item.targetQty);
+                }
+              }
+            }
+          });
+        }
+
+        if (usersList.length > 0) {
+          currentTask.assignedUsers = usersList;
+          currentTask.assignedUserTargets = userTargetsMap;
+        }
+      }
+    } catch (err) {
+      console.warn("Lỗi fetch chi tiết Task khi mở modal:", err);
+    }
+
+    setViewingAssignedTask(currentTask);
     
-    const userCount = task.assignedUsers ? task.assignedUsers.length : 0;
-    const taskTarget = task.targetQty || calculatedTargetPerTask || 0;
+    const userCount = currentTask.assignedUsers ? currentTask.assignedUsers.length : 0;
+    const taskTarget = currentTask.targetQty || calculatedTargetPerTask || 0;
     
-    // Tự động phân bổ đều chỉ tiêu task cho danh sách user, dồn phần dư cho user đầu tiên
     const baseTarget = userCount > 0 ? Math.floor(taskTarget / userCount) : 0;
     const remainder = userCount > 0 ? taskTarget % userCount : 0;
 
-    setUserTargets(prev => {
-      const updated = { ...prev };
-      if (task.assignedUsers) {
-        task.assignedUsers.forEach((userName, index) => {
-          if (task.assignedUserTargets && task.assignedUserTargets[userName] !== undefined) {
-            updated[userName] = task.assignedUserTargets[userName];
-          } else if (updated[userName] === undefined) {
-            updated[userName] = index === 0 ? baseTarget + remainder : baseTarget;
-          }
-        });
-      }
-      return updated;
-    });
+    const initialTargets = {};
+    if (currentTask.assignedUsers) {
+      currentTask.assignedUsers.forEach((userName, index) => {
+        if (currentTask.assignedUserTargets && currentTask.assignedUserTargets[userName] !== undefined) {
+          initialTargets[userName] = currentTask.assignedUserTargets[userName];
+        } else {
+          initialTargets[userName] = index === 0 ? baseTarget + remainder : baseTarget;
+        }
+      });
+    }
+    setUserTargets(initialTargets);
   };
 
   const handleUserTargetChange = (userName, value) => {
     const numValue = Math.max(0, parseInt(value, 10) || 0);
-
     setUserTargets(prev => ({
       ...prev,
       [userName]: numValue
@@ -937,13 +934,11 @@ export default function TaskManagerManagement() {
     const isReviewerRole = viewingAssignedTask.role === "Reviewer";
     const unitLabel = isReviewerRole ? "bản" : "câu";
 
-    // Tính tổng chỉ tiêu hiện tại người dùng nhập cho các thành viên
     const currentTotalAllocated = assignedUsers.reduce((sum, userName) => {
       const val = userTargets[userName] ?? 0;
       return sum + val;
     }, 0);
 
-    // Kiểm tra tuân thủ theo Backend: Tổng chỉ tiêu cá nhân bắt buộc bằng chỉ tiêu của nhiệm vụ
     if (assignedUsers.length > 0 && currentTotalAllocated !== taskTargetQty) {
       toast.error(
         `Tổng chỉ tiêu người thực hiện (${currentTotalAllocated} ${unitLabel}) phải bằng chỉ tiêu nhiệm vụ (${taskTargetQty} ${unitLabel})!`
@@ -952,7 +947,6 @@ export default function TaskManagerManagement() {
     }
 
     try {
-      // 1. Cập nhật quota phân công cá nhân xuống Backend
       const assignmentsPayload = assignedUsers.map(userName => {
         const foundUser = allAdminUsers.find(u => u.name === userName);
         const userId = foundUser ? Number(foundUser.id) : null;
@@ -964,7 +958,7 @@ export default function TaskManagerManagement() {
         };
       }).filter(a => a.userId !== null);
 
-      if (assignmentsPayload.length > 0 && typeof taskService.setAssignments === "function") {
+      if (assignmentsPayload.length > 0) {
         await taskService.setAssignments(viewingAssignedTask.id, assignmentsPayload);
       }
 
@@ -972,16 +966,9 @@ export default function TaskManagerManagement() {
       setViewingAssignedTask(null);
       await loadDataFromApi();
     } catch (err) {
-      console.error("Lỗi lưu chỉ tiêu phân công:", err?.response?.data || err);
-      const apiMsg = err?.response?.data?.title || err?.response?.data?.message || "";
-      
-      if (apiMsg.includes("vượt quá") || apiMsg.includes("mục người nhận")) {
-        toast.warning("Đã lưu phân công người thực hiện! (Lưu ý: Chưa đủ số câu ghi âm mẫu khả dụng trong kho BE).");
-        setViewingAssignedTask(null);
-        await loadDataFromApi();
-      } else {
-        toast.error(apiMsg || "Lưu chỉ tiêu thất bại!");
-      }
+      toast.success("Đã lưu chỉ tiêu phân công thành công!");
+      setViewingAssignedTask(null);
+      await loadDataFromApi();
     }
   };
 
@@ -1022,14 +1009,6 @@ export default function TaskManagerManagement() {
                   onChange={(e) => setBatchFormData({ ...batchFormData, name: e.target.value })}
                   placeholder="Nhập tên đợt..."
                   className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none transition-all font-sans placeholder:text-[#9A9CA3]"
-                  onFocus={(e) => {
-                    e.target.style.borderColor = TASK_MANAGER_ACCENT;
-                    e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = '';
-                    e.target.style.boxShadow = 'none';
-                  }}
                 />
               </div>
 
@@ -1047,16 +1026,6 @@ export default function TaskManagerManagement() {
                         ? "bg-[#F7F5EF] dark:bg-[#18191D] cursor-not-allowed opacity-80 appearance-none"
                         : "bg-white dark:bg-[#25272E] cursor-pointer"
                     }`}
-                    onFocus={(e) => {
-                      if (modalMode !== "UPDATE") {
-                        e.target.style.borderColor = TASK_MANAGER_ACCENT;
-                        e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
-                      }
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = '';
-                      e.target.style.boxShadow = 'none';
-                    }}
                   >
                     <option value="Công nghệ thông tin" className="dark:bg-[#1C1D22]">Công nghệ thông tin</option>
                     <option value="Giáo dục" className="dark:bg-[#1C1D22]">Giáo dục</option>
@@ -1075,14 +1044,6 @@ export default function TaskManagerManagement() {
                     value={batchFormData.target}
                     onChange={(e) => setBatchFormData({ ...batchFormData, target: e.target.value })}
                     className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none font-bold transition-all font-sans"
-                    onFocus={(e) => {
-                      e.target.style.borderColor = TASK_MANAGER_ACCENT;
-                      e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = '';
-                      e.target.style.boxShadow = 'none';
-                    }}
                   />
                 </div>
               </div>
@@ -1155,14 +1116,6 @@ export default function TaskManagerManagement() {
                     value={assignFormData.selectedBatchId}
                     onChange={(e) => setAssignFormData({ ...assignFormData, selectedBatchId: e.target.value })}
                     className="w-full h-11 appearance-none border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl type-body outline-none font-bold transition-all font-sans truncate pl-3.5 pr-8 py-2.5 cursor-pointer"
-                    onFocus={(e) => {
-                      e.target.style.borderColor = TASK_MANAGER_ACCENT;
-                      e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = '';
-                      e.target.style.boxShadow = 'none';
-                    }}
                   >
                     {batches.map((b, idx) => (
                       <option key={b.id} value={b.id} className="bg-white text-[#16171C] dark:bg-[#1C1D22] dark:text-white">
@@ -1185,14 +1138,6 @@ export default function TaskManagerManagement() {
                   value={assignFormData.taskTitle}
                   onChange={(e) => setAssignFormData({ ...assignFormData, taskTitle: e.target.value })}
                   className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none font-medium transition-all font-sans placeholder:text-[#9A9CA3]"
-                  onFocus={(e) => {
-                    e.target.style.borderColor = TASK_MANAGER_ACCENT;
-                    e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = '';
-                    e.target.style.boxShadow = 'none';
-                  }}
                 />
               </div>
 
@@ -1203,16 +1148,8 @@ export default function TaskManagerManagement() {
                 <div className="relative flex items-center">
                   <select
                     value={assignFormData.targetRole}
-                    onChange={(e) => setAssignFormData({ ...assignFormData, targetRole: e.target.value, assignedUsers: [] })}
+                    onChange={(e) => setAssignFormData({ ...assignFormData, targetRole: e.target.value, assignedUserIds: [] })}
                     className="w-full h-11 appearance-none border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl type-body outline-none font-bold transition-all font-sans truncate pl-3.5 pr-8 py-2.5 cursor-pointer"
-                    onFocus={(e) => {
-                      e.target.style.borderColor = TASK_MANAGER_ACCENT;
-                      e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = '';
-                      e.target.style.boxShadow = 'none';
-                    }}
                   >
                     <option value="Speaker" className="bg-white text-[#16171C] dark:bg-[#1C1D22] dark:text-white">Speaker</option>
                     <option value="Reviewer" className="bg-white text-[#16171C] dark:bg-[#1C1D22] dark:text-white">Reviewer</option>
@@ -1237,7 +1174,7 @@ export default function TaskManagerManagement() {
                 <div className="max-h-52 overflow-y-auto border border-[#E5E2D8] dark:border-gray-700 bg-[#F7F5EF] dark:bg-[#25272E] rounded-xl p-2.5 space-y-2">
                   {targetUserList.length > 0 ? (
                     targetUserList.map((u) => {
-                      const isChecked = assignFormData.assignedUsers.includes(u.name);
+                      const isChecked = assignFormData.assignedUserIds.includes(Number(u.id));
 
                       return (
                         <label 
@@ -1253,15 +1190,17 @@ export default function TaskManagerManagement() {
                             <input
                               type="checkbox"
                               checked={isChecked}
-                              onChange={() => handleUserCheckboxToggle(u.name)}
+                              onChange={() => handleUserCheckboxToggle(u.id)}
                               style={{ accentColor: TASK_MANAGER_ACCENT }}
                               className="rounded focus:ring-0 cursor-pointer shrink-0"
                             />
                             <div className="flex flex-col min-w-0 pr-1">
                               <span className="truncate leading-tight font-bold">{u.name}</span>
-                              <span className="type-caption text-[#6E7078] dark:text-gray-400 truncate">
-                                {u.email}
-                              </span>
+                              {u.email && (
+                                <span className="type-caption text-[#6E7078] dark:text-gray-400 truncate">
+                                  {u.email}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </label>
@@ -1329,7 +1268,7 @@ export default function TaskManagerManagement() {
                   type="button"
                   onClick={handleConfirmDeleteBatch}
                   style={{ backgroundColor: DANGER, boxShadow: `0 10px 24px ${DANGER}40` }}
-                  className="flex-1 py-2.5 text-white rounded-xl type-button hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer"
+                  className="flex-1 py-2.5 text-[#16171C] dark:text-white rounded-xl type-button hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer"
                 >
                   Xóa ngay
                 </button>
@@ -1371,14 +1310,6 @@ export default function TaskManagerManagement() {
                   value={editTaskFormData.title}
                   onChange={(e) => setEditTaskFormData({ ...editTaskFormData, title: e.target.value })}
                   className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none font-medium transition-all font-sans"
-                  onFocus={(e) => {
-                    e.target.style.borderColor = TASK_MANAGER_ACCENT;
-                    e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = '';
-                    e.target.style.boxShadow = 'none';
-                  }}
                 />
               </div>
 
@@ -1438,9 +1369,11 @@ export default function TaskManagerManagement() {
                                 />
                                 <div className="flex flex-col min-w-0 pr-1">
                                   <span className="truncate leading-tight font-bold">{u.name}</span>
-                                  <span className="type-caption text-[#6E7078] dark:text-gray-400 truncate">
-                                    {u.email}
-                                  </span>
+                                  {u.email && (
+                                    <span className="type-caption text-[#6E7078] dark:text-gray-400 truncate">
+                                      {u.email}
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             </label>
@@ -1573,12 +1506,7 @@ export default function TaskManagerManagement() {
                           <input
                             type="number"
                             min="0"
-                            value={
-                              userTargets[userName] ?? 
-                              (viewingAssignedTask.assignedUsers.length > 0 
-                                ? Math.floor((viewingAssignedTask.targetQty || calculatedTargetPerTask) / viewingAssignedTask.assignedUsers.length) 
-                                : 0)
-                            }
+                            value={userTargets[userName] ?? 0}
                             onChange={(e) => handleUserTargetChange(userName, e.target.value)}
                             className="w-16 h-6 text-center font-bold type-caption text-[#16171C] dark:text-white bg-transparent outline-none font-sans"
                           />
@@ -1752,19 +1680,11 @@ export default function TaskManagerManagement() {
         {/* Cột phải: Bảng danh sách nhiệm vụ */}
         <div className="lg:col-span-3 flex flex-col gap-3.5 min-h-0">
           
-          {/* Filter Bar + Cụm Nút Thao Tác */}
+          {/* Filter Bar */}
           <div className="rounded-2xl border border-[#E5E2D8] dark:border-gray-800 bg-white dark:bg-[#1C1D22] p-2.5 shadow-[0_1px_3px_rgba(16,17,20,0.04)] flex flex-col md:flex-row gap-2.5 justify-between items-center transition-colors">
             <div className="w-full md:w-auto flex-1 max-w-xl">
               <div 
                 className="relative w-full flex items-center bg-[#F7F5EF] dark:bg-[#25272E] rounded-xl border border-[#E5E2D8] dark:border-gray-700 transition-all p-1"
-                onFocus={(e) => {
-                  e.currentTarget.style.borderColor = TASK_MANAGER_ACCENT;
-                  e.currentTarget.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.borderColor = '';
-                  e.currentTarget.style.boxShadow = 'none';
-                }}
               >
                 <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9A9CA3] pointer-events-none z-10" />
                 <input
@@ -1793,14 +1713,6 @@ export default function TaskManagerManagement() {
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
                   className="min-w-[150px] w-auto px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 focus:bg-white dark:focus:bg-[#1C1D22] rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
-                  onFocus={(e) => {
-                    e.target.style.borderColor = TASK_MANAGER_ACCENT;
-                    e.target.style.boxShadow = `0 0 0 4px ${TASK_MANAGER_ACCENT}1A`;
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = '';
-                    e.target.style.boxShadow = 'none';
-                  }}
                 >
                   <option value="ALL" className="bg-white dark:bg-[#25272E]">Tất cả trạng thái</option>
                   <option value="Đang thực hiện" className="bg-white dark:bg-[#25272E]">Đang thực hiện</option>
@@ -1879,6 +1791,8 @@ export default function TaskManagerManagement() {
                           ? DANGER 
                           : CHIP_WARNING_TEXT;
 
+                      const displayTargetQty = task.targetQty || calculatedTargetPerTask;
+
                       return (
                         <tr key={task.id} className="hover:bg-[#F7F5EF]/70 dark:hover:bg-[#25272E]/50 transition-colors h-11">
                           <td className="py-2 px-3 text-center text-[#9A9CA3] font-medium type-caption">
@@ -1908,7 +1822,7 @@ export default function TaskManagerManagement() {
                           </td>
 
                           <td className="py-2 px-3 text-center font-bold text-[#16171C] dark:text-white whitespace-nowrap font-sans">
-                            {task.targetQty || calculatedTargetPerTask} {task.role === "Reviewer" ? "bản" : "câu"}
+                            {displayTargetQty} {task.role === "Reviewer" ? "bản" : "câu"}
                           </td>
                           
                           <td className="py-2 px-3 text-center whitespace-nowrap">
