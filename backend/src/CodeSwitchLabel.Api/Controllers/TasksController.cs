@@ -38,6 +38,8 @@ public class TasksController(ITaskService taskService) : ControllerBase
     /// Task gắn chiến dịch thì hạn hoàn thành phải nằm trong khoảng ngày của chiến dịch;
     /// task độc lập bỏ qua kiểm tra này. Hạn gửi kèm múi giờ nào cũng được, ví dụ
     /// <c>2026-09-30T17:00:00+07:00</c>; backend đổi sang UTC trước khi lưu.
+    /// Task thu âm tạo kèm người nhận phải giữ đủ <c>targetQty</c> cặp câu hợp lệ;
+    /// thiếu câu thì trả 422 và không tạo task. Không gửi người nhận thì task được tạo rỗng.
     /// Lỗi trigger do race (vượt quota/khung hạn) cũng trả mã
     /// <c>task_target_exceeds_campaign</c> / <c>task_deadline_outside_campaign</c> (422).
     /// </remarks>
@@ -101,8 +103,8 @@ public class TasksController(ITaskService taskService) : ControllerBase
     /// Gửi **đúng một** trong hai:
     ///
     /// - <c>{ "ids": ["s_211000001"] }</c> — mã cặp câu với task thu âm, mã bản ghi với task duyệt.
-    /// - <c>{ "autoFill": { "count": 10, "domain": "ItTechnology" } }</c> — task thu âm, lọc theo chủ đề.
-    /// - <c>{ "autoFill": { "count": 10, "speakerId": 6 } }</c> — task duyệt, lọc theo người đọc.
+    /// - <c>{ "autoFill": { "count": 10, "domain": "ItTechnology" } }</c> — task thu âm, cố thêm tối đa 10 mục hợp lệ theo chủ đề; chủ đề phải khớp task.
+    /// - <c>{ "autoFill": { "count": 10, "speakerId": 6 } }</c> — task duyệt, cố thêm tối đa 10 mục hợp lệ theo người đọc.
     ///
     /// Mục không hợp lệ **không làm hỏng cả request**: phần hợp lệ vẫn được thêm,
     /// phần bị loại nằm trong <c>skipped</c> kèm lý do.

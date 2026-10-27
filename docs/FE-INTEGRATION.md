@@ -734,14 +734,14 @@ giao) — các dòng có `canReview: false`, nộp duyệt vẫn trả 403 `task
 | Danh sách chiến dịch | `GET /api/campaigns` — lọc tuỳ chọn `status`, `page`, `pageSize`. Mỗi dòng kèm `allocatedTaskQty` (tổng chỉ tiêu đã chia cho các task), `taskCount`, `completedTaskCount`, `assignedTo` |
 | Chi tiết chiến dịch | `GET /api/campaigns/{id}` |
 | Danh sách task | `GET /api/tasks` — lọc tuỳ chọn: `taskType`, `status`, `assigneeId`, `overdue`, `page`, `pageSize`. Mỗi dòng kèm `campaignId`, `campaignName` |
-| Tạo task | `POST /api/tasks` `{ "campaignId": 2, "taskType": "Recording", "description": "…", "targetQty": 10, "deadline": "2026-09-30T17:00:00+07:00", "assigneeUserIds": [6, 7] }` — `campaignId` để trống/`null` = task độc lập; `assigneeUserIds` tuỳ chọn, bỏ qua hoặc `[]` để tạo chưa phân công |
+| Tạo task | `POST /api/tasks` `{ "campaignId": 2, "taskType": "Recording", "description": "…", "targetQty": 10, "deadline": "2026-09-30T17:00:00+07:00", "assigneeUserIds": [6, 7] }` — `campaignId` để trống/`null` = task độc lập; `assigneeUserIds` tuỳ chọn, bỏ qua hoặc `[]` để tạo chưa phân công. Recording tạo kèm người nhận phải có đủ `targetQty` cặp hợp lệ, nếu thiếu trả 422 và không tạo task |
 | Gắn/chuyển/gỡ chiến dịch | `PATCH /api/tasks/{id}/campaign` `{ "campaignId": 2 }` — `null` = gỡ về độc lập |
 | Xoá task khỏi chiến dịch (vĩnh viễn) | `DELETE /api/campaigns/{id}/tasks/{taskId}` → 204 — task và dữ liệu điều phối bị xoá; bản ghi thu âm/lượt duyệt giữ lại |
 | Xoá task độc lập | `DELETE /api/tasks/{id}` → 204 — task đã gỡ khỏi chiến dịch và chưa có dữ liệu nộp thật (lượt giao, hàng chờ xoá theo) |
 | Chi tiết task | `GET /api/tasks/{id}` — tiến độ, lịch sử giao, danh sách mục (`campaignId`/`campaignName` có thể `null`) |
 | Sửa task | `PATCH /api/tasks/{id}` — chỉ gửi trường cần đổi (không đổi chiến dịch ở đây) |
 | Thêm mục chọn tay | `POST /api/tasks/{id}/items` `{ "ids": ["s_211000000001", "s_131000000002"] }` |
-| Thêm mục tự động | `POST /api/tasks/{id}/items` `{ "autoFill": { "count": 10, "domain": "ItTechnology" } }` — task duyệt thì dùng `"speakerId"` thay cho `"domain"` |
+| Thêm mục tự động | `POST /api/tasks/{id}/items` `{ "autoFill": { "count": 10, "domain": "ItTechnology" } }` — cố thêm 10 mục hợp lệ (hoặc ít hơn nếu hết ứng viên phù hợp); `domain` phải khớp chủ đề task, nếu không trả 422; task duyệt thì dùng `"speakerId"` thay cho `"domain"` |
 | Gỡ mục | `DELETE /api/tasks/{id}/items/{itemId}` |
 
 ### Giao người nhận khi tạo task (TEAM_021)

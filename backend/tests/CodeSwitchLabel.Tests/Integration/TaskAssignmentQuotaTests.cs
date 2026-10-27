@@ -45,6 +45,33 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task AutoFillContinuesAfterCandidateIsQueuedInAnotherUnassignedTask()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await CreateValidatedScriptAsync("[vi]Em nhớ [en]upload alpha nhé.", "[vi]Em nhớ tải lên alpha nhé.",
+            ScriptDomain.ItTechnology, AdminUserId);
+        await CreateValidatedScriptAsync("[vi]Em nhớ [en]upload beta nhé.", "[vi]Em nhớ tải lên beta nhé.",
+            ScriptDomain.ItTechnology, AdminUserId);
+
+        var source = await CreateTaskAsync(CampaignId, TaskType.Recording, 1, ManagerUserId);
+        var target = await CreateTaskAsync(CampaignId, TaskType.Recording, 1, ManagerUserId);
+        var candidates = await Tasks.FindScriptCandidatesAsync(
+            source.TaskId, [], ScriptDomain.ItTechnology, 2, [], ct);
+        Assert.Equal(2, candidates.Count);
+
+        await TaskService.AddItemsAsync(source.TaskId,
+            new AddTaskItemsRequest { Ids = [candidates[0]] }, ct, ManagerUserId);
+
+        var result = await TaskService.AddItemsAsync(target.TaskId,
+            new AddTaskItemsRequest { AutoFill = new AutoFillCriteria { Count = 1 } },
+            ct, ManagerUserId);
+
+        Assert.Equal(1, result.Added);
+        Assert.Contains(result.Skipped, item => item.Id == candidates[0]);
+        Assert.Contains(result.Task.Items, item => item.Id == candidates[1]);
+    }
+
+    [Fact]
     public async Task SetAssignments_ThayDanhSach_ChiaQuotaVaGiuLichSu()
     {
         var ct = TestContext.Current.CancellationToken;
