@@ -28,6 +28,17 @@ public class UsersController(IUserService userService) : ControllerBase
         [FromQuery] UserSearchRequest request, CancellationToken ct)
         => Ok(await userService.SearchAsync(request, ct));
 
+    /// <summary>Bảng Speaker của Admin: họ tên, email, giới tính, trạng thái và số cặp đã duyệt.</summary>
+    /// <remarks>
+    /// Một cặp được đếm khi cả bản CS và bản VI đều đã duyệt đạt. Có `campaignId` thì chỉ đếm cặp
+    /// trong chiến dịch đó và chỉ trả về người có ít nhất một cặp như vậy; bỏ trống thì cộng tất cả.
+    /// </remarks>
+    [HttpGet("speakers")]
+    [ProducesResponseType(typeof(PagedResult<SpeakerListItemDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResult<SpeakerListItemDto>>> SearchSpeakers(
+        [FromQuery] SpeakerSearchRequest request, CancellationToken ct)
+        => Ok(await userService.SearchSpeakersAsync(request, ct));
+
     /// <summary>Chi tiết một tài khoản, kèm hồ sơ người đọc và các task đang nhận.</summary>
     [HttpGet("{id:long}")]
     [ProducesResponseType(typeof(UserDetailDto), StatusCodes.Status200OK)]

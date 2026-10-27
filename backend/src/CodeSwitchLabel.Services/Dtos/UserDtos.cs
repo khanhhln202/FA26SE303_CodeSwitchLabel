@@ -17,7 +17,26 @@ public record SpeakerProfileDto(
     string? Province,
     decimal? EnglishLevel,
     Occupation? Occupation,
+    Gender? Gender,
     string? Major);
+
+/// <summary>Một dòng trong bảng Speaker của Admin. ApprovedPairs đếm cặp đủ cả bản CS và VI đã duyệt.</summary>
+public record SpeakerListItemDto(
+    long UserId,
+    string FullName,
+    string Email,
+    Gender? Gender,
+    UserStatus Status,
+    int ApprovedPairs);
+
+public record SpeakerSearchRequest : PageRequest
+{
+    /// <summary>Chỉ lấy Speaker có ít nhất một cặp đã duyệt trong chiến dịch này.</summary>
+    public long? CampaignId { get; init; }
+
+    /// <summary>Tìm theo họ tên hoặc email.</summary>
+    public string? Keyword { get; init; }
+}
 
 /// <summary>Task đang chạy mà người dùng này là người nhận.</summary>
 public record UserTaskDto(long TaskId, TaskType TaskType, string? Description, WorkTaskStatus Status);
@@ -130,6 +149,8 @@ public record UpdateSpeakerProfileRequest
     public decimal? EnglishLevel { get; init; }
 
     public Occupation? Occupation { get; init; }
+
+    public Gender? Gender { get; init; }
 
     [StringLength(100)]
     public string? Major { get; init; }

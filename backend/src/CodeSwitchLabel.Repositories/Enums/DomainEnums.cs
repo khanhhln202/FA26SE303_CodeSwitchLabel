@@ -13,6 +13,9 @@ public enum UserStatus { Active, Inactive, Suspended }
 
 public enum Occupation { Student, Employed, Other }
 
+/// <summary>Không bắt buộc: hồ sơ cũ chưa có thì để null.</summary>
+public enum Gender { Male, Female, Other }
+
 public enum ConfigValueType { Int, Bool, String }
 
 public enum AuditAction { Create, Update, Delete, Import, Export, Assign, Release, Login }

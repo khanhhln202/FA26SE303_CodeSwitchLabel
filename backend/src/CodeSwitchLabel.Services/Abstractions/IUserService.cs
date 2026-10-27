@@ -7,6 +7,10 @@ public interface IUserService
 {
     Task<PagedResult<UserListItemDto>> SearchAsync(UserSearchRequest request, CancellationToken ct = default);
 
+    /// <summary>Bảng Speaker của Admin, kèm số cặp đã duyệt và lọc theo chiến dịch.</summary>
+    Task<PagedResult<SpeakerListItemDto>> SearchSpeakersAsync(
+        SpeakerSearchRequest request, CancellationToken ct = default);
+
     Task<UserDetailDto> GetAsync(long userId, CancellationToken ct = default);
 
     /// <summary>Tạo tài khoản với mật khẩu tạm do hệ thống sinh, trả về đúng một lần.</summary>

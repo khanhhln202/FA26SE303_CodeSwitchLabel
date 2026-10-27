@@ -107,6 +107,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         // Tên kiểu trong database suy ra từ tên enum theo snake_case, trừ hai chỗ đặt tên khác.
         modelBuilder.HasPostgresEnum<UserStatus>();
         modelBuilder.HasPostgresEnum<Occupation>();
+        modelBuilder.HasPostgresEnum<Gender>();
         modelBuilder.HasPostgresEnum<ConfigValueType>();
         modelBuilder.HasPostgresEnum<AuditAction>();
         modelBuilder.HasPostgresEnum<ScriptStatus>();

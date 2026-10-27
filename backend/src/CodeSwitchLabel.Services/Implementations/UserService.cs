@@ -15,7 +15,10 @@ internal static class UserMapper
         new(u.UserId, u.FullName, u.Email, u.Phone, u.Role.RoleName, u.Status, u.CreatedAt);
 
     public static SpeakerProfileDto ToDto(this SpeakerProfile? p) =>
-        new(p?.BirthYear, p?.Province, p?.EnglishLevel, p?.Occupation, p?.Major);
+        new(p?.BirthYear, p?.Province, p?.EnglishLevel, p?.Occupation, p?.Gender, p?.Major);
+
+    public static SpeakerListItemDto ToSpeakerListItem(this SpeakerListRow r) =>
+        new(r.UserId, r.FullName, r.Email, r.Gender, r.Status, r.ApprovedPairs);
 
     /// <remarks>Phải kèm Role và SpeakerProfile.</remarks>
     public static CurrentUserDto ToCurrentUser(this AppUser u) =>
@@ -50,6 +53,16 @@ public class UserService(
 
         return new PagedResult<UserListItemDto>(
             [.. items.Select(u => u.ToListItem())], request.Page, request.PageSize, total);
+    }
+
+    public async Task<PagedResult<SpeakerListItemDto>> SearchSpeakersAsync(
+        SpeakerSearchRequest request, CancellationToken ct = default)
+    {
+        var (items, total) = await users.SearchSpeakersAsync(
+            request.CampaignId, request.Keyword, request.Page, request.PageSize, ct);
+
+        return new PagedResult<SpeakerListItemDto>(
+            [.. items.Select(r => r.ToSpeakerListItem())], request.Page, request.PageSize, total);
     }
 
     public async Task<UserDetailDto> GetAsync(long userId, CancellationToken ct = default)
@@ -279,6 +292,7 @@ public class UserService(
         profile.Province = Clean(request.Province);
         profile.EnglishLevel = request.EnglishLevel;
         profile.Occupation = request.Occupation;
+        profile.Gender = request.Gender;
         profile.Major = Clean(request.Major);
 
         await users.SaveChangesAsync(ct);

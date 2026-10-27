@@ -11,6 +11,7 @@ BEGIN;
 -- ============================================================
 CREATE TYPE user_status           AS ENUM ('active','inactive','suspended');
 CREATE TYPE occupation            AS ENUM ('student','employed','other');
+CREATE TYPE gender                AS ENUM ('male','female','other');
 CREATE TYPE config_value_type     AS ENUM ('int','bool','string');
 CREATE TYPE audit_action          AS ENUM ('create','update','delete','import','export','assign','release','login');
 CREATE TYPE script_status         AS ENUM ('pending_validation','validated','rejected','deactivated');
@@ -103,6 +104,7 @@ CREATE TABLE speaker_profile (                    -- 1 : 0..1 with app_user
     province      VARCHAR(100),                   -- region (N/C/S) auto-derived, not stored
     english_level NUMERIC(2,1) CHECK (english_level BETWEEN 0.0 AND 9.0),  -- IELTS band
     occupation    occupation,
+    gender        gender,                         -- không bắt buộc (hồ sơ cũ chưa có)
     major         VARCHAR(100)                    -- chuyên ngành: IT | english | business ...
 );
 

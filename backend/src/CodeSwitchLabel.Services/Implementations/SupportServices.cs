@@ -61,6 +61,7 @@ public class AuthService(
                 Province = Clean(profile?.Province),
                 EnglishLevel = profile?.EnglishLevel,
                 Occupation = profile?.Occupation,
+                Gender = profile?.Gender,
                 Major = Clean(profile?.Major)
             }
         };

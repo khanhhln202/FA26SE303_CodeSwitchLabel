@@ -15,4 +15,8 @@ public interface IDatasetService
     Task DeleteAsync(long datasetId, CancellationToken ct = default);
     Task<DatasetFileDto> DownloadAsync(
         long datasetId, bool includeAudio = true, CancellationToken ct = default);
+
+    /// <summary>Xuất thẳng ZIP dữ liệu đã duyệt theo Speaker hoặc theo chiến dịch.</summary>
+    Task<DatasetFileDto> ExportSpeakersAsync(
+        ExportSpeakerDataRequest request, CancellationToken ct = default);
 }

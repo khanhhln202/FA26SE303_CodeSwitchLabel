@@ -148,6 +148,18 @@ public static partial class DatabaseSeeder
         await db.Database.ExecuteSqlRawAsync(
             "CREATE INDEX IF NOT EXISTS idx_task_script_assignee ON task_script (assignee_user_id)", ct);
 
+        // V19: hồ sơ người đọc có thêm giới tính, nullable cho dữ liệu cũ.
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            DO $$ BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'gender') THEN
+                    CREATE TYPE gender AS ENUM ('male','female','other');
+                END IF;
+            END $$;
+            """, ct);
+        await db.Database.ExecuteSqlRawAsync(
+            "ALTER TABLE speaker_profile ADD COLUMN IF NOT EXISTS gender gender", ct);
+
         var hasRegistration = await db.Database
             .SqlQuery<bool>($"""SELECT to_regclass('public.campaign_registration') IS NOT NULL AS "Value" """)
             .SingleAsync(ct);
