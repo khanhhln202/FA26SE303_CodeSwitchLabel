@@ -56,7 +56,19 @@ const catStyle = (cat) => {
   return CATEGORY_COLORS[normalized] || { bg: '#F7F5EF', text: '#6E7078', border: '#E5E2D8' };
 };
 
-// Helper tự động gắn nhãn [vi]... và [en]... cho từng từ nếu chưa có
+// Hàm xóa thẻ [vi] và [en] chỉ dùng khi cần kiểm tra trùng lặp Client
+const cleanLanguageTags = (str) => {
+  if (!str) return "";
+  return str
+    .replace(/\[vi\]/gi, " ")
+    .replace(/\[en\]/gi, " ")
+    .replace(/\[\/vi\]/gi, " ")
+    .replace(/\[\/en\]/gi, " ")
+    .replace(/\s+/g, " ") // Chuẩn hóa khoảng trắng thừa
+    .trim();
+};
+
+// Helper tự động gắn nhãn [vi]...[/vi] và [en]...[/en] cho từng từ
 const addTagsToCsContent = (str) => {
   if (!str) return "";
   if (str.includes("[vi]") || str.includes("[en]")) return str;
@@ -73,19 +85,41 @@ const addTagsToCsContent = (str) => {
         cleanWord.length > 1;
 
       if (isEnglishWord) {
-        return `[en]${word}`;
+        return `[en]${word}[/en]`;
       }
-      return `[vi]${word}`;
+      return `[vi]${word}[/vi]`;
     })
     .join(" ");
 };
 
-// Helper gắn nhãn [vi] cho toàn bộ chuỗi tiếng Việt thuần
-const addViTagToPureText = (str) => {
-  if (!str) return "";
-  if (str.startsWith("[vi]")) return str;
-  return `[vi]${str}`;
-};
+// Hiển thị đầy đủ cả thẻ [vi], [/vi], [en], [/en] thô gốc và in đậm từ tiếng Anh
+function HighlightCsText({ rawText }) {
+  if (!rawText) return null;
+
+  if (rawText.includes("[en]") || rawText.includes("[vi]")) {
+    const parts = rawText.split(/(\[en\].*?\[\/en\]|\[vi\].*?\[\/vi\])/gi);
+    
+    return (
+      <>
+        {parts.map((part, index) => {
+          if (!part) return null;
+          const lowerPart = part.toLowerCase();
+
+          if (lowerPart.startsWith("[en]")) {
+            return (
+              <span key={index} className="font-semibold">
+                {part}
+              </span>
+            );
+          }
+          return part;
+        })}
+      </>
+    );
+  }
+
+  return <>{rawText}</>;
+}
 
 export default function AdminTextData() {
   const [textList, setTextList] = useState([]);
@@ -94,6 +128,7 @@ export default function AdminTextData() {
   const [selectedStatus, setSelectedStatus] = useState("all");
   
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
   const pageSize = 10;
   
   const [showModal, setShowModal] = useState(false);
@@ -108,25 +143,34 @@ export default function AdminTextData() {
 
   const fetchTexts = async () => {
     try {
-      const res = await adminService.getTexts({
+      const params = {
         page: currentPage,
-        pageSize: 100
-      });
-      const items = res.items || res || [];
-      setTextList(
-        items.map((item) => {
-          const rawCs = item.csContent || item.csPlain || item.content || "";
-          const rawVi = item.viContent || item.viEquivalent || item.csContent || item.content || "";
+        pageSize: pageSize
+      };
+      
+      if (activeSearchTerm) {
+        params.search = activeSearchTerm;
+      }
+      if (selectedStatus !== "all") {
+        params.status = selectedStatus === "active" ? "Validated" : "Pending";
+      }
 
-          return {
-            id: item.scriptId || item.id,
-            csContent: addTagsToCsContent(rawCs),
-            viContent: addViTagToPureText(rawVi),
-            rawCsContent: rawCs,
-            topic: normalizeTopicName(item.domain || item.topic),
-            status: (item.status === "Validated" || item.status === "active") ? "active" : "pending"
-          };
-        })
+      const res = await adminService.getTexts(params);
+      const items = res.items || res.data || (Array.isArray(res) ? res : []);
+      const total = res.totalCount || res.totalItems || res.total || (Array.isArray(res) ? res.length : items.length);
+
+      setTotalItems(total);
+      setTextList(
+        items.map((item) => ({
+          id: item.scriptId || item.id,
+          // Giữ NGUYÊN 100% chuỗi gốc chứa [vi], [/vi], [en], [/en] cho cả 2 trường
+          csContent: item.csContent || item.csPlain || item.content || "",
+          viContent: item.viContent || item.viEquivalent || item.csContent || item.content || "",
+          content: item.csContent || item.csPlain || item.content || "",
+          rawCsContent: item.csContent || item.content || "",
+          topic: normalizeTopicName(item.domain || item.topic),
+          status: (item.status === "Validated" || item.status === "active") ? "active" : "pending"
+        }))
       );
     } catch (err) {
       console.error("Lỗi lấy danh sách câu văn bản:", err);
@@ -135,7 +179,7 @@ export default function AdminTextData() {
 
   useEffect(() => {
     fetchTexts();
-  }, [currentPage]);
+  }, [currentPage, activeSearchTerm, selectedStatus]);
 
   // Hàm cập nhật trạng thái từ Chờ duyệt sang Sẵn sàng
   const handleScriptStatusChange = async (item, newStatus) => {
@@ -250,12 +294,11 @@ export default function AdminTextData() {
       const rawVi = item.vi_equivalent || item.viContent || rawCs;
 
       const taggedCsContent = addTagsToCsContent(rawCs);
-      const cleanCsForCheck = rawCs.toLowerCase().replace(/\[\/?(vi|en)\]/gi, "").trim();
+      const cleanCsForCheck = cleanLanguageTags(rawCs).toLowerCase();
 
-      // Kiểm tra câu trùng lặp
       const isDuplicateOnClient = textList.some((existingItem) => {
         if (editingItem && existingItem.id === editingItem.id) return false;
-        const existingClean = existingItem.csContent.toLowerCase().replace(/\[\/?(vi|en)\]/gi, "").trim();
+        const existingClean = cleanLanguageTags(existingItem.csContent).toLowerCase();
         return existingClean === cleanCsForCheck;
       });
 
@@ -321,23 +364,7 @@ export default function AdminTextData() {
     }
   };
 
-  const filteredTexts = useMemo(() => {
-    return textList.filter((item) => {
-      const matchesSearch = 
-        item.csContent.toLowerCase().includes(activeSearchTerm.toLowerCase()) || 
-        item.viContent.toLowerCase().includes(activeSearchTerm.toLowerCase()) || 
-        String(item.id).toLowerCase().includes(activeSearchTerm.toLowerCase());
-      const matchesStatus = selectedStatus === "all" || item.status === selectedStatus;
-      
-      return matchesSearch && matchesStatus;
-    });
-  }, [textList, activeSearchTerm, selectedStatus]);
-
-  const totalPages = Math.ceil(filteredTexts.length / pageSize) || 1;
-  const paginatedTexts = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredTexts.slice(start, start + pageSize);
-  }, [filteredTexts, currentPage, pageSize]);
+  const totalPages = Math.ceil(totalItems / pageSize) || 1;
 
   return (
     <div className="w-full h-full flex flex-col justify-between text-left font-sans p-1 overflow-hidden transition-colors relative">
@@ -429,8 +456,8 @@ export default function AdminTextData() {
 
             {/* Table Body */}
             <div className="divide-y divide-[#F0EEE6] dark:divide-gray-800 type-ui flex-1 grid grid-rows-10">
-              {paginatedTexts.length > 0 ? (
-                paginatedTexts.map((item, index) => {
+              {textList.length > 0 ? (
+                textList.map((item, index) => {
                   const stt = (currentPage - 1) * pageSize + index + 1;
                   const style = catStyle(item.topic);
                   return (
@@ -439,9 +466,9 @@ export default function AdminTextData() {
                         {stt}
                       </div>
                       
-                      {/* GIỮ NGUYÊN 2 BADGE VI-EN VÀ VI + HIỂN THỊ CÂU TEXT CÓ [vi] VÀ [en] */}
+                      {/* Hiển thị 2 dòng dạng badge VI-EN và VI */}
                       <div className="px-4 flex-1 space-y-0.5 my-0.5 pr-6 min-w-0">
-                        {/* Dòng 1: Trộn ngôn ngữ (VI-EN) */}
+                        {/* Dòng 1: Trộn ngôn ngữ (VI-EN) - HIỂN THỊ ĐẦY ĐỦ THẺ [vi], [en] */}
                         <div className="flex items-center gap-2">
                           <span 
                             style={{ background: `${ADMIN_ACCENT}1A`, color: ADMIN_ACCENT }}
@@ -450,11 +477,11 @@ export default function AdminTextData() {
                             VI-EN
                           </span>
                           <p className="truncate type-ui text-[#16171C] dark:text-gray-100">
-                            {item.csContent}
+                            <HighlightCsText rawText={item.rawCsContent || item.csContent} />
                           </p>
                         </div>
 
-                        {/* Dòng 2: Tiếng Việt thuần (VI) */}
+                        {/* Dòng 2: Tiếng Việt thuần (VI) - GIỮ NGUYÊN MÃ THÔ NẾU CÓ */}
                         <div className="flex items-center gap-2">
                           <span 
                             style={{ background: '#F0EEE6', color: '#6E7078' }}
@@ -463,7 +490,7 @@ export default function AdminTextData() {
                             VI
                           </span>
                           <p className="truncate type-ui text-[#16171C] dark:text-gray-300">
-                            {item.viContent}
+                            <HighlightCsText rawText={item.viContent} />
                           </p>
                         </div>
                       </div>
@@ -547,7 +574,7 @@ export default function AdminTextData() {
         </div>
 
         {/* Footer Pagination */}
-        <div className="px-4 py-1 border-t border-[#E5E2D8] dark:border-gray-800 shrink-0 bg-white dark:bg-[#1C1D22]">
+        <div className="px-4 py-1 border-t border-[#E5E2D8] dark:border-gray-800 shrink-0 bg-[#F7F5EF]/50 dark:bg-[#1C1D22]">
           <Pagination
             currentPage={currentPage}
             totalPages={totalPages}

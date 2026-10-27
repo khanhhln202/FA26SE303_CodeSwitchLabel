@@ -6,9 +6,43 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 // phân trang không nên là thứ nổi nhất màn hình. accent phải là mã hex 6 số (#RRGGBB).
 export default function Pagination({ currentPage = 1, totalPages = 3, onPageChange, accent = '#FF4B2E', variant = 'solid' }) {
   const soft = variant === 'soft';
-  const pages = Array.from({ length: totalPages }, (_, i) => i + 1);
-
   // đổi hex -> rgba cho box-shadow theo accent
+  // Hàm tạo dãy số trang có rút gọn (...)
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxVisiblePages = 5;
+
+    if (totalPages <= maxVisiblePages + 2) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      let start = Math.max(1, currentPage - 2);
+      let end = Math.min(totalPages, currentPage + 2);
+
+      if (currentPage <= 3) {
+        start = 1;
+        end = 5;
+      } else if (currentPage >= totalPages - 2) {
+        start = totalPages - 4;
+        end = totalPages;
+      }
+
+      if (start > 1) {
+        pages.push(1);
+        if (start > 2) pages.push('...');
+      }
+
+      for (let i = start; i <= end; i++) {
+        pages.push(i);
+      }
+
+      if (end < totalPages) {
+        if (end < totalPages - 1) pages.push('...');
+        pages.push(totalPages);
+      }
+    }
+    return pages;
+  };
+
   const shadow = (hex) => {
     const h = hex.replace('#', '');
     const r = parseInt(h.slice(0, 2), 16);
@@ -16,6 +50,8 @@ export default function Pagination({ currentPage = 1, totalPages = 3, onPageChan
     const b = parseInt(h.slice(4, 6), 16);
     return `0 4px 10px rgba(${r},${g},${b},0.25)`;
   };
+
+  const pages = getPageNumbers();
 
   return (
     <div className="flex items-center justify-center gap-1.5 py-2.5">
@@ -28,7 +64,15 @@ export default function Pagination({ currentPage = 1, totalPages = 3, onPageChan
         <ChevronLeft className="w-4 h-4" />
       </button>
 
-      {pages.map((page) => {
+      {pages.map((page, idx) => {
+        if (page === '...') {
+          return (
+            <span key={`dots-${idx}`} className="w-8 h-8 flex items-center justify-center text-gray-400 font-bold">
+              ...
+            </span>
+          );
+        }
+
         const isActive = page === currentPage;
         return (
           <button
