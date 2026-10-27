@@ -428,4 +428,62 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
                         (r.Status == RecordingStatus.PendingReview || r.Status == RecordingStatus.Approved), ct);
         Assert.Equal(0, conHieuLuc);
     }
+
+    /// <summary>
+    /// Bản ghi bị từ chối vì "đọc thiếu / sai văn bản" là lỗi của BẢN GHI, không phải của câu:
+    /// câu phải ở nguyên `Validated` để người đọc thu lại ngay.
+    ///
+    /// Trước V12, lý do đó thuộc nhóm `content` nên trigger đẩy câu về `PendingValidation`, và
+    /// tầng ghi âm chặn "chỉ thu âm được câu đã duyệt nội dung" — người đọc kẹt, không thu lại
+    /// được bản nào. Câu viết sai thật thì đi đường đề xuất báo lỗi / sửa câu.
+    /// </summary>
+    [Fact]
+    public async Task TuChoiVoiLyDoDocSai_CauVanValidated_ThuLaiDuocNgay()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var dau = Dau();
+
+        var (manager, campaign) = await TaoDotAsync(dau, ct);
+        var speaker = await CreateUserAsync($"sp-nd-{dau}@test.local", RoleName.Speaker);
+        var rv1 = await CreateUserAsync($"rv1-nd-{dau}@test.local", RoleName.Reviewer);
+        var rv2 = await CreateUserAsync($"rv2-nd-{dau}@test.local", RoleName.Reviewer);
+
+        var script = await CreateValidatedScriptAsync(
+            $"[vi]Cô giáo dặn cả lớp vào [en]Coursera{dau} [vi]trước thứ Sáu.",
+            $"[vi]Cô giáo dặn cả lớp vào trang học trước thứ Sáu {dau}.",
+            ScriptDomain.ItTechnology, speaker.UserId);
+
+        var cs = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
+
+        var task = await TaoLoDuyetAsync(
+            campaign.CampaignId, manager.UserId, cs.RecordingId, [rv1.UserId, rv2.UserId], 1, ct);
+
+        // Hai phiếu từ chối với đúng lý do thuộc nhóm nội dung.
+        foreach (var (reviewer, vong) in new[] { (rv1, 1), (rv2, 2) })
+        {
+            await ReviewService.SubmitAsync(cs.RecordingId, reviewer.UserId, new SubmitReviewRequest
+            {
+                Decision = ReviewDecision.Rejected,
+                ExpectedRound = vong,
+                RejectionReasonCodes = ["content_mismatch"],
+                TaskId = task.TaskId
+            }, ct);
+        }
+
+        Db.ChangeTracker.Clear();
+
+        var banGhi = await Db.Recordings.AsNoTracking()
+            .SingleAsync(r => r.RecordingId == cs.RecordingId, ct);
+        Assert.Equal(RecordingStatus.Rejected, banGhi.Status);
+
+        // Mấu chốt: câu KHÔNG bị đẩy về duyệt nội dung.
+        var cauSau = await Db.Scripts.AsNoTracking()
+            .SingleAsync(s => s.ScriptId == script.ScriptId, ct);
+        Assert.Equal(ScriptStatus.Validated, cauSau.Status);
+
+        // Mục trong task thu âm cũng còn đó để người đọc thu lại.
+        var muc = await Db.TaskScripts.AsNoTracking()
+            .SingleOrDefaultAsync(ts => ts.ScriptId == script.ScriptId, ct);
+        if (muc is not null) Assert.NotEqual(TaskScriptStatus.Rejected, muc.Status);
+    }
 }
