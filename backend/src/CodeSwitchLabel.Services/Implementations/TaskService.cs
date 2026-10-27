@@ -690,12 +690,35 @@ public class TaskService(
 
         if (task.TaskType == TaskType.Recording)
         {
-            string[] ids = hasIds
-                ? [.. request.Ids.Distinct()]
-                : [.. await tasks.FindScriptCandidatesAsync(
-                    taskId, assigneeIds, request.AutoFill!.Domain ?? task.Domain, request.AutoFill.Count, ct)];
+            if (hasIds)
+            {
+                accepted = await FilterScriptsAsync(
+                    taskId, task.Domain, [.. request.Ids.Distinct()], assigneeIds, skipped, ct, borrowedFrom);
+            }
+            else
+            {
+                accepted = [];
+                var excludedIds = new HashSet<string>();
+                var criteria = request.AutoFill!;
+                if (criteria.Domain.HasValue && criteria.Domain != task.Domain)
+                {
+                    throw new UnprocessableException(
+                        "auto_fill_domain_mismatch",
+                        $"Chủ đề tự lấp ({criteria.Domain}) không khớp với chủ đề nhiệm vụ ({task.Domain}).");
+                }
 
-            accepted = await FilterScriptsAsync(taskId, task.Domain, ids, assigneeIds, skipped, ct, borrowedFrom);
+                while (accepted.Count < criteria.Count)
+                {
+                    var ids = await tasks.FindScriptCandidatesAsync(
+                        taskId, assigneeIds, criteria.Domain ?? task.Domain,
+                        criteria.Count - accepted.Count, [.. excludedIds], ct);
+                    if (ids.Count == 0) break;
+
+                    excludedIds.UnionWith(ids);
+                    accepted.AddRange(await FilterScriptsAsync(
+                        taskId, task.Domain, [.. ids], assigneeIds, skipped, ct, borrowedFrom));
+                }
+            }
 
             tasks.AddScriptItems(accepted.Select(id => new TaskScript
             {
@@ -708,13 +731,28 @@ public class TaskService(
         else
         {
             var roundsRequired = await RoundsRequiredAsync(ct);
+            if (hasIds)
+            {
+                accepted = await FilterRecordingsAsync(
+                    taskId, [.. request.Ids.Distinct()], assigneeIds, roundsRequired, skipped, ct);
+            }
+            else
+            {
+                accepted = [];
+                var excludedIds = new HashSet<string>();
+                var criteria = request.AutoFill!;
+                while (accepted.Count < criteria.Count)
+                {
+                    var ids = await tasks.FindRecordingCandidatesAsync(
+                        taskId, assigneeIds, criteria.SpeakerId,
+                        criteria.Count - accepted.Count, roundsRequired, [.. excludedIds], ct);
+                    if (ids.Count == 0) break;
 
-            string[] ids = hasIds
-                ? [.. request.Ids.Distinct()]
-                : [.. await tasks.FindRecordingCandidatesAsync(
-                    taskId, assigneeIds, request.AutoFill!.SpeakerId, request.AutoFill.Count, roundsRequired, ct)];
-
-            accepted = await FilterRecordingsAsync(taskId, ids, assigneeIds, roundsRequired, skipped, ct);
+                    excludedIds.UnionWith(ids);
+                    accepted.AddRange(await FilterRecordingsAsync(
+                        taskId, [.. ids], assigneeIds, roundsRequired, skipped, ct));
+                }
+            }
 
             tasks.AddRecordingItems(accepted.Select(id => new TaskRecording
             {

@@ -72,6 +72,7 @@ public record AddTaskItemsRequest
 
 public record AutoFillCriteria
 {
+    /// <summary>Số mục hợp lệ cần thêm; có thể ít hơn nếu đã hết ứng viên phù hợp.</summary>
     [Range(1, 1000, ErrorMessage = "Số mục cần lấy phải từ 1 đến 1000.")]
     public int Count { get; init; }
 

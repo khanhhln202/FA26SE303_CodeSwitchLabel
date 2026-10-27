@@ -206,11 +206,12 @@ public interface ITaskRepository
     Task<List<Recording>> GetRecordingsWithReviewsAsync(string[] ids, CancellationToken ct = default);
 
     Task<List<string>> FindScriptCandidatesAsync(
-        long taskId, long[] assigneeIds, ScriptDomain? domain, int count, CancellationToken ct = default);
+        long taskId, long[] assigneeIds, ScriptDomain? domain, int count, string[] excludedIds,
+        CancellationToken ct = default);
 
     Task<List<string>> FindRecordingCandidatesAsync(
         long taskId, long[] assigneeIds, long? speakerId, int count,
-        int roundsRequired, CancellationToken ct = default);
+        int roundsRequired, string[] excludedIds, CancellationToken ct = default);
 
     /// <summary>lấy ID các câu validated chưa nằm trong task nào, theo chủ đề, giới hạn count.</summary>
     Task<List<string>> GetAvailableScriptIdsByDomainAsync(
@@ -725,7 +726,8 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
             .ToListAsync(ct);
 
     public Task<List<string>> FindScriptCandidatesAsync(
-        long taskId, long[] assigneeIds, ScriptDomain? domain, int count, CancellationToken ct = default)
+        long taskId, long[] assigneeIds, ScriptDomain? domain, int count, string[] excludedIds,
+        CancellationToken ct = default)
     {
         var query = db.Scripts
             .AsNoTracking()
@@ -733,6 +735,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
             .Where(s => !s.TaskScripts.Any(ts => ts.TaskId == taskId));
 
         if (domain.HasValue) query = query.Where(s => s.Domain == domain.Value);
+        if (excludedIds.Length > 0) query = query.Where(s => !excludedIds.Contains(s.ScriptId));
 
         if (assigneeIds.Length > 0)
         {
@@ -778,7 +781,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
 
     public Task<List<string>> FindRecordingCandidatesAsync(
         long taskId, long[] assigneeIds, long? speakerId, int count,
-        int roundsRequired, CancellationToken ct = default)
+        int roundsRequired, string[] excludedIds, CancellationToken ct = default)
     {
         var query = db.Recordings
             .AsNoTracking()
@@ -789,6 +792,8 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
             .Where(r => !r.TaskRecordings.Any(tr =>
                 tr.Status == TaskRecordingStatus.Queued &&
                 tr.Task.Status != WorkTaskStatus.Cancelled));
+
+        if (excludedIds.Length > 0) query = query.Where(r => !excludedIds.Contains(r.RecordingId));
 
         if (speakerId.HasValue) query = query.Where(r => r.SpeakerId == speakerId.Value);
 

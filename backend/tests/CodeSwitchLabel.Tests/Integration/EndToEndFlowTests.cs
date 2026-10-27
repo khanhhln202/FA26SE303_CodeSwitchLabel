@@ -209,6 +209,23 @@ public sealed class EndToEndFlowTests : ApiTestBase
     }
 
     [Fact]
+    public async Task TaskItems_AutoFillRejectsDomainDifferentFromTask()
+    {
+        var admin = await GetAdminTokenAsync();
+        var manager = await GetManagerTokenAsync();
+        var managerId = await GetUserIdAsync(manager);
+        var campaignId = await CreateCampaignAssignedToAsync(admin, managerId);
+        var taskId = await CreateRecordingTaskAsync(manager, campaignId);
+
+        var response = await PostAsync($"/api/tasks/{taskId}/items",
+            new { autoFill = new { count = 1, domain = "Education" } }, manager);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        using var problem = await ReadJsonAsync(response);
+        Assert.Equal("auto_fill_domain_mismatch", problem.RootElement.GetProperty("code").GetString());
+    }
+
+    [Fact]
     public async Task TaskCreation_InCampaignNotAssignedToManager_IsRejected()
     {
         var admin = await GetAdminTokenAsync();
