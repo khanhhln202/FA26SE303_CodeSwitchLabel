@@ -90,6 +90,15 @@ const cleanLanguageTags = (str) => {
     .trim();
 };
 
+const normalizeTextForMatch = (str) => {
+  if (!str) return "";
+  return cleanLanguageTags(str)
+    .toLowerCase()
+    .replace(/[.,!?;:]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+};
+
 function HighlightCsText({ rawText }) {
   if (!rawText) return null;
 
@@ -194,7 +203,7 @@ export default function AdminRecordings() {
 
   const fetchRecordings = async () => {
     try {
-      // 1. Tải tất cả người dùng để map tên Speaker
+      // 1. Tải danh sách User
       const usersRes = await adminService.getUsers({ page: 1, pageSize: 500 }).catch(() => ({ items: [] }));
       const userItems = usersRes.items || usersRes || [];
       const userMap = {};
@@ -203,41 +212,50 @@ export default function AdminRecordings() {
       });
       setUserMapState(userMap);
 
-      // 2. LẤY TOÀN BỘ LỊCH SỬ TỪ REVIEWER API ĐỂ TRÁNH SẮP XẾP / PHÂN TRANG BỊ THIẾU
+      // 2. LẤY TOÀN BỘ TẤT CẢ TRANG LỊCH SỬ TỪ REVIEWER API ĐỂ LẤY CHUẨN TRẠNG THÁI CẶP
       let reviewerHistoryItems = [];
       try {
         let page = 1;
         let totalPages = 1;
         do {
-          const revHistoryRes = await getReviewerRecordingHistoryApi({ page, pageSize: 100 });
-          const items = revHistoryRes?.items || [];
+          const revRes = await getReviewerRecordingHistoryApi({ page, pageSize: 100 });
+          const items = revRes?.items || [];
           reviewerHistoryItems = [...reviewerHistoryItems, ...items];
-          totalPages = revHistoryRes?.totalPages || 1;
+          totalPages = revRes?.totalPages || 1;
           page++;
         } while (page <= totalPages);
       } catch (e) {
-        console.warn("Không thể lấy toàn bộ lịch sử reviewer API:", e);
+        console.warn("Không thể tải toàn bộ trang Reviewer History:", e);
       }
 
+      // Map chuẩn kết quả của Reviewer với TẤT CẢ biến thể Text & ScriptId
       const reviewerStatusMap = new Map();
       reviewerHistoryItems.forEach((item) => {
+        const st = item.recordingStatus;
+        if (!st) return;
+
         if (item.scriptId) {
-          reviewerStatusMap.set(String(item.scriptId), item.recordingStatus);
+          reviewerStatusMap.set(String(item.scriptId), st);
         }
         if (item.csText) {
-          const rawTextKey = String(item.csText).trim();
-          reviewerStatusMap.set(rawTextKey, item.recordingStatus);
+          const rawCs = String(item.csText).trim();
+          const cleanCs = cleanLanguageTags(rawCs);
+          const normCs = normalizeTextForMatch(rawCs);
 
-          const cleanCs = cleanLanguageTags(item.csText).toLowerCase();
-          if (cleanCs) reviewerStatusMap.set(cleanCs, item.recordingStatus);
+          reviewerStatusMap.set(rawCs, st);
+          if (cleanCs) reviewerStatusMap.set(cleanCs, st);
+          if (normCs) reviewerStatusMap.set(normCs, st);
+        }
+        if (item.viText) {
+          const normVi = normalizeTextForMatch(item.viText);
+          if (normVi) reviewerStatusMap.set(normVi, st);
         }
       });
 
-      // 3. Tải tất cả các bản ghi âm từ API Admin
+      // 3. Tải tất cả bản ghi từ Admin API
       let allItems = [];
       let page = 1;
       let totalPages = 1;
-
       do {
         const recRes = await adminService.getRecordings({ page, pageSize: 100 });
         const items = recRes.items || recRes || [];
@@ -246,7 +264,7 @@ export default function AdminRecordings() {
         page++;
       } while (page <= totalPages);
 
-      // 4. Cache thông tin chi tiết Script
+      // 4. Lấy chi tiết Script Text theo lô
       const scriptIds = [...new Set(allItems.map(r => r.scriptId || r.textId).filter(Boolean))];
       const scriptMap = {};
 
@@ -266,22 +284,10 @@ export default function AdminRecordings() {
         })
       );
 
-      // 5. Lấy link audio và Reviews cho từng bản ghi đơn lẻ
+      // 5. Tải Audio URL song song tối ưu tốc độ
       const rawRecordings = await Promise.all(
         allItems.map(async (r) => {
           const recId = r.recordingId || r.id;
-          let reviews = [];
-          try {
-            const reviewsData = await adminService.getRecordingReviews(recId);
-            reviews = (Array.isArray(reviewsData) ? reviewsData : []).map((rev, index) =>
-              formatReviewDtoFromBe(rev, index, userMap)
-            );
-          } catch (e) {
-            reviews = (Array.isArray(r.reviewers) ? r.reviewers : []).map((rev, index) =>
-              formatReviewDtoFromBe(rev, index, userMap)
-            );
-          }
-
           const sId = r.scriptId || r.textId;
           const scriptInfo = scriptMap[sId] || {};
 
@@ -295,7 +301,6 @@ export default function AdminRecordings() {
             }
           }
 
-          // Đọc chính xác trường sentenceVariant từ C# Backend
           const variantRaw = r.sentenceVariant !== undefined ? r.sentenceVariant : r.variant;
           const variantStr = String(variantRaw || r.language || r.type || "").toLowerCase();
 
@@ -303,6 +308,10 @@ export default function AdminRecordings() {
           const isVi = variantStr.includes("purevietnamese") || variantStr === "2" || (variantStr.includes("vi") && !variantStr.includes("vi-en"));
 
           const rawStatus = r.recordingStatus !== undefined ? r.recordingStatus : (r.status !== undefined ? r.status : r.state);
+
+          const reviews = (Array.isArray(r.reviewers) ? r.reviewers : []).map((rev, index) =>
+            formatReviewDtoFromBe(rev, index, userMap)
+          );
 
           return {
             recId,
@@ -323,7 +332,7 @@ export default function AdminRecordings() {
         })
       );
 
-      // 6. GỘP CẶP CHUẨN THEO scriptId + speakerId
+      // 6. GỘP CẶP CHUẨN ĐỒNG BỘ MÀN REVIEWER
       const groupedMap = new Map();
 
       rawRecordings.forEach((rec) => {
@@ -351,7 +360,6 @@ export default function AdminRecordings() {
           group.rawIds.push(rec.recId);
         }
 
-        // Gán chính xác bản thu âm dựa trên biến thể câu
         if (rec.isCs && rec.audioUrl) {
           group.csAudioUrl = rec.audioUrl;
         } else if (rec.isVi && rec.audioUrl) {
@@ -361,9 +369,7 @@ export default function AdminRecordings() {
         }
 
         if (Array.isArray(rec.reviews)) {
-          rec.reviews.forEach(rev => {
-            group.reviewers.push(rev);
-          });
+          rec.reviews.forEach(rev => group.reviewers.push(rev));
         }
         if (rec.status !== undefined && rec.status !== null) {
           group.statuses.push(rec.status);
@@ -371,23 +377,24 @@ export default function AdminRecordings() {
       });
 
       const pairedRecordings = Array.from(groupedMap.values()).map((pair) => {
-        const finalReviews = pair.reviewers;
-
-        // ƯU TIÊN LẤY 100% TRẠNG THÁI GỐC CỦA REVIEWER DÀNH CHO CẶP NÀY
         let computedStatus = "Pending";
         
         const rawContentKey = String(pair.content).trim();
-        const cleanContentKey = cleanLanguageTags(pair.content).toLowerCase();
-        
+        const cleanContentKey = cleanLanguageTags(pair.content);
+        const normContentKey = normalizeTextForMatch(pair.content);
+        const normViKey = normalizeTextForMatch(pair.contentVietnamese);
+
+        // ƯU TIÊN LẤY TRỰC TIẾP TRẠNG THÁI TRONG REVIEWER MAP ĐỂ TRÙNG KHỚP 100%
         const directReviewerStatus = 
           reviewerStatusMap.get(String(pair.scriptId)) || 
           reviewerStatusMap.get(rawContentKey) ||
-          reviewerStatusMap.get(cleanContentKey);
+          reviewerStatusMap.get(cleanContentKey) ||
+          reviewerStatusMap.get(normContentKey) ||
+          reviewerStatusMap.get(normViKey);
 
         if (directReviewerStatus) {
           computedStatus = parseBeRecordingStatus(directReviewerStatus);
         } else {
-          // Fallback nếu không khớp dữ liệu Reviewer API
           const parsedStatuses = pair.statuses.map(s => parseBeRecordingStatus(s));
           if (parsedStatuses.length > 0 && parsedStatuses.every(s => s === "Approved")) {
             computedStatus = "Approved";
@@ -410,7 +417,7 @@ export default function AdminRecordings() {
           csAudioUrl: pair.csAudioUrl,
           viAudioUrl: pair.viAudioUrl,
           durationSec: pair.durationSec,
-          reviewers: finalReviews,
+          reviewers: pair.reviewers,
           status: computedStatus
         };
       });
@@ -779,7 +786,6 @@ export default function AdminRecordings() {
                   {paginatedRecordings.map((r, index) => {
                     const stt = (currentPage - 1) * pageSize + index + 1;
                     const status = r.status;
-                    const votedCount = r.reviewers ? r.reviewers.length : 0;
                     
                     const stStyle = styleOf(status);
                     const StatusIcon = stStyle.icon;
@@ -831,16 +837,16 @@ export default function AdminRecordings() {
                           <button
                             type="button"
                             onClick={() => handleOpenReviewersModal(r)}
-                            title="Bấm để xem phản hồi kiểm duyệt chi tiết"
-                            className="w-[128px] h-6 inline-flex items-center justify-center gap-1 rounded-full border type-caption transition-all cursor-pointer whitespace-nowrap hover:opacity-80 mx-auto"
+                            title="Bấm để xem chi tiết các lượt kiểm duyệt"
+                            className="w-[110px] h-6 inline-flex items-center justify-center gap-1 rounded-full border type-caption transition-all cursor-pointer whitespace-nowrap hover:opacity-80 mx-auto"
                             style={{
                               background: stStyle.bg,
                               borderColor: stStyle.border,
                               color: stStyle.text
                             }}
                           >
-                            <StatusIcon className="w-3 h-3 shrink-0" />
-                            <span>{votedCount > 0 ? `${stStyle.label} · ${votedCount}/3` : stStyle.label}</span>
+                            <StatusIcon className="w-3.5 h-3.5 shrink-0" />
+                            <span>{stStyle.label}</span>
                           </button>
                         </td>
                       </tr>
