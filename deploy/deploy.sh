@@ -192,7 +192,7 @@ SQL
 APPLIED_COUNT=0
 if [ -d "$MIGRATIONS_DIR" ]; then
   # File dang tên V<n>__<ten>.sql. File __verify_ là kiem chung, KHONG chay lai.
-  for f in "$MIGRATIONS_DIR"/V*.sql; do
+  while IFS= read -r f; do
     [ -e "$f" ] || continue
     base="$(basename "$f")"
     case "$base" in *__verify_*) continue ;; esac
@@ -220,7 +220,7 @@ if [ -d "$MIGRATIONS_DIR" ]; then
     # va file do se chay lai o lan deploy sau.
     psql_q -c "INSERT INTO schema_migration (version, checksum, duration_ms) VALUES ('$version', '$sum', $((t1 - t0)))"
     APPLIED_COUNT=$((APPLIED_COUNT + 1))
-  done
+  done < <(printf '%s\n' "$MIGRATIONS_DIR"/V*.sql | sort -V)
 fi
 [ "$APPLIED_COUNT" -gt 0 ] && say "Da ap $APPLIED_COUNT migration." || say "Khong co migration moi."
 
