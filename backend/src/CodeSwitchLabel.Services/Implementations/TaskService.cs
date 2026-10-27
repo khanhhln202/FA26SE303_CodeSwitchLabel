@@ -100,6 +100,7 @@ internal static class TaskMapper
 public class TaskService(
     ITaskRepository tasks,
     ICampaignRepository campaigns,
+    IScriptQueueRepository queue,
     ITaskProgressTracker tracker,
     ISystemConfigService config,
     TimeProvider clock) : ITaskService
@@ -1053,7 +1054,8 @@ public class TaskService(
         var wanted = requested.Select(a => a.UserId).ToHashSet();
         var byUser = active.ToDictionary(a => a.UserId);
 
-        // người bị gỡ mà còn cặp câu đang làm/đã có bản ghi thì không được gỡ.
+        // Người bị gỡ: nhả câu đang giữ trong hàng đợi, KHÔNG đụng bản đã nộp.
+        // Bản đã nộp giữ nguyên người đọc và vẫn chặn người khác cho tới khi được duyệt/loại.
         if (task.TaskType == TaskType.Recording)
         {
             var removed = active
@@ -1061,7 +1063,10 @@ public class TaskService(
                 .Select(a => a.UserId)
                 .ToList();
 
-            await EnsureRecordingAssigneesHaveNoStartedPairsAsync(taskId, removed, ct);
+            foreach (var userId in removed)
+            {
+                await queue.ReleaseClaimsAsync(userId, taskId, ct);
+            }
         }
 
         var now = clock.GetUtcNow();
@@ -1206,10 +1211,10 @@ public class TaskService(
             }
         }
 
-        // cặp câu đã bắt đầu (đang thu / đã có bản ghi / đã xong) không đổi chủ.
         if (task.TaskType == TaskType.Recording)
         {
-            await EnsureRecordingAssigneesHaveNoStartedPairsAsync(taskId, [userId], ct);
+            // Nhả câu đang giữ; bản đã nộp giữ nguyên người đọc.
+            await queue.ReleaseClaimsAsync(userId, taskId, ct);
         }
 
         mine.AssignmentStatus = AssignmentStatus.Reassigned;
@@ -1238,39 +1243,6 @@ public class TaskService(
         if (transaction is not null) await transaction.CommitAsync(ct);
 
         return await LoadDetailAsync(taskId, ct);
-    }
-
-    /// <summary>
-    /// chặn gỡ người nhận task thu âm khi người đó còn cặp câu đã bắt đầu.
-    /// Cặp đã có bản ghi hoặc đang được thu không thể chuyển sang người khác — chuyển
-    /// đi là mất dấu công việc và có thể làm sai lệch bản ghi đã nộp.
-    /// </summary>
-    private async Task EnsureRecordingAssigneesHaveNoStartedPairsAsync(
-        long taskId, IReadOnlyCollection<long> userIds, CancellationToken ct)
-    {
-        if (userIds.Count == 0) return;
-
-        var items = await tasks.GetScriptItemsTrackedAsync(taskId, ct);
-        var startedIds = await tasks.GetStartedScriptIdsAsync(taskId, clock.GetUtcNow(), ct);
-
-        var blocked = items
-            .Where(i => i.AssigneeUserId.HasValue
-                        && userIds.Contains(i.AssigneeUserId.Value)
-                        && startedIds.Contains(i.ScriptId))
-            .Select(i => i.ScriptId)
-            .Distinct()
-            .OrderBy(id => id)
-            .ToList();
-
-        if (blocked.Count == 0) return;
-
-        var preview = string.Join(", ", blocked.Take(5));
-        if (blocked.Count > 5) preview += ", …";
-
-        throw new ConflictException(
-            "assignee_has_in_progress_items",
-            $"Không gỡ được người nhận vì còn {blocked.Count} cặp câu đang làm hoặc đã có bản ghi ({preview}). " +
-            "Hoàn tất các cặp đó hoặc giữ nguyên người nhận.");
     }
 
     /// <summary>

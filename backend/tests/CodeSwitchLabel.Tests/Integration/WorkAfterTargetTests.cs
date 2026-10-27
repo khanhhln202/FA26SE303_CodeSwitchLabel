@@ -176,7 +176,7 @@ public sealed class WorkAfterTargetTests(DatabaseFixture fixture)
         // Lấy câu kế tiếp trong task đã Hoàn thành qua được cửa (service không mở
         // transaction mới — chỉ kiểm tra điều kiện qua repository).
         Assert.True(await Tasks.IsActiveTaskOfAsync(task.TaskId, speaker.UserId, TaskType.Recording, ct));
-        Assert.True(await Recordings.IsRecordableInTaskAsync(task.TaskId, speaker.UserId, next.ScriptId, ct));
+        Assert.Equal(task.TaskId, await Recordings.FindRecordableTaskIdAsync(task.TaskId, speaker.UserId, next.ScriptId, ct));
 
         // Nhận thêm việc KHÔNG làm task rời trạng thái Hoàn thành — chỉ tiêu vẫn đủ.
         await Db.Entry(task).ReloadAsync(ct);
@@ -307,7 +307,7 @@ public sealed class WorkAfterTargetTests(DatabaseFixture fixture)
         await Db.SaveChangesAsync(ct);
 
         Assert.False(await Tasks.IsActiveTaskOfAsync(recTask.TaskId, speaker.UserId, TaskType.Recording, ct));
-        Assert.False(await Recordings.IsRecordableInTaskAsync(recTask.TaskId, speaker.UserId, script.ScriptId, ct));
+        Assert.Null(await Recordings.FindRecordableTaskIdAsync(recTask.TaskId, speaker.UserId, script.ScriptId, ct));
 
         // Nộp bản ghi vào task đã huỷ: chặn.
         using var audio = new MemoryStream([1, 2, 3, 4]);

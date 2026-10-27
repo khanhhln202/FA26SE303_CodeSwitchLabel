@@ -53,7 +53,7 @@ public enum ProposalKind { Report, Edit }
 /// quyết định. Đề xuất Pending giữ câu khỏi hàng đợi ghi âm (trigger fn_script_proposal_sync);
 /// xử lý xong câu tự quay lại hàng đợi.
 /// </summary>
-public enum ProposalStatus { Pending, Accepted, Rejected }
+public enum ProposalStatus { Pending, Accepted, Rejected, Deleted }
 
 /// <summary>
 /// Quan hệ giữa từ tiếng Anh và từ tiếng Việt tương ứng, lưu theo từng từ trong script_word.

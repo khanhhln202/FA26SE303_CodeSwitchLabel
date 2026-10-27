@@ -233,14 +233,6 @@ public class RecordingService(
                 $"Cặp câu {command.ScriptId} đã do người đọc khác thu. Mỗi cặp câu chỉ một người đọc.");
         }
 
-        if (command.TaskId.HasValue &&
-            !await recordings.IsRecordableInTaskAsync(command.TaskId.Value, command.SpeakerId, command.ScriptId, ct))
-        {
-            throw new ForbiddenException(
-                "task_not_recordable",
-                $"Task #{command.TaskId} không phải task thu âm đang giao cho bạn, hoặc không chứa cặp câu này.");
-        }
-
         if (await recordings.HasActiveRecordingAsync(command.ScriptId, command.SentenceVariant, ct))
         {
             throw new ConflictException(
@@ -248,9 +240,19 @@ public class RecordingService(
                 $"Bạn đã có bản {command.SentenceVariant} đang chờ duyệt hoặc đã được duyệt cho cặp câu {command.ScriptId}.");
         }
 
+        if (command.TaskId.HasValue)
+        {
+            // Hàng đợi phát theo chiến dịch nên cặp câu có thể đến từ task khác trong đợt.
+            // Gắn bản ghi vào đúng task chứa cặp, không mặc định task client gửi lên.
+            return await recordings.FindRecordableTaskIdAsync(
+                       command.TaskId.Value, command.SpeakerId, command.ScriptId, ct)
+                   ?? throw new ForbiddenException(
+                       "task_not_recordable",
+                       $"Task #{command.TaskId} không phải task thu âm đang giao cho bạn, hoặc cặp câu không thuộc chiến dịch của task.");
+        }
+
         // Không gửi taskId nhưng cặp câu lại đang nằm trong task của chính người này thì tự gắn vào task.
-        return command.TaskId
-               ?? await recordings.FindOwnTaskContainingScriptAsync(command.SpeakerId, command.ScriptId, ct);
+        return await recordings.FindOwnTaskContainingScriptAsync(command.SpeakerId, command.ScriptId, ct);
     }
 
     private async Task<int> NextTakeAsync(UploadRecordingCommand command, CancellationToken ct)

@@ -124,15 +124,21 @@ public sealed class SpeakerExportTests : IntegrationTestBase
             .Select(e => e.FullName.Split('/')[0])
             .Distinct());
 
+        // Thư mục gốc: email Speaker + mốc Bangkok tới giây. Chỉ so phần ngày để test
+        // không gãy khi chạy vắt qua nửa đêm.
         var bangkokDate = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(7))
             .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
-        Assert.Equal($"speaker@test.local_{bangkokDate}", root);
-        Assert.NotNull(zip.GetEntry($"{root}/test/{script.ScriptId}.json"));
-        Assert.NotNull(zip.GetEntry($"{root}/audio/{script.ScriptId}_CS.wav"));
-        Assert.NotNull(zip.GetEntry($"{root}/audio/{script.ScriptId}_VI.wav"));
+        Assert.StartsWith($"speaker@test.local_{bangkokDate}_", root);
+        Assert.Matches(@"^speaker@test\.local_\d{4}-\d{2}-\d{2}_\d{6}$", root);
 
-        using var jsonStream = zip.GetEntry($"{root}/test/{script.ScriptId}.json")!.Open();
+        // JSON nằm trong text/, audio cạnh đó; cùng một mã số cho cả ba tên file.
+        var numericId = script.ScriptId[2..];
+        Assert.NotNull(zip.GetEntry($"{root}/text/{numericId}.json"));
+        Assert.NotNull(zip.GetEntry($"{root}/audio/{numericId}-cs.wav"));
+        Assert.NotNull(zip.GetEntry($"{root}/audio/{numericId}-vi.wav"));
+
+        using var jsonStream = zip.GetEntry($"{root}/text/{numericId}.json")!.Open();
         using var json = await JsonDocument.ParseAsync(
             jsonStream, cancellationToken: TestContext.Current.CancellationToken);
 

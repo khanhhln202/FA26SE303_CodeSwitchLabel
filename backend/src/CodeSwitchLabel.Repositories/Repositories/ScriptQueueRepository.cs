@@ -43,6 +43,12 @@ public interface IScriptQueueRepository
     /// <summary>Đưa câu trở lại hàng đợi, kể cả khi hàng của nó đang ở trạng thái <c>done</c>.</summary>
     Task RequeueAsync(string scriptId, QueueStage stage, CancellationToken ct = default);
 
+    /// <summary>
+    /// Nhả các câu người này đang giữ trong phạm vi task/chiến dịch — dùng khi gỡ người
+    /// khỏi task. Claim nằm lại sẽ chặn người khác tới khi hết TTL.
+    /// </summary>
+    Task<int> ReleaseClaimsAsync(long userId, long taskId, CancellationToken ct = default);
+
     /// <summary>Số câu đang chờ ai đó lấy, và số câu đang bị giữ. Cho màn hình Task Manager.</summary>
     Task<QueueStatsDto> GetStatsAsync(QueueStage stage, CancellationToken ct = default);
 
@@ -125,6 +131,31 @@ public class ScriptQueueRepository(CodeSwitchLabelDbContext db) : IScriptQueueRe
             .SqlQuery<int>(
                 $"""SELECT fn_queue_requeue({scriptId}, CAST({stageName} AS queue_stage)) AS "Value" """)
             .SingleAsync(ct);
+    }
+
+    public async Task<int> ReleaseClaimsAsync(
+        long userId, long taskId, CancellationToken ct = default)
+    {
+        var campaignId = await db.WorkTasks.AsNoTracking()
+            .Where(t => t.TaskId == taskId)
+            .Select(t => t.CampaignId)
+            .FirstOrDefaultAsync(ct);
+
+        var now = DateTimeOffset.UtcNow;
+
+        return await db.ScriptQueue
+            .Where(q => q.Stage == QueueStage.Recording &&
+                        q.State == QueueState.Claimed &&
+                        q.ClaimedBy == userId)
+            .Where(q => db.TaskScripts.Any(ts => ts.ScriptId == q.ScriptId &&
+                (ts.TaskId == taskId ||
+                 (campaignId != null && ts.Task.CampaignId == campaignId))))
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(q => q.State, QueueState.Queued)
+                .SetProperty(q => q.ClaimedBy, (long?)null)
+                .SetProperty(q => q.ClaimedAt, (DateTimeOffset?)null)
+                .SetProperty(q => q.ClaimExpiresAt, (DateTimeOffset?)null)
+                .SetProperty(q => q.EnqueuedAt, now), ct);
     }
 
     public async Task<QueueStatsDto> GetStatsAsync(QueueStage stage, CancellationToken ct = default)

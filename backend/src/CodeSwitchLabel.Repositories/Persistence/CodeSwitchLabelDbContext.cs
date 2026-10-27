@@ -265,6 +265,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
 
             // Lời giải Anh–Việt của bản sửa giữ nguyên dạng JSONB như lược đồ.
             e.Property(x => x.ProposedAlignment).HasColumnType("jsonb");
+            e.Property(x => x.DraftAlignment).HasColumnType("jsonb");
 
             e.HasOne(x => x.Script).WithMany(s => s.Proposals).HasForeignKey(x => x.ScriptId);
             e.HasOne(x => x.Proposer).WithMany().HasForeignKey(x => x.ProposerId);

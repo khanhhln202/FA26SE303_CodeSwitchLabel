@@ -182,6 +182,16 @@ public class ScriptProposal
     /// </summary>
     public string? ProposedAlignment { get; set; }
 
+    /// <summary>
+    /// Bản nháp Reviewer lưu trên máy chủ trước khi chốt. Duyệt đề xuất dùng bản nháp này
+    /// (hoặc `applied*` của request cũ, được lưu vào đây luôn) — không dựa vào state trình duyệt.
+    /// </summary>
+    public string? DraftCsContent { get; set; }
+    public string? DraftViContent { get; set; }
+    public string? DraftAlignment { get; set; }
+    public long? DraftSavedBy { get; set; }
+    public DateTimeOffset? DraftSavedAt { get; set; }
+
     public ProposalStatus Status { get; set; }
 
     /// <summary>FK tới app_user; NULL khi câu bị loại và đề xuất tự đóng.</summary>

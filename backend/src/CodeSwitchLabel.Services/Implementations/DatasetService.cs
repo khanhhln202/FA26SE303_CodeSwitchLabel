@@ -377,9 +377,9 @@ public class DatasetService(
                 "Không có cặp câu nào đã duyệt đủ cả hai bản trong phạm vi đã chọn.");
         }
 
-        // Ngày Bangkok (UTC+7) trong tên thư mục, đúng quy ước bàn giao dữ liệu.
+        // Mốc Bangkok (UTC+7) trong tên thư mục, đúng quy ước bàn giao dữ liệu.
         var date = clock.GetUtcNow().ToOffset(TimeSpan.FromHours(7))
-            .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            .ToString("yyyy-MM-dd_HHmmss", CultureInfo.InvariantCulture);
 
         using var stream = new MemoryStream();
 
@@ -403,19 +403,21 @@ public class DatasetService(
 
                 // Dùng lại đúng DTO của bộ nhập để file JSON luôn khớp schema hiện hành.
                 // File bàn giao đọc bằng mắt nên xuống dòng + giữ tiếng Việt, và id chỉ giữ
-                // phần số đúng mẫu input_text.json (bỏ tiền tố nội bộ s_).
+                // phần số đúng mẫu input_text.json (bỏ tiền tố nội bộ s_). Cùng một id số
+                // dùng cho tên file âm thanh để JSON và WAV khớp nhau.
+                var numericId = scriptId.StartsWith("s_", StringComparison.Ordinal) ? scriptId[2..] : scriptId;
                 var json = JsonSerializer.SerializeToUtf8Bytes(new ImportScriptItem
                 {
-                    Id = scriptId.StartsWith("s_", StringComparison.Ordinal) ? scriptId[2..] : scriptId,
+                    Id = numericId,
                     Domain = DomainLabel(pair.Script.Domain),
                     CsTranscript = pair.Script.CsContent,
                     ViEquivalent = pair.Script.ViContent,
                     Alignment = [.. ScriptPairRules.ToAlignment(pair.Script.Words)]
                 }, ExportJsonOptions);
 
-                await AddZipEntryAsync(zip, $"{folder}/test/{scriptId}.json", json, ct);
-                await AddZipEntryAsync(zip, $"{folder}/audio/{scriptId}_CS.wav", csAudio, ct);
-                await AddZipEntryAsync(zip, $"{folder}/audio/{scriptId}_VI.wav", viAudio, ct);
+                await AddZipEntryAsync(zip, $"{folder}/text/{numericId}.json", json, ct);
+                await AddZipEntryAsync(zip, $"{folder}/audio/{numericId}-cs.wav", csAudio, ct);
+                await AddZipEntryAsync(zip, $"{folder}/audio/{numericId}-vi.wav", viAudio, ct);
             }
         }
 
