@@ -12,7 +12,7 @@ public interface ISpeakerRoundsService
         long campaignId, long speakerId, int top, CancellationToken ct = default);
     Task<SpeakerRoundDto> RegisterAsync(long campaignId, long speakerId, CancellationToken ct = default);
     Task UnregisterAsync(long campaignId, long speakerId, CancellationToken ct = default);
-    Task<IReadOnlyList<RejectedRecordingDto>> GetRejectedAsync(
+    Task<IReadOnlyList<RejectedPairDto>> GetRejectedAsync(
         long speakerId, int limit, CancellationToken ct = default);
     Task<PagedResult<SpeakerRecordingHistoryDto>> GetRecordingHistoryAsync(
         long speakerId, SpeakerHistoryQuery query, CancellationToken ct = default);
