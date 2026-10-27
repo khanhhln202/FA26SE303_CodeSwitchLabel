@@ -1,5 +1,5 @@
 -- ============================================================
--- V12 — Bản ghi bị từ chối KHÔNG còn đẩy cặp câu về duyệt nội dung
+-- V18 — Bản ghi bị từ chối KHÔNG còn đẩy cặp câu về duyệt nội dung
 --
 -- Luật cũ (TEAM_007): đa số từ chối bản ghi VÀ có lý do thuộc nhóm 'content'
 -- thì câu quay về 'pending_validation' và mục trong task thu âm bị đánh
@@ -21,8 +21,8 @@
 -- giữ nguyên, không đụng bảng hay cột nào.
 --
 -- Cài trên database ĐANG CHẠY (không dùng `docker compose down -v`):
---   cat migrations/V12__rejection_keeps_script_validated.sql --     | docker exec -i csl-postgres psql -U csl -d codeswitchlabel -v ON_ERROR_STOP=1
---   cat migrations/V12__verify_rejection_keeps_script.sql --     | docker exec -i csl-postgres psql -U csl -d codeswitchlabel -v ON_ERROR_STOP=1
+--   cat migrations/V18__rejection_keeps_script_validated.sql --     | docker exec -i csl-postgres psql -U csl -d codeswitchlabel -v ON_ERROR_STOP=1
+--   cat migrations/V18__verify_rejection_keeps_script.sql --     | docker exec -i csl-postgres psql -U csl -d codeswitchlabel -v ON_ERROR_STOP=1
 --
 -- Idempotent: chạy lại nhiều lần vẫn cho kết quả như nhau.
 -- ============================================================
@@ -69,7 +69,7 @@ BEGIN
     UPDATE recording SET status = v_final
      WHERE recording_id = NEW.recording_id AND status = 'pending_review';
 
-    -- V12: KHÔNG đẩy câu về duyệt nội dung nữa. Xem ghi chú ở đầu migration.
+    -- V18: KHÔNG đẩy câu về duyệt nội dung nữa. Xem ghi chú ở đầu migration.
     RETURN NEW;
 END $$ LANGUAGE plpgsql;
 

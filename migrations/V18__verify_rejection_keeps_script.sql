@@ -1,8 +1,8 @@
 -- ============================================================
--- V12 verification (psql): bản ghi bị từ chối không còn đẩy câu về duyệt nội dung.
+-- V18 verification (psql): bản ghi bị từ chối không còn đẩy câu về duyệt nội dung.
 --
 -- Chạy trong transaction mà ROLLBACK ở cuối nên không để lại dữ liệu nào.
--- Run: psql -d codeswitchlabel -v ON_ERROR_STOP=1 -f migrations/V12__verify_rejection_keeps_script.sql
+-- Run: psql -d codeswitchlabel -v ON_ERROR_STOP=1 -f migrations/V18__verify_rejection_keeps_script.sql
 -- ============================================================
 BEGIN;
 
@@ -53,17 +53,17 @@ BEGIN
     END IF;
 
     INSERT INTO app_user (role_id, full_name, email, password_hash, status)
-    SELECT r.role_id, 'V12 speaker', 'v12-speaker@verify.local', 'x', 'active'
+    SELECT r.role_id, 'V18 speaker', 'v18-speaker@verify.local', 'x', 'active'
       FROM role r WHERE r.role_name = 'speaker'
     RETURNING user_id INTO v_speaker;
 
     INSERT INTO app_user (role_id, full_name, email, password_hash, status)
-    SELECT r.role_id, 'V12 rv1', 'v12-rv1@verify.local', 'x', 'active'
+    SELECT r.role_id, 'V18 rv1', 'v18-rv1@verify.local', 'x', 'active'
       FROM role r WHERE r.role_name = 'reviewer'
     RETURNING user_id INTO v_rv1;
 
     INSERT INTO app_user (role_id, full_name, email, password_hash, status)
-    SELECT r.role_id, 'V12 rv2', 'v12-rv2@verify.local', 'x', 'active'
+    SELECT r.role_id, 'V18 rv2', 'v18-rv2@verify.local', 'x', 'active'
       FROM role r WHERE r.role_name = 'reviewer'
     RETURNING user_id INTO v_rv2;
 
@@ -71,13 +71,13 @@ BEGIN
     -- không phải về đường đi tới validated.
     INSERT INTO script (script_id, cs_content, vi_content, status, word_count, en_word_count,
                         domain, created_by)
-    VALUES (v_script, '[vi]Câu kiểm tra [en]verify [vi]V12.', '[vi]Câu kiểm tra V12.',
+    VALUES (v_script, '[vi]Câu kiểm tra [en]verify [vi]V18.', '[vi]Câu kiểm tra V18.',
             'pending_validation', 5, 1, 'it_technology', v_speaker);
 
     INSERT INTO recording (recording_id, script_id, speaker_id, sentence_variant, duration_sec,
                            status, cloud_link, audio_format)
     VALUES (v_rec, v_script, v_speaker, 'code_switching', 3.0,
-            'pending_review', 's3://verify/v12.wav', 'wav');
+            'pending_review', 's3://verify/v18.wav', 'wav');
 
     UPDATE script SET status = 'validated' WHERE script_id = v_script;
 
