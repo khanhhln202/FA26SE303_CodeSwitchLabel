@@ -74,6 +74,7 @@ export default function ReviewRecording() {
 
   const [filterSpeaker, setFilterSpeaker] = useState("all");
   const [page, setPage] = useState(1);
+  // Cặp câu đang chọn (theo scriptId): sau khi duyệt 1 bản, API trả bản còn lại của cặp ở cùng dòng
   const [selectedId, setSelectedId] = useState(null);
   // Kết quả mình đã nộp trong phiên (API duyệt mù không trả lại quyết định) - để tô icon trên danh sách
   const [sessionDecisions, setSessionDecisions] = useState({});
@@ -106,7 +107,8 @@ export default function ReviewRecording() {
     refetch: refetchRecordings,
   } = useQuery({
     queryKey: [GET_REVIEW_TASK_RECORDINGS_API, taskId, page],
-    queryFn: () => getReviewTaskRecordingsApi({ taskId, page, pageSize: PAGE_SIZE }),
+    // groupBy=Pair: mỗi cặp câu 1 dòng, phân trang theo cặp
+    queryFn: () => getReviewTaskRecordingsApi({ taskId, page, pageSize: PAGE_SIZE, groupBy: "Pair" }),
     enabled: Boolean(taskId),
     placeholderData: keepPreviousData,
   });
@@ -116,8 +118,13 @@ export default function ReviewRecording() {
   // API danh sách không lọc theo người đọc -> bộ lọc chỉ áp trên trang đang xem
   const speakerIds = [...new Set(recordings.map((r) => r.speakerId))];
   const list = recordings.filter((r) => filterSpeaker === "all" || String(r.speakerId) === filterSpeaker);
-  // Bản đang xem: bản đã chọn (nếu còn trong danh sách), không thì bản còn duyệt được đầu tiên
-  const current = list.find((r) => r.recordingId === selectedId) ?? list.find((r) => r.canReview) ?? list[0] ?? null;
+  // Số lượt đã duyệt của CẢ CẶP: API đếm riêng từng bản (VI-EN / VI) -> lấy bản đã được duyệt nhiều nhất,
+  // để duyệt 1 bản xong dòng hiện ngay 1/3 thay vì 0/3 của bản còn lại
+  const pairReviews = (r) => Math.max(r.reviewsDone ?? 0, r.sibling?.reviewsDone ?? 0);
+  // Cặp còn bản duyệt được (bản của dòng hoặc bản còn lại)
+  const pairReviewable = (r) => r.canReview || Boolean(r.sibling?.canReview);
+  // Bản đang xem: cặp đã chọn (nếu còn trong danh sách), không thì cặp còn duyệt được đầu tiên
+  const current = list.find((r) => r.scriptId === selectedId) ?? list.find(pairReviewable) ?? list[0] ?? null;
 
   // Call API mở bản đang xem: link nghe + round + cặp câu đầy đủ (pair) - chỉ khi bản đó còn duyệt được
   const {
@@ -131,6 +138,22 @@ export default function ReviewRecording() {
     enabled: Boolean(current?.canReview),
     staleTime: 10 * 60 * 1000, // link nghe hết hạn sau 15 phút
   });
+
+  // Duyệt cả cặp 1 lần bấm: bản còn lại (sibling) mình còn duyệt được thì mở luôn để lấy round (expectedRound)
+  const siblingTarget = current?.sibling?.canReview ? current.sibling : null;
+  // Call API mở bản còn lại của cặp
+  const { data: siblingDetail, isLoading: isLoadingSibling } = useQuery({
+    queryKey: [GET_REVIEW_RECORDING_API, siblingTarget?.recordingId],
+    queryFn: () => getReviewRecordingApi(siblingTarget.recordingId),
+    enabled: Boolean(siblingTarget),
+    staleTime: 10 * 60 * 1000,
+  });
+  // Các bản của cặp sẽ nộp khi bấm Duyệt / Từ chối (API duyệt từng bản -> mỗi bản 1 lần gọi)
+  const pairTargets = [
+    current?.canReview && detail ? { recordingId: detail.recordingId, round: detail.round } : null,
+    siblingTarget && siblingDetail ? { recordingId: siblingDetail.recordingId, round: siblingDetail.round } : null,
+  ].filter(Boolean);
+  const pairReady = pairTargets.length > 0 && (!current?.canReview || Boolean(detail)) && (!siblingTarget || Boolean(siblingDetail));
 
   // Call API lấy lý do từ chối - chỉ khi mở popup; hiện đúng mô tả backend trả về
   const {
@@ -150,25 +173,39 @@ export default function ReviewRecording() {
     return groups;
   }, {});
 
-  // Mutation nộp kết quả duyệt (đạt / từ chối)
-  const { mutate: submitReview, isPending: isSubmitting } = useMutation({
+  // Mutation duyệt CẢ CẶP: gọi POST /api/recordings/{id}/reviews lần lượt cho từng bản của cặp
+  const { mutate: submitPair, isPending: isSubmitting } = useMutation({
     mutationKey: [SUBMIT_REVIEW_API],
-    mutationFn: submitReviewApi,
-    onSuccess: async (result, variables) => {
-      setSessionDecisions((prev) => ({ ...prev, [variables.recordingId]: variables.decision }));
-      toast.success(variables.decision === "Approved" ? "Đã duyệt bản ghi" : "Đã từ chối bản ghi", {
-        description: result.isFinal ? "Bản ghi đã đủ lượt duyệt và được chốt." : `Lượt ${result.reviewsSoFar}/${result.roundsRequired}.`,
+    mutationFn: async (items) => {
+      const results = [];
+      for (const item of items) {
+        try {
+          results.push(await submitReviewApi(item));
+        } catch (error) {
+          // Bản trước vừa chốt Từ chối thì backend từ chối luôn cả cặp -> bản sau không còn chờ duyệt (409).
+          // Coi như cặp đã xong, không báo lỗi.
+          const code = error.cause?.response?.data?.code;
+          if (results.length > 0 && (code === "recording_not_reviewable" || code === "no_more_rounds")) continue;
+          throw error;
+        }
+      }
+      return results;
+    },
+    onSuccess: async (results, items) => {
+      setSessionDecisions((prev) => ({ ...prev, ...Object.fromEntries(items.map((it) => [it.recordingId, it.decision])) }));
+      const last = results[results.length - 1];
+      toast.success(items[0].decision === "Approved" ? "Đã duyệt cặp câu" : "Đã từ chối cặp câu", {
+        description: last?.isFinal ? "Bản ghi đã đủ lượt duyệt và được chốt." : `Lượt ${Math.max(...results.map((r) => r.reviewsSoFar))}/${last?.roundsRequired ?? 3}.`,
       });
-      // Wait for the new vote/counts before switching to the next recording (or
-      // keeping this one selected when there is no other reviewable item).
+      // Chờ danh sách và tiến độ tải lại (số lượt mới) rồi mới chuyển cặp
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: [GET_REVIEW_TASK_RECORDINGS_API] }),
         queryClient.invalidateQueries({ queryKey: [GET_REVIEWER_PROGRESS_API] }),
       ]);
-      // Chuyển sang bản còn duyệt được kế tiếp trong danh sách
-      const idx = list.findIndex((r) => r.recordingId === variables.recordingId);
-      const next = [...list.slice(idx + 1), ...list.slice(0, idx)].find((r) => r.canReview && r.recordingId !== variables.recordingId);
-      setSelectedId(next?.recordingId ?? variables.recordingId);
+      // Xong cặp -> sang cặp kế tiếp còn duyệt được
+      const idx = list.findIndex((r) => r.scriptId === current?.scriptId);
+      const next = [...list.slice(idx + 1), ...list.slice(0, idx)].find((r) => pairReviewable(r) && r.scriptId !== current?.scriptId);
+      setSelectedId(next?.scriptId ?? null);
     },
     // 409 round_changed / already_reviewed...: người khác vừa duyệt -> tải lại danh sách để lấy lượt mới
     onError: (error) => {
@@ -178,23 +215,25 @@ export default function ReviewRecording() {
     },
   });
 
+  // Duyệt: mọi bản của cặp đều đạt
   const handleApprove = () => {
-    if (!detail || isSubmitting) return;
-    submitReview({ recordingId: detail.recordingId, decision: "Approved", expectedRound: detail.round, taskId });
+    if (!pairReady || isSubmitting) return;
+    submitPair(pairTargets.map((t) => ({ recordingId: t.recordingId, decision: "Approved", expectedRound: t.round, taskId })));
   };
 
+  // Từ chối: mọi bản của cặp cùng lý do
   const handleRejectSubmit = (e) => {
     e.preventDefault();
-    if (!detail || !rejectReason || isSubmitting) return;
-    submitReview(
-      {
-        recordingId: detail.recordingId,
+    if (!pairReady || !rejectReason || isSubmitting) return;
+    submitPair(
+      pairTargets.map((t) => ({
+        recordingId: t.recordingId,
         decision: "Rejected",
-        expectedRound: detail.round,
+        expectedRound: t.round,
         taskId,
         rejectionReasonCodes: [rejectReason],
         comment: rejectComment.trim() || null,
-      },
+      })),
       {
         onSuccess: () => {
           setShowRejectModal(false);
@@ -292,23 +331,21 @@ export default function ReviewRecording() {
             <ul className="flex-1 min-h-0 grid grid-cols-[minmax(0,1fr)] gap-0.5 p-1.5 [@media(max-height:820px)]:p-1 overflow-y-auto overflow-x-hidden" style={{ gridTemplateRows: `repeat(${PAGE_SIZE}, minmax(44px, 1fr))` }} aria-label="Danh sách bản ghi">
               {[...list, ...Array(Math.max(0, PAGE_SIZE - list.length)).fill(null)].map((rec, i) => {
                 if (!rec) return <li key={`empty-${i}`} aria-hidden="true" />;
-                const decision = sessionDecisions[rec.recordingId];
-                const done = Boolean(decision) || rec.myReviewDone || !rec.canReview;
-                const active = current?.recordingId === rec.recordingId;
+                // Cặp không còn bản nào mình duyệt được -> làm mờ
+                const done = !pairReviewable(rec) || (Boolean(sessionDecisions[rec.recordingId]) && !rec.sibling?.canReview);
+                const active = current?.scriptId === rec.scriptId;
                 // Cặp câu theo thứ tự VI-EN rồi VI: bản của dòng này (rec) + bản còn lại (sibling) API trả kèm
                 const lines = [rec, rec.sibling].filter(Boolean).sort((x, y) => (variantOf(x) === "cs" ? -1 : 1) - (variantOf(y) === "cs" ? -1 : 1));
                 return (
-                  <li key={rec.recordingId} className="min-h-0 min-w-0">
+                  <li key={rec.scriptId} className="min-h-0 min-w-0">
                     <button
                       type="button"
-                      onClick={() => setSelectedId(rec.recordingId)}
+                      onClick={() => setSelectedId(rec.scriptId)}
                       className={`w-full h-full text-left px-2.5 rounded-lg border transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-[#16A34A]/30 flex flex-col justify-center overflow-hidden ${active ? "bg-[#EDF7F0] border-[#BFE3CB]" : "border-transparent hover:bg-[#F7F5EF]"} ${done && !active ? "opacity-55" : ""}`}
                     >
                       <span className="flex items-center gap-2">
                         <span className={`text-meta font-label leading-4 [@media(max-height:820px)]:leading-[14px] text-[#16171C] truncate flex-1`}>{speakerLabel(rec.speakerId)}</span>
-                        <span className="type-caption leading-4 text-[#9A9CA3] tabular-nums shrink-0">{rec.reviewsDone}/{rec.roundsRequired}</span>
-                        {decision === "Approved" && <CheckCircle2 className="w-3.5 h-3.5 text-[#3FA66B] shrink-0" />}
-                        {decision === "Rejected" && <XCircle className="w-3.5 h-3.5 text-[#C63B3B] shrink-0" />}
+                        <span className="type-caption leading-4 text-[#9A9CA3] tabular-nums shrink-0">{pairReviews(rec)}/{rec.roundsRequired}</span>
                       </span>
                       {/* Luôn giữ chỗ 2 dòng câu để mọi ô giống nhau */}
                       {[0, 1].map((idx) => {
@@ -340,7 +377,7 @@ export default function ReviewRecording() {
               <div className="px-5 py-3 border-b border-[#F0EEE6] flex items-center justify-between gap-3">
                 <p className="min-w-0">
                   <span className="type-card-title text-[#16171C]">{speakerLabel(current.speakerId)}</span>
-                  <span className="type-meta text-[#9A9CA3] ml-2">Lượt duyệt {current.reviewsDone}/{current.roundsRequired}</span>
+                  <span className="type-meta text-[#9A9CA3] ml-2">Lượt duyệt {pairReviews(current)}/{current.roundsRequired}</span>
                 </p>
                 {/* Hành động ở góc phải tiêu đề; đã xử lý / không duyệt được thì hiện trạng thái thay cho nút */}
                 {currentDecision ? (
@@ -352,10 +389,10 @@ export default function ReviewRecording() {
                   <span className="type-label shrink-0 text-[#6E7078]">{BLOCKER_TEXT[current.blocker] ?? "Không duyệt được"}</span>
                 ) : (
                   <div className="shrink-0 flex items-center gap-1.5">
-                    <button onClick={() => setShowRejectModal(true)} disabled={!detail || isSubmitting} className="h-7 px-2.5 rounded-lg type-label flex items-center gap-1 bg-white border border-[#E5E2D8] text-[#C63B3B] hover:bg-[#FDEAEA] hover:border-[#F3C9C9] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                    <button onClick={() => setShowRejectModal(true)} disabled={!pairReady || isSubmitting || isLoadingSibling} className="h-7 px-2.5 rounded-lg type-label flex items-center gap-1 bg-white border border-[#E5E2D8] text-[#C63B3B] hover:bg-[#FDEAEA] hover:border-[#F3C9C9] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
                       <XCircle className="w-3.5 h-3.5" /> Từ chối
                     </button>
-                    <button onClick={handleApprove} disabled={!detail || isSubmitting} className="h-7 px-2.5 rounded-lg type-label flex items-center gap-1 bg-[#2F855A] border border-[#2F855A] text-white hover:bg-[#276749] hover:border-[#276749] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                    <button onClick={handleApprove} disabled={!pairReady || isSubmitting || isLoadingSibling} className="h-7 px-2.5 rounded-lg type-label flex items-center gap-1 bg-[#2F855A] border border-[#2F855A] text-white hover:bg-[#276749] hover:border-[#276749] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
                       <CheckCircle2 className="w-3.5 h-3.5" /> {isSubmitting ? "Đang gửi..." : "Duyệt"}
                     </button>
                   </div>
@@ -370,7 +407,8 @@ export default function ReviewRecording() {
                 ) : detail?.pair?.length ? (
                   // Cặp câu đầy đủ từ API: bản đang duyệt có nhãn "Đang duyệt", bản còn lại để nghe đối chiếu
                   detail.pair.map((v) => {
-                    const isTarget = v.recordingId === detail.recordingId;
+                    // Mọi bản của cặp mình còn duyệt được đều "Đang duyệt" (1 lần bấm duyệt cả cặp)
+                    const isTarget = pairTargets.some((t) => t.recordingId === v.recordingId);
                     return (
                       <div key={v.recordingId ?? v.sentenceVariant}>
                         <span className="flex items-center gap-2">
@@ -440,7 +478,7 @@ export default function ReviewRecording() {
                   </div>
 
                   <span className="type-section text-[#16171C]">
-                    Từ chối bản ghi · {speakerLabel(current.speakerId)}
+                    Từ chối cặp câu · {speakerLabel(current.speakerId)}
                   </span>
                 </div>
 
