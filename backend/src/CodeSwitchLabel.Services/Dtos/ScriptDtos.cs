@@ -73,7 +73,9 @@ public record ImportBatchDetailDto(
 public record ScriptListItemDto(
     string ScriptId,
     string CsContent,
+    string CsPlain,
     string ViContent,
+    string ViPlain,
     ScriptStatus Status,
     ScriptDomain Domain,
     int WordCount,

@@ -822,7 +822,11 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
                  WHERE s.status = 'validated'
                    AND s.domain = {domain}
                    AND NOT EXISTS (
-                       SELECT 1 FROM task_script ts WHERE ts.script_id = s.script_id
+                       SELECT 1
+                         FROM task_script ts
+                         JOIN task t ON t.task_id = ts.task_id
+                        WHERE ts.script_id = s.script_id
+                          AND t.status <> 'cancelled'
                    )
                  ORDER BY s.script_id
                  FOR UPDATE OF s SKIP LOCKED

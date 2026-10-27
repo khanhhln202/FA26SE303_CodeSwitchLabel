@@ -15,7 +15,9 @@ namespace CodeSwitchLabel.Services.Implementations;
 internal static class ScriptMapper
 {
     public static ScriptListItemDto ToListItem(this Script s) =>
-        new(s.ScriptId, s.CsContent, s.ViContent, s.Status, s.Domain, s.WordCount, s.EnWordCount, s.CreatedAt);
+        new(s.ScriptId, s.CsContent, ScriptPairRules.SafeStrip(s.CsContent),
+            s.ViContent, ScriptPairRules.SafeStrip(s.ViContent),
+            s.Status, s.Domain, s.WordCount, s.EnWordCount, s.CreatedAt);
 
     public static ScriptDetailDto ToDetail(this Script s) =>
         new(s.ScriptId,

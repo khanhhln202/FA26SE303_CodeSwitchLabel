@@ -160,6 +160,44 @@ public class TaskRepositoryTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task GetAvailableScriptIdsByDomainAsync_ReusesCanceledTaskScriptsOnly()
+    {
+        var canceledScript = await CreateValidatedScriptAsync(
+            "[vi]Câu [en]canceled", "[vi]Câu đã hủy", ScriptDomain.ItTechnology, AdminUserId);
+        var activeScript = await CreateValidatedScriptAsync(
+            "[vi]Câu [en]active", "[vi]Câu đang làm", ScriptDomain.ItTechnology, AdminUserId);
+        var completedScript = await CreateValidatedScriptAsync(
+            "[vi]Câu [en]completed", "[vi]Câu hoàn thành", ScriptDomain.ItTechnology, AdminUserId);
+
+        var tasks = new[]
+        {
+            await CreateTaskAsync(CampaignId, TaskType.Recording, 1, ManagerUserId,
+                status: WorkTaskStatus.Cancelled),
+            await CreateTaskAsync(CampaignId, TaskType.Recording, 1, ManagerUserId,
+                status: WorkTaskStatus.InProgress),
+            await CreateTaskAsync(CampaignId, TaskType.Recording, 1, ManagerUserId,
+                status: WorkTaskStatus.Completed)
+        };
+        var scripts = new[] { canceledScript, activeScript, completedScript };
+
+        Db.TaskScripts.AddRange(tasks.Zip(scripts, (task, script) => new TaskScript
+        {
+            TaskId = task.TaskId,
+            ScriptId = script.ScriptId,
+            Status = TaskScriptStatus.Pending,
+            IncludedAt = DateTimeOffset.UtcNow
+        }));
+        await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var available = await Tasks.GetAvailableScriptIdsByDomainAsync(
+            ScriptDomain.ItTechnology, 10, TestContext.Current.CancellationToken);
+
+        Assert.Contains(canceledScript.ScriptId, available);
+        Assert.DoesNotContain(activeScript.ScriptId, available);
+        Assert.DoesNotContain(completedScript.ScriptId, available);
+    }
+
+    [Fact]
     public async Task GetAssignableUsersAsync_RanksByApprovalThenOverdueThenLoad()
     {
         // speaker prioritization — approval DESC, overdue ASC, load ASC.
