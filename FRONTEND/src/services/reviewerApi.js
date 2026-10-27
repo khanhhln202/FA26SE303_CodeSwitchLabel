@@ -14,14 +14,15 @@ export const getReviewerProgressApi = async () => {
   }
 };
 
-// Danh sách bản ghi trong một task duyệt: GET /api/reviewer/tasks/{taskId}/recordings?page=&pageSize=
+// Danh sách bản ghi trong một task duyệt: GET /api/reviewer/tasks/{taskId}/recordings?page=&pageSize=&groupBy=
 // Trả về { items, page, pageSize, total, totalPages, hasNext }
-// Mỗi phần tử là MỘT bản ghi: { recordingId, speakerId, scriptId, sentenceVariant, scriptText, durationSec, status,
+// Mỗi phần tử: { recordingId, speakerId, scriptId, sentenceVariant, scriptText, durationSec, status, queueStatus,
 //   reviewsDone, roundsRequired, myReviewDone, blocker, canReview,
-//   sibling: { recordingId, sentenceVariant, scriptText, status, reviewsDone } | null } - sibling là bản còn lại của cặp câu
-export const getReviewTaskRecordingsApi = async ({ taskId, page = 1, pageSize = 100 }) => {
+//   sibling: { recordingId, sentenceVariant, scriptText, status, reviewsDone, myReviewDone, blocker, canReview } | null }
+// groupBy = "Pair": mỗi cặp câu đúng 1 dòng (phân trang theo cặp), dòng là bản đang cần bạn duyệt, sibling là bản còn lại
+export const getReviewTaskRecordingsApi = async ({ taskId, page = 1, pageSize = 100, groupBy }) => {
   try {
-    const response = await httpClient.get(`/api/reviewer/tasks/${taskId}/recordings`, { params: { page, pageSize } });
+    const response = await httpClient.get(`/api/reviewer/tasks/${taskId}/recordings`, { params: { page, pageSize, groupBy } });
     return response.data;
   } catch (error) {
     const message =

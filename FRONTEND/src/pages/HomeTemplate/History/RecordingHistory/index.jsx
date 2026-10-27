@@ -131,11 +131,10 @@ function ResultTag({ status }) {
 
 /**
  * Gom lượt duyệt theo cặp: API trả từng lượt của từng bản (reviews[].recordingId, round) -> mỗi round là 1 lượt duyệt cả cặp.
- * Lượt có bản bị từ chối = Rejected; mọi bản có audio đều đạt = Approved; mới có 1 bản được duyệt = chưa xong (Partial).
+ * Theo đúng decision API trả: lượt có bản bị từ chối = Rejected (x), còn lại có bản đạt = Approved (tick).
  */
 function pairRounds(item) {
   const variantOfId = (id) => (id === item.csRecordingId ? "cs" : "vi");
-  const needed = [item.csAudioUrl, item.viAudioUrl].filter(Boolean).length || 1;
   const byRound = new Map();
   (item.reviews ?? []).forEach((r) => {
     if (!byRound.has(r.round)) byRound.set(r.round, []);
@@ -146,7 +145,7 @@ function pairRounds(item) {
     .map(([round, list]) => {
       let decision = "Partial";
       if (list.some((r) => r.decision === "Rejected")) decision = "Rejected";
-      else if (list.filter((r) => r.decision === "Approved").length >= needed) decision = "Approved";
+      else if (list.some((r) => r.decision === "Approved")) decision = "Approved";
       return { round, decision, reviews: list.sort((a, b) => (a.variant === "cs" ? 0 : 1) - (b.variant === "cs" ? 0 : 1)) };
     });
 }
