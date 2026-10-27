@@ -66,13 +66,33 @@ public record LeaderboardDto(
     IReadOnlyList<LeaderboardEntryDto> Items);
 
 /// <summary>Bản ghi bị từ chối của chính mình, kèm lý do và link nghe lại để thu lại.</summary>
-public record RejectedRecordingDto(
+/// <summary>Một lần thu cũ đã bị loại, giữ lại để người đọc nghe lại trước khi thu lại.</summary>
+public record RejectedTakeDto(
     string RecordingId,
+    SentenceVariant SentenceVariant,
+    string? AudioUrl,
+    DateTimeOffset? AudioUrlExpiresAt);
+
+/// <summary>
+/// Một CẶP CÂU cần thu lại. Một dòng là một cặp, không phải một bản thu: từ chối là từ chối
+/// cả cặp, nên hai bản luôn đi cùng nhau và màn hình thu lại giống hệt lúc thu lần đầu.
+/// </summary>
+/// <param name="RemainingVariants">Bản còn nợ. Cả hai bản bị loại thì ở đây có đủ hai.</param>
+/// <param name="CanRecord">
+/// Thu lại được ngay chưa. False khi câu không còn ở trạng thái đã duyệt nội dung — lúc đó
+/// phải chờ Reviewer duyệt lại câu, thu luôn sẽ bị tầng ghi âm từ chối.
+/// </param>
+public record RejectedPairDto(
     string ScriptId,
-    string Transcript,
+    string CsText,
+    string ViText,
     string? Reason,
-    string AudioUrl,
-    DateTimeOffset AudioUrlExpiresAt);
+    DateTimeOffset RejectedAt,
+    ScriptStatus ScriptStatus,
+    bool CanRecord,
+    IReadOnlyList<SentenceVariant> RemainingVariants,
+    RejectedTakeDto? Cs,
+    RejectedTakeDto? Vi);
 
 /// <summary>Dòng lịch sử ghi âm của Speaker: mỗi dòng là MỘT CẶP bản ghi (Việt-Anh + tiếng Việt).</summary>
 /// <param name="CsRecordingId">Null = cặp mới chỉ ghi được một bản.</param>

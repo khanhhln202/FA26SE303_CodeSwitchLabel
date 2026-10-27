@@ -486,4 +486,66 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
             .SingleOrDefaultAsync(ts => ts.ScriptId == script.ScriptId, ct);
         if (muc is not null) Assert.NotEqual(TaskScriptStatus.Rejected, muc.Status);
     }
+
+    /// <summary>
+    /// Danh sách "câu chờ ghi âm lại" phải trả MỘT dòng cho mỗi cặp, kèm cả hai bản thu cũ.
+    /// Từ khi từ chối là từ chối cả cặp, trả theo từng bản thu làm cặp nào cũng hiện hai dòng
+    /// trùng nội dung — đúng chỗ đội frontend báo.
+    /// </summary>
+    [Fact]
+    public async Task DanhSachChoThuLai_MotCapMotDong_KemCaHaiBanCu()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var dau = Dau();
+
+        var (manager, campaign) = await TaoDotAsync(dau, ct);
+        var speaker = await CreateUserAsync($"sp-cho-{dau}@test.local", RoleName.Speaker);
+        var rv1 = await CreateUserAsync($"rv1-cho-{dau}@test.local", RoleName.Reviewer);
+        var rv2 = await CreateUserAsync($"rv2-cho-{dau}@test.local", RoleName.Reviewer);
+
+        var script = await CreateValidatedScriptAsync(
+            $"[vi]Hôm nay mình cần cài đặt [en]Excel{dau} [vi]cho kịp giờ.",
+            $"[vi]Hôm nay mình cần cài đặt bảng tính cho kịp giờ {dau}.",
+            ScriptDomain.ItTechnology, speaker.UserId);
+
+        var cs = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
+        var vi = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.PureVietnamese);
+
+        var task = await TaoLoDuyetAsync(
+            campaign.CampaignId, manager.UserId, cs.RecordingId, [rv1.UserId, rv2.UserId], 2, ct);
+
+        Db.TaskRecordings.Add(new TaskRecording
+        {
+            TaskId = task.TaskId,
+            RecordingId = vi.RecordingId,
+            Status = TaskRecordingStatus.Queued
+        });
+        await Db.SaveChangesAsync(ct);
+
+        // Hai phiếu từ chối chốt bản cs; bản vi bị gỡ theo cặp.
+        await DuyetAsync(cs.RecordingId, rv1.UserId, task.TaskId, 1, ct, ReviewDecision.Rejected);
+        await DuyetAsync(cs.RecordingId, rv2.UserId, task.TaskId, 2, ct, ReviewDecision.Rejected);
+
+        Db.ChangeTracker.Clear();
+
+        var cho = await Rounds.GetRejectedAsync(speaker.UserId, 20, ct);
+
+        // MỘT dòng cho cả cặp, không phải hai.
+        var dong = Assert.Single(cho, x => x.ScriptId == script.ScriptId);
+
+        Assert.Contains("Excel", dong.CsText, StringComparison.Ordinal);
+        Assert.Contains("bảng tính", dong.ViText, StringComparison.Ordinal);
+
+        // Nợ cả hai bản, và cả hai bản cũ đều có mặt để nghe lại.
+        Assert.Equal(
+            [SentenceVariant.CodeSwitching, SentenceVariant.PureVietnamese],
+            dong.RemainingVariants);
+
+        Assert.Equal(cs.RecordingId, dong.Cs!.RecordingId);
+        Assert.Equal(vi.RecordingId, dong.Vi!.RecordingId);
+
+        // Câu vẫn duyệt rồi nên thu lại được ngay — V12.
+        Assert.Equal(ScriptStatus.Validated, dong.ScriptStatus);
+        Assert.True(dong.CanRecord);
+    }
 }
