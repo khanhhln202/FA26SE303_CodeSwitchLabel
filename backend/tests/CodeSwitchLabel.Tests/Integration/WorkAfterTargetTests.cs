@@ -253,8 +253,11 @@ public sealed class WorkAfterTargetTests(DatabaseFixture fixture)
         });
         await Db.SaveChangesAsync(ct);
 
+        // Test này soi TỪNG BẢN THU (bản thu lại cùng biến thể), nên hỏi đúng hình dạng đó —
+        // mặc định của endpoint là gom theo cặp.
         var page = await ReviewService.GetTaskRecordingsAsync(
-            task.TaskId, reviewer.UserId, new TaskReviewQuery(), ct);
+            task.TaskId, reviewer.UserId,
+            new TaskReviewQuery { GroupBy = TaskReviewGrouping.Recording }, ct);
 
         Assert.Equal(2, page.Items.Count);
 

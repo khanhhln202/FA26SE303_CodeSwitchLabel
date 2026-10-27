@@ -191,18 +191,21 @@ export default function ReviewRecording() {
       }
       return results;
     },
-    onSuccess: (results, items) => {
+    onSuccess: async (results, items) => {
       setSessionDecisions((prev) => ({ ...prev, ...Object.fromEntries(items.map((it) => [it.recordingId, it.decision])) }));
       const last = results[results.length - 1];
       toast.success(items[0].decision === "Approved" ? "Đã duyệt cặp câu" : "Đã từ chối cặp câu", {
         description: last?.isFinal ? "Bản ghi đã đủ lượt duyệt và được chốt." : `Lượt ${Math.max(...results.map((r) => r.reviewsSoFar))}/${last?.roundsRequired ?? 3}.`,
       });
+      // Chờ danh sách và tiến độ tải lại (số lượt mới) rồi mới chuyển cặp
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: [GET_REVIEW_TASK_RECORDINGS_API] }),
+        queryClient.invalidateQueries({ queryKey: [GET_REVIEWER_PROGRESS_API] }),
+      ]);
       // Xong cặp -> sang cặp kế tiếp còn duyệt được
       const idx = list.findIndex((r) => r.scriptId === current?.scriptId);
       const next = [...list.slice(idx + 1), ...list.slice(0, idx)].find((r) => pairReviewable(r) && r.scriptId !== current?.scriptId);
       setSelectedId(next?.scriptId ?? null);
-      queryClient.invalidateQueries({ queryKey: [GET_REVIEW_TASK_RECORDINGS_API] });
-      queryClient.invalidateQueries({ queryKey: [GET_REVIEWER_PROGRESS_API] });
     },
     // 409 round_changed / already_reviewed...: người khác vừa duyệt -> tải lại danh sách để lấy lượt mới
     onError: (error) => {

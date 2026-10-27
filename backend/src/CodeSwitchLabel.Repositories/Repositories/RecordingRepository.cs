@@ -18,6 +18,14 @@ public interface IRecordingRepository
 
     Task<Recording?> GetAsync(string recordingId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Lần thu đang hiệu lực của một biến thể — bản chờ duyệt hoặc đã đạt. Null nghĩa là
+    /// biến thể đó đang trống (chưa thu, hoặc bản cũ đã bị loại / trượt QC).
+    /// Trả về thực thể CÓ theo dõi thay đổi: người gọi sửa trạng thái rồi lưu.
+    /// </summary>
+    Task<Recording?> GetActiveTakeAsync(
+        string scriptId, SentenceVariant variant, CancellationToken ct = default);
+
     /// <summary><paramref name="sort"/> rỗng (Field = null) là thứ tự mặc định.</summary>
     Task<(IReadOnlyList<Recording> Items, int Total)> SearchAsync(
         long? speakerId, string? scriptId, RecordingStatus? status,
@@ -72,6 +80,14 @@ public class RecordingRepository(CodeSwitchLabelDbContext db) : IRecordingReposi
 
     public Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken ct = default) =>
         db.Database.BeginTransactionAsync(ct);
+
+    public Task<Recording?> GetActiveTakeAsync(
+        string scriptId, SentenceVariant variant, CancellationToken ct = default) =>
+        db.Recordings.FirstOrDefaultAsync(
+            r => r.ScriptId == scriptId &&
+                 r.SentenceVariant == variant &&
+                 (r.Status == RecordingStatus.PendingReview || r.Status == RecordingStatus.Approved),
+            ct);
 
     public Task<Recording?> GetAsync(string recordingId, CancellationToken ct = default) =>
         db.Recordings.AsNoTracking().FirstOrDefaultAsync(r => r.RecordingId == recordingId, ct);

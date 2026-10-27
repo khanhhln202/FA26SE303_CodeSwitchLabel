@@ -330,18 +330,18 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
 
         await Db.SaveChangesAsync(ct);
 
-        // Mặc định: hai cặp ra BỐN dòng.
+        // groupBy=recording: hai cặp ra BỐN dòng — hình dạng cũ, giờ phải hỏi đích danh.
         var theoBanGhi = await ReviewService.GetTaskRecordingsAsync(
-            task.TaskId, reviewer.UserId, new TaskReviewQuery { PageSize = 50 }, ct);
+            task.TaskId, reviewer.UserId,
+            new TaskReviewQuery { PageSize = 50, GroupBy = TaskReviewGrouping.Recording }, ct);
 
         Assert.Equal(4, theoBanGhi.Total);
         Assert.Equal(4, theoBanGhi.Items.Count);
         Assert.Equal(2, theoBanGhi.Items.Select(i => i.ScriptId).Distinct().Count());
 
-        // Gom theo cặp: hai cặp ra HAI dòng, và tổng cũng đếm theo cặp.
+        // MẶC ĐỊNH gom theo cặp: hai cặp ra HAI dòng, và tổng cũng đếm theo cặp.
         var theoCap = await ReviewService.GetTaskRecordingsAsync(
-            task.TaskId, reviewer.UserId,
-            new TaskReviewQuery { PageSize = 50, GroupBy = TaskReviewGrouping.Pair }, ct);
+            task.TaskId, reviewer.UserId, new TaskReviewQuery { PageSize = 50 }, ct);
 
         Assert.Equal(2, theoCap.Total);
         Assert.Equal(2, theoCap.Items.Count);
@@ -359,5 +359,73 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
             Assert.False(kia.MyReviewDone);
             Assert.True(kia.CanReview);
         }
+    }
+
+    /// <summary>
+    /// Từ chối là từ chối CẢ CẶP: bản còn lại cũng bị loại để người đọc thu lại nguyên cặp.
+    /// Ca khó nhất ở đây — bản còn lại ĐÃ ĐẠT rồi vẫn phải bị gỡ, vì cặp chỉ dùng được khi có
+    /// đủ hai bản cùng một giọng; giữ lại nửa đã đạt thì nửa mới thu sẽ lệch điều kiện thu.
+    /// </summary>
+    [Fact]
+    public async Task TuChoiMotBan_BanConLaiDuDaDat_CungBiLoaiDeThuLaiCaCap()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var dau = Dau();
+
+        var (manager, campaign) = await TaoDotAsync(dau, ct);
+        var speaker = await CreateUserAsync($"sp-cap-{dau}@test.local", RoleName.Speaker);
+        var rv1 = await CreateUserAsync($"rv1-cap-{dau}@test.local", RoleName.Reviewer);
+        var rv2 = await CreateUserAsync($"rv2-cap-{dau}@test.local", RoleName.Reviewer);
+
+        var script = await CreateValidatedScriptAsync(
+            $"[vi]Làm ơn mở [en]Teams{dau} [vi]giúp em.", $"[vi]Làm ơn mở ứng dụng giúp em {dau}.",
+            ScriptDomain.ItTechnology, speaker.UserId);
+
+        var cs = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
+        var vi = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.PureVietnamese);
+
+        var task = await TaoLoDuyetAsync(
+            campaign.CampaignId, manager.UserId, cs.RecordingId, [rv1.UserId, rv2.UserId], 2, ct);
+
+        Db.TaskRecordings.Add(new TaskRecording
+        {
+            TaskId = task.TaskId,
+            RecordingId = vi.RecordingId,
+            Status = TaskRecordingStatus.Queued
+        });
+        await Db.SaveChangesAsync(ct);
+
+        // Bản thuần Việt được duyệt ĐẠT trước: hai phiếu là quá bán, chốt ngay.
+        await DuyetAsync(vi.RecordingId, rv1.UserId, task.TaskId, 1, ct);
+        var viChot = await DuyetAsync(vi.RecordingId, rv2.UserId, task.TaskId, 2, ct);
+
+        Assert.Equal(RecordingStatus.Approved, viChot.RecordingStatus);
+
+        // Rồi bản chen tiếng Anh bị từ chối.
+        await DuyetAsync(cs.RecordingId, rv1.UserId, task.TaskId, 1, ct, ReviewDecision.Rejected);
+        var csChot = await DuyetAsync(cs.RecordingId, rv2.UserId, task.TaskId, 2, ct, ReviewDecision.Rejected);
+
+        Assert.Equal(RecordingStatus.Rejected, csChot.RecordingStatus);
+
+        // Bản đã đạt bị gỡ theo cặp, có ghi rõ ai gỡ và vì sao.
+        Db.ChangeTracker.Clear();
+        var viSau = await Db.Recordings.AsNoTracking()
+            .SingleAsync(r => r.RecordingId == vi.RecordingId, ct);
+
+        Assert.Equal(RecordingStatus.Rejected, viSau.Status);
+        Assert.NotNull(viSau.DiscardedAt);
+        Assert.Equal(rv2.UserId, viSau.DiscardedBy);
+        Assert.Contains(cs.RecordingId, viSau.DiscardNote!, StringComparison.Ordinal);
+
+        // Câu vẫn còn dùng được — chỉ hai bản thu bị gỡ, không phải loại câu khỏi kho.
+        var cauSau = await Db.Scripts.AsNoTracking()
+            .SingleAsync(s => s.ScriptId == script.ScriptId, ct);
+        Assert.Equal(ScriptStatus.Validated, cauSau.Status);
+
+        // Người đọc nợ lại CẢ HAI bản: không bản nào của cặp còn hiệu lực.
+        var conHieuLuc = await Db.Recordings.AsNoTracking()
+            .CountAsync(r => r.ScriptId == script.ScriptId &&
+                        (r.Status == RecordingStatus.PendingReview || r.Status == RecordingStatus.Approved), ct);
+        Assert.Equal(0, conHieuLuc);
     }
 }
