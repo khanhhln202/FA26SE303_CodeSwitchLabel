@@ -476,15 +476,24 @@ export default function TaskManagerManagement() {
       const tasksInTargetBatch = assignTasks.filter(t => Number(t.campaignId) === targetBatchId);
       const batchTarget = Number(batchObj.target || 2000);
       const newTaskCount = tasksInTargetBatch.length + 1;
-      const targetPerTask = Math.floor(batchTarget / newTaskCount);
+      
+      // Tính toán chia chỉ tiêu: Dồn phần dư chênh lệch vào nhiệm vụ đầu tiên
+      const baseTargetPerTask = Math.floor(batchTarget / newTaskCount);
+      const remainder = batchTarget % newTaskCount;
+      
+      // Chỉ tiêu của nhiệm vụ mới sắp tạo (Nếu là task đầu tiên thì nhận phần dư)
+      const newTaskTarget = tasksInTargetBatch.length === 0 ? baseTargetPerTask + remainder : baseTargetPerTask;
 
+      // Cập nhật lại các nhiệm vụ cũ đã có trong đợt
       if (tasksInTargetBatch.length > 0 && typeof taskService.updateTask === "function") {
         await Promise.all(
-          tasksInTargetBatch.map(existingTask => 
-            taskService.updateTask(existingTask.id, {
-              targetQty: targetPerTask
-            }).catch(err => console.warn(`Lỗi hạ targetQty task ${existingTask.id}:`, err))
-          )
+          tasksInTargetBatch.map((existingTask, index) => {
+            // Task ở vị trí đầu tiên trong danh sách nhận phần dư để tổng 100% bằng chỉ tiêu đợt
+            const updatedTaskTarget = index === 0 ? baseTargetPerTask + remainder : baseTargetPerTask;
+            return taskService.updateTask(existingTask.id, {
+              targetQty: updatedTaskTarget
+            }).catch(err => console.warn(`Lỗi cập nhật targetQty task ${existingTask.id}:`, err));
+          })
         );
       }
 
@@ -495,7 +504,7 @@ export default function TaskManagerManagement() {
         domain: selectedDomainCode,
         topic: batchObj?.topic || "Công nghệ thông tin",
         campaignId: targetBatchId,
-        targetQty: targetPerTask,
+        targetQty: newTaskTarget,
         deadline: endDateClean
       };
 
@@ -511,7 +520,7 @@ export default function TaskManagerManagement() {
 
       if (taskId && userIdsToAssign.length > 0) {
         await taskService.assignTask(taskId, userIdsToAssign).catch(err => console.warn("Lỗi assignTask:", err));
-        const targetPerUser = Math.floor(targetPerTask / userIdsToAssign.length);
+        const targetPerUser = Math.floor(newTaskTarget / userIdsToAssign.length);
 
         try {
           if (isSpeaker && typeof taskService.addTaskItems === "function") {
@@ -525,7 +534,7 @@ export default function TaskManagerManagement() {
       }
 
       const unitText = isSpeaker ? "câu" : "bản";
-      toast.success(`Đã tạo và tự động chia lại chỉ tiêu (${targetPerTask} ${unitText}/nhiệm vụ) thành công!`);
+      toast.success(`Đã tạo và tự động chia lại chỉ tiêu (${newTaskTarget} ${unitText}/nhiệm vụ) thành công!`);
       setIsAssignModalOpen(false);
       await loadDataFromApi();
     } catch (err) {
@@ -629,22 +638,26 @@ export default function TaskManagerManagement() {
         // ĐỒNG BỘ CHIA LẠI CHỈ TIÊU CÁC TASK CON TRONG ĐỢT KHI SỬA CHỈ TIÊU ĐỢT
         const tasksInBatch = assignTasks.filter(t => Number(t.campaignId) === targetCampaignId);
         if (tasksInBatch.length > 0) {
-          const newTargetPerTask = Math.floor(newCampaignTarget / tasksInBatch.length);
+          const baseTargetPerTask = Math.floor(newCampaignTarget / tasksInBatch.length);
+          const remainder = newCampaignTarget % tasksInBatch.length;
 
           await Promise.all(
-            tasksInBatch.map(async (t) => {
+            tasksInBatch.map(async (t, taskIndex) => {
+              // Task đầu tiên gánh phần dư để tổng chính xác 100% chỉ tiêu đợt
+              const newTargetPerTask = taskIndex === 0 ? baseTargetPerTask + remainder : baseTargetPerTask;
+
               // 1. Cập nhật chỉ tiêu tổng của Task
               await taskService.updateTask(t.id, { targetQty: newTargetPerTask }).catch(err => console.warn(err));
 
               // 2. Cập nhật chỉ tiêu cá nhân cho từng người trong Task
               if (t.assignedUsers && t.assignedUsers.length > 0) {
                 const baseUserTarget = Math.floor(newTargetPerTask / t.assignedUsers.length);
-                const remainder = newTargetPerTask % t.assignedUsers.length;
+                const userRemainder = newTargetPerTask % t.assignedUsers.length;
 
                 const assignmentsPayload = t.assignedUsers.map((userName, index) => {
                   const foundUser = allAdminUsers.find(u => u.name === userName);
                   // Dồn phần dư cho người đầu tiên để tổng đúng bằng chỉ tiêu Task
-                  const userTarget = index === 0 ? baseUserTarget + remainder : baseUserTarget;
+                  const userTarget = index === 0 ? baseUserTarget + userRemainder : baseUserTarget;
                   return {
                     userId: foundUser ? Number(foundUser.id) : null,
                     targetQty: userTarget
@@ -739,6 +752,7 @@ export default function TaskManagerManagement() {
     }
 
     try {
+      // 1. Cập nhật tiêu đề nhiệm vụ
       if (typeof taskService.updateTask === "function") {
         await taskService.updateTask(editingTask.id, {
           title: editTaskFormData.title,
@@ -746,27 +760,45 @@ export default function TaskManagerManagement() {
         }).catch((err) => console.warn("Lỗi updateTask:", err));
       }
 
+      // 2. Chuẩn bị danh sách ID người thực hiện được chọn
       const userList = editTaskFormData.role === "Speaker" ? activeSpeakers : activeReviewers;
       const roleUserIds = new Set(userList.map(u => Number(u.id)));
-      const currentIds = (editingTask.assignedUserIds || []).map(Number);
       const selectedIds = (editTaskFormData.assignedUserIds || []).map(Number).filter(id => roleUserIds.has(id));
 
-      for (const userId of currentIds.filter(id => roleUserIds.has(id) && !selectedIds.includes(id))) {
-        await taskService.unassignTask(editingTask.id, userId);
+      if (selectedIds.length === 0) {
+        toast.error("Vui lòng chọn ít nhất một người thực hiện!");
+        return;
       }
 
-      const addedIds = selectedIds.filter(id => !currentIds.includes(id));
-      if (addedIds.length > 0) {
-        await taskService.assignTask(editingTask.id, addedIds);
+      // 3. Tự động tính toán chia đều chỉ tiêu nhiệm vụ cho danh sách người chọn (dồn phần dư cho người đầu tiên)
+      const taskTargetQty = Number(editingTask.targetQty || 0);
+      const baseUserTarget = Math.floor(taskTargetQty / selectedIds.length);
+      const userRemainder = taskTargetQty % selectedIds.length;
+
+      const assignmentsPayload = selectedIds.map((uId, idx) => ({
+        userId: uId,
+        targetQty: idx === 0 ? baseUserTarget + userRemainder : baseUserTarget
+      }));
+
+      // 4. Đồng bộ danh sách phân công và chỉ tiêu cá nhân lên BE
+      if (typeof taskService.setAssignments === "function") {
+        await taskService.setAssignments(editingTask.id, assignmentsPayload);
+      } else {
+        await taskService.assignTask(editingTask.id, selectedIds);
       }
 
-      toast.success(`Đã cập nhật nhiệm vụ "${editTaskFormData.title}" thành công!`);
+      toast.success(`Đã cập nhật phân công nhiệm vụ "${editTaskFormData.title}" thành công!`);
       setIsEditTaskModalOpen(false);
       await loadDataFromApi();
     } catch (err) {
       console.error("Lỗi cập nhật nhiệm vụ:", err?.response?.data || err);
-      const apiMsg = err?.response?.data?.message || err?.response?.data?.title || "Cập nhật nhiệm vụ thất bại!";
-      toast.error(apiMsg);
+      const apiMsg = err?.response?.data?.title || err?.response?.data?.message || "";
+
+      if (apiMsg.includes("vượt quá") || apiMsg.includes("mục người nhận")) {
+        toast.warning("Lưu ý từ Server: Kho câu mẫu (scripts) chưa đủ số lượng để đáp ứng chỉ tiêu nhiệm vụ này.");
+      } else {
+        toast.error(apiMsg || "Cập nhật nhiệm vụ thất bại!");
+      }
     }
   };
 
@@ -797,9 +829,35 @@ export default function TaskManagerManagement() {
   const handleConfirmDeleteTask = async () => {
     if (!deletingTask || !selectedBatchId) return;
     const targetTaskId = Number(deletingTask.id || deletingTask.taskId);
+    const targetCampaignId = Number(selectedBatchId);
 
     try {
-      await taskService.detachTaskFromCampaign(Number(selectedBatchId), targetTaskId);
+      // 1. Gỡ nhiệm vụ khỏi đợt
+      await taskService.detachTaskFromCampaign(targetCampaignId, targetTaskId);
+
+      // 2. Lấy danh sách các nhiệm vụ còn lại trong đợt
+      const remainingTasks = assignTasks.filter(
+        (t) => Number(t.campaignId) === targetCampaignId && Number(t.id) !== targetTaskId
+      );
+
+      // 3. Tự động chia đều lại chỉ tiêu đợt cho các nhiệm vụ còn lại
+      if (remainingTasks.length > 0 && selectedBatchObj) {
+        const batchTarget = Number(selectedBatchObj.target || 2000);
+        const remainingCount = remainingTasks.length;
+        
+        const baseTargetPerTask = Math.floor(batchTarget / remainingCount);
+        const remainder = batchTarget % remainingCount;
+
+        await Promise.all(
+          remainingTasks.map((t, index) => {
+            const updatedTaskTarget = index === 0 ? baseTargetPerTask + remainder : baseTargetPerTask;
+            return taskService.updateTask(t.id, {
+              targetQty: updatedTaskTarget
+            }).catch((err) => console.warn(`Lỗi cập nhật targetQty cho task ${t.id}:`, err));
+          })
+        );
+      }
+
       toast.success(`Đã gỡ nhiệm vụ "${deletingTask.title}" khỏi đợt thành công!`);
     } catch (err) {
       console.warn("Lỗi gỡ task khỏi đợt:", err?.response?.data || err);
@@ -1675,7 +1733,7 @@ export default function TaskManagerManagement() {
 
                       <div className="flex items-center gap-1 font-medium text-[#16171C] dark:text-gray-300">
                         <Target className="w-3 h-3 text-blue-500 shrink-0" />
-                        <span>Mục tiêu đợt: <strong className="text-[#16171C] dark:text-white font-bold">{batch.target || 2000}</strong> câu</span>
+                        <span>Mục tiêu đợt: <strong className="text-[#16171C] dark:text-white font-bold">{batch.target || 2000}</strong> câu và bản</span>
                       </div>
 
                       <div className="flex items-center gap-1 font-medium text-[#16171C] dark:text-gray-300">

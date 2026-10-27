@@ -35,9 +35,10 @@ export default function AdminUserManagement() {
 
   const fetchUsers = async () => {
     try {
+      // Lấy toàn bộ danh sách User về để phân trang ở Client
       const res = await adminService.getUsers({
-        page: currentPage,
-        pageSize: 100
+        page: 1,
+        pageSize: 500
       });
       const items = res.items || res || [];
       setUsers(
@@ -71,7 +72,7 @@ export default function AdminUserManagement() {
 
   useEffect(() => {
     fetchUsers();
-  }, [currentPage]);
+  }, []); // Bỏ currentPage khỏi dependency array để không gọi lại API mỗi lần đổi trang
 
   const handleSearch = () => {
     setSearchTerm(searchInput);
