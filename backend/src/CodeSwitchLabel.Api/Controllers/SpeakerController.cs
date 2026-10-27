@@ -150,10 +150,21 @@ public class SpeakerController(
         return NoContent();
     }
 
-    /// <summary>Bản ghi bị từ chối của chính mình, kèm lý do và link nghe lại để thu lại.</summary>
+    /// <summary>Cặp câu bị từ chối của chính mình, kèm lý do và link nghe lại để thu lại.</summary>
+    /// <remarks>
+    /// **Một dòng là một CẶP CÂU**, không phải một bản thu. Từ chối là từ chối cả cặp nên hai
+    /// bản luôn đi cùng nhau; `limit` vì vậy đếm theo cặp.
+    ///
+    /// - `remainingVariants` — bản còn nợ. Cả hai bản bị loại thì ở đây có đủ hai, và màn hình
+    ///   thu lại giống hệt lúc thu lần đầu.
+    /// - `cs` / `vi` — bản thu cũ kèm link nghe lại (15 phút). Null nghĩa là biến thể đó chưa
+    ///   từng thu.
+    /// - `canRecord` — thu lại được ngay chưa. False khi câu không còn ở trạng thái đã duyệt
+    ///   nội dung; lúc đó phải chờ Reviewer duyệt lại câu, thu luôn sẽ bị từ chối.
+    /// </remarks>
     [HttpGet("recordings/rejected")]
-    [ProducesResponseType(typeof(IEnumerable<RejectedRecordingDto>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IEnumerable<RejectedRecordingDto>>> Rejected(
+    [ProducesResponseType(typeof(IEnumerable<RejectedPairDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<RejectedPairDto>>> Rejected(
         [FromQuery] int limit = 5, CancellationToken ct = default)
         => Ok(await roundsService.GetRejectedAsync(User.GetUserId(), limit, ct));
 

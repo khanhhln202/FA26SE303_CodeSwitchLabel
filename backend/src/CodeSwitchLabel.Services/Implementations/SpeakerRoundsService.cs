@@ -173,39 +173,87 @@ public class SpeakerRoundsService(
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task<IReadOnlyList<RejectedRecordingDto>> GetRejectedAsync(
+    public async Task<IReadOnlyList<RejectedPairDto>> GetRejectedAsync(
         long speakerId, int limit, CancellationToken ct = default)
     {
-        var rows = await db.Recordings.AsNoTracking()
-            .Include(r => r.Script)
-            .Include(r => r.Reviews).ThenInclude(v => v.RejectionReasons).ThenInclude(rr => rr.Reason)
+        // Một dòng là một CẶP. Trước đây mỗi bản thu một dòng, nên từ khi "từ chối là từ chối
+        // cả cặp" thì cặp nào cũng hiện hai dòng trùng nội dung trên màn hình chờ thu lại.
+        var capBiLoai = await db.Recordings.AsNoTracking()
             .Where(r => r.SpeakerId == speakerId && r.Status == RecordingStatus.Rejected)
-            .OrderByDescending(r => r.RecordedAt)
+            .GroupBy(r => r.ScriptId)
+            .Select(g => new { ScriptId = g.Key, BiLoaiLuc = g.Max(r => r.RecordedAt) })
+            .OrderByDescending(x => x.BiLoaiLuc)
             .Take(Math.Clamp(limit, 1, 20))
             .ToListAsync(ct);
 
-        var result = new List<RejectedRecordingDto>();
-        foreach (var r in rows)
-        {
-            string? url;
-            DateTimeOffset expiresAt;
-            try
-            {
-                var key = storage.GetObjectKey(r.CloudLink);
-                if (key is null) continue;
-                (url, expiresAt) = await storage.GetDownloadUrlAsync(key, ct);
-            }
-            catch { continue; }
+        if (capBiLoai.Count == 0) return [];
 
-            var reason = r.Reviews
+        var maCap = capBiLoai.Select(x => x.ScriptId).ToList();
+
+        // Kéo MỌI bản thu của các cặp đó, không riêng bản bị loại: biến thể đã thu lại rồi
+        // thì không còn nợ nữa, mà điều đó chỉ thấy được khi nhìn cả lượt thu mới.
+        var banThu = await db.Recordings.AsNoTracking()
+            .Include(r => r.Script)
+            .Include(r => r.Reviews).ThenInclude(v => v.RejectionReasons).ThenInclude(rr => rr.Reason)
+            .Where(r => maCap.Contains(r.ScriptId))
+            .OrderByDescending(r => r.RecordedAt)
+            .ToListAsync(ct);
+
+        var theoCap = banThu.ToLookup(r => r.ScriptId);
+        var ketQua = new List<RejectedPairDto>(capBiLoai.Count);
+
+        foreach (var cap in capBiLoai)
+        {
+            var cua = theoCap[cap.ScriptId].ToList();
+            var moiNhat = cua
+                .GroupBy(r => r.SentenceVariant)
+                .ToDictionary(g => g.Key, g => g.First());
+
+            var cauVan = cua[0].Script;
+
+            // Biến thể còn nợ: bản mới nhất của nó không phải bản đang chờ duyệt hay đã đạt.
+            // Cùng luật với GET /api/speaker/scripts/next, để hai màn hình không nói khác nhau.
+            var conNo = new[] { SentenceVariant.CodeSwitching, SentenceVariant.PureVietnamese }
+                .Where(v => !moiNhat.TryGetValue(v, out var ban)
+                            || ban.Status is not (RecordingStatus.PendingReview or RecordingStatus.Approved))
+                .ToArray();
+
+            var lyDo = cua
+                .Where(r => r.Status == RecordingStatus.Rejected)
+                .SelectMany(r => r.Reviews)
                 .SelectMany(v => v.RejectionReasons.Select(rr => rr.Reason.Description ?? rr.Reason.ReasonCode))
                 .FirstOrDefault();
 
-            result.Add(new RejectedRecordingDto(
-                r.RecordingId, r.ScriptId, r.Script.CsContent, reason, url, expiresAt));
+            ketQua.Add(new RejectedPairDto(
+                cap.ScriptId,
+                cauVan.CsContent,
+                cauVan.ViContent,
+                lyDo,
+                cap.BiLoaiLuc,
+                cauVan.Status,
+                cauVan.Status == ScriptStatus.Validated,
+                conNo,
+                await BanCuAsync(moiNhat, SentenceVariant.CodeSwitching, ct),
+                await BanCuAsync(moiNhat, SentenceVariant.PureVietnamese, ct)));
         }
 
-        return result;
+        return ketQua;
+    }
+
+    /// <summary>
+    /// Bản thu cũ của một biến thể kèm link nghe lại. Link hỏng thì để null chứ không bỏ cả
+    /// dòng: người đọc vẫn cần biết bản nào phải thu lại.
+    /// </summary>
+    private async Task<RejectedTakeDto?> BanCuAsync(
+        Dictionary<SentenceVariant, Recording> moiNhat, SentenceVariant variant, CancellationToken ct)
+    {
+        if (!moiNhat.TryGetValue(variant, out var ban)) return null;
+
+        var url = await SignAsync(ban, ct);
+
+        return new RejectedTakeDto(
+            ban.RecordingId, variant, url,
+            url is null ? null : clock.GetUtcNow().AddMinutes(15));
     }
 
     public async Task<PagedResult<SpeakerRecordingHistoryDto>> GetRecordingHistoryAsync(
