@@ -192,7 +192,10 @@ SQL
 APPLIED_COUNT=0
 if [ -d "$MIGRATIONS_DIR" ]; then
   # File dang tên V<n>__<ten>.sql. File __verify_ là kiem chung, KHONG chay lai.
-  while IFS= read -r f; do
+  # Dung mang + for, KHONG `while read < <(...)`: psql trong vong lap doc stdin
+  # va nuot mat danh sach file con lai (da lam sot V18/V19/V20 ngay 27-28/10).
+  mapfile -t migration_files < <(printf '%s\n' "$MIGRATIONS_DIR"/V*.sql | sort -V)
+  for f in "${migration_files[@]}"; do
     [ -e "$f" ] || continue
     base="$(basename "$f")"
     case "$base" in *__verify_*) continue ;; esac
@@ -220,7 +223,7 @@ if [ -d "$MIGRATIONS_DIR" ]; then
     # va file do se chay lai o lan deploy sau.
     psql_q -c "INSERT INTO schema_migration (version, checksum, duration_ms) VALUES ('$version', '$sum', $((t1 - t0)))"
     APPLIED_COUNT=$((APPLIED_COUNT + 1))
-  done < <(printf '%s\n' "$MIGRATIONS_DIR"/V*.sql | sort -V)
+  done
 fi
 [ "$APPLIED_COUNT" -gt 0 ] && say "Da ap $APPLIED_COUNT migration." || say "Khong co migration moi."
 
@@ -252,11 +255,15 @@ if [ -z "$SEED_PASSWORD" ]; then
 else
   # Mat khau truyen qua STDIN chu khong phai -d: trong truong doi so lenh thi
   # moi nguoi tren may deu thay duoc qua `ps aux`. Khong ghi ra log.
-  token="$(printf '{"email":"admin@codeswitchlabel.local","password":"%s"}' "$SEED_PASSWORD" \
-            | curl -fsS --max-time 10 -H 'Content-Type: application/json' --data-binary @- \
-                   "$BASE_URL/api/auth/login" 2>/dev/null \
-            | grep -o '"accessToken":"[^"]*"' | cut -d'"' -f4 || true)"
-  [ -n "$token" ] || die "Dang nhap that bai. Kiem tra SEED_PASSWORD trong deploy/.env."
+  # -w tach HTTP status ra dong cuoi: curl -f truoc day nuot mat status nen loi
+  # 500 (API/DB) bi bao nham thanh sai SEED_PASSWORD.
+  resp="$(printf '{"email":"admin@codeswitchlabel.local","password":"%s"}' "$SEED_PASSWORD" \
+            | curl -sS --max-time 10 -H 'Content-Type: application/json' --data-binary @- \
+                   -w '\n%{http_code}' "$BASE_URL/api/auth/login" 2>/dev/null || true)"
+  code="${resp##*$'\n'}"
+  body="${resp%$'\n'*}"
+  token="$(printf '%s' "$body" | grep -o '"accessToken":"[^"]*"' | cut -d'"' -f4 || true)"
+  [ -n "$token" ] || die "Dang nhap that bai (HTTP ${code:-?}). 401/400: kiem tra SEED_PASSWORD; 5xx: loi API/DB, xem 'logs api'."
   # Token cung truyen qua STDIN (curl -K -) de khong lo ra truong doi so lenh.
   printf 'header = "Authorization: Bearer %s"\n' "$token" \
     | curl -fsS --max-time 10 -K - "$BASE_URL/api/campaigns" >/dev/null \
