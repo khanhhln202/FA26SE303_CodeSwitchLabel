@@ -94,7 +94,7 @@ public class UserService(
 
         var user = new AppUser
         {
-            RoleId = await users.GetRoleIdAsync(role, ct),
+            Role = await users.GetRoleAsync(role, ct),
             FullName = request.FullName.Trim(),
             Email = email,
             Phone = Clean(request.Phone),
@@ -165,7 +165,7 @@ public class UserService(
                 ". Giao các task đó cho người khác trước rồi mới đổi vai.");
         }
 
-        user.RoleId = await users.GetRoleIdAsync(newRole, ct);
+        user.Role = await users.GetRoleAsync(newRole, ct);
 
         // Đổi sang người đọc thì tạo hồ sơ nếu chưa có. Đổi sang vai khác thì GIỮ hồ sơ cũ:
         // đó là thông tin gắn với những bản ghi người này đã thu.

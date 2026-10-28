@@ -52,7 +52,7 @@ public interface IUserRepository
 
     Task<List<UserTaskRow>> GetOpenTasksAsync(long userId, CancellationToken ct = default);
 
-    Task<short> GetRoleIdAsync(RoleName role, CancellationToken ct = default);
+    Task<Role> GetRoleAsync(RoleName role, CancellationToken ct = default);
 
     void Add(AppUser user);
 
@@ -215,8 +215,8 @@ public class UserRepository(CodeSwitchLabelDbContext db) : IUserRepository
             .Select(a => new UserTaskRow(a.TaskId, a.Task.TaskType, a.Task.Description, a.Task.Status))
             .ToListAsync(ct);
 
-    public Task<short> GetRoleIdAsync(RoleName role, CancellationToken ct = default) =>
-        db.Roles.AsNoTracking().Where(r => r.RoleName == role).Select(r => r.RoleId).FirstAsync(ct);
+    public Task<Role> GetRoleAsync(RoleName role, CancellationToken ct = default) =>
+        db.Roles.FirstAsync(r => r.RoleName == role, ct);
 
     public void Add(AppUser user) => db.AppUsers.Add(user);
 

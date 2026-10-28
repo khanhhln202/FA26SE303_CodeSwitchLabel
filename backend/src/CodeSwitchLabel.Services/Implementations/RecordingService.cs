@@ -311,19 +311,13 @@ public class RecordingService(
     private async Task<(IReadOnlyList<QcIssueDto> Issues, RecordingQcReport Report)> RunQualityChecksAsync(
         AudioProbeResult probe, string wavPath, CancellationToken ct)
     {
-        var min = await config.GetDecimalAsync(ConfigKeys.RecordingMinDurationSec, 1m, ct);
-        var max = await config.GetDecimalAsync(ConfigKeys.RecordingMaxDurationSec, 30m, ct);
-        var maxLeading = await config.GetDecimalAsync(ConfigKeys.RecordingMaxLeadingSilenceSec, 1m, ct);
-        var maxTrailing = await config.GetDecimalAsync(ConfigKeys.RecordingMaxTrailingSilenceSec, 1m, ct);
-        var silenceNoiseDb = await config.GetDecimalAsync(ConfigKeys.RecordingSilenceNoiseDb, -35m, ct);
-        var silenceMinSec = await config.GetDecimalAsync(ConfigKeys.RecordingSilenceMinDurationSec, 0.5m, ct);
-        var minMeanDb = await config.GetDecimalAsync(ConfigKeys.RecordingMinMeanVolumeDb, -50m, ct);
-        var maxPeakDb = await config.GetDecimalAsync(ConfigKeys.RecordingMaxPeakDb, -1m, ct);
+        var qc = RecordingQcSettings.From(await config.GetAllAsync(ct));
 
         AudioSignalMetrics signal;
         try
         {
-            signal = await audio.AnalyzeSignalAsync(wavPath, probe.DurationSec, silenceNoiseDb, silenceMinSec, ct);
+            signal = await audio.AnalyzeSignalAsync(
+                wavPath, probe.DurationSec, qc.SilenceNoiseDb, qc.SilenceMinDurationSec, ct);
         }
         catch (AudioProcessingException ex)
         {
@@ -331,7 +325,8 @@ public class RecordingService(
         }
 
         var issues = RecordingQcEvaluator.Evaluate(
-            probe.DurationSec, signal, min, max, maxLeading, maxTrailing, minMeanDb, maxPeakDb);
+            probe.DurationSec, signal, qc.MinDurationSec, qc.MaxDurationSec,
+            qc.MaxLeadingSilenceSec, qc.MaxTrailingSilenceSec, qc.MinMeanVolumeDb, qc.MaxPeakDb);
 
         var report = new RecordingQcReport(
             issues.Count == 0,

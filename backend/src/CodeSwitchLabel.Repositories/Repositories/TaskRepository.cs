@@ -81,13 +81,6 @@ public interface ITaskRepository
     Task<WorkTask?> GetForUpdateAsync(long taskId, CancellationToken ct = default);
 
     /// <summary>
-    /// một task có thể có nhiều người nhận. Hàm cũ trả về đúng một dòng
-    /// (FirstOrDefault) nên 8 chỗ gọi nó đều phải sửa — giữ hàm cũ là giữ cái bẫy
-    /// "chỉ thấy người đầu tiên".
-    /// </summary>
-    Task<List<TaskAssignment>> GetActiveAssignmentsAsync(long taskId, CancellationToken ct = default);
-
-    /// <summary>
     /// Lượt giao còn hiệu lực: Active (chưa đạt quota) và Completed (đã đạt quota nhưng
     /// vẫn còn là người nhận task). Reassigned/Cancelled mới là đã rời task.
     /// </summary>
@@ -267,13 +260,6 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
     public Task<WorkTask?> GetForUpdateAsync(long taskId, CancellationToken ct = default) =>
         db.WorkTasks.FromSqlInterpolated($"SELECT * FROM task WHERE task_id = {taskId} FOR UPDATE")
             .SingleOrDefaultAsync(ct);
-
-    /// <summary>Chỉ lượt giao đang chờ đủ quota — dùng cho huỷ task, không gồm Completed.</summary>
-    public Task<List<TaskAssignment>> GetActiveAssignmentsAsync(long taskId, CancellationToken ct = default) =>
-        db.TaskAssignments
-            .Where(a => a.TaskId == taskId && a.AssignmentStatus == AssignmentStatus.Active)
-            .OrderBy(a => a.AssignedAt)
-            .ToListAsync(ct);
 
     public Task<List<TaskAssignment>> GetOpenAssignmentsAsync(long taskId, CancellationToken ct = default) =>
         db.TaskAssignments

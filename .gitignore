@@ -6,6 +6,7 @@ obj/
 [Dd]ebug/
 [Rr]elease/
 artifacts/
+TestResults/
 
 # ---- Bí mật: KHÔNG BAO GIỜ commit ----
 # appsettings.Development.json đang chứa mật khẩu dev và khoá ký JWT.

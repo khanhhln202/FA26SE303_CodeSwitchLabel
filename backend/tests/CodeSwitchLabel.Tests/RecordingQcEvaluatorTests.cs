@@ -1,4 +1,6 @@
 using System.Text.Json;
+using CodeSwitchLabel.Repositories.Entities;
+using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Audio;
 
 namespace CodeSwitchLabel.Tests;
@@ -206,5 +208,16 @@ public sealed class RecordingQcEvaluatorTests
         // Trường null (không đo được) bị bỏ, không ghi null vào cột JSONB.
         Assert.False(root.TryGetProperty("trailing_silence_sec", out _));
         Assert.False(root.TryGetProperty("max_volume_db", out _));
+    }
+
+    [Fact]
+    public void Settings_ReadsConfiguredValue_AndFallsBackForMissingKey()
+    {
+        var settings = RecordingQcSettings.From([
+            new SystemConfigDto(ConfigKeys.RecordingMinDurationSec, "2.5", "string", null, default)
+        ]);
+
+        Assert.Equal(2.5m, settings.MinDurationSec);
+        Assert.Equal(30m, settings.MaxDurationSec);
     }
 }

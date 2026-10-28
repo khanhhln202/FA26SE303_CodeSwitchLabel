@@ -39,23 +39,6 @@ public class ReasonsController(IReasonService reasonService) : ControllerBase
 [Authorize(Roles = "Admin")]
 public class SystemConfigController(ISystemConfigService configService) : ControllerBase
 {
-    /// <summary>Toàn bộ tham số hệ thống.</summary>
-    /// <remarks>
-    /// Các tham số do lược đồ (`docs/codeswitchlabel.sql`) tạo sẵn, gom theo tiền tố khoá: `review.*`,
-    /// `recording.*` (ngưỡng auto-QC), `import.*`, `quality.*`, `queue.*`, `text_review.*`. Danh sách đầy đủ là
-    /// kết quả của chính endpoint này nên không đếm cứng ở đây. Ba khoá `quality.*` (ngưỡng chống rác) là
-    /// GIÁ TRỊ TẠM chờ giảng viên xác nhận; ngưỡng thời lượng bản ghi cũng là đề xuất của nhóm backend
-    /// và **chưa được giảng viên duyệt**.
-    ///
-    /// Lưu ý: `review.rounds_required` đổi được, trigger `trg_review_majority` đọc cùng tham số
-    /// đó nên hai bên không lệch nhau. Lưu ý thứ hai: đổi nó là mọi chỗ đang giả định
-    /// "3 = ba người" phải rà lại.
-    /// </remarks>
-    [HttpGet]
-    [ProducesResponseType(typeof(IEnumerable<SystemConfigDto>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IEnumerable<SystemConfigDto>>> GetAll(CancellationToken ct)
-        => Ok(await configService.GetAllAsync(ct));
-
     /// <summary>Đổi giá trị một tham số.</summary>
     [HttpPut("{key}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]

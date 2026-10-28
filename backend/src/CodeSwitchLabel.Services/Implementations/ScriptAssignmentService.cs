@@ -3,6 +3,7 @@ using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Repositories.Persistence;
 using CodeSwitchLabel.Repositories.Repositories;
 using CodeSwitchLabel.Services.Abstractions;
+using CodeSwitchLabel.Services.Audio;
 using CodeSwitchLabel.Services.Common;
 using CodeSwitchLabel.Services.Dtos;
 
@@ -40,11 +41,9 @@ public class ScriptAssignmentService(
         var script = await ClaimNextRecordableAsync(speakerId, taskId, ct);
         if (script is null) return null;
 
+        var qc = RecordingQcSettings.From(await config.GetAllAsync(ct));
         var guidance = new RecordingGuidanceDto(
-            await config.GetDecimalAsync(ConfigKeys.RecordingMinDurationSec, 1m, ct),
-            await config.GetDecimalAsync(ConfigKeys.RecordingMaxDurationSec, 30m, ct),
-            await config.GetDecimalAsync(ConfigKeys.RecordingMaxLeadingSilenceSec, 1m, ct),
-            await config.GetDecimalAsync(ConfigKeys.RecordingMaxTrailingSilenceSec, 1m, ct));
+            qc.MinDurationSec, qc.MaxDurationSec, qc.MaxLeadingSilenceSec, qc.MaxTrailingSilenceSec);
 
         return new NextScriptDto(
             script.ScriptId,

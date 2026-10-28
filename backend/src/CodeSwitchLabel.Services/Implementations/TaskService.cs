@@ -138,25 +138,9 @@ public class TaskService(
             assignmentQuotas = SplitQuota(targetQty, assigneeUserIds.Count);
 
             // Xác thực từng thành viên
-            var requiredRole = request.TaskType == TaskType.Recording
-                ? RoleName.Speaker : RoleName.Reviewer;
-
             foreach (var userId in assigneeUserIds)
             {
-                var user = await tasks.GetUserWithRoleAsync(userId, ct)
-                    ?? throw new NotFoundException("user_not_found", $"Không tìm thấy tài khoản #{userId}.");
-
-                if (user.Status != UserStatus.Active)
-                {
-                    throw new UnprocessableException("user_inactive", $"Tài khoản {user.Email} đang bị vô hiệu hoá.");
-                }
-
-                if (user.Role.RoleName != requiredRole)
-                {
-                    throw new UnprocessableException(
-                        "assignee_role_mismatch",
-                        $"Task {request.TaskType} chỉ giao được cho {requiredRole}, còn {user.Email} là {user.Role.RoleName}.");
-                }
+                await EnsureEligibleAssigneeAsync(userId, request.TaskType!.Value, ct);
             }
         }
 
@@ -888,27 +872,11 @@ public class TaskService(
             return await LoadDetailAsync(taskId, ct);
         }
 
-        var requiredRole = task.TaskType == TaskType.Recording ? RoleName.Speaker : RoleName.Reviewer;
         var fresh = new List<AppUser>(toAdd.Length);
 
         foreach (var userId in toAdd)
         {
-            var user = await tasks.GetUserWithRoleAsync(userId, ct)
-                       ?? throw new NotFoundException("user_not_found", $"Không tìm thấy tài khoản #{userId}.");
-
-            if (user.Status != UserStatus.Active)
-            {
-                throw new UnprocessableException("user_inactive", $"Tài khoản {user.Email} đang bị vô hiệu hoá.");
-            }
-
-            if (user.Role.RoleName != requiredRole)
-            {
-                throw new UnprocessableException(
-                    "assignee_role_mismatch",
-                    $"Task {task.TaskType} chỉ giao được cho {requiredRole}, còn {user.Email} là {user.Role.RoleName}.");
-            }
-
-            fresh.Add(user);
+            fresh.Add(await EnsureEligibleAssigneeAsync(userId, task.TaskType, ct));
         }
 
         // chỉ tiêu là của CẢ NHÓM. Mỗi người khoảng target/n, nên không
@@ -1013,23 +981,9 @@ public class TaskService(
 
         var quotas = ResolveAssignmentQuotas(task.TargetQty, requested);
 
-        var requiredRole = task.TaskType == TaskType.Recording ? RoleName.Speaker : RoleName.Reviewer;
         foreach (var item in requested)
         {
-            var user = await tasks.GetUserWithRoleAsync(item.UserId, ct)
-                       ?? throw new NotFoundException("user_not_found", $"Không tìm thấy tài khoản #{item.UserId}.");
-
-            if (user.Status != UserStatus.Active)
-            {
-                throw new UnprocessableException("user_inactive", $"Tài khoản {user.Email} đang bị vô hiệu hoá.");
-            }
-
-            if (user.Role.RoleName != requiredRole)
-            {
-                throw new UnprocessableException(
-                    "assignee_role_mismatch",
-                    $"Task {task.TaskType} chỉ giao được cho {requiredRole}, còn {user.Email} là {user.Role.RoleName}.");
-            }
+            await EnsureEligibleAssigneeAsync(item.UserId, task.TaskType, ct);
         }
 
         var active = await tasks.GetOpenAssignmentsAsync(taskId, ct);
@@ -1745,6 +1699,32 @@ public class TaskService(
                 "task_not_owned",
                 $"Task #{task.TaskId} thuộc chiến dịch #{campaign.CampaignId} không giao cho bạn.");
         }
+    }
+
+    /// <summary>
+    /// Người nhận task phải đang hoạt động và đúng vai: Speaker cho task thu âm,
+    /// Reviewer cho task duyệt. Dùng chung cho tạo task, giao thêm và sửa phân công.
+    /// </summary>
+    private async Task<AppUser> EnsureEligibleAssigneeAsync(
+        long userId, TaskType taskType, CancellationToken ct)
+    {
+        var requiredRole = taskType == TaskType.Recording ? RoleName.Speaker : RoleName.Reviewer;
+        var user = await tasks.GetUserWithRoleAsync(userId, ct)
+                   ?? throw new NotFoundException("user_not_found", $"Không tìm thấy tài khoản #{userId}.");
+
+        if (user.Status != UserStatus.Active)
+        {
+            throw new UnprocessableException("user_inactive", $"Tài khoản {user.Email} đang bị vô hiệu hoá.");
+        }
+
+        if (user.Role.RoleName != requiredRole)
+        {
+            throw new UnprocessableException(
+                "assignee_role_mismatch",
+                $"Task {taskType} chỉ giao được cho {requiredRole}, còn {user.Email} là {user.Role.RoleName}.");
+        }
+
+        return user;
     }
 
     /// <summary>
