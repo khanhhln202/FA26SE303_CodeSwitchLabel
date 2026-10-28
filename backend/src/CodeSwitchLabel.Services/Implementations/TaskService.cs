@@ -100,6 +100,7 @@ internal static class TaskMapper
 public class TaskService(
     ITaskRepository tasks,
     ICampaignRepository campaigns,
+    IScriptQueueRepository queue,
     ITaskProgressTracker tracker,
     ISystemConfigService config,
     TimeProvider clock) : ITaskService
@@ -137,25 +138,9 @@ public class TaskService(
             assignmentQuotas = SplitQuota(targetQty, assigneeUserIds.Count);
 
             // Xác thực từng thành viên
-            var requiredRole = request.TaskType == TaskType.Recording
-                ? RoleName.Speaker : RoleName.Reviewer;
-
             foreach (var userId in assigneeUserIds)
             {
-                var user = await tasks.GetUserWithRoleAsync(userId, ct)
-                    ?? throw new NotFoundException("user_not_found", $"Không tìm thấy tài khoản #{userId}.");
-
-                if (user.Status != UserStatus.Active)
-                {
-                    throw new UnprocessableException("user_inactive", $"Tài khoản {user.Email} đang bị vô hiệu hoá.");
-                }
-
-                if (user.Role.RoleName != requiredRole)
-                {
-                    throw new UnprocessableException(
-                        "assignee_role_mismatch",
-                        $"Task {request.TaskType} chỉ giao được cho {requiredRole}, còn {user.Email} là {user.Role.RoleName}.");
-                }
+                await EnsureEligibleAssigneeAsync(userId, request.TaskType!.Value, ct);
             }
         }
 
@@ -887,27 +872,11 @@ public class TaskService(
             return await LoadDetailAsync(taskId, ct);
         }
 
-        var requiredRole = task.TaskType == TaskType.Recording ? RoleName.Speaker : RoleName.Reviewer;
         var fresh = new List<AppUser>(toAdd.Length);
 
         foreach (var userId in toAdd)
         {
-            var user = await tasks.GetUserWithRoleAsync(userId, ct)
-                       ?? throw new NotFoundException("user_not_found", $"Không tìm thấy tài khoản #{userId}.");
-
-            if (user.Status != UserStatus.Active)
-            {
-                throw new UnprocessableException("user_inactive", $"Tài khoản {user.Email} đang bị vô hiệu hoá.");
-            }
-
-            if (user.Role.RoleName != requiredRole)
-            {
-                throw new UnprocessableException(
-                    "assignee_role_mismatch",
-                    $"Task {task.TaskType} chỉ giao được cho {requiredRole}, còn {user.Email} là {user.Role.RoleName}.");
-            }
-
-            fresh.Add(user);
+            fresh.Add(await EnsureEligibleAssigneeAsync(userId, task.TaskType, ct));
         }
 
         // chỉ tiêu là của CẢ NHÓM. Mỗi người khoảng target/n, nên không
@@ -1012,23 +981,9 @@ public class TaskService(
 
         var quotas = ResolveAssignmentQuotas(task.TargetQty, requested);
 
-        var requiredRole = task.TaskType == TaskType.Recording ? RoleName.Speaker : RoleName.Reviewer;
         foreach (var item in requested)
         {
-            var user = await tasks.GetUserWithRoleAsync(item.UserId, ct)
-                       ?? throw new NotFoundException("user_not_found", $"Không tìm thấy tài khoản #{item.UserId}.");
-
-            if (user.Status != UserStatus.Active)
-            {
-                throw new UnprocessableException("user_inactive", $"Tài khoản {user.Email} đang bị vô hiệu hoá.");
-            }
-
-            if (user.Role.RoleName != requiredRole)
-            {
-                throw new UnprocessableException(
-                    "assignee_role_mismatch",
-                    $"Task {task.TaskType} chỉ giao được cho {requiredRole}, còn {user.Email} là {user.Role.RoleName}.");
-            }
+            await EnsureEligibleAssigneeAsync(item.UserId, task.TaskType, ct);
         }
 
         var active = await tasks.GetOpenAssignmentsAsync(taskId, ct);
@@ -1053,7 +1008,8 @@ public class TaskService(
         var wanted = requested.Select(a => a.UserId).ToHashSet();
         var byUser = active.ToDictionary(a => a.UserId);
 
-        // người bị gỡ mà còn cặp câu đang làm/đã có bản ghi thì không được gỡ.
+        // Người bị gỡ: nhả câu đang giữ trong hàng đợi, KHÔNG đụng bản đã nộp.
+        // Bản đã nộp giữ nguyên người đọc và vẫn chặn người khác cho tới khi được duyệt/loại.
         if (task.TaskType == TaskType.Recording)
         {
             var removed = active
@@ -1061,7 +1017,10 @@ public class TaskService(
                 .Select(a => a.UserId)
                 .ToList();
 
-            await EnsureRecordingAssigneesHaveNoStartedPairsAsync(taskId, removed, ct);
+            foreach (var userId in removed)
+            {
+                await queue.ReleaseClaimsAsync(userId, taskId, ct);
+            }
         }
 
         var now = clock.GetUtcNow();
@@ -1206,10 +1165,10 @@ public class TaskService(
             }
         }
 
-        // cặp câu đã bắt đầu (đang thu / đã có bản ghi / đã xong) không đổi chủ.
         if (task.TaskType == TaskType.Recording)
         {
-            await EnsureRecordingAssigneesHaveNoStartedPairsAsync(taskId, [userId], ct);
+            // Nhả câu đang giữ; bản đã nộp giữ nguyên người đọc.
+            await queue.ReleaseClaimsAsync(userId, taskId, ct);
         }
 
         mine.AssignmentStatus = AssignmentStatus.Reassigned;
@@ -1238,39 +1197,6 @@ public class TaskService(
         if (transaction is not null) await transaction.CommitAsync(ct);
 
         return await LoadDetailAsync(taskId, ct);
-    }
-
-    /// <summary>
-    /// chặn gỡ người nhận task thu âm khi người đó còn cặp câu đã bắt đầu.
-    /// Cặp đã có bản ghi hoặc đang được thu không thể chuyển sang người khác — chuyển
-    /// đi là mất dấu công việc và có thể làm sai lệch bản ghi đã nộp.
-    /// </summary>
-    private async Task EnsureRecordingAssigneesHaveNoStartedPairsAsync(
-        long taskId, IReadOnlyCollection<long> userIds, CancellationToken ct)
-    {
-        if (userIds.Count == 0) return;
-
-        var items = await tasks.GetScriptItemsTrackedAsync(taskId, ct);
-        var startedIds = await tasks.GetStartedScriptIdsAsync(taskId, clock.GetUtcNow(), ct);
-
-        var blocked = items
-            .Where(i => i.AssigneeUserId.HasValue
-                        && userIds.Contains(i.AssigneeUserId.Value)
-                        && startedIds.Contains(i.ScriptId))
-            .Select(i => i.ScriptId)
-            .Distinct()
-            .OrderBy(id => id)
-            .ToList();
-
-        if (blocked.Count == 0) return;
-
-        var preview = string.Join(", ", blocked.Take(5));
-        if (blocked.Count > 5) preview += ", …";
-
-        throw new ConflictException(
-            "assignee_has_in_progress_items",
-            $"Không gỡ được người nhận vì còn {blocked.Count} cặp câu đang làm hoặc đã có bản ghi ({preview}). " +
-            "Hoàn tất các cặp đó hoặc giữ nguyên người nhận.");
     }
 
     /// <summary>
@@ -1539,7 +1465,7 @@ public class TaskService(
         // không gắn với ai, nên không được cướp câu đang nằm trong task của người khác.
         var borrowable = queuedElsewhere
             .Where(id => !found.TryGetValue(id, out var s)
-                || !s.Recordings.Any(r => r.Status != RecordingStatus.QcFailed))
+                || !s.Recordings.Any(r => r.Status != RecordingStatus.QcFailed && r.Status != RecordingStatus.Rejected))
             .ToHashSet();
 
         if (assigneeIds.Length == 0) borrowable.Clear();
@@ -1556,8 +1482,10 @@ public class TaskService(
                 skipped.Add(new SkippedItemDto(id, $"Chủ đề câu ({script.Domain}) không khớp với chủ đề nhiệm vụ ({taskDomain})."));
             // một cặp câu chỉ một người đọc. Với nhóm n người nhận, câu do
             // một người NGOÀI nhóm đã thu thì cả nhóm đều không thu được nữa.
+            // Bản trượt QC hoặc bị từ chối đã trả cặp về hàng đợi nên không tính là giữ chỗ.
             else if (assigneeIds.Length > 0 &&
-                     script.Recordings.Any(r => !assigneeIds.Contains(r.SpeakerId) && r.Status != RecordingStatus.QcFailed))
+                     script.Recordings.Any(r => !assigneeIds.Contains(r.SpeakerId)
+                         && r.Status != RecordingStatus.QcFailed && r.Status != RecordingStatus.Rejected))
                 skipped.Add(new SkippedItemDto(id, "Cặp câu này do người đọc khác thu."));
             else if (queuedElsewhere.Contains(id) && borrowable.Contains(id))
             {
@@ -1586,7 +1514,8 @@ public class TaskService(
             {
                 // Trùng nhau là bình thường khi một câu nằm ở nhiều task: bỏ hết các bản cũ.
                 if (found.TryGetValue(item.ScriptId, out var s)
-                    && s.Recordings.Any(r => r.Status != RecordingStatus.QcFailed))
+                    && s.Recordings.Any(r => r.Status != RecordingStatus.QcFailed
+                        && r.Status != RecordingStatus.Rejected))
                 {
                     continue;
                 }
@@ -1773,6 +1702,32 @@ public class TaskService(
                 "task_not_owned",
                 $"Task #{task.TaskId} thuộc chiến dịch #{campaign.CampaignId} không giao cho bạn.");
         }
+    }
+
+    /// <summary>
+    /// Người nhận task phải đang hoạt động và đúng vai: Speaker cho task thu âm,
+    /// Reviewer cho task duyệt. Dùng chung cho tạo task, giao thêm và sửa phân công.
+    /// </summary>
+    private async Task<AppUser> EnsureEligibleAssigneeAsync(
+        long userId, TaskType taskType, CancellationToken ct)
+    {
+        var requiredRole = taskType == TaskType.Recording ? RoleName.Speaker : RoleName.Reviewer;
+        var user = await tasks.GetUserWithRoleAsync(userId, ct)
+                   ?? throw new NotFoundException("user_not_found", $"Không tìm thấy tài khoản #{userId}.");
+
+        if (user.Status != UserStatus.Active)
+        {
+            throw new UnprocessableException("user_inactive", $"Tài khoản {user.Email} đang bị vô hiệu hoá.");
+        }
+
+        if (user.Role.RoleName != requiredRole)
+        {
+            throw new UnprocessableException(
+                "assignee_role_mismatch",
+                $"Task {taskType} chỉ giao được cho {requiredRole}, còn {user.Email} là {user.Role.RoleName}.");
+        }
+
+        return user;
     }
 
     /// <summary>

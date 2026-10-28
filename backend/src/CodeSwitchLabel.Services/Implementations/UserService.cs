@@ -15,7 +15,10 @@ internal static class UserMapper
         new(u.UserId, u.FullName, u.Email, u.Phone, u.Role.RoleName, u.Status, u.CreatedAt);
 
     public static SpeakerProfileDto ToDto(this SpeakerProfile? p) =>
-        new(p?.BirthYear, p?.Province, p?.EnglishLevel, p?.Occupation, p?.Major);
+        new(p?.BirthYear, p?.Province, p?.EnglishLevel, p?.Occupation, p?.Gender, p?.Major);
+
+    public static SpeakerListItemDto ToSpeakerListItem(this SpeakerListRow r) =>
+        new(r.UserId, r.FullName, r.Email, r.Gender, r.Status, r.ApprovedPairs);
 
     /// <remarks>Phải kèm Role và SpeakerProfile.</remarks>
     public static CurrentUserDto ToCurrentUser(this AppUser u) =>
@@ -52,6 +55,16 @@ public class UserService(
             [.. items.Select(u => u.ToListItem())], request.Page, request.PageSize, total);
     }
 
+    public async Task<PagedResult<SpeakerListItemDto>> SearchSpeakersAsync(
+        SpeakerSearchRequest request, CancellationToken ct = default)
+    {
+        var (items, total) = await users.SearchSpeakersAsync(
+            request.CampaignId, request.Keyword, request.Page, request.PageSize, ct);
+
+        return new PagedResult<SpeakerListItemDto>(
+            [.. items.Select(r => r.ToSpeakerListItem())], request.Page, request.PageSize, total);
+    }
+
     public async Task<UserDetailDto> GetAsync(long userId, CancellationToken ct = default)
     {
         var user = await users.GetByIdAsync(userId, ct) ?? throw NotFound(userId);
@@ -81,7 +94,7 @@ public class UserService(
 
         var user = new AppUser
         {
-            RoleId = await users.GetRoleIdAsync(role, ct),
+            Role = await users.GetRoleAsync(role, ct),
             FullName = request.FullName.Trim(),
             Email = email,
             Phone = Clean(request.Phone),
@@ -152,7 +165,7 @@ public class UserService(
                 ". Giao các task đó cho người khác trước rồi mới đổi vai.");
         }
 
-        user.RoleId = await users.GetRoleIdAsync(newRole, ct);
+        user.Role = await users.GetRoleAsync(newRole, ct);
 
         // Đổi sang người đọc thì tạo hồ sơ nếu chưa có. Đổi sang vai khác thì GIỮ hồ sơ cũ:
         // đó là thông tin gắn với những bản ghi người này đã thu.
@@ -279,6 +292,7 @@ public class UserService(
         profile.Province = Clean(request.Province);
         profile.EnglishLevel = request.EnglishLevel;
         profile.Occupation = request.Occupation;
+        profile.Gender = request.Gender;
         profile.Major = Clean(request.Major);
 
         await users.SaveChangesAsync(ct);

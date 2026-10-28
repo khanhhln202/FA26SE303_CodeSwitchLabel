@@ -13,6 +13,15 @@ public record UserAuthState(UserStatus Status, RoleName Role, string PasswordHas
 /// <summary>Task chưa xong mà người dùng đang là người nhận.</summary>
 public record UserTaskRow(long TaskId, TaskType TaskType, string? Description, WorkTaskStatus Status);
 
+/// <summary>Một dòng bảng Speaker của Admin, kèm số cặp đã duyệt đủ cả hai bản.</summary>
+public record SpeakerListRow(
+    long UserId,
+    string FullName,
+    string Email,
+    Gender? Gender,
+    UserStatus Status,
+    int ApprovedPairs);
+
 public interface IUserRepository
 {
     /// <summary>So email không phân biệt hoa thường: A@x.com và a@x.com là một người.</summary>
@@ -30,6 +39,10 @@ public interface IUserRepository
         RoleName? role, UserStatus? status, string? keyword,
         int page, int pageSize, SortSpec<UserSortField> sort, CancellationToken ct = default);
 
+    /// <summary>Bảng Speaker của Admin; lọc theo chiến dịch thì chỉ giữ người có cặp đã duyệt trong đợt.</summary>
+    Task<(IReadOnlyList<SpeakerListRow> Items, int Total)> SearchSpeakersAsync(
+        long? campaignId, string? keyword, int page, int pageSize, CancellationToken ct = default);
+
     Task<bool> EmailExistsAsync(string email, CancellationToken ct = default);
 
     /// <summary>Gọi ở MỖI request đã đăng nhập, nên chỉ đọc đúng ba cột theo khoá chính.</summary>
@@ -39,7 +52,7 @@ public interface IUserRepository
 
     Task<List<UserTaskRow>> GetOpenTasksAsync(long userId, CancellationToken ct = default);
 
-    Task<short> GetRoleIdAsync(RoleName role, CancellationToken ct = default);
+    Task<Role> GetRoleAsync(RoleName role, CancellationToken ct = default);
 
     void Add(AppUser user);
 
@@ -116,6 +129,68 @@ public class UserRepository(CodeSwitchLabelDbContext db) : IUserRepository
         return (items, total);
     }
 
+    public async Task<(IReadOnlyList<SpeakerListRow> Items, int Total)> SearchSpeakersAsync(
+        long? campaignId, string? keyword, int page, int pageSize, CancellationToken ct = default)
+    {
+        var query = db.AppUsers.AsNoTracking()
+            .Include(u => u.Role)
+            .Include(u => u.SpeakerProfile)
+            .Where(u => u.Role.RoleName == RoleName.Speaker);
+
+        var approved = db.Recordings.AsNoTracking()
+            .Where(r => r.Status == RecordingStatus.Approved);
+
+        if (campaignId.HasValue)
+        {
+            approved = approved.Where(r => r.Task != null && r.Task.CampaignId == campaignId.Value);
+
+            // Unique index bảo đảm mỗi (câu, biến thể) chỉ một bản approved, nên nhóm đủ
+            // hai dòng nghĩa là đủ cả CS lẫn VI. Ghép theo cả speaker để cặp khác người không lọt.
+            var eligible = approved
+                .GroupBy(r => new { r.SpeakerId, r.ScriptId })
+                .Where(g => g.Count() == 2)
+                .Select(g => g.Key.SpeakerId);
+
+            query = query.Where(u => eligible.Contains(u.UserId));
+        }
+
+        if (!string.IsNullOrWhiteSpace(keyword))
+        {
+            var needle = $"%{keyword.Trim()}%";
+            query = query.Where(u => EF.Functions.ILike(u.FullName, needle) || EF.Functions.ILike(u.Email, needle));
+        }
+
+        var total = await query.CountAsync(ct);
+
+        var items = await query
+            .OrderBy(u => u.FullName).ThenBy(u => u.UserId)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        var ids = items.Select(u => u.UserId).ToList();
+
+        var pairRows = await approved
+            .Where(r => ids.Contains(r.SpeakerId))
+            .Select(r => new { r.SpeakerId, r.ScriptId, r.SentenceVariant })
+            .Distinct()
+            .ToListAsync(ct);
+
+        var counts = pairRows
+            .GroupBy(r => new { r.SpeakerId, r.ScriptId })
+            .Where(g => g.Count() == 2)
+            .GroupBy(g => g.Key.SpeakerId)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        return
+        (
+            [.. items.Select(u => new SpeakerListRow(
+                u.UserId, u.FullName, u.Email, u.SpeakerProfile?.Gender, u.Status,
+                counts.GetValueOrDefault(u.UserId)))],
+            total
+        );
+    }
+
     public Task<bool> EmailExistsAsync(string email, CancellationToken ct = default)
     {
         var normalized = email.Trim().ToLowerInvariant();
@@ -140,8 +215,8 @@ public class UserRepository(CodeSwitchLabelDbContext db) : IUserRepository
             .Select(a => new UserTaskRow(a.TaskId, a.Task.TaskType, a.Task.Description, a.Task.Status))
             .ToListAsync(ct);
 
-    public Task<short> GetRoleIdAsync(RoleName role, CancellationToken ct = default) =>
-        db.Roles.AsNoTracking().Where(r => r.RoleName == role).Select(r => r.RoleId).FirstAsync(ct);
+    public Task<Role> GetRoleAsync(RoleName role, CancellationToken ct = default) =>
+        db.Roles.FirstAsync(r => r.RoleName == role, ct);
 
     public void Add(AppUser user) => db.AppUsers.Add(user);
 

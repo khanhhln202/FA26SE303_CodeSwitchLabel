@@ -107,6 +107,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         // Tên kiểu trong database suy ra từ tên enum theo snake_case, trừ hai chỗ đặt tên khác.
         modelBuilder.HasPostgresEnum<UserStatus>();
         modelBuilder.HasPostgresEnum<Occupation>();
+        modelBuilder.HasPostgresEnum<Gender>();
         modelBuilder.HasPostgresEnum<ConfigValueType>();
         modelBuilder.HasPostgresEnum<AuditAction>();
         modelBuilder.HasPostgresEnum<ScriptStatus>();
@@ -264,6 +265,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
 
             // Lời giải Anh–Việt của bản sửa giữ nguyên dạng JSONB như lược đồ.
             e.Property(x => x.ProposedAlignment).HasColumnType("jsonb");
+            e.Property(x => x.DraftAlignment).HasColumnType("jsonb");
 
             e.HasOne(x => x.Script).WithMany(s => s.Proposals).HasForeignKey(x => x.ScriptId);
             e.HasOne(x => x.Proposer).WithMany().HasForeignKey(x => x.ProposerId);

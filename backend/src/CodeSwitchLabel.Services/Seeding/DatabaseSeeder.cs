@@ -28,7 +28,7 @@ public static partial class DatabaseSeeder
         var hasher = sp.GetRequiredService<IPasswordHasher>();
         var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger(nameof(DatabaseSeeder));
 
-        await EnsureSchemaAsync(db, logger, ct);
+        await EnsureSchemaAsync(db, ct);
 
         await SeedUsersAsync(db, hasher, defaultPassword, ct);
         await SeedReviewerDomainsAsync(db, ct);
@@ -83,15 +83,10 @@ public static partial class DatabaseSeeder
     }
 
     /// <summary>
-    /// Dự án không dùng migration: lược đồ do PostgreSQL chạy từ file .sql lúc tạo database.
-    /// Thiếu lược đồ thì báo đúng việc phải làm, thay vì để EF ném lỗi khó hiểu ở request đầu tiên.
-    /// Các bảng thêm sau (ví dụ campaign_registration) được tự vá idempotent cho volume cũ.
+    /// Database rỗng nhận lược đồ từ docs/codeswitchlabel.sql; database đang chạy nhận
+    /// migrations/V*.sql qua deploy/deploy.sh. API chỉ kiểm lược đồ, không tự sửa.
     /// </summary>
     public static async Task EnsureSchemaAsync(CodeSwitchLabelDbContext db, CancellationToken ct = default)
-        => await EnsureSchemaAsync(db, logger: null, ct);
-
-    public static async Task EnsureSchemaAsync(
-        CodeSwitchLabelDbContext db, Microsoft.Extensions.Logging.ILogger? logger, CancellationToken ct = default)
     {
         // Container postgres nhận kết nối TRƯỚC khi chạy xong file lược đồ, nên chờ vài giây:
         // `docker compose up -d && dotnet run` liền tay vẫn phải chạy được.
@@ -125,63 +120,6 @@ public static partial class DatabaseSeeder
             await Task.Delay(TimeSpan.FromSeconds(1), ct);
         }
 
-        await EnsureIncrementalTablesAsync(db, logger, ct);
-    }
-
-    /// <summary>
-    /// Tự vá các bảng được thêm sau khi volume đã tồn tại. Mirror từ docs/codeswitchlabel.sql,
-    /// dùng IF NOT EXISTS nên chạy lại an toàn và chịu được nhiều replica khởi động cùng lúc.
-    /// Sửa lược đồ thì sửa file .sql trước, rồi bổ sung vào đây.
-    /// </summary>
-    private static async Task EnsureIncrementalTablesAsync(
-        CodeSwitchLabelDbContext db, Microsoft.Extensions.Logging.ILogger? logger, CancellationToken ct)
-    {
-        // V12 added per-assignee quotas. Existing local volumes do not rerun the
-        // bootstrap SQL, so keep this additive and safe to run on every startup.
-        await db.Database.ExecuteSqlRawAsync(
-            "ALTER TABLE task_assignment ADD COLUMN IF NOT EXISTS target_qty INT", ct);
-
-        // V14: cặp câu trong task thu âm có thể chỉ định đúng Speaker. Thêm cột/index
-        // cho volume cũ; V15 thay hàm claim là bước triển khai riêng trong migrations/.
-        await db.Database.ExecuteSqlRawAsync(
-            "ALTER TABLE task_script ADD COLUMN IF NOT EXISTS assignee_user_id BIGINT REFERENCES app_user(user_id)", ct);
-        await db.Database.ExecuteSqlRawAsync(
-            "CREATE INDEX IF NOT EXISTS idx_task_script_assignee ON task_script (assignee_user_id)", ct);
-
-        var hasRegistration = await db.Database
-            .SqlQuery<bool>($"""SELECT to_regclass('public.campaign_registration') IS NOT NULL AS "Value" """)
-            .SingleAsync(ct);
-
-        if (!hasRegistration)
-        {
-            logger?.LogWarning("Thiếu bảng public.campaign_registration (volume tạo trước khi có bảng này) — tự tạo bổ sung.");
-
-            try
-            {
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    CREATE TABLE IF NOT EXISTS campaign_registration (
-                        campaign_id   BIGINT NOT NULL REFERENCES campaign(campaign_id) ON DELETE CASCADE,
-                        speaker_id    BIGINT NOT NULL REFERENCES app_user(user_id) ON DELETE CASCADE,
-                        registered_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                        PRIMARY KEY (campaign_id, speaker_id)
-                    )
-                    """, ct);
-
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    CREATE INDEX IF NOT EXISTS idx_campaign_registration_speaker
-                        ON campaign_registration (speaker_id)
-                    """, ct);
-            }
-            catch (Exception ex)
-            {
-                throw new InvalidOperationException(
-                    "Database thiếu bảng campaign_registration và tài khoản hiện tại không đủ quyền tự tạo. " +
-                    "Hãy chạy: docker compose down -v && docker compose up -d postgres minio " +
-                    "(xóa dữ liệu dev), hoặc chạy tay đoạn CREATE TABLE trong docs/codeswitchlabel.sql.", ex);
-            }
-        }
     }
 
     private static async Task<long> SeedUsersAsync(

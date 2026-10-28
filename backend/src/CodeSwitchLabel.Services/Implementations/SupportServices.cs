@@ -48,7 +48,7 @@ public class AuthService(
         var profile = request.SpeakerProfile;
         var user = new AppUser
         {
-            RoleId = await users.GetRoleIdAsync(RoleName.Speaker, ct),
+            Role = await users.GetRoleAsync(RoleName.Speaker, ct),
             FullName = request.FullName.Trim(),
             Email = email,
             Phone = Clean(request.Phone),
@@ -61,6 +61,7 @@ public class AuthService(
                 Province = Clean(profile?.Province),
                 EnglishLevel = profile?.EnglishLevel,
                 Occupation = profile?.Occupation,
+                Gender = profile?.Gender,
                 Major = Clean(profile?.Major)
             }
         };
@@ -77,10 +78,7 @@ public class AuthService(
             throw new ConflictException("email_taken", "Email đã được đăng ký.");
         }
 
-        var createdUser = await users.GetByIdAsync(user.UserId, ct)
-            ?? throw new NotFoundException("user_not_found", "Không tìm thấy tài khoản vừa tạo.");
-
-        return createdUser.ToLoginResponse(tokens.Issue(createdUser));
+        return user.ToLoginResponse(tokens.Issue(user));
     }
 
     private static string? Clean(string? value) =>
@@ -97,21 +95,13 @@ public class AuthService(
 
 public class SystemConfigService(ISystemConfigRepository repository) : ISystemConfigService
 {
-    public async Task<int> GetIntAsync(string key, int fallback, CancellationToken ct = default)
-    {
-        var config = await repository.GetAsync(key, ct);
-        if (config is null) return fallback;
-
-        return int.TryParse(config.ConfigValue, NumberStyles.Integer,
+    public async Task<int> GetIntAsync(string key, int fallback, CancellationToken ct = default) =>
+        int.TryParse(await GetRawAsync(key, ct), NumberStyles.Integer,
             CultureInfo.InvariantCulture, out var value) ? value : fallback;
-    }
 
     public async Task<bool> GetBoolAsync(string key, bool fallback, CancellationToken ct = default)
     {
-        var config = await repository.GetAsync(key, ct);
-        if (config is null) return fallback;
-
-        var raw = config.ConfigValue.Trim();
+        var raw = (await GetRawAsync(key, ct))?.Trim();
 
         // Lược đồ lưu 'true'/'false', nhưng người sửa tay hay gõ 1/0 nên nhận cả hai.
         return raw switch
@@ -122,15 +112,13 @@ public class SystemConfigService(ISystemConfigRepository repository) : ISystemCo
         };
     }
 
-    public async Task<decimal> GetDecimalAsync(string key, decimal fallback, CancellationToken ct = default)
-    {
-        var config = await repository.GetAsync(key, ct);
-        if (config is null) return fallback;
-
-        // InvariantCulture bắt buộc: máy đặt tiếng Việt dùng dấu phẩy làm dấu thập phân.
-        return decimal.TryParse(config.ConfigValue, NumberStyles.Float,
+    // InvariantCulture bắt buộc: máy đặt tiếng Việt dùng dấu phẩy làm dấu thập phân.
+    public async Task<decimal> GetDecimalAsync(string key, decimal fallback, CancellationToken ct = default) =>
+        decimal.TryParse(await GetRawAsync(key, ct), NumberStyles.Float,
             CultureInfo.InvariantCulture, out var value) ? value : fallback;
-    }
+
+    private async Task<string?> GetRawAsync(string key, CancellationToken ct) =>
+        (await repository.GetAsync(key, ct))?.ConfigValue;
 
     public async Task<IReadOnlyList<SystemConfigDto>> GetAllAsync(CancellationToken ct = default)
     {

@@ -40,9 +40,9 @@ public interface IReviewService
     /// TEAM_010 (yêu cầu 2.4) — nút CHỈ XÓA AUDIO: bản ghi bị loại nhưng CÂU VĂN BẢN
     /// được giữ lại và quay về hàng đợi ghi âm để thu lại.
     ///
-    /// Quay lại cho CHÍNH người đọc cũ, không phải người khác: luật của lược đồ là một
-    /// cặp câu chỉ một người đọc (trg_recording_single_speaker), và đổi người đọc giữa
-    /// hai bản sẽ phá vỡ tính nhất quán giọng của cặp.
+    /// Bản bị loại không còn giữ cặp câu, nên Speaker KHÁC trong chiến dịch được thu lại.
+    /// Người vừa bị loại chỉ nhận lại khi mọi Speaker khác của đợt đã thử — tránh cặp câu
+    /// kẹt vĩnh viễn khi cả đợt đều không đọc được.
     /// </summary>
     Task<RejectAudioResult> RejectAudioAsync(
         string recordingId, long reviewerId, RejectAudioRequest request, CancellationToken ct = default);

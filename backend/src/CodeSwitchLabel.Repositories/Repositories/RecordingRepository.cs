@@ -32,8 +32,8 @@ public interface IRecordingRepository
         int page, int pageSize, SortSpec<RecordingSortField> sort, CancellationToken ct = default);
 
     /// <summary>
-    /// Người đã thu cặp câu này, nếu có. Lược đồ chỉ cho phép MỘT người đọc cho mỗi cặp câu,
-    /// và có trigger chặn ở database.
+    /// Người đang giữ cặp câu này (có bản chờ duyệt/đạt). Bản rejected/qc_failed không
+    /// giữ quyền — sau khi Reviewer loại, cặp câu được thu lại bởi người khác.
     /// </summary>
     Task<long?> GetOwnerSpeakerIdAsync(string scriptId, CancellationToken ct = default);
 
@@ -49,11 +49,12 @@ public interface IRecordingRepository
         string scriptId, SentenceVariant variant, int take, CancellationToken ct = default);
 
     /// <summary>
-    /// Task có đúng là task thu âm còn nhận việc (chưa huỷ), đang giao cho người này,
-    /// và chứa cặp câu này. task đã đủ chỉ tiêu (Completed) vẫn nhận — KPI không chặn.
+    /// Task thu âm chứa cặp câu, trong phạm vi chiến dịch của task được hỏi, mà người này
+    /// đang nhận việc. Trả task sẽ ghi vào bản ghi (ưu tiên đúng task được hỏi), null nếu
+    /// không thu được. Task đã đủ chỉ tiêu (Completed) vẫn nhận — KPI không chặn.
     /// </summary>
-    Task<bool> IsRecordableInTaskAsync(
-        long taskId, long speakerId, string scriptId, CancellationToken ct = default);
+    Task<long?> FindRecordableTaskIdAsync(
+        long requestedTaskId, long speakerId, string scriptId, CancellationToken ct = default);
 
     /// <summary>
     /// Task thu âm còn nhận việc (chưa huỷ), đang giao cho người này, mà còn chứa cặp câu
@@ -136,7 +137,9 @@ public class RecordingRepository(CodeSwitchLabelDbContext db) : IRecordingReposi
 
     public Task<long?> GetOwnerSpeakerIdAsync(string scriptId, CancellationToken ct = default) =>
         db.Recordings.AsNoTracking()
-            .Where(r => r.ScriptId == scriptId && r.Status != RecordingStatus.QcFailed)
+            .Where(r => r.ScriptId == scriptId &&
+                        r.Status != RecordingStatus.QcFailed &&
+                        r.Status != RecordingStatus.Rejected)
             .Select(r => (long?)r.SpeakerId)
             .FirstOrDefaultAsync(ct);
 
@@ -163,15 +166,46 @@ public class RecordingRepository(CodeSwitchLabelDbContext db) : IRecordingReposi
             .SingleAsync(ct);
     }
 
-    public Task<bool> IsRecordableInTaskAsync(
-        long taskId, long speakerId, string scriptId, CancellationToken ct = default) =>
-        db.WorkTasks.AsNoTracking().AnyAsync(t =>
-            t.TaskId == taskId &&
-            t.TaskType == TaskType.Recording &&
+    public async Task<long?> FindRecordableTaskIdAsync(
+        long requestedTaskId, long speakerId, string scriptId, CancellationToken ct = default)
+    {
+        var scope = await db.WorkTasks.AsNoTracking()
+            .Where(t => t.TaskId == requestedTaskId)
+            .Select(t => new { t.TaskId, t.TaskType, t.Status, t.CampaignId })
+            .FirstOrDefaultAsync(ct);
+
+        if (scope is null ||
+            scope.TaskType != TaskType.Recording ||
             // chỉ task đã huỷ mới chặn — task đủ chỉ tiêu vẫn thu thêm được.
-            t.Status != WorkTaskStatus.Cancelled &&
-            t.Assignments.Any(a => a.UserId == speakerId && a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled) &&
-            t.TaskScripts.Any(ts => ts.ScriptId == scriptId && ts.Status == TaskScriptStatus.Pending), ct);
+            scope.Status == WorkTaskStatus.Cancelled)
+        {
+            return null;
+        }
+
+        // Nhận việc ở BẤT KỲ task thu âm nào của cùng chiến dịch, không chỉ task được hỏi.
+        var assigned = await db.TaskAssignments.AsNoTracking().AnyAsync(a =>
+            a.UserId == speakerId &&
+            a.AssignmentStatus != AssignmentStatus.Reassigned &&
+            a.AssignmentStatus != AssignmentStatus.Cancelled &&
+            (a.TaskId == scope.TaskId ||
+             (scope.CampaignId != null &&
+              a.Task.CampaignId == scope.CampaignId &&
+              a.Task.TaskType == TaskType.Recording &&
+              a.Task.Status != WorkTaskStatus.Cancelled)), ct);
+
+        if (!assigned) return null;
+
+        return await db.TaskScripts.AsNoTracking()
+            .Where(ts => ts.ScriptId == scriptId && ts.Status == TaskScriptStatus.Pending)
+            .Where(ts => ts.Task.TaskType == TaskType.Recording &&
+                         ts.Task.Status != WorkTaskStatus.Cancelled)
+            .Where(ts => ts.TaskId == scope.TaskId ||
+                         (scope.CampaignId != null && ts.Task.CampaignId == scope.CampaignId))
+            // Ưu tiên task được hỏi để bản ghi vào đúng chỗ người dùng đang làm.
+            .OrderByDescending(ts => ts.TaskId == scope.TaskId)
+            .Select(ts => (long?)ts.TaskId)
+            .FirstOrDefaultAsync(ct);
+    }
 
     public Task<long?> FindOwnTaskContainingScriptAsync(
         long speakerId, string scriptId, CancellationToken ct = default) =>

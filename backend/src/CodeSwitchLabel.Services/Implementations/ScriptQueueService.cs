@@ -29,7 +29,7 @@ public class ScriptQueueService(
     public async Task<ScriptDetailDto?> ClaimNextForRecordingAsync(
         long speakerId, long? taskId, CancellationToken ct = default)
     {
-        if (taskId.HasValue && !await tasks.IsActiveTaskOfAsync(taskId.Value, speakerId, TaskType.Recording, ct))
+        if (taskId.HasValue && !await tasks.IsAssignedToRecordingScopeAsync(taskId.Value, speakerId, ct))
         {
             throw new ForbiddenException(
                 "task_not_recordable", $"Task #{taskId.Value} không phải task thu âm đang giao cho bạn.");

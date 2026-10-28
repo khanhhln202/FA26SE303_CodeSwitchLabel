@@ -1,3 +1,4 @@
+using CodeSwitchLabel.Repositories.Entities;
 using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Repositories.Repositories;
 using CodeSwitchLabel.Services.Common;
@@ -69,6 +70,38 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
         Assert.Equal(1, result.Added);
         Assert.Contains(result.Skipped, item => item.Id == candidates[0]);
         Assert.Contains(result.Task.Items, item => item.Id == candidates[1]);
+    }
+
+    /// <summary>
+    /// Bản rejected trả cặp về hàng đợi, nên người nhận task khác được thêm câu đó —
+    /// trước đây điều kiện chỉ bỏ qua bản trượt QC nên câu bị chặn nhầm.
+    /// </summary>
+    [Fact]
+    public async Task AddItems_CauCoBanBiTuChoiCuaNguoiKhac_VanNhan()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var owner = await CreateUserWithBuilderAsync(RoleName.Speaker, NewUniqueEmail("add-owner"), "Add Owner");
+        var assignee = await CreateUserWithBuilderAsync(RoleName.Speaker, NewUniqueEmail("add-assignee"), "Add Assignee");
+
+        var script = await CreateValidatedScriptAsync(
+            "[vi]Câu [en]add [vi]này", "[vi]Câu add này",
+            ScriptDomain.ItTechnology, owner.UserId);
+
+        var rejected = await CreateRecordingAsync(script.ScriptId, owner.UserId, SentenceVariant.CodeSwitching);
+        rejected.Status = RecordingStatus.Rejected;
+        var task = await CreateTaskAsync(CampaignId, TaskType.Recording, 1, ManagerUserId);
+        Db.TaskAssignments.Add(new TaskAssignment
+        {
+            TaskId = task.TaskId, UserId = assignee.UserId,
+            AssignmentStatus = AssignmentStatus.Active, AssignedAt = DateTimeOffset.UtcNow
+        });
+        await Db.SaveChangesAsync(ct);
+
+        var result = await TaskService.AddItemsAsync(task.TaskId,
+            new AddTaskItemsRequest { Ids = [script.ScriptId] }, ct, ManagerUserId);
+
+        Assert.Equal(1, result.Added);
+        Assert.Contains(result.Task.Items, item => item.Id == script.ScriptId);
     }
 
     [Fact]
@@ -376,7 +409,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
     }
 
     [Fact]
-    public async Task EditRecording_AssigneeChanged_StartedPairsStay_InProgressPairsBlocked()
+    public async Task EditRecording_AssigneeChanged_ReleasesClaimedPairs_KeepsSubmitted()
     {
         var ct = TestContext.Current.CancellationToken;
         var scriptIds = new List<string>();
@@ -404,13 +437,31 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
         await TaskService.AddItemsAsync(
             task.Summary.TaskId, new AddTaskItemsRequest { Ids = scriptIds }, ct, ManagerUserId, isAdmin: false);
 
-        await Queue.ClaimNextAsync(speakers[0].UserId, QueueStage.Recording, task.Summary.TaskId, ct);
+        // A đang giữ một câu trong hàng đợi và đã nộp một câu khác.
+        var claim = await Queue.ClaimNextAsync(
+            speakers[0].UserId, QueueStage.Recording, task.Summary.TaskId, ct);
+        Assert.NotNull(claim);
 
-        await Assert.ThrowsAsync<ConflictException>(() =>
-            TaskService.SetAssignmentsAsync(task.Summary.TaskId, new SetTaskAssignmentsRequest
-            {
-                Assignments = [new AssignmentQuotaRequest { UserId = speakers[1].UserId }]
-            }, ct, ManagerUserId, isAdmin: false));
+        var recording = await CreateRecordingAsync(
+            scriptIds[0], speakers[0].UserId, SentenceVariant.CodeSwitching);
+
+        // Act — sửa bảng phân công chỉ còn B.
+        var detail = await TaskService.SetAssignmentsAsync(task.Summary.TaskId, new SetTaskAssignmentsRequest
+        {
+            Assignments = [new AssignmentQuotaRequest { UserId = speakers[1].UserId }]
+        }, ct, ManagerUserId, isAdmin: false);
+
+        Assert.Equal(speakers[1].UserId, Assert.Single(detail.Summary.Assignees).UserId);
+
+        // Câu đang giữ được nhả ngay cho người khác lấy.
+        var row = await Db.ScriptQueue.FirstAsync(
+            q => q.ScriptId == claim!.ScriptId && q.Stage == QueueStage.Recording, ct);
+        Assert.Equal(QueueState.Queued, row.State);
+        Assert.Null(row.ClaimedBy);
+
+        // Bản đã nộp vẫn còn nguyên của A.
+        Assert.NotNull(await Db.Recordings.AsNoTracking()
+            .FirstOrDefaultAsync(r => r.RecordingId == recording.RecordingId, ct));
     }
 
     [Fact]

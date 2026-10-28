@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.IO.Compression;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using CodeSwitchLabel.Repositories.Entities;
 using CodeSwitchLabel.Repositories.Enums;
@@ -266,7 +268,7 @@ public class DatasetService(
             .OrderBy(dr => dr.Recording.ScriptId).ThenBy(dr => dr.Recording.RecordingId)
             .ToListAsync(ct);
 
-        using var stream = new MemoryStream();
+        var stream = new MemoryStream();
         using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
         {
             // Manifest: mỗi bản ghi kèm câu đối chiếu, file audio trong ZIP và link nghe tạm.
@@ -328,13 +330,167 @@ public class DatasetService(
             }
         }
 
+        stream.Position = 0;
         return new DatasetFileDto(
             $"{dataset.DatasetName}-{dataset.Version}.zip",
             "application/zip",
-            stream.ToArray());
+            stream);
+    }
+
+    public async Task<DatasetFileDto> ExportSpeakersAsync(
+        ExportSpeakerDataRequest request, CancellationToken ct = default)
+    {
+        var speakerIds = request.SpeakerIds.Where(id => id > 0).Distinct().ToList();
+
+        if (speakerIds.Count == 0 && request.CampaignId is null)
+        {
+            throw new UnprocessableException(
+                "export_scope_required", "Chọn ít nhất một Speaker hoặc một chiến dịch để tải dữ liệu.");
+        }
+
+        var recordings = await db.Recordings.AsNoTracking()
+            .Include(r => r.Script).ThenInclude(s => s.Words)
+            .Include(r => r.Speaker)
+            .Where(r => r.Status == RecordingStatus.Approved)
+            .Where(r => speakerIds.Count == 0 || speakerIds.Contains(r.SpeakerId))
+            .Where(r => request.CampaignId == null || (r.Task != null && r.Task.CampaignId == request.CampaignId))
+            .ToListAsync(ct);
+
+        // Chỉ đóng gói cặp đủ hai bản. Thiếu một bản thì bỏ cả cặp, không để JSON trỏ tới file không có.
+        var pairs = recordings
+            .GroupBy(r => new { r.SpeakerId, r.ScriptId })
+            .Select(g => new
+            {
+                Speaker = g.First().Speaker,
+                Script = g.First().Script,
+                Cs = g.FirstOrDefault(r => r.SentenceVariant == SentenceVariant.CodeSwitching),
+                Vi = g.FirstOrDefault(r => r.SentenceVariant == SentenceVariant.PureVietnamese)
+            })
+            .Where(p => p.Cs is not null && p.Vi is not null)
+            .OrderBy(p => p.Speaker.FullName)
+            .ThenBy(p => p.Script.ScriptId)
+            .ToList();
+
+        if (pairs.Count == 0)
+        {
+            throw new UnprocessableException(
+                "export_no_approved_pairs",
+                "Không có cặp câu nào đã duyệt đủ cả hai bản trong phạm vi đã chọn.");
+        }
+
+        // Mốc Bangkok (UTC+7) trong tên thư mục, đúng quy ước bàn giao dữ liệu.
+        var date = clock.GetUtcNow().ToOffset(TimeSpan.FromHours(7))
+            .ToString("yyyy-MM-dd_HHmmss", CultureInfo.InvariantCulture);
+
+        // ZIP có thể chứa hàng GB audio nên ghi ra file tạm thay vì giữ cả file trong RAM.
+        // DeleteOnClose: FileStreamResult dispose sau khi gửi xong là file tự xoá.
+        var stream = new FileStream(
+            Path.Combine(Path.GetTempPath(), Path.GetRandomFileName()),
+            FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 64 * 1024,
+            FileOptions.DeleteOnClose);
+
+        try
+        {
+            using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+            {
+                foreach (var pair in pairs)
+                {
+                    var csAudio = await TryReadAudioAsync(pair.Cs!, ct);
+                    var viAudio = await TryReadAudioAsync(pair.Vi!, ct);
+
+                    if (csAudio is null || viAudio is null)
+                    {
+                        logger.LogWarning(
+                            "Bỏ cặp {ScriptId} của speaker {SpeakerId} khỏi ZIP vì thiếu file audio.",
+                            pair.Script.ScriptId, pair.Speaker.UserId);
+                        continue;
+                    }
+
+                    var folder = $"{SafeFolderName(pair.Speaker.Email)}_{date}";
+                    var scriptId = pair.Script.ScriptId;
+
+                    // Dùng lại đúng DTO của bộ nhập để file JSON luôn khớp schema hiện hành.
+                    // File bàn giao đọc bằng mắt nên xuống dòng + giữ tiếng Việt, và id chỉ giữ
+                    // phần số đúng mẫu input_text.json (bỏ tiền tố nội bộ s_). Cùng một id số
+                    // dùng cho tên file âm thanh để JSON và WAV khớp nhau.
+                    var numericId = scriptId.StartsWith("s_", StringComparison.Ordinal) ? scriptId[2..] : scriptId;
+                    var json = JsonSerializer.SerializeToUtf8Bytes(new ImportScriptItem
+                    {
+                        Id = numericId,
+                        Domain = DomainLabel(pair.Script.Domain),
+                        CsTranscript = pair.Script.CsContent,
+                        ViEquivalent = pair.Script.ViContent,
+                        Alignment = [.. ScriptPairRules.ToAlignment(pair.Script.Words)]
+                    }, ExportJsonOptions);
+
+                    await AddZipEntryAsync(zip, $"{folder}/text/{numericId}.json", json, ct);
+                    await AddZipEntryAsync(zip, $"{folder}/audio/{numericId}-cs.wav", csAudio, ct);
+                    await AddZipEntryAsync(zip, $"{folder}/audio/{numericId}-vi.wav", viAudio, ct);
+                }
+            }
+        }
+        catch
+        {
+            stream.Dispose();
+            throw;
+        }
+
+        var fileName = speakerIds.Count == 0
+            ? $"campaign-{request.CampaignId}-{date}.zip"
+            : $"speakers-{date}.zip";
+
+        stream.Position = 0;
+        return new DatasetFileDto(fileName, "application/zip", stream);
     }
 
     // ----------------------------------------------------------------- nội bộ
+
+    /// <summary>File bàn giao đọc bằng mắt: xuống dòng, không đổi tiếng Việt thành \uXXXX.</summary>
+    private static readonly JsonSerializerOptions ExportJsonOptions = new()
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
+    /// <summary>Đọc trọn file audio trước khi tạo entry, để ZIP không bao giờ có file cụt.</summary>
+    private async Task<byte[]?> TryReadAudioAsync(Recording recording, CancellationToken ct)
+    {
+        var key = storage.GetObjectKey(recording.CloudLink);
+        if (key is null) return null;
+
+        try
+        {
+            await using var source = await storage.OpenReadAsync(key, ct);
+            using var buffer = new MemoryStream();
+            await source.CopyToAsync(buffer, ct);
+            return buffer.ToArray();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex,
+                "Không đọc được audio {RecordingId} ({Key}) khi xuất ZIP.", recording.RecordingId, key);
+            return null;
+        }
+    }
+
+    private static async Task AddZipEntryAsync(
+        ZipArchive zip, string entryName, byte[] content, CancellationToken ct)
+    {
+        var entry = zip.CreateEntry(entryName, CompressionLevel.Fastest);
+        await using var target = entry.Open();
+        await target.WriteAsync(content, ct);
+    }
+
+    /// <summary>Email không chứa dấu phân cách thư mục, nhưng vẫn chặn để tên entry không bị lạc chỗ.</summary>
+    private static string SafeFolderName(string email) =>
+        email.Replace('/', '_').Replace('\\', '_');
+
+    private static string DomainLabel(ScriptDomain domain) => domain switch
+    {
+        ScriptDomain.ItTechnology => "IT/Technology",
+        ScriptDomain.Education => "Education",
+        _ => "Daily Life"
+    };
 
     /// <summary>
     /// Chép một file audio từ kho vào ZIP. Lỗi một file thì bỏ file đó, vẫn giữ dòng metadata

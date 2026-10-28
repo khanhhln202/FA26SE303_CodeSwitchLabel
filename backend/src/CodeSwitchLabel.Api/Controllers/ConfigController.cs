@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace CodeSwitchLabel.Api.Controllers;
 
-/// <summary>Tham số hệ thống cho mọi vai — bản đọc công khai của /api/admin/config.</summary>
+/// <summary>Tham số hệ thống cho mọi vai — đầu đọc duy nhất của cấu hình.</summary>
 /// <remarks>
 /// Speaker/Reviewer cần `maxEnglishWords` và danh sách chủ đề để validate form
 /// mà không phải là Admin. Ghi vẫn chỉ Admin qua `PUT /api/admin/config/{key}`.

@@ -370,6 +370,182 @@ public sealed class ScriptProposalTests : IntegrationTestBase
         Assert.Contains("tự đóng", luu.DecisionNote, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Đường mới của Reviewer: lưu nháp đã kiểm luật lên máy chủ, rồi chốt mà không gửi
+    /// kèm nội dung. Duyệt phải dùng đúng bản nháp đã lưu, không phụ thuộc state trình duyệt.
+    /// Nháp sai luật bị chặn và không ghi đè bản nháp tốt trước đó.
+    /// </summary>
+    [Fact]
+    public async Task LuuNhap_RoiDuyet_DungBanNhapDaLuu()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        var script = await CreateValidatedScriptAsync(
+            "[vi]Em nên [en]scan [vi]tài liệu này.", "[vi]Em nên quét tài liệu này.",
+            ScriptDomain.ItTechnology, SpeakerUserId);
+
+        var tao = await ProposalService.CreateAsync(script.ScriptId, SpeakerUserId, new CreateProposalRequest
+        {
+            Kind = ProposalKind.Report,
+            ErrorReasonCode = "spelling",
+            Comment = "Sai chính tả"
+        }, ct);
+
+        var nhap = await ProposalService.SaveDraftAsync(tao.ProposalId, ReviewerUserId,
+            new SaveProposalDraftRequest
+            {
+                CsContent = "[vi]Em nên [en]scan [vi]tài liệu mới này.",
+                ViContent = "[vi]Em nên quét tài liệu mới này.",
+                Alignment = [new AlignmentItem { Source = "scan", Target = "đọc quét" }]
+            }, ct);
+
+        Assert.Equal("đọc quét", Assert.Single(nhap.Alignment).Target);
+
+        // Hàng chờ trả kèm bản nháp để Reviewer mở lại đúng chỗ đã lưu.
+        var muc = Assert.Single(
+            (await ProposalService.ListAsync(new ProposalQueueQuery(), ct)).Items,
+            i => i.ProposalId == tao.ProposalId);
+        Assert.NotNull(muc.Draft);
+        Assert.Contains("tài liệu mới này", muc.Draft.CsContent, StringComparison.Ordinal);
+
+        // Nháp sai luật bị chặn và không ghi đè bản đã lưu.
+        var loi = await Assert.ThrowsAsync<UnprocessableException>(
+            () => ProposalService.SaveDraftAsync(tao.ProposalId, ReviewerUserId,
+                new SaveProposalDraftRequest
+                {
+                    CsContent = "[vi]Em nên quét tài liệu mới này.",
+                    ViContent = "[vi]Em nên quét tài liệu mới này."
+                }, ct));
+        Assert.Equal("en_word_count_out_of_range", loi.Code);
+
+        var giuNhap = await Db.ScriptProposals.AsNoTracking()
+            .SingleAsync(p => p.ProposalId == tao.ProposalId, ct);
+        Assert.Equal("[vi]Em nên [en]scan [vi]tài liệu mới này.", giuNhap.DraftCsContent);
+
+        // Chốt không gửi applied*: lấy đúng bản nháp.
+        var ketQua = await ProposalService.ResolveAsync(
+            tao.ProposalId, ReviewerUserId,
+            new ResolveProposalRequest { Decision = ProposalDecision.Accepted }, ct);
+
+        Assert.Equal(ProposalStatus.Accepted, ketQua.Status);
+
+        var luu = await Db.Scripts.AsNoTracking()
+            .SingleAsync(s => s.ScriptId == script.ScriptId, ct);
+        Assert.Contains("tài liệu mới này", luu.CsContent, StringComparison.Ordinal);
+
+        var tu = await Db.ScriptWords.AsNoTracking()
+            .Where(w => w.ScriptId == script.ScriptId)
+            .ToListAsync(ct);
+        Assert.Equal("đọc quét", Assert.Single(tu).ViWord);
+    }
+
+    /// <summary>
+    /// Client cũ vẫn gửi bản chốt trong request `applied*` — đường này phải tiếp tục chạy,
+    /// và bản chốt được lưu lại thành nháp cuối để tra cứu sau.
+    /// </summary>
+    [Fact]
+    public async Task DuyetDeXuat_ClientCuGuiApplied_VanChayVaLuuThanhNhap()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        var script = await CreateValidatedScriptAsync(
+            "[vi]Mình hẹn ở [en]office Daily cũ.", "[vi]Mình hẹn ở văn phòng Daily cũ.",
+            ScriptDomain.DailyLife, SpeakerUserId);
+
+        var tao = await ProposalService.CreateAsync(script.ScriptId, SpeakerUserId, new CreateProposalRequest
+        {
+            Kind = ProposalKind.Report,
+            ErrorReasonCode = "unnatural"
+        }, ct);
+
+        var ketQua = await ProposalService.ResolveAsync(tao.ProposalId, ReviewerUserId,
+            new ResolveProposalRequest
+            {
+                Decision = ProposalDecision.Accepted,
+                AppliedCsContent = "[vi]Mình hẹn ở [en]office [vi]mới.",
+                AppliedViContent = "[vi]Mình hẹn ở văn phòng mới.",
+                AppliedAlignment = [new AlignmentItem { Source = "office", Target = "văn phòng" }]
+            }, ct);
+
+        Assert.Equal(ProposalStatus.Accepted, ketQua.Status);
+
+        var luu = await Db.Scripts.AsNoTracking()
+            .SingleAsync(s => s.ScriptId == script.ScriptId, ct);
+        Assert.Contains("office", luu.CsContent, StringComparison.Ordinal);
+        Assert.Contains("văn phòng mới", luu.ViContent, StringComparison.Ordinal);
+
+        var proposal = await Db.ScriptProposals.AsNoTracking()
+            .SingleAsync(p => p.ProposalId == tao.ProposalId, ct);
+        Assert.Equal("[vi]Mình hẹn ở [en]office [vi]mới.", proposal.DraftCsContent);
+        Assert.Equal("[vi]Mình hẹn ở văn phòng mới.", proposal.DraftViContent);
+    }
+
+    /// <summary>
+    /// "Xoá" một đề xuất: câu chuyển `deactivated` (soft-delete), rời mọi hàng đợi, nhưng
+    /// đề xuất và người chốt vẫn còn trong lịch sử. Không ghi lượt duyệt sửa vì nội dung
+    /// không được dùng nữa.
+    /// </summary>
+    [Fact]
+    public async Task XoaDeXuat_DeactivateCau_VaGiuLichSu()
+    {
+        var ct = TestContext.Current.CancellationToken;
+
+        var script = await CreateValidatedScriptAsync(
+            "[vi]Câu này [en]delete luôn.", "[vi]Câu này xoá luôn.",
+            ScriptDomain.ItTechnology, SpeakerUserId);
+
+        // Câu đang nằm trong một task thu âm: xoá câu phải đóng luôn mục task.
+        var task = await CreateTaskAsync(CampaignId, TaskType.Recording, 10, ManagerUserId);
+        Db.TaskScripts.Add(new TaskScript
+        {
+            TaskId = task.TaskId, ScriptId = script.ScriptId, Status = TaskScriptStatus.Pending
+        });
+        await Db.SaveChangesAsync(ct);
+
+        var tao = await ProposalService.CreateAsync(script.ScriptId, SpeakerUserId, new CreateProposalRequest
+        {
+            Kind = ProposalKind.Report,
+            ErrorReasonCode = "other",
+            Comment = "Không dùng được"
+        }, ct);
+
+        var ketQua = await ProposalService.ResolveAsync(tao.ProposalId, ReviewerUserId,
+            new ResolveProposalRequest
+            {
+                Decision = ProposalDecision.Deleted,
+                Comment = "Câu không dùng được nữa."
+            }, ct);
+
+        Assert.Equal(ProposalStatus.Deleted, ketQua.Status);
+        Assert.Equal(ScriptStatus.Deactivated, ketQua.ScriptStatus);
+        Assert.Null(ketQua.ScriptReviewId);
+
+        var luu = await Db.Scripts.AsNoTracking()
+            .SingleAsync(s => s.ScriptId == script.ScriptId, ct);
+        Assert.Equal(ScriptStatus.Deactivated, luu.Status);
+
+        var proposal = await Db.ScriptProposals.AsNoTracking()
+            .SingleAsync(p => p.ProposalId == tao.ProposalId, ct);
+        Assert.Equal(ProposalStatus.Deleted, proposal.Status);
+        Assert.Equal(ReviewerUserId, proposal.DecidedBy);
+        Assert.NotNull(proposal.DecidedAt);
+        Assert.Equal("Câu không dùng được nữa.", proposal.DecisionNote);
+
+        // Câu rời mọi hàng đợi như mọi lần deactivate.
+        Assert.Equal(0, await Db.ScriptQueue.CountAsync(
+            q => q.ScriptId == script.ScriptId &&
+                 (q.State == QueueState.Queued || q.State == QueueState.Claimed), ct));
+
+        // Đề xuất đã chốt không còn trong hàng chờ.
+        var hangCho = await ProposalService.ListAsync(new ProposalQueueQuery(), ct);
+        Assert.DoesNotContain(hangCho.Items, i => i.ProposalId == tao.ProposalId);
+
+        // Mục công việc cũng chốt là loại, nếu không task không bao giờ đạt chỉ tiêu.
+        var item = await Db.TaskScripts.AsNoTracking()
+            .SingleAsync(ts => ts.TaskId == task.TaskId && ts.ScriptId == script.ScriptId, ct);
+        Assert.Equal(TaskScriptStatus.Rejected, item.Status);
+    }
+
     /// <summary>Hàng chờ lọc theo loại / từ khoá và giữ đúng thứ tự FIFO mặc định.</summary>
     [Fact]
     public async Task HangCho_LocTheoLoaiVaTuKhoa_GiuThuTuCuNhatTruoc()

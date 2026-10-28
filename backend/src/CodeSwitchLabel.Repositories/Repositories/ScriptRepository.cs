@@ -251,7 +251,10 @@ public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
 
     public Task<bool> IsRecordedByOtherAsync(string scriptId, long speakerId, CancellationToken ct = default) =>
         db.Recordings.AsNoTracking().AnyAsync(
-            r => r.ScriptId == scriptId && r.SpeakerId != speakerId && r.Status != RecordingStatus.QcFailed, ct);
+            r => r.ScriptId == scriptId &&
+                 r.SpeakerId != speakerId &&
+                 r.Status != RecordingStatus.QcFailed &&
+                 r.Status != RecordingStatus.Rejected, ct);
 
     public async Task<string> GenerateIdAsync(
         int enWordCount, ScriptDomain domain, ScriptRelation relation, CancellationToken ct = default)

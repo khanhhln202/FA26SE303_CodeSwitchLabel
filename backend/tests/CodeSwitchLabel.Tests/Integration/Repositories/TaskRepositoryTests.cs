@@ -136,6 +136,70 @@ public class TaskRepositoryTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task GetAssigneeDoneAsync_CapCuaNguoiKhacBiTuChoi_TinhChoNguoiDaDuyet()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var task = await CreateTaskAsync(CampaignId, TaskType.Recording, 1, ManagerUserId);
+        var rejectedSpeaker = await CreateUserWithBuilderAsync(
+            RoleName.Speaker, NewUniqueEmail("done-rejected"), "Done Rejected");
+        var approvedSpeaker = await CreateUserWithBuilderAsync(
+            RoleName.Speaker, NewUniqueEmail("done-approved"), "Done Approved");
+
+        var script = await CreateValidatedScriptAsync(
+            "[vi]Câu [en]done [vi]rồi", "[vi]Câu done rồi",
+            ScriptDomain.ItTechnology, approvedSpeaker.UserId);
+        Db.TaskScripts.Add(new TaskScript
+        {
+            TaskId = task.TaskId, ScriptId = script.ScriptId, Status = TaskScriptStatus.Completed
+        });
+
+        // A thu bản đầu rồi bị loại; B thu lại và đạt cả hai biến thể.
+        var rejected = await CreateRecordingAsync(script.ScriptId, rejectedSpeaker.UserId, SentenceVariant.CodeSwitching);
+        rejected.Status = RecordingStatus.Rejected;
+        await Db.SaveChangesAsync(ct);
+
+        var cs = await CreateRecordingAsync(script.ScriptId, approvedSpeaker.UserId, SentenceVariant.CodeSwitching);
+        var vi = await CreateRecordingAsync(script.ScriptId, approvedSpeaker.UserId, SentenceVariant.PureVietnamese);
+        cs.Status = RecordingStatus.Approved;
+        vi.Status = RecordingStatus.Approved;
+        await Db.SaveChangesAsync(ct);
+
+        var done = await Tasks.GetAssigneeDoneAsync(task.TaskId, TaskType.Recording, ct);
+
+        Assert.False(done.ContainsKey(rejectedSpeaker.UserId));
+        Assert.Equal(1, done[approvedSpeaker.UserId]);
+    }
+
+    [Fact]
+    public async Task FindScriptCandidatesAsync_BanBiTuChoi_KhongGiuCho()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var owner = await CreateUserWithBuilderAsync(RoleName.Speaker, NewUniqueEmail("cand-owner"), "Cand Owner");
+        var other = await CreateUserWithBuilderAsync(RoleName.Speaker, NewUniqueEmail("cand-other"), "Cand Other");
+
+        var script = await CreateValidatedScriptAsync(
+            "[vi]Câu [en]candidate [vi]này", "[vi]Câu candidate này",
+            ScriptDomain.ItTechnology, owner.UserId);
+
+        var rejected = await CreateRecordingAsync(script.ScriptId, owner.UserId, SentenceVariant.CodeSwitching);
+        rejected.Status = RecordingStatus.Rejected;
+        await Db.SaveChangesAsync(ct);
+
+        var assignedTask = await CreateTaskAsync(CampaignId, TaskType.Recording, 1, ManagerUserId);
+        var openTask = await CreateTaskAsync(CampaignId, TaskType.Recording, 1, ManagerUserId);
+
+        // Người khác nhận task vẫn thấy câu vì bản rejected đã trả cặp về hàng đợi.
+        var forOther = await Tasks.FindScriptCandidatesAsync(
+            assignedTask.TaskId, [other.UserId], ScriptDomain.ItTechnology, 100, [], ct);
+        Assert.Contains(script.ScriptId, forOther);
+
+        // Task chưa giao cho ai cũng vậy.
+        var unassigned = await Tasks.FindScriptCandidatesAsync(
+            openTask.TaskId, [], ScriptDomain.ItTechnology, 100, [], ct);
+        Assert.Contains(script.ScriptId, unassigned);
+    }
+
+    [Fact]
     public async Task GetActiveRowsForAssigneeAsync_ReturnsEmpty_WhenNoAssignments()
     {
         // Act

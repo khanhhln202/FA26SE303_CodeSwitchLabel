@@ -34,7 +34,8 @@ public record ProposalQueueItemDto(
     string? Comment,
     DateTimeOffset CreatedAt,
     ProposalSentenceDto Original,
-    ProposalSentenceDto? Proposed);
+    ProposalSentenceDto? Proposed,
+    ProposalSentenceDto? Draft);
 
 /// <summary>
 /// Một đề xuất trong lịch sử của chính Speaker: phần nội dung giống hàng chờ của Reviewer,
@@ -90,9 +91,10 @@ public record ProposalResolutionDto(
 
 /// <summary>
 /// Quyết định của Reviewer cho một đề xuất. Không phải kiểu ENUM của lược đồ — chỉ tồn tại
-/// trên đường truyền nên không ánh xạ vào database.
+/// trên đường truyền nên không ánh xạ vào database. Deleted = loại hẳn câu khỏi kho
+/// (soft-delete, giữ lịch sử đề xuất).
 /// </summary>
-public enum ProposalDecision { Accepted, Rejected }
+public enum ProposalDecision { Accepted, Rejected, Deleted }
 
 public record CreateProposalRequest
 {
@@ -146,6 +148,29 @@ public record ResolveProposalRequest
     /// </summary>
     public List<AlignmentItem>? AppliedAlignment { get; init; }
 }
+
+public record SaveProposalDraftRequest
+{
+    [Required(ErrorMessage = "Phải gửi câu chen tiếng Anh đã chốt.")]
+    [StringLength(1000, MinimumLength = 3)]
+    public string? CsContent { get; init; }
+
+    [Required(ErrorMessage = "Phải gửi câu thuần Việt đã chốt.")]
+    [StringLength(1000, MinimumLength = 3)]
+    public string? ViContent { get; init; }
+
+    /// <summary>Lời giải Anh–Việt của bản nháp; bỏ trống thì giữ lời giải hiện có.</summary>
+    public List<AlignmentItem>? Alignment { get; init; }
+}
+
+public record ProposalDraftDto(
+    long ProposalId,
+    string ScriptId,
+    string CsContent,
+    string ViContent,
+    IReadOnlyList<AlignmentItem> Alignment,
+    long SavedBy,
+    DateTimeOffset SavedAt);
 
 public record ProposalQueueQuery : PageRequest
 {

@@ -374,8 +374,8 @@ public class ReviewService(
             : null;
 
         // Chỉ xoá AUDIO. Câu văn bản giữ nguyên status 'validated', và câu quay về
-        // hàng đợi ghi âm cho CHÍNH người đọc cũ — trigger trg_recording_single_speaker
-        // cấm người khác đọc cặp câu này, nên "giao cho người khác" là việc không làm được.
+        // hàng đợi ghi âm. Bản 'rejected' không còn giữ cặp câu (trigger
+        // trg_recording_single_speaker bỏ qua nó), nên người khác trong đợt thu lại được.
         recording.Status = RecordingStatus.Rejected;
 
         if (taskRecording is not null) taskRecording.Status = TaskRecordingStatus.Reviewed;
@@ -443,12 +443,13 @@ public class ReviewService(
     }
 
     /// <summary>
-    /// Loại nốt bản còn lại của cặp khi một bản đã bị từ chối, để người đọc thu lại NGUYÊN CẶP.
+    /// Loại nốt bản còn lại của cặp khi một bản đã bị từ chối, để cặp câu sạch trước khi
+    /// giao lại cho người khác.
     ///
     /// Không ghi thêm phiếu duyệt nào cho bản đó — đây là hệ quả của quyết định đã có, không
     /// phải một lá phiếu mới; thêm phiếu sẽ làm lệch bộ đếm vòng và kích hoạt lại trigger chốt
     /// đa số. Đánh dấu đúng kiểu "gỡ bản ghi" như nút chỉ xoá audio: giữ dòng, ghi ai gỡ và vì
-    /// sao, rồi đẩy câu về hàng đợi ghi âm cho chính người đọc cũ.
+    /// sao, rồi đẩy câu về hàng đợi ghi âm.
     ///
     /// Bản còn lại đang trống (chưa thu, hoặc đã bị loại trước đó) thì không có gì để làm.
     /// </summary>

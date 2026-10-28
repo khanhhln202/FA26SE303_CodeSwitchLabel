@@ -24,6 +24,7 @@ public sealed class TaskServiceAutoFillTests
         var service = new TaskService(
             tasks.Object,
             Mock.Of<ICampaignRepository>(),
+            Mock.Of<IScriptQueueRepository>(),
             tracker.Object,
             config.Object,
             TimeProvider.System);

@@ -3,6 +3,7 @@ using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Repositories.Persistence;
 using CodeSwitchLabel.Repositories.Repositories;
 using CodeSwitchLabel.Services.Abstractions;
+using CodeSwitchLabel.Services.Audio;
 using CodeSwitchLabel.Services.Common;
 using CodeSwitchLabel.Services.Dtos;
 
@@ -29,7 +30,8 @@ public class ScriptAssignmentService(
         if (taskId.HasValue)
         {
             // Không kiểm thì Speaker nào cũng xem được danh sách câu trong task của người khác.
-            if (!await taskRepository.IsActiveTaskOfAsync(taskId.Value, speakerId, TaskType.Recording, ct))
+            // Hàng đợi ghi âm phát theo chiến dịch, nên chỉ cần nhận một task thu âm của đợt.
+            if (!await taskRepository.IsAssignedToRecordingScopeAsync(taskId.Value, speakerId, ct))
             {
                 throw new ForbiddenException(
                     "task_not_recordable", $"Task #{taskId} không phải task thu âm đang giao cho bạn.");
@@ -39,11 +41,9 @@ public class ScriptAssignmentService(
         var script = await ClaimNextRecordableAsync(speakerId, taskId, ct);
         if (script is null) return null;
 
+        var qc = RecordingQcSettings.From(await config.GetAllAsync(ct));
         var guidance = new RecordingGuidanceDto(
-            await config.GetDecimalAsync(ConfigKeys.RecordingMinDurationSec, 1m, ct),
-            await config.GetDecimalAsync(ConfigKeys.RecordingMaxDurationSec, 30m, ct),
-            await config.GetDecimalAsync(ConfigKeys.RecordingMaxLeadingSilenceSec, 1m, ct),
-            await config.GetDecimalAsync(ConfigKeys.RecordingMaxTrailingSilenceSec, 1m, ct));
+            qc.MinDurationSec, qc.MaxDurationSec, qc.MaxLeadingSilenceSec, qc.MaxTrailingSilenceSec);
 
         return new NextScriptDto(
             script.ScriptId,
@@ -75,13 +75,8 @@ public class ScriptAssignmentService(
             var script = await repository.GetAsync(claim.ScriptId, ct);
             if (script is null) continue;
 
-            // Câu do người khác đọc — trigger sẽ chặn lúc thu, nên đừng phát ra.
-            if (await repository.IsRecordedByOtherAsync(script.ScriptId, speakerId, ct))
-            {
-                await queue.ReleaseAsync(script.ScriptId, QueueStage.Recording, ct);
-                continue;
-            }
-
+            // Câu đang có bản của người khác (chờ duyệt/đạt) đã bị hàm claim lọc sẵn;
+            // ở đây chỉ còn việc bỏ qua câu người này đã thu đủ.
             var mine = await repository.GetRecordingsOfSpeakerAsync(script.ScriptId, speakerId, ct);
 
             if (RemainingVariants(script, mine).Count == 0)

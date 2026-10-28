@@ -71,13 +71,29 @@ public class DatasetsController(IDatasetService datasets) : ControllerBase
         return NoContent();
     }
 
+    /// <summary>Tải thẳng ZIP dữ liệu đã duyệt theo Speaker hoặc theo chiến dịch, không cần tạo dataset.</summary>
+    /// <remarks>
+    /// Gửi `speakerIds` để lấy các Speaker đã chọn; bỏ trống rồi gửi `campaignId` để lấy cả chiến dịch.
+    /// Mỗi Speaker một thư mục `{email}_{ngày Bangkok}` gồm `test/{scriptId}.json` (đúng schema nhập)
+    /// và `audio/{scriptId}_CS.wav`, `audio/{scriptId}_VI.wav`. Cặp thiếu một bản hoặc thiếu audio bị bỏ.
+    /// </remarks>
+    [HttpPost("export")]
+    [ProducesResponseType(typeof(FileStreamResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<IActionResult> ExportSpeakers(
+        [FromBody] ExportSpeakerDataRequest request, CancellationToken ct)
+    {
+        var file = await datasets.ExportSpeakersAsync(request, ct);
+        return File(file.Content, file.ContentType, file.FileName);
+    }
+
     /// <summary>Tải dataset đã phát hành (ZIP gồm manifest.json, metadata.csv và audio/ nếu includeAudio=true).</summary>
     /// <remarks>
     /// `?includeAudio=true` (mặc định): đóng gói cả file ghi âm vào thư mục `audio/`.
     /// `?includeAudio=false`: chỉ lấy metadata kèm link nghe tạm 15 phút.
     /// </remarks>
     [HttpGet("{id:long}/download")]
-    [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(FileStreamResult), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Download(

@@ -32,8 +32,16 @@ public interface IScriptProposalService
         long proposerId, SpeakerProposalHistoryQuery query, CancellationToken ct = default);
 
     /// <summary>
+    /// Reviewer lưu bản nháp đã kiểm luật lên máy chủ. Quyết định duyệt đọc bản này —
+    /// không phụ thuộc state trình duyệt.
+    /// </summary>
+    Task<ProposalDraftDto> SaveDraftAsync(
+        long proposalId, long reviewerId, SaveProposalDraftRequest request, CancellationToken ct = default);
+
+    /// <summary>
     /// Reviewer chốt một đề xuất: duyệt thì ghi nội dung mới vào câu (kèm lượt duyệt sửa
-    /// trong lịch sử), từ chối thì giữ nguyên câu. Cả hai đường đều trả câu về hàng đợi ghi âm.
+    /// trong lịch sử), từ chối thì giữ nguyên câu, xoá thì deactivate câu. Cả ba đường đều
+    /// trả câu về hàng đợi ghi âm khi câu còn dùng được.
     /// </summary>
     Task<ProposalResolutionDto> ResolveAsync(
         long proposalId, long reviewerId, ResolveProposalRequest request, CancellationToken ct = default);

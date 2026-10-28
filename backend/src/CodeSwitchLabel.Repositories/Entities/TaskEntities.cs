@@ -101,7 +101,10 @@ public class TaskScript
     public long TaskId { get; set; }
     public string ScriptId { get; set; } = string.Empty;
 
-    /// <summary>người nhận câu này (Recording), NULL = chưa gán / task duyệt.</summary>
+    /// <summary>
+    /// Speaker được gán cặp câu này để hiển thị/chia quota; hàng đợi ghi âm phát theo
+    /// chiến dịch nên cột này không chặn người khác nhận câu. NULL = chưa gán / task duyệt.
+    /// </summary>
     public long? AssigneeUserId { get; set; }
 
     public TaskScriptStatus Status { get; set; }

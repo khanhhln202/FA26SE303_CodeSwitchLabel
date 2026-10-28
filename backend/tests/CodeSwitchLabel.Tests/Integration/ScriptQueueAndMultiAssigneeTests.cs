@@ -20,7 +20,7 @@ namespace CodeSwitchLabel.Tests.Integration;
 ///   • hai người KHÔNG BAO GIỜ nhận cùng một câu
 ///   • xoá cặp thì câu rút khỏi mọi hàng đợi
 ///   • task giao được cho nhiều người
-///   • bản ghi bị từ chối làm chỉ tiêu tụt và task tự rời trạng thái Hoàn thành
+///   • bản ghi bị từ chối trả câu về hàng đợi và mở cho Speaker khác
 /// </summary>
 [Trait("Category", "Integration")]
 [Collection("Database")]
@@ -426,22 +426,72 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
             a.UserId == speakers[0].UserId && a.Status == AssignmentStatus.Reassigned);
     }
 
+    // ------------------------------ hàng đợi ghi âm theo chiến dịch
+
+    [Fact]
+    public async Task HangDoiGhiAm_PhamViCaChienDich()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var speakers = await TaoBaSpeakerAsync();
+        var (a, b, c) = (speakers[0], speakers[1], speakers[2]);
+
+        var campaign = await CreateCampaignAsync(
+            $"Đợt queue-{Guid.NewGuid():N}", 2000,
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), ManagerUserId, CampaignStatus.Open);
+        campaign.AssignedTo = ManagerUserId;
+        await Db.SaveChangesAsync(ct);
+
+        var t1 = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 2, ManagerUserId);
+        var t2 = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 2, ManagerUserId);
+
+        // Câu của task 2 vào hàng trước, câu của task 1 sau.
+        var s2 = await CreateValidatedScriptAsync(
+            "[vi]Thu [en]queue2 [vi]nhe", "[vi]Thu queue2 nhe", ScriptDomain.ItTechnology, a.UserId);
+        var s1 = await CreateValidatedScriptAsync(
+            "[vi]Thu [en]queue1 [vi]nhe", "[vi]Thu queue1 nhe", ScriptDomain.ItTechnology, a.UserId);
+
+        Db.TaskScripts.AddRange(
+            new TaskScript { TaskId = t2.TaskId, ScriptId = s2.ScriptId, Status = TaskScriptStatus.Pending },
+            new TaskScript { TaskId = t1.TaskId, ScriptId = s1.ScriptId, Status = TaskScriptStatus.Pending });
+        Db.TaskAssignments.AddRange(
+            new TaskAssignment
+            {
+                TaskId = t1.TaskId, UserId = a.UserId,
+                AssignmentStatus = AssignmentStatus.Active, AssignedAt = DateTimeOffset.UtcNow
+            },
+            new TaskAssignment
+            {
+                TaskId = t2.TaskId, UserId = b.UserId,
+                AssignmentStatus = AssignmentStatus.Active, AssignedAt = DateTimeOffset.UtcNow
+            });
+        await Db.SaveChangesAsync(ct);
+
+        // A chỉ nhận task 1 nhưng nhận câu CŨ HƠN nằm trong task 2 — hàng của cả đợt.
+        var first = await ScriptAssignmentService.GetNextAsync(a.UserId, t1.TaskId, ct);
+        Assert.Equal(s2.ScriptId, first?.ScriptId);
+
+        // B chỉ nhận task 2 nhưng tới lượt thì lấy câu của task 1.
+        var second = await ScriptAssignmentService.GetNextAsync(b.UserId, t2.TaskId, ct);
+        Assert.Equal(s1.ScriptId, second?.ScriptId);
+
+        // Người ngoài đợt không mượn task để lấy câu.
+        var error = await Assert.ThrowsAsync<ForbiddenException>(
+            () => ScriptAssignmentService.GetNextAsync(c.UserId, t1.TaskId, ct));
+        Assert.Equal("task_not_recordable", error.Code);
+    }
+
     // ------------------------------ bản ghi bị từ chối thì ai được thu lại
 
     /// <summary>
-    /// Thay cho test cũ `GetNextForSpeakerAsync_ReServesRejectedScript_ToSameSpeaker`
-    /// (đã xoá cùng hàm chết).
-    ///
-    /// Luật của lược đồ: một cặp câu chỉ một người đọc (`trg_recording_single_speaker`).
-    /// Nên khi bản ghi bị từ chối, câu KHÔNG THỂ rơi vào tay người khác — nếu không thì
-    /// cặp câu bị bỏ rơi giữa hai giọng đọc. Đường mới bảo đảm điều đó bằng
-    /// `IsRecordedByOtherAsync`: câu do người khác đọc thì bị bỏ qua và đẩy xuống
-    /// cuối hàng đợi.
+    /// Reviewer loại audio là loại cả lần thu: bản `rejected` không còn giữ cặp câu,
+    /// nên Speaker khác được thu lại. Người cũ vẫn còn nợ biến thể còn lại.
     /// </summary>
     [Fact]
-    public async Task BanGhiBiTuChoi_CauKhongRoiVaoTayNguoiKhac()
+    public async Task BanGhiBiTuChoi_CauMoLaiChoNguoiKhac()
     {
         // Arrange — speaker A thu một bản rồi bị từ chối.
+        var ct = TestContext.Current.CancellationToken;
         var speakers = await TaoBaSpeakerAsync();
         var (a, b) = (speakers[0], speakers[1]);
 
@@ -451,19 +501,176 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
 
         var recording = await CreateRecordingAsync(script.ScriptId, a.UserId, SentenceVariant.CodeSwitching);
         recording.Status = RecordingStatus.Rejected;
-        await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        await Db.SaveChangesAsync(ct);
 
-        // Assert — người B không được nhận câu này...
-        Assert.True(await Scripts.IsRecordedByOtherAsync(
-            script.ScriptId, b.UserId, TestContext.Current.CancellationToken));
+        // Bản rejected không giữ cặp câu.
+        Assert.False(await Scripts.IsRecordedByOtherAsync(script.ScriptId, b.UserId, ct));
+        Assert.Null(await Recordings.GetOwnerSpeakerIdAsync(script.ScriptId, ct));
 
-        // ...còn người A thì vẫn còn việc để làm (còn thiếu biến thể vi).
-        Assert.False(await Scripts.IsRecordedByOtherAsync(
-            script.ScriptId, a.UserId, TestContext.Current.CancellationToken));
+        // Người cũ vẫn còn việc (thiếu biến thể vi) và bản ghi vẫn còn trong lịch sử.
+        Assert.False(await Scripts.IsRecordedByOtherAsync(script.ScriptId, a.UserId, ct));
+        Assert.Single(await Scripts.GetRecordingsOfSpeakerAsync(script.ScriptId, a.UserId, ct));
+    }
 
-        var mine = await Scripts.GetRecordingsOfSpeakerAsync(
-            script.ScriptId, a.UserId, TestContext.Current.CancellationToken);
-        Assert.Single(mine);
+    /// <summary>
+    /// Người từng bị loại không nhận lại câu khi còn Speaker khác trong đợt chưa thử.
+    /// Khi tất cả đều đã thử thì mở lại cho người cũ — nếu không cặp câu kẹt vĩnh viễn.
+    /// </summary>
+    [Fact]
+    public async Task BanGhiBiTuChoi_NguoiCuChiNhanLaiKhiNguoiKhacDaThu()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var speakers = await TaoBaSpeakerAsync();
+        var (a, b) = (speakers[0], speakers[1]);
+
+        var campaign = await CreateCampaignAsync(
+            $"Đợt retry-{Guid.NewGuid():N}", 2000,
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), ManagerUserId, CampaignStatus.Open);
+        campaign.AssignedTo = ManagerUserId;
+        await Db.SaveChangesAsync(ct);
+        var task = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 1, ManagerUserId);
+
+        var script = await CreateValidatedScriptAsync(
+            "[vi]Thu [en]deadend [vi]nhe", "[vi]Thu deadend nhe",
+            ScriptDomain.ItTechnology, a.UserId);
+
+        Db.TaskScripts.Add(new TaskScript
+        {
+            TaskId = task.TaskId, ScriptId = script.ScriptId, Status = TaskScriptStatus.Pending
+        });
+        Db.TaskAssignments.AddRange(
+            new TaskAssignment
+            {
+                TaskId = task.TaskId, UserId = a.UserId,
+                AssignmentStatus = AssignmentStatus.Active, AssignedAt = DateTimeOffset.UtcNow
+            },
+            new TaskAssignment
+            {
+                TaskId = task.TaskId, UserId = b.UserId,
+                AssignmentStatus = AssignmentStatus.Active, AssignedAt = DateTimeOffset.UtcNow
+            });
+        await Db.SaveChangesAsync(ct);
+
+        var rejected = await CreateRecordingAsync(script.ScriptId, a.UserId, SentenceVariant.CodeSwitching);
+        rejected.Status = RecordingStatus.Rejected;
+        await Db.SaveChangesAsync(ct);
+
+        // A chưa được nhận lại khi B chưa thử.
+        Assert.Null(await Queue.ClaimNextAsync(a.UserId, QueueStage.Recording, task.TaskId, ct));
+
+        // B lấy được câu.
+        var bClaim = await Queue.ClaimNextAsync(b.UserId, QueueStage.Recording, task.TaskId, ct);
+        Assert.Equal(script.ScriptId, bClaim?.ScriptId);
+
+        // B cũng bị loại: trả câu về hàng, giờ A được nhận lại.
+        var bRejected = await CreateRecordingAsync(script.ScriptId, b.UserId, SentenceVariant.PureVietnamese);
+        bRejected.Status = RecordingStatus.Rejected;
+        await Db.SaveChangesAsync(ct);
+        await Queue.ReleaseAsync(script.ScriptId, QueueStage.Recording, ct: ct);
+
+        var aClaim = await Queue.ClaimNextAsync(a.UserId, QueueStage.Recording, task.TaskId, ct);
+        Assert.Equal(script.ScriptId, aClaim?.ScriptId);
+    }
+
+    /// <summary>
+    /// Người đang giữ cặp bằng một bản chờ duyệt vẫn nhận được biến thể còn lại dù từng
+    /// bị loại trên câu này — nếu không cặp kẹt: người khác bị bản đang chờ chặn, còn
+    /// người cũ bị luật "người từng bị loại" chặn.
+    /// </summary>
+    [Fact]
+    public async Task NguoiDangGiuMotBienThe_DuocNhanLaiBienTheConLai()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var speakers = await TaoBaSpeakerAsync();
+        var (a, b) = (speakers[0], speakers[1]);
+
+        var campaign = await CreateCampaignAsync(
+            $"Đợt rerecord-{Guid.NewGuid():N}", 2000,
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), ManagerUserId, CampaignStatus.Open);
+        campaign.AssignedTo = ManagerUserId;
+        await Db.SaveChangesAsync(ct);
+        var task = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 1, ManagerUserId);
+
+        var script = await CreateValidatedScriptAsync(
+            "[vi]Thu [en]variant [vi]nhe", "[vi]Thu variant nhe",
+            ScriptDomain.ItTechnology, a.UserId);
+
+        Db.TaskScripts.Add(new TaskScript
+        {
+            TaskId = task.TaskId, ScriptId = script.ScriptId, Status = TaskScriptStatus.Pending
+        });
+        Db.TaskAssignments.AddRange(
+            new TaskAssignment
+            {
+                TaskId = task.TaskId, UserId = a.UserId,
+                AssignmentStatus = AssignmentStatus.Active, AssignedAt = DateTimeOffset.UtcNow
+            },
+            new TaskAssignment
+            {
+                TaskId = task.TaskId, UserId = b.UserId,
+                AssignmentStatus = AssignmentStatus.Active, AssignedAt = DateTimeOffset.UtcNow
+            });
+        await Db.SaveChangesAsync(ct);
+
+        // A thu bản đầu, bị loại, rồi ghi lại thẳng một biến thể (không qua hàng đợi).
+        var rejected = await CreateRecordingAsync(script.ScriptId, a.UserId, SentenceVariant.CodeSwitching);
+        rejected.Status = RecordingStatus.Rejected;
+        await Db.SaveChangesAsync(ct);
+        await Queue.ReleaseAsync(script.ScriptId, QueueStage.Recording, ct: ct);
+
+        await CreateRecordingAsync(script.ScriptId, a.UserId, SentenceVariant.PureVietnamese);
+
+        // A nhận biến thể còn lại; B vẫn không chen vào được.
+        var aClaim = await Queue.ClaimNextAsync(a.UserId, QueueStage.Recording, task.TaskId, ct);
+        Assert.Equal(script.ScriptId, aClaim?.ScriptId);
+
+        await Queue.ReleaseAsync(script.ScriptId, QueueStage.Recording, ct: ct);
+        Assert.Null(await Queue.ClaimNextAsync(b.UserId, QueueStage.Recording, task.TaskId, ct));
+    }
+
+    // ------------------------------ gỡ người khỏi task
+
+    /// <summary>
+    /// Gỡ người khỏi task thu âm: nhả câu họ đang giữ để người khác lấy ngay, nhưng
+    /// KHÔNG đụng bản đã nộp — bản đó vẫn thuộc về họ và vẫn chặn người khác.
+    /// </summary>
+    [Fact]
+    public async Task GoNguoiKhoiTask_NhaCauDangGiuVaGiuBanDaNop()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var speakers = await TaoBaSpeakerAsync();
+        var (a, b) = (speakers[0], speakers[1]);
+
+        var task = await TaoTaskGhiAmAsync("release", soMuc: 2);
+        await TaskService.AssignAsync(task.TaskId, [a.UserId, b.UserId], ct, task.CreatedBy);
+
+        // A giữ một câu trong hàng đợi.
+        var claim = await Queue.ClaimNextAsync(a.UserId, QueueStage.Recording, task.TaskId, ct);
+        Assert.NotNull(claim);
+
+        // Và đã nộp một câu khác.
+        var items = await Db.TaskScripts
+            .Where(ts => ts.TaskId == task.TaskId)
+            .ToListAsync(ct);
+        var submitted = items.Single(ts => ts.ScriptId != claim!.ScriptId);
+        var recording = await CreateRecordingAsync(
+            submitted.ScriptId, a.UserId, SentenceVariant.CodeSwitching);
+
+        // Act
+        await TaskService.UnassignAsync(task.TaskId, a.UserId, ct, task.CreatedBy);
+
+        // Assert — câu đang giữ được nhả về hàng đợi...
+        var row = await Db.ScriptQueue.FirstAsync(
+            q => q.ScriptId == claim!.ScriptId && q.Stage == QueueStage.Recording, ct);
+        Assert.Equal(QueueState.Queued, row.State);
+        Assert.Null(row.ClaimedBy);
+
+        // ...còn bản đã nộp vẫn nguyên của A.
+        var kept = await Db.Recordings.FirstAsync(r => r.RecordingId == recording.RecordingId, ct);
+        Assert.Equal(a.UserId, kept.SpeakerId);
+        Assert.Equal(RecordingStatus.PendingReview, kept.Status);
     }
 
     /// <summary>

@@ -5,6 +5,7 @@ using CodeSwitchLabel.Repositories.Repositories;
 using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Common;
 using CodeSwitchLabel.Services.Dtos;
+using CodeSwitchLabel.Services.WorkTasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
@@ -27,6 +28,7 @@ public class ScriptProposalService(
     IScriptRepository repository,
     IReasonRepository reasonRepository,
     IUserDomainRepository domainRepository,
+    ITaskProgressTracker taskTracker,
     TimeProvider clock,
     ILogger<ScriptProposalService> logger) : IScriptProposalService
 {
@@ -136,6 +138,53 @@ public class ScriptProposalService(
             [.. items.Select(ToHistoryItem)], query.Page, query.PageSize, total);
     }
 
+    public async Task<ProposalDraftDto> SaveDraftAsync(
+        long proposalId, long reviewerId, SaveProposalDraftRequest request, CancellationToken ct = default)
+    {
+        var proposal = await proposals.LockAsync(proposalId, ct)
+                       ?? throw new NotFoundException(
+                           "proposal_not_found", $"Không tìm thấy đề xuất #{proposalId}.");
+
+        if (proposal.Status != ProposalStatus.Pending)
+        {
+            throw new ConflictException(
+                "proposal_already_decided",
+                $"Đề xuất #{proposalId} đã được xử lý ({proposal.Status}) nên không lưu nháp được nữa.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.CsContent) || string.IsNullOrWhiteSpace(request.ViContent))
+        {
+            throw new UnprocessableException(
+                "draft_pair_required",
+                "Bản nháp phải có cả câu chen tiếng Anh lẫn câu thuần Việt — sửa là sửa cả cặp.");
+        }
+
+        var cs = request.CsContent.Trim();
+        var ve = request.ViContent.Trim();
+        var alignment = request.Alignment is { Count: > 0 } ? request.Alignment : null;
+
+        // Cùng luật với lượt duyệt sửa: giữ số từ tiếng Anh và quan hệ Anh–Việt.
+        await ScriptPairRules.ValidateEditContentAsync(
+            repository, proposal.Script, cs, ve, alignment, ct);
+
+        var now = clock.GetUtcNow();
+
+        proposal.DraftCsContent = cs;
+        proposal.DraftViContent = ve;
+        proposal.DraftAlignment = alignment is null ? null : JsonSerializer.Serialize(alignment);
+        proposal.DraftSavedBy = reviewerId;
+        proposal.DraftSavedAt = now;
+
+        await proposals.SaveChangesAsync(ct);
+
+        var effective = alignment
+                        ?? DeserializeAlignment(proposal.DraftAlignment)
+                        ?? DeserializeAlignment(proposal.ProposedAlignment)
+                        ?? [.. ScriptPairRules.ToAlignment(proposal.Script.Words)];
+
+        return new ProposalDraftDto(proposalId, proposal.ScriptId, cs, ve, effective, reviewerId, now);
+    }
+
     public async Task<ProposalResolutionDto> ResolveAsync(
         long proposalId, long reviewerId, ResolveProposalRequest request, CancellationToken ct = default)
     {
@@ -166,6 +215,16 @@ public class ScriptProposalService(
             proposal.DecisionNote = RequireDecisionNote(request);
             proposal.Status = ProposalStatus.Rejected;
         }
+        else if (decision == ProposalDecision.Deleted)
+        {
+            // Loại hẳn câu khỏi kho: soft-delete, không xoá dòng nào. Trigger
+            // fn_script_queue_sync rút câu khỏi mọi chặng; đề xuất vẫn còn trong lịch sử.
+            proposal.DecisionNote = string.IsNullOrWhiteSpace(request.Comment) ? null : request.Comment.Trim();
+            proposal.Status = ProposalStatus.Deleted;
+
+            script.Status = ScriptStatus.Deactivated;
+            script.UpdatedAt = now;
+        }
         else
         {
             // Duyệt = chốt nội dung mới cho câu, nên người duyệt phải đúng chủ đề — cùng
@@ -195,6 +254,14 @@ public class ScriptProposalService(
             repository.AddReview(review);
             ScriptPairRules.ApplyEdit(repository, script, cs, ve, plan);
 
+            // Bản đã chốt cũng là bản nháp cuối cùng — giữ lại để lần sau tra được
+            // Reviewer đã dựa trên nội dung nào.
+            proposal.DraftCsContent = cs;
+            proposal.DraftViContent = ve;
+            proposal.DraftAlignment = alignment is null ? null : JsonSerializer.Serialize(alignment);
+            proposal.DraftSavedBy = reviewerId;
+            proposal.DraftSavedAt = now;
+
             proposal.DecisionNote = string.IsNullOrWhiteSpace(request.Comment) ? null : request.Comment.Trim();
             proposal.Status = ProposalStatus.Accepted;
         }
@@ -210,6 +277,13 @@ public class ScriptProposalService(
         // Mã lượt duyệt sửa có sau lần lưu này; đọc trước khi commit để còn dùng cho response.
         await proposals.SaveChangesAsync(ct);
         scriptReviewId = review?.ScriptReviewId;
+
+        // deactivate câu phải đóng luôn mục task_script/task_recording của nó —
+        // cùng việc ScriptService.DeactivateAsync làm, nếu không task không bao giờ đạt.
+        if (decision == ProposalDecision.Deleted)
+        {
+            await taskTracker.OnPairDiscardedAsync(script.ScriptId, ct);
+        }
 
         if (transaction is not null) await transaction.CommitAsync(ct);
 
@@ -269,15 +343,15 @@ public class ScriptProposalService(
     }
 
     /// <summary>
-    /// Bản chốt lưu vào câu khi duyệt: ưu tiên bản Reviewer gửi lên, không gửi thì lấy bản
-    /// sửa của đề xuất Edit. Đề xuất Report không có bản sẵn nên Reviewer bắt buộc phải gửi —
-    /// duyệt một báo lỗi mà không sửa gì thì câu vẫn sai như cũ.
+    /// Bản chốt lưu vào câu khi duyệt, theo thứ tự: `applied*` của request (client cũ vẫn
+    /// chạy), bản nháp Reviewer đã lưu, rồi bản sửa của đề xuất Edit. Đề xuất Report không
+    /// có bản sẵn nên Reviewer bắt buộc phải lưu nháp hoặc gửi kèm.
     /// </summary>
     private static (string Cs, string Ve, List<AlignmentItem>? Alignment) RequireAppliedContent(
         ResolveProposalRequest request, ScriptProposal proposal)
     {
-        var cs = request.AppliedCsContent ?? proposal.ProposedCsContent;
-        var ve = request.AppliedViContent ?? proposal.ProposedViContent;
+        var cs = request.AppliedCsContent ?? proposal.DraftCsContent ?? proposal.ProposedCsContent;
+        var ve = request.AppliedViContent ?? proposal.DraftViContent ?? proposal.ProposedViContent;
 
         if (string.IsNullOrWhiteSpace(cs) || string.IsNullOrWhiteSpace(ve))
         {
@@ -288,7 +362,8 @@ public class ScriptProposalService(
 
         var alignment = request.AppliedAlignment is { Count: > 0 }
             ? request.AppliedAlignment
-            : DeserializeAlignment(proposal.ProposedAlignment);
+            : DeserializeAlignment(proposal.DraftAlignment)
+              ?? DeserializeAlignment(proposal.ProposedAlignment);
 
         return (cs.Trim(), ve.Trim(), alignment);
     }
@@ -315,7 +390,12 @@ public class ScriptProposalService(
             ToSentence(script.CsContent, script.ViContent, ScriptPairRules.ToAlignment(script.Words)),
             p.ProposedCsContent is null || p.ProposedViContent is null
                 ? null
-                : ToSentence(p.ProposedCsContent, p.ProposedViContent, proposedAlignment));
+                : ToSentence(p.ProposedCsContent, p.ProposedViContent, proposedAlignment),
+            p.DraftCsContent is null || p.DraftViContent is null
+                ? null
+                : ToSentence(
+                    p.DraftCsContent, p.DraftViContent,
+                    DeserializeAlignment(p.DraftAlignment) ?? proposedAlignment));
     }
 
     private static SpeakerProposalHistoryDto ToHistoryItem(ScriptProposal p)

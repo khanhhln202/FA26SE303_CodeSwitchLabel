@@ -11,6 +11,7 @@ BEGIN;
 -- ============================================================
 CREATE TYPE user_status           AS ENUM ('active','inactive','suspended');
 CREATE TYPE occupation            AS ENUM ('student','employed','other');
+CREATE TYPE gender                AS ENUM ('male','female','other');
 CREATE TYPE config_value_type     AS ENUM ('int','bool','string');
 CREATE TYPE audit_action          AS ENUM ('create','update','delete','import','export','assign','release','login');
 CREATE TYPE script_status         AS ENUM ('pending_validation','validated','rejected','deactivated');
@@ -40,7 +41,7 @@ CREATE TYPE queue_state           AS ENUM ('queued','claimed','done','dropped');
 -- không phải một chặng của script_queue: đề xuất là VIỆC RIÊNG chờ quyết định,
 -- không phải bước bắt buộc mà mọi câu đều phải đi qua.
 CREATE TYPE proposal_kind         AS ENUM ('report','edit');
-CREATE TYPE proposal_status       AS ENUM ('pending','accepted','rejected');
+CREATE TYPE proposal_status       AS ENUM ('pending','accepted','rejected','deleted');
 CREATE TYPE dataset_status        AS ENUM ('draft','released','archived');
 CREATE TYPE dataset_file_format   AS ENUM ('json','csv');
 
@@ -103,6 +104,7 @@ CREATE TABLE speaker_profile (                    -- 1 : 0..1 with app_user
     province      VARCHAR(100),                   -- region (N/C/S) auto-derived, not stored
     english_level NUMERIC(2,1) CHECK (english_level BETWEEN 0.0 AND 9.0),  -- IELTS band
     occupation    occupation,
+    gender        gender,                         -- không bắt buộc (hồ sơ cũ chưa có)
     major         VARCHAR(100)                    -- chuyên ngành: IT | english | business ...
 );
 
@@ -261,6 +263,14 @@ CREATE TABLE script_proposal (
     proposed_vi_content TEXT,
     proposed_alignment  JSONB,
 
+    -- Bản nháp Reviewer lưu trước khi chốt. Duyệt đề xuất đọc bản này thay vì tin
+    -- vào nội dung client gửi kèm ở bước quyết định.
+    draft_cs_content    TEXT,
+    draft_vi_content    TEXT,
+    draft_alignment     JSONB,
+    draft_saved_by      BIGINT REFERENCES app_user(user_id),
+    draft_saved_at      TIMESTAMPTZ,
+
     status              proposal_status NOT NULL DEFAULT 'pending',
     decided_by          BIGINT REFERENCES app_user(user_id),
     decided_at          TIMESTAMPTZ,
@@ -368,7 +378,7 @@ CREATE INDEX idx_task_assignment_user ON task_assignment (user_id);
 CREATE TABLE task_script (
     task_id         BIGINT NOT NULL REFERENCES task(task_id) ON DELETE CASCADE,
     script_id       VARCHAR(16) NOT NULL REFERENCES script(script_id),
-    assignee_user_id BIGINT REFERENCES app_user(user_id),   -- người nhận câu này (Recording), NULL = chưa gán / task duyệt
+    assignee_user_id BIGINT REFERENCES app_user(user_id),   -- Speaker được gán để hiển thị/chia quota (advisory); NULL = chưa gán / task duyệt
     status          task_script_status NOT NULL DEFAULT 'pending',
     included_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (task_id, script_id)
@@ -1157,7 +1167,7 @@ CREATE OR REPLACE FUNCTION fn_script_proposal_sync() RETURNS trigger AS $$ BEGIN
            AND stage = 'recording'
            AND state IN ('queued','claimed');
 
-    ELSIF OLD.status = 'pending' AND NEW.status IN ('accepted','rejected') THEN
+    ELSIF OLD.status = 'pending' AND NEW.status IN ('accepted','rejected','deleted') THEN
         IF EXISTS (SELECT 1 FROM script s
                     WHERE s.script_id = NEW.script_id AND s.status = 'validated')
            AND NOT EXISTS (SELECT 1 FROM recording r WHERE r.script_id = NEW.script_id) THEN
@@ -1218,6 +1228,7 @@ CREATE OR REPLACE FUNCTION fn_queue_claim_next(
 DECLARE
     v_ttl    INT;
     v_row    script_queue%ROWTYPE;
+    v_campaign BIGINT;
 BEGIN
     SELECT COALESCE(NULLIF(config_value, '')::int, 30)
       INTO v_ttl
@@ -1226,6 +1237,13 @@ BEGIN
         v_ttl := 30;
     END IF;
     v_ttl := COALESCE(p_ttl_minutes, v_ttl);
+
+    -- Chặng ghi âm làm việc theo CHIẾN DỊCH: câu của mọi task thu âm trong cùng đợt
+    -- đều phát chung cho những Speaker đang nhận việc của đợt. Task độc lập (campaign
+    -- NULL) vẫn giới hạn trong chính nó.
+    IF p_task_id IS NOT NULL THEN
+        SELECT t.campaign_id INTO v_campaign FROM task t WHERE t.task_id = p_task_id;
+    END IF;
 
     SELECT q.* INTO v_row
       FROM script_queue q
@@ -1254,23 +1272,63 @@ BEGIN
                                    AND a.user_id = p_user_id
                                    AND a.assignment_status IN ('active', 'completed'))
                  )
-                 ELSE EXISTS (SELECT 1 FROM task_script ts
-                               WHERE ts.script_id = q.script_id
-                                 AND ts.task_id = p_task_id
-                                 AND ts.status = 'pending'
-                                 -- chỉ phát cặp đã gán cho đúng Speaker;
-                                 -- NULL là mục cũ chưa gán nên giữ hành vi cũ.
-                                 AND (ts.assignee_user_id IS NULL OR ts.assignee_user_id = p_user_id))
+                 ELSE EXISTS (
+                     SELECT 1
+                       FROM task_script ts
+                       JOIN task t ON t.task_id = ts.task_id
+                      WHERE ts.script_id = q.script_id
+                        AND ts.status = 'pending'
+                        AND t.task_type = 'recording'
+                        AND t.status <> 'cancelled'
+                        AND (t.task_id = p_task_id
+                             OR (v_campaign IS NOT NULL AND t.campaign_id = v_campaign))
+                 )
                END
            )
-     -- cặp đã gán cho Speaker khác thì không phát cho người này, kể cả
-       -- khi gọi không kèm task_id. Mục cũ assignee_user_id NULL vẫn dùng chung.
+       -- Ghi âm: cặp đang có bản chờ duyệt/đạt của người KHÁC thì không phát. Bản
+       -- rejected/qc_failed không giữ cặp — người mới được thu sau khi Reviewer loại.
        AND (
             q.stage <> 'recording'
-            OR NOT EXISTS (SELECT 1 FROM task_script ts
-                            WHERE ts.script_id = q.script_id
-                              AND ts.assignee_user_id IS NOT NULL
-                              AND ts.assignee_user_id <> p_user_id)
+            OR NOT EXISTS (SELECT 1 FROM recording r
+                            WHERE r.script_id = q.script_id
+                              AND r.speaker_id <> p_user_id
+                              AND r.status IN ('pending_review','approved'))
+           )
+       -- Ghi âm: người đã bị từ chối trên câu này không nhận lại, CHỪNG NÀO còn một
+       -- Speaker khác trong đợt chưa thử. Tất cả đều đã thử thì mở lại cho người cũ,
+       -- nếu không cặp câu kẹt vĩnh viễn. Ngoại lệ: người đang giữ cặp bằng một bản
+       -- chờ duyệt/đạt được nhận lại — cặp không phát cho ai khác được, chặn họ chỉ
+       -- làm cặp kẹt thiếu biến thể. Claim không kèm task/chiến dịch (thu tự do)
+       -- không có danh sách người để so nên giữ hành vi cũ: người cũ nhận lại.
+       AND (
+            q.stage <> 'recording'
+            OR EXISTS (SELECT 1 FROM recording r
+                        WHERE r.script_id = q.script_id
+                          AND r.speaker_id = p_user_id
+                          AND r.status IN ('pending_review','approved'))
+            OR NOT EXISTS (SELECT 1 FROM recording r
+                            WHERE r.script_id = q.script_id
+                              AND r.speaker_id = p_user_id
+                              AND r.status = 'rejected')
+            OR NOT EXISTS (
+                SELECT 1
+                  FROM task_assignment a
+                  JOIN task t ON t.task_id = a.task_id
+                  JOIN app_user u ON u.user_id = a.user_id
+                 WHERE a.user_id <> p_user_id
+                   AND a.assignment_status IN ('active','completed')
+                   AND u.status = 'active'
+                   AND t.task_type = 'recording'
+                   AND t.status <> 'cancelled'
+                   AND (
+                        (v_campaign IS NOT NULL AND t.campaign_id = v_campaign)
+                        OR (v_campaign IS NULL AND p_task_id IS NOT NULL AND t.task_id = p_task_id)
+                       )
+                   AND NOT EXISTS (SELECT 1 FROM recording x
+                                    WHERE x.script_id = q.script_id
+                                      AND x.speaker_id = a.user_id
+                                      AND x.status = 'rejected')
+               )
            )
       ORDER BY q.enqueued_at, q.queue_id
      FOR UPDATE OF q SKIP LOCKED
@@ -1391,9 +1449,10 @@ END $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_review_no_self BEFORE INSERT OR UPDATE ON review
     FOR EACH ROW EXECUTE FUNCTION fn_review_no_self_review();
 
--- [ERD] pair rule: one script pair = ONE speaker (same take, same session).
--- qc_failed takes do not claim ownership: a failed take by another speaker must not
--- permanently block reuse.
+-- [ERD] pair rule: one script pair = ONE speaker PER ATTEMPT (same take, same session).
+-- qc_failed and rejected takes do not claim ownership: a failed take by another speaker
+-- must not permanently block reuse, and a rejected pair must be recordable by a new
+-- speaker after the Reviewer invalidates it.
 CREATE OR REPLACE FUNCTION fn_recording_single_speaker() RETURNS trigger AS $$ BEGIN
     -- Khóa cấp giao dịch theo băm script_id để ngăn race condition
     PERFORM pg_advisory_xact_lock(hashtext(NEW.script_id));
@@ -1401,7 +1460,7 @@ CREATE OR REPLACE FUNCTION fn_recording_single_speaker() RETURNS trigger AS $$ B
     IF EXISTS (SELECT 1 FROM recording r
                WHERE r.script_id = NEW.script_id
                  AND r.speaker_id <> NEW.speaker_id
-                 AND r.status <> 'qc_failed') THEN
+                 AND r.status NOT IN ('qc_failed','rejected')) THEN
         RAISE EXCEPTION 'script % must be recorded by a single speaker', NEW.script_id;
     END IF;
     RETURN NEW;

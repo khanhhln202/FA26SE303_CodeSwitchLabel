@@ -25,6 +25,7 @@ public sealed class TaskServiceDeleteTests
         _service = new TaskService(
             _tasks.Object,
             Mock.Of<ICampaignRepository>(),
+            Mock.Of<IScriptQueueRepository>(),
             Mock.Of<ITaskProgressTracker>(),
             Mock.Of<ISystemConfigService>(),
             TimeProvider.System);

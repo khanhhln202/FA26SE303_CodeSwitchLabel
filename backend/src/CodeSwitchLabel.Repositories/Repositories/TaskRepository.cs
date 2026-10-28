@@ -81,13 +81,6 @@ public interface ITaskRepository
     Task<WorkTask?> GetForUpdateAsync(long taskId, CancellationToken ct = default);
 
     /// <summary>
-    /// một task có thể có nhiều người nhận. Hàm cũ trả về đúng một dòng
-    /// (FirstOrDefault) nên 8 chỗ gọi nó đều phải sửa — giữ hàm cũ là giữ cái bẫy
-    /// "chỉ thấy người đầu tiên".
-    /// </summary>
-    Task<List<TaskAssignment>> GetActiveAssignmentsAsync(long taskId, CancellationToken ct = default);
-
-    /// <summary>
     /// Lượt giao còn hiệu lực: Active (chưa đạt quota) và Completed (đã đạt quota nhưng
     /// vẫn còn là người nhận task). Reassigned/Cancelled mới là đã rời task.
     /// </summary>
@@ -186,6 +179,12 @@ public interface ITaskRepository
     /// </summary>
     Task<bool> IsActiveTaskOfAsync(long taskId, long userId, TaskType type, CancellationToken ct = default);
 
+    /// <summary>
+    /// Người này có nhận việc thu âm trong phạm vi của task không: chính task đó, hoặc
+    /// bất kỳ task thu âm còn chạy nào của cùng chiến dịch. Task độc lập chỉ xét chính nó.
+    /// </summary>
+    Task<bool> IsAssignedToRecordingScopeAsync(long taskId, long userId, CancellationToken ct = default);
+
     Task<HashSet<string>> FindScriptsQueuedInOtherActiveTasksAsync(
         string[] scriptIds, long excludeTaskId, long[] assigneeIds, CancellationToken ct = default);
 
@@ -261,13 +260,6 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
     public Task<WorkTask?> GetForUpdateAsync(long taskId, CancellationToken ct = default) =>
         db.WorkTasks.FromSqlInterpolated($"SELECT * FROM task WHERE task_id = {taskId} FOR UPDATE")
             .SingleOrDefaultAsync(ct);
-
-    /// <summary>Chỉ lượt giao đang chờ đủ quota — dùng cho huỷ task, không gồm Completed.</summary>
-    public Task<List<TaskAssignment>> GetActiveAssignmentsAsync(long taskId, CancellationToken ct = default) =>
-        db.TaskAssignments
-            .Where(a => a.TaskId == taskId && a.AssignmentStatus == AssignmentStatus.Active)
-            .OrderBy(a => a.AssignedAt)
-            .ToListAsync(ct);
 
     public Task<List<TaskAssignment>> GetOpenAssignmentsAsync(long taskId, CancellationToken ct = default) =>
         db.TaskAssignments
@@ -423,14 +415,13 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
 
         if (type == TaskType.Recording)
         {
-            // Cặp câu tính là xong cho MỘT người khi chính người đó thu đủ bản cs + vi
-            // (bản trượt QC không tính — người đó vẫn phải thu lại). Trigger
-            // trg_recording_single_speaker bảo đảm một cặp câu chỉ có một người đọc,
-            // nên lấy người đọc đầu tiên cũng là người duy nhất.
+            // Cặp câu tính là xong cho MỘT người khi chính người đó có cả hai bản
+            // cs + vi đã duyệt đạt. Bản rejected trả cặp về hàng đợi cho người khác,
+            // nên phải lọc Approved — nếu không sẽ lấy nhầm bản của người bị từ chối.
             var rows = await (from ts in db.TaskScripts.AsNoTracking()
                               where ts.TaskId == taskId && ts.Status == TaskScriptStatus.Completed
                               let speaker = ts.Script.Recordings
-                                  .Where(r => r.Status != RecordingStatus.QcFailed)
+                                  .Where(r => r.Status == RecordingStatus.Approved)
                                   .Select(r => (long?)r.SpeakerId)
                                   .FirstOrDefault()
                               where speaker != null
@@ -525,14 +516,17 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
     public async Task<HashSet<string>> GetStartedScriptIdsAsync(
         long taskId, DateTimeOffset now, CancellationToken ct = default)
     {
-        // Mục đã hoàn thành / bị loại, cặp đã có bản ghi thật (bỏ qua bản trượt QC),
-        // hoặc đang có người giữ trong hàng đợi ghi âm. Ba dấu hiệu này độc lập:
-        // mục còn Pending vẫn có thể đã có bản ghi chờ duyệt hoặc đang được thu.
+        // Mục đã hoàn thành / bị loại, cặp đã có bản ghi THẬT (chờ duyệt/đạt; bản trượt QC
+        // và bản bị từ chối không tính vì câu phải thu lại), hoặc đang có người giữ trong
+        // hàng đợi ghi âm. Ba dấu hiệu này độc lập: mục còn Pending vẫn có thể đã có bản
+        // ghi chờ duyệt hoặc đang được thu.
         var rows = await db.TaskScripts
             .AsNoTracking()
             .Where(ts => ts.TaskId == taskId)
             .Where(ts => ts.Status != TaskScriptStatus.Pending
-                         || ts.Script.Recordings.Any(r => r.Status != RecordingStatus.QcFailed)
+                         || ts.Script.Recordings.Any(r =>
+                             r.Status == RecordingStatus.PendingReview ||
+                             r.Status == RecordingStatus.Approved)
                          || db.ScriptQueue.Any(q =>
                              q.ScriptId == ts.ScriptId
                              && q.Stage == QueueStage.Recording
@@ -650,6 +644,32 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
             t.Status != WorkTaskStatus.Cancelled &&
             t.Assignments.Any(a => a.UserId == userId && a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled), ct);
 
+    public async Task<bool> IsAssignedToRecordingScopeAsync(
+        long taskId, long userId, CancellationToken ct = default)
+    {
+        var task = await db.WorkTasks.AsNoTracking()
+            .Where(t => t.TaskId == taskId)
+            .Select(t => new { t.TaskType, t.Status, t.CampaignId })
+            .FirstOrDefaultAsync(ct);
+
+        if (task is null ||
+            task.TaskType != TaskType.Recording ||
+            task.Status == WorkTaskStatus.Cancelled)
+        {
+            return false;
+        }
+
+        return await db.TaskAssignments.AsNoTracking().AnyAsync(a =>
+            a.UserId == userId &&
+            a.AssignmentStatus != AssignmentStatus.Reassigned &&
+            a.AssignmentStatus != AssignmentStatus.Cancelled &&
+            (a.TaskId == taskId ||
+             (task.CampaignId != null &&
+              a.Task.CampaignId == task.CampaignId &&
+              a.Task.TaskType == TaskType.Recording &&
+              a.Task.Status != WorkTaskStatus.Cancelled)), ct);
+    }
+
     public async Task<HashSet<string>> FindScriptsQueuedInOtherActiveTasksAsync(
         string[] scriptIds, long excludeTaskId, long[] assigneeIds, CancellationToken ct = default)
     {
@@ -743,8 +763,9 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
 
             query = query
                 // Một cặp câu một người đọc: bỏ qua câu người khác đã đụng vào.
-                // Bản trượt QC không giữ chỗ.
-                .Where(s => !s.Recordings.Any(r => !ids.Contains(r.SpeakerId) && r.Status != RecordingStatus.QcFailed))
+                // Bản trượt QC và bản bị từ chối không giữ chỗ — cặp đã về hàng đợi.
+                .Where(s => !s.Recordings.Any(r => !ids.Contains(r.SpeakerId)
+                    && r.Status != RecordingStatus.QcFailed && r.Status != RecordingStatus.Rejected))
                 // Người này còn thiếu ít nhất một biến thể thì mới có việc để làm.
                 .Where(s =>
                     !s.Recordings.Any(r => r.SentenceVariant == SentenceVariant.CodeSwitching &&
@@ -761,9 +782,10 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         }
         else
         {
-            // Chưa giao cho ai thì chỉ lấy câu chưa ai thu (bỏ qua bản trượt QC),
-            // để giao cho người nào cũng được.
-            query = query.Where(s => !s.Recordings.Any(r => r.Status != RecordingStatus.QcFailed));
+            // Chưa giao cho ai thì chỉ lấy câu chưa ai thu (bỏ qua bản trượt QC
+            // và bản bị từ chối), để giao cho người nào cũng được.
+            query = query.Where(s => !s.Recordings.Any(r =>
+                r.Status != RecordingStatus.QcFailed && r.Status != RecordingStatus.Rejected));
         }
 
         return query
@@ -858,11 +880,13 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
                 .ToListAsync(ct);
         }
 
-        // Cặp câu đã thuộc về người đọc khác thì người nhận task không đụng vào được.
+        // Cặp câu đang có bản chờ duyệt/đạt của người đọc khác thì người nhận task không
+        // đụng vào được. Bản rejected/qc_failed không giữ cặp — câu đã được thu lại.
         var ownedByOther = await db.TaskScripts
             .AsNoTracking()
             .Where(ts => ts.TaskId == taskId && ts.Status == TaskScriptStatus.Pending)
-            .Where(ts => ts.Script.Recordings.Any(r => r.SpeakerId != userId && r.Status != RecordingStatus.QcFailed))
+            .Where(ts => ts.Script.Recordings.Any(r => r.SpeakerId != userId &&
+                (r.Status == RecordingStatus.PendingReview || r.Status == RecordingStatus.Approved)))
             .Select(ts => ts.ScriptId)
             .ToListAsync(ct);
 

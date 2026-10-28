@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using CodeSwitchLabel.Repositories.Entities;
+using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Dtos;
 
 namespace CodeSwitchLabel.Services.Audio;
@@ -18,6 +20,45 @@ public record RecordingQcReport(
     decimal? MaxVolumeDb,
     bool ClippingSuspected,
     IReadOnlyList<QcIssueDto> Issues);
+
+/// <summary>
+/// Ngưỡng QC đọc một lần từ system_config, để cả lượt kiểm tra dùng chung một ảnh chụp
+/// cấu hình thay vì 8 lượt đọc rời có thể thấy hai giá trị khác nhau giữa chừng.
+/// </summary>
+public sealed record RecordingQcSettings(
+    decimal MinDurationSec,
+    decimal MaxDurationSec,
+    decimal MaxLeadingSilenceSec,
+    decimal MaxTrailingSilenceSec,
+    decimal SilenceNoiseDb,
+    decimal SilenceMinDurationSec,
+    decimal MinMeanVolumeDb,
+    decimal MaxPeakDb)
+{
+    public static RecordingQcSettings From(IEnumerable<SystemConfigDto> config)
+    {
+        var values = config.ToDictionary(c => c.Key, c => c.Value, StringComparer.Ordinal);
+
+        decimal Get(string key, decimal fallback)
+        {
+            if (!values.TryGetValue(key, out var raw)) return fallback;
+
+            return decimal.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
+                ? value
+                : fallback;
+        }
+
+        return new(
+            Get(ConfigKeys.RecordingMinDurationSec, 1m),
+            Get(ConfigKeys.RecordingMaxDurationSec, 30m),
+            Get(ConfigKeys.RecordingMaxLeadingSilenceSec, 1m),
+            Get(ConfigKeys.RecordingMaxTrailingSilenceSec, 1m),
+            Get(ConfigKeys.RecordingSilenceNoiseDb, -35m),
+            Get(ConfigKeys.RecordingSilenceMinDurationSec, 0.5m),
+            Get(ConfigKeys.RecordingMinMeanVolumeDb, -50m),
+            Get(ConfigKeys.RecordingMaxPeakDb, -1m));
+    }
+}
 
 /// <summary>
 /// Luật kiểm tra tự động, viết thành hàm thuần để test được từng nhánh ngưỡng.

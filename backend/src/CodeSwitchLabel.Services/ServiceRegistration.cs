@@ -117,6 +117,7 @@ public static class ServiceRegistration
     [
         (typeof(UserStatus), "user_status"),
         (typeof(Occupation), "occupation"),
+        (typeof(Gender), "gender"),
         (typeof(ConfigValueType), "config_value_type"),
         (typeof(AuditAction), "audit_action"),
         (typeof(ScriptStatus), "script_status"),

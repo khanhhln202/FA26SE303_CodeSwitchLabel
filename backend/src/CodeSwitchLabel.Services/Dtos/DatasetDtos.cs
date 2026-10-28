@@ -52,4 +52,15 @@ public record CreateDatasetResult(
     int Added,
     IReadOnlyList<SkippedItemDto> Skipped);
 
-public record DatasetFileDto(string FileName, string ContentType, byte[] Content);
+/// <summary>Controller ghi thẳng stream ra response rồi tự dispose — nơi tạo không được dispose.</summary>
+public record DatasetFileDto(string FileName, string ContentType, Stream Content);
+
+/// <summary>
+/// Xuất trực tiếp dữ liệu đã duyệt, không qua bước tạo/phát hành dataset.
+/// Chọn SpeakerIds thì xuất các speaker đó; bỏ trống thì xuất cả một chiến dịch.
+/// </summary>
+public record ExportSpeakerDataRequest
+{
+    public List<long> SpeakerIds { get; init; } = [];
+    public long? CampaignId { get; init; }
+}

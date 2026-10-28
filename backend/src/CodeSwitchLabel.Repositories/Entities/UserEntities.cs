@@ -48,6 +48,9 @@ public class SpeakerProfile
 
     public Occupation? Occupation { get; set; }
 
+    /// <summary>Không bắt buộc; hồ sơ tạo trước V19 không có giá trị.</summary>
+    public Gender? Gender { get; set; }
+
     /// <summary>Chuyên ngành: IT, english, business…</summary>
     public string? Major { get; set; }
 
