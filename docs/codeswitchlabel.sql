@@ -1296,10 +1296,16 @@ BEGIN
            )
        -- Ghi âm: người đã bị từ chối trên câu này không nhận lại, CHỪNG NÀO còn một
        -- Speaker khác trong đợt chưa thử. Tất cả đều đã thử thì mở lại cho người cũ,
-       -- nếu không cặp câu kẹt vĩnh viễn. Claim không kèm task/chiến dịch (thu tự do)
+       -- nếu không cặp câu kẹt vĩnh viễn. Ngoại lệ: người đang giữ cặp bằng một bản
+       -- chờ duyệt/đạt được nhận lại — cặp không phát cho ai khác được, chặn họ chỉ
+       -- làm cặp kẹt thiếu biến thể. Claim không kèm task/chiến dịch (thu tự do)
        -- không có danh sách người để so nên giữ hành vi cũ: người cũ nhận lại.
        AND (
             q.stage <> 'recording'
+            OR EXISTS (SELECT 1 FROM recording r
+                        WHERE r.script_id = q.script_id
+                          AND r.speaker_id = p_user_id
+                          AND r.status IN ('pending_review','approved'))
             OR NOT EXISTS (SELECT 1 FROM recording r
                             WHERE r.script_id = q.script_id
                               AND r.speaker_id = p_user_id

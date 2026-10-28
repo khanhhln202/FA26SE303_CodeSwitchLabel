@@ -78,7 +78,7 @@ public class DatasetsController(IDatasetService datasets) : ControllerBase
     /// và `audio/{scriptId}_CS.wav`, `audio/{scriptId}_VI.wav`. Cặp thiếu một bản hoặc thiếu audio bị bỏ.
     /// </remarks>
     [HttpPost("export")]
-    [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(FileStreamResult), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
     public async Task<IActionResult> ExportSpeakers(
         [FromBody] ExportSpeakerDataRequest request, CancellationToken ct)
@@ -93,7 +93,7 @@ public class DatasetsController(IDatasetService datasets) : ControllerBase
     /// `?includeAudio=false`: chỉ lấy metadata kèm link nghe tạm 15 phút.
     /// </remarks>
     [HttpGet("{id:long}/download")]
-    [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(FileStreamResult), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Download(

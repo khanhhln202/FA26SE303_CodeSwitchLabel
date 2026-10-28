@@ -1,3 +1,4 @@
+using CodeSwitchLabel.Repositories.Entities;
 using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Repositories.Repositories;
 using CodeSwitchLabel.Services.Common;
@@ -69,6 +70,38 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
         Assert.Equal(1, result.Added);
         Assert.Contains(result.Skipped, item => item.Id == candidates[0]);
         Assert.Contains(result.Task.Items, item => item.Id == candidates[1]);
+    }
+
+    /// <summary>
+    /// Bản rejected trả cặp về hàng đợi, nên người nhận task khác được thêm câu đó —
+    /// trước đây điều kiện chỉ bỏ qua bản trượt QC nên câu bị chặn nhầm.
+    /// </summary>
+    [Fact]
+    public async Task AddItems_CauCoBanBiTuChoiCuaNguoiKhac_VanNhan()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var owner = await CreateUserWithBuilderAsync(RoleName.Speaker, NewUniqueEmail("add-owner"), "Add Owner");
+        var assignee = await CreateUserWithBuilderAsync(RoleName.Speaker, NewUniqueEmail("add-assignee"), "Add Assignee");
+
+        var script = await CreateValidatedScriptAsync(
+            "[vi]Câu [en]add [vi]này", "[vi]Câu add này",
+            ScriptDomain.ItTechnology, owner.UserId);
+
+        var rejected = await CreateRecordingAsync(script.ScriptId, owner.UserId, SentenceVariant.CodeSwitching);
+        rejected.Status = RecordingStatus.Rejected;
+        var task = await CreateTaskAsync(CampaignId, TaskType.Recording, 1, ManagerUserId);
+        Db.TaskAssignments.Add(new TaskAssignment
+        {
+            TaskId = task.TaskId, UserId = assignee.UserId,
+            AssignmentStatus = AssignmentStatus.Active, AssignedAt = DateTimeOffset.UtcNow
+        });
+        await Db.SaveChangesAsync(ct);
+
+        var result = await TaskService.AddItemsAsync(task.TaskId,
+            new AddTaskItemsRequest { Ids = [script.ScriptId] }, ct, ManagerUserId);
+
+        Assert.Equal(1, result.Added);
+        Assert.Contains(result.Task.Items, item => item.Id == script.ScriptId);
     }
 
     [Fact]

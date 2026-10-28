@@ -268,7 +268,7 @@ public class DatasetService(
             .OrderBy(dr => dr.Recording.ScriptId).ThenBy(dr => dr.Recording.RecordingId)
             .ToListAsync(ct);
 
-        using var stream = new MemoryStream();
+        var stream = new MemoryStream();
         using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
         {
             // Manifest: mỗi bản ghi kèm câu đối chiếu, file audio trong ZIP và link nghe tạm.
@@ -330,10 +330,11 @@ public class DatasetService(
             }
         }
 
+        stream.Position = 0;
         return new DatasetFileDto(
             $"{dataset.DatasetName}-{dataset.Version}.zip",
             "application/zip",
-            stream.ToArray());
+            stream);
     }
 
     public async Task<DatasetFileDto> ExportSpeakersAsync(
@@ -381,51 +382,65 @@ public class DatasetService(
         var date = clock.GetUtcNow().ToOffset(TimeSpan.FromHours(7))
             .ToString("yyyy-MM-dd_HHmmss", CultureInfo.InvariantCulture);
 
-        using var stream = new MemoryStream();
+        // ZIP có thể chứa hàng GB audio nên ghi ra file tạm thay vì giữ cả file trong RAM.
+        // DeleteOnClose: FileStreamResult dispose sau khi gửi xong là file tự xoá.
+        var stream = new FileStream(
+            Path.Combine(Path.GetTempPath(), Path.GetRandomFileName()),
+            FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 64 * 1024,
+            FileOptions.DeleteOnClose);
 
-        using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        try
         {
-            foreach (var pair in pairs)
+            using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
             {
-                var csAudio = await TryReadAudioAsync(pair.Cs!, ct);
-                var viAudio = await TryReadAudioAsync(pair.Vi!, ct);
-
-                if (csAudio is null || viAudio is null)
+                foreach (var pair in pairs)
                 {
-                    logger.LogWarning(
-                        "Bỏ cặp {ScriptId} của speaker {SpeakerId} khỏi ZIP vì thiếu file audio.",
-                        pair.Script.ScriptId, pair.Speaker.UserId);
-                    continue;
+                    var csAudio = await TryReadAudioAsync(pair.Cs!, ct);
+                    var viAudio = await TryReadAudioAsync(pair.Vi!, ct);
+
+                    if (csAudio is null || viAudio is null)
+                    {
+                        logger.LogWarning(
+                            "Bỏ cặp {ScriptId} của speaker {SpeakerId} khỏi ZIP vì thiếu file audio.",
+                            pair.Script.ScriptId, pair.Speaker.UserId);
+                        continue;
+                    }
+
+                    var folder = $"{SafeFolderName(pair.Speaker.Email)}_{date}";
+                    var scriptId = pair.Script.ScriptId;
+
+                    // Dùng lại đúng DTO của bộ nhập để file JSON luôn khớp schema hiện hành.
+                    // File bàn giao đọc bằng mắt nên xuống dòng + giữ tiếng Việt, và id chỉ giữ
+                    // phần số đúng mẫu input_text.json (bỏ tiền tố nội bộ s_). Cùng một id số
+                    // dùng cho tên file âm thanh để JSON và WAV khớp nhau.
+                    var numericId = scriptId.StartsWith("s_", StringComparison.Ordinal) ? scriptId[2..] : scriptId;
+                    var json = JsonSerializer.SerializeToUtf8Bytes(new ImportScriptItem
+                    {
+                        Id = numericId,
+                        Domain = DomainLabel(pair.Script.Domain),
+                        CsTranscript = pair.Script.CsContent,
+                        ViEquivalent = pair.Script.ViContent,
+                        Alignment = [.. ScriptPairRules.ToAlignment(pair.Script.Words)]
+                    }, ExportJsonOptions);
+
+                    await AddZipEntryAsync(zip, $"{folder}/text/{numericId}.json", json, ct);
+                    await AddZipEntryAsync(zip, $"{folder}/audio/{numericId}-cs.wav", csAudio, ct);
+                    await AddZipEntryAsync(zip, $"{folder}/audio/{numericId}-vi.wav", viAudio, ct);
                 }
-
-                var folder = $"{SafeFolderName(pair.Speaker.Email)}_{date}";
-                var scriptId = pair.Script.ScriptId;
-
-                // Dùng lại đúng DTO của bộ nhập để file JSON luôn khớp schema hiện hành.
-                // File bàn giao đọc bằng mắt nên xuống dòng + giữ tiếng Việt, và id chỉ giữ
-                // phần số đúng mẫu input_text.json (bỏ tiền tố nội bộ s_). Cùng một id số
-                // dùng cho tên file âm thanh để JSON và WAV khớp nhau.
-                var numericId = scriptId.StartsWith("s_", StringComparison.Ordinal) ? scriptId[2..] : scriptId;
-                var json = JsonSerializer.SerializeToUtf8Bytes(new ImportScriptItem
-                {
-                    Id = numericId,
-                    Domain = DomainLabel(pair.Script.Domain),
-                    CsTranscript = pair.Script.CsContent,
-                    ViEquivalent = pair.Script.ViContent,
-                    Alignment = [.. ScriptPairRules.ToAlignment(pair.Script.Words)]
-                }, ExportJsonOptions);
-
-                await AddZipEntryAsync(zip, $"{folder}/text/{numericId}.json", json, ct);
-                await AddZipEntryAsync(zip, $"{folder}/audio/{numericId}-cs.wav", csAudio, ct);
-                await AddZipEntryAsync(zip, $"{folder}/audio/{numericId}-vi.wav", viAudio, ct);
             }
+        }
+        catch
+        {
+            stream.Dispose();
+            throw;
         }
 
         var fileName = speakerIds.Count == 0
             ? $"campaign-{request.CampaignId}-{date}.zip"
             : $"speakers-{date}.zip";
 
-        return new DatasetFileDto(fileName, "application/zip", stream.ToArray());
+        stream.Position = 0;
+        return new DatasetFileDto(fileName, "application/zip", stream);
     }
 
     // ----------------------------------------------------------------- nội bộ

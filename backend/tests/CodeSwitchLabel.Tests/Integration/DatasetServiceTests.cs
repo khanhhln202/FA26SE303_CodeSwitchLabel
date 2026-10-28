@@ -196,12 +196,13 @@ public sealed class DatasetServiceTests : IntegrationTestBase
             dataset.DatasetId, includeAudio: true, TestContext.Current.CancellationToken);
 
         Assert.Equal("application/zip", file.ContentType);
-        Assert.NotEmpty(file.Content);
+        Assert.True(file.Content.Length > 0);
         // ZIP bắt đầu bằng chữ ký "PK".
-        Assert.Equal((byte)'P', file.Content[0]);
-        Assert.Equal((byte)'K', file.Content[1]);
+        Assert.Equal((byte)'P', file.Content.ReadByte());
+        Assert.Equal((byte)'K', file.Content.ReadByte());
+        file.Content.Position = 0;
 
-        using var zip = new ZipArchive(new MemoryStream(file.Content), ZipArchiveMode.Read);
+        using var zip = new ZipArchive(file.Content, ZipArchiveMode.Read);
         var names = zip.Entries.Select(e => e.FullName).ToList();
 
         Assert.Contains("manifest.json", names);
@@ -232,7 +233,7 @@ public sealed class DatasetServiceTests : IntegrationTestBase
         var file = await _datasets.DownloadAsync(
             dataset.DatasetId, includeAudio: false, TestContext.Current.CancellationToken);
 
-        using var zip = new ZipArchive(new MemoryStream(file.Content), ZipArchiveMode.Read);
+        using var zip = new ZipArchive(file.Content, ZipArchiveMode.Read);
         Assert.NotNull(zip.GetEntry("manifest.json"));
         Assert.NotNull(zip.GetEntry("metadata.csv"));
         Assert.DoesNotContain(zip.Entries, e => e.FullName.StartsWith("audio/"));

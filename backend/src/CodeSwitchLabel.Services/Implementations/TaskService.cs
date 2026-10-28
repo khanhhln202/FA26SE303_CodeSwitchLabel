@@ -1465,7 +1465,7 @@ public class TaskService(
         // không gắn với ai, nên không được cướp câu đang nằm trong task của người khác.
         var borrowable = queuedElsewhere
             .Where(id => !found.TryGetValue(id, out var s)
-                || !s.Recordings.Any(r => r.Status != RecordingStatus.QcFailed))
+                || !s.Recordings.Any(r => r.Status != RecordingStatus.QcFailed && r.Status != RecordingStatus.Rejected))
             .ToHashSet();
 
         if (assigneeIds.Length == 0) borrowable.Clear();
@@ -1482,8 +1482,10 @@ public class TaskService(
                 skipped.Add(new SkippedItemDto(id, $"Chủ đề câu ({script.Domain}) không khớp với chủ đề nhiệm vụ ({taskDomain})."));
             // một cặp câu chỉ một người đọc. Với nhóm n người nhận, câu do
             // một người NGOÀI nhóm đã thu thì cả nhóm đều không thu được nữa.
+            // Bản trượt QC hoặc bị từ chối đã trả cặp về hàng đợi nên không tính là giữ chỗ.
             else if (assigneeIds.Length > 0 &&
-                     script.Recordings.Any(r => !assigneeIds.Contains(r.SpeakerId) && r.Status != RecordingStatus.QcFailed))
+                     script.Recordings.Any(r => !assigneeIds.Contains(r.SpeakerId)
+                         && r.Status != RecordingStatus.QcFailed && r.Status != RecordingStatus.Rejected))
                 skipped.Add(new SkippedItemDto(id, "Cặp câu này do người đọc khác thu."));
             else if (queuedElsewhere.Contains(id) && borrowable.Contains(id))
             {
@@ -1512,7 +1514,8 @@ public class TaskService(
             {
                 // Trùng nhau là bình thường khi một câu nằm ở nhiều task: bỏ hết các bản cũ.
                 if (found.TryGetValue(item.ScriptId, out var s)
-                    && s.Recordings.Any(r => r.Status != RecordingStatus.QcFailed))
+                    && s.Recordings.Any(r => r.Status != RecordingStatus.QcFailed
+                        && r.Status != RecordingStatus.Rejected))
                 {
                     continue;
                 }

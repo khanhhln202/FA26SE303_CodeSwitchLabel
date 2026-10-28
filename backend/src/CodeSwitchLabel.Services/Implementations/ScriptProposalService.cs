@@ -5,6 +5,7 @@ using CodeSwitchLabel.Repositories.Repositories;
 using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Common;
 using CodeSwitchLabel.Services.Dtos;
+using CodeSwitchLabel.Services.WorkTasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
@@ -27,6 +28,7 @@ public class ScriptProposalService(
     IScriptRepository repository,
     IReasonRepository reasonRepository,
     IUserDomainRepository domainRepository,
+    ITaskProgressTracker taskTracker,
     TimeProvider clock,
     ILogger<ScriptProposalService> logger) : IScriptProposalService
 {
@@ -275,6 +277,13 @@ public class ScriptProposalService(
         // Mã lượt duyệt sửa có sau lần lưu này; đọc trước khi commit để còn dùng cho response.
         await proposals.SaveChangesAsync(ct);
         scriptReviewId = review?.ScriptReviewId;
+
+        // deactivate câu phải đóng luôn mục task_script/task_recording của nó —
+        // cùng việc ScriptService.DeactivateAsync làm, nếu không task không bao giờ đạt.
+        if (decision == ProposalDecision.Deleted)
+        {
+            await taskTracker.OnPairDiscardedAsync(script.ScriptId, ct);
+        }
 
         if (transaction is not null) await transaction.CommitAsync(ct);
 

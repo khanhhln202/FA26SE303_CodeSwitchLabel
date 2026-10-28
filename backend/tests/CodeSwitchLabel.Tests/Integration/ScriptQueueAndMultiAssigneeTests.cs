@@ -573,6 +573,63 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
         Assert.Equal(script.ScriptId, aClaim?.ScriptId);
     }
 
+    /// <summary>
+    /// Người đang giữ cặp bằng một bản chờ duyệt vẫn nhận được biến thể còn lại dù từng
+    /// bị loại trên câu này — nếu không cặp kẹt: người khác bị bản đang chờ chặn, còn
+    /// người cũ bị luật "người từng bị loại" chặn.
+    /// </summary>
+    [Fact]
+    public async Task NguoiDangGiuMotBienThe_DuocNhanLaiBienTheConLai()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var speakers = await TaoBaSpeakerAsync();
+        var (a, b) = (speakers[0], speakers[1]);
+
+        var campaign = await CreateCampaignAsync(
+            $"Đợt rerecord-{Guid.NewGuid():N}", 2000,
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), ManagerUserId, CampaignStatus.Open);
+        campaign.AssignedTo = ManagerUserId;
+        await Db.SaveChangesAsync(ct);
+        var task = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 1, ManagerUserId);
+
+        var script = await CreateValidatedScriptAsync(
+            "[vi]Thu [en]variant [vi]nhe", "[vi]Thu variant nhe",
+            ScriptDomain.ItTechnology, a.UserId);
+
+        Db.TaskScripts.Add(new TaskScript
+        {
+            TaskId = task.TaskId, ScriptId = script.ScriptId, Status = TaskScriptStatus.Pending
+        });
+        Db.TaskAssignments.AddRange(
+            new TaskAssignment
+            {
+                TaskId = task.TaskId, UserId = a.UserId,
+                AssignmentStatus = AssignmentStatus.Active, AssignedAt = DateTimeOffset.UtcNow
+            },
+            new TaskAssignment
+            {
+                TaskId = task.TaskId, UserId = b.UserId,
+                AssignmentStatus = AssignmentStatus.Active, AssignedAt = DateTimeOffset.UtcNow
+            });
+        await Db.SaveChangesAsync(ct);
+
+        // A thu bản đầu, bị loại, rồi ghi lại thẳng một biến thể (không qua hàng đợi).
+        var rejected = await CreateRecordingAsync(script.ScriptId, a.UserId, SentenceVariant.CodeSwitching);
+        rejected.Status = RecordingStatus.Rejected;
+        await Db.SaveChangesAsync(ct);
+        await Queue.ReleaseAsync(script.ScriptId, QueueStage.Recording, ct: ct);
+
+        await CreateRecordingAsync(script.ScriptId, a.UserId, SentenceVariant.PureVietnamese);
+
+        // A nhận biến thể còn lại; B vẫn không chen vào được.
+        var aClaim = await Queue.ClaimNextAsync(a.UserId, QueueStage.Recording, task.TaskId, ct);
+        Assert.Equal(script.ScriptId, aClaim?.ScriptId);
+
+        await Queue.ReleaseAsync(script.ScriptId, QueueStage.Recording, ct: ct);
+        Assert.Null(await Queue.ClaimNextAsync(b.UserId, QueueStage.Recording, task.TaskId, ct));
+    }
+
     // ------------------------------ gỡ người khỏi task
 
     /// <summary>

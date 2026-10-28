@@ -116,10 +116,11 @@ public sealed class SpeakerExportTests : IntegrationTestBase
             TestContext.Current.CancellationToken);
 
         Assert.Equal("application/zip", file.ContentType);
-        Assert.Equal((byte)'P', file.Content[0]);
-        Assert.Equal((byte)'K', file.Content[1]);
+        Assert.Equal((byte)'P', file.Content.ReadByte());
+        Assert.Equal((byte)'K', file.Content.ReadByte());
+        file.Content.Position = 0;
 
-        using var zip = new ZipArchive(new MemoryStream(file.Content), ZipArchiveMode.Read);
+        using var zip = new ZipArchive(file.Content, ZipArchiveMode.Read);
         var root = Assert.Single(zip.Entries
             .Select(e => e.FullName.Split('/')[0])
             .Distinct());

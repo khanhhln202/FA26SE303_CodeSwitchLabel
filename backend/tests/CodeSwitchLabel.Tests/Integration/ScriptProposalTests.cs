@@ -492,7 +492,15 @@ public sealed class ScriptProposalTests : IntegrationTestBase
 
         var script = await CreateValidatedScriptAsync(
             "[vi]Câu này [en]delete luôn.", "[vi]Câu này xoá luôn.",
-            ScriptDomain.DailyLife, SpeakerUserId);
+            ScriptDomain.ItTechnology, SpeakerUserId);
+
+        // Câu đang nằm trong một task thu âm: xoá câu phải đóng luôn mục task.
+        var task = await CreateTaskAsync(CampaignId, TaskType.Recording, 10, ManagerUserId);
+        Db.TaskScripts.Add(new TaskScript
+        {
+            TaskId = task.TaskId, ScriptId = script.ScriptId, Status = TaskScriptStatus.Pending
+        });
+        await Db.SaveChangesAsync(ct);
 
         var tao = await ProposalService.CreateAsync(script.ScriptId, SpeakerUserId, new CreateProposalRequest
         {
@@ -531,6 +539,11 @@ public sealed class ScriptProposalTests : IntegrationTestBase
         // Đề xuất đã chốt không còn trong hàng chờ.
         var hangCho = await ProposalService.ListAsync(new ProposalQueueQuery(), ct);
         Assert.DoesNotContain(hangCho.Items, i => i.ProposalId == tao.ProposalId);
+
+        // Mục công việc cũng chốt là loại, nếu không task không bao giờ đạt chỉ tiêu.
+        var item = await Db.TaskScripts.AsNoTracking()
+            .SingleAsync(ts => ts.TaskId == task.TaskId && ts.ScriptId == script.ScriptId, ct);
+        Assert.Equal(TaskScriptStatus.Rejected, item.Status);
     }
 
     /// <summary>Hàng chờ lọc theo loại / từ khoá và giữ đúng thứ tự FIFO mặc định.</summary>

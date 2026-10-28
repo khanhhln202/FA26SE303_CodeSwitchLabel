@@ -102,11 +102,17 @@ BEGIN
                               AND r.speaker_id <> p_user_id
                               AND r.status IN ('pending_review','approved'))
            )
-       -- Người đã bị từ chối không nhận lại khi còn Speaker khác chưa thử.
+       -- Người đã bị từ chối không nhận lại khi còn Speaker khác chưa thử — trừ khi
+       -- họ đang giữ cặp bằng một bản chờ duyệt/đạt: cặp không phát cho ai khác được,
+       -- chặn họ chỉ làm cặp kẹt thiếu biến thể.
        -- Claim không kèm task/chiến dịch (thu tự do) không có danh sách người để so
        -- nên giữ hành vi cũ: người cũ nhận lại.
        AND (
             q.stage <> 'recording'
+            OR EXISTS (SELECT 1 FROM recording r
+                        WHERE r.script_id = q.script_id
+                          AND r.speaker_id = p_user_id
+                          AND r.status IN ('pending_review','approved'))
             OR NOT EXISTS (SELECT 1 FROM recording r
                             WHERE r.script_id = q.script_id
                               AND r.speaker_id = p_user_id

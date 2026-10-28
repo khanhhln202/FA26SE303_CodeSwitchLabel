@@ -415,14 +415,13 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
 
         if (type == TaskType.Recording)
         {
-            // Cặp câu tính là xong cho MỘT người khi chính người đó thu đủ bản cs + vi
-            // (bản trượt QC không tính — người đó vẫn phải thu lại). Trigger
-            // trg_recording_single_speaker bảo đảm một cặp câu chỉ có một người đọc,
-            // nên lấy người đọc đầu tiên cũng là người duy nhất.
+            // Cặp câu tính là xong cho MỘT người khi chính người đó có cả hai bản
+            // cs + vi đã duyệt đạt. Bản rejected trả cặp về hàng đợi cho người khác,
+            // nên phải lọc Approved — nếu không sẽ lấy nhầm bản của người bị từ chối.
             var rows = await (from ts in db.TaskScripts.AsNoTracking()
                               where ts.TaskId == taskId && ts.Status == TaskScriptStatus.Completed
                               let speaker = ts.Script.Recordings
-                                  .Where(r => r.Status != RecordingStatus.QcFailed)
+                                  .Where(r => r.Status == RecordingStatus.Approved)
                                   .Select(r => (long?)r.SpeakerId)
                                   .FirstOrDefault()
                               where speaker != null
@@ -764,8 +763,9 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
 
             query = query
                 // Một cặp câu một người đọc: bỏ qua câu người khác đã đụng vào.
-                // Bản trượt QC không giữ chỗ.
-                .Where(s => !s.Recordings.Any(r => !ids.Contains(r.SpeakerId) && r.Status != RecordingStatus.QcFailed))
+                // Bản trượt QC và bản bị từ chối không giữ chỗ — cặp đã về hàng đợi.
+                .Where(s => !s.Recordings.Any(r => !ids.Contains(r.SpeakerId)
+                    && r.Status != RecordingStatus.QcFailed && r.Status != RecordingStatus.Rejected))
                 // Người này còn thiếu ít nhất một biến thể thì mới có việc để làm.
                 .Where(s =>
                     !s.Recordings.Any(r => r.SentenceVariant == SentenceVariant.CodeSwitching &&
@@ -782,9 +782,10 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         }
         else
         {
-            // Chưa giao cho ai thì chỉ lấy câu chưa ai thu (bỏ qua bản trượt QC),
-            // để giao cho người nào cũng được.
-            query = query.Where(s => !s.Recordings.Any(r => r.Status != RecordingStatus.QcFailed));
+            // Chưa giao cho ai thì chỉ lấy câu chưa ai thu (bỏ qua bản trượt QC
+            // và bản bị từ chối), để giao cho người nào cũng được.
+            query = query.Where(s => !s.Recordings.Any(r =>
+                r.Status != RecordingStatus.QcFailed && r.Status != RecordingStatus.Rejected));
         }
 
         return query
