@@ -114,7 +114,8 @@ export const taskService = {
 
   // API lưu danh sách phân công kèm Quota/TargetQty từng user
   setAssignments: async (id, assignments) => {
-    const res = await apiClient.put(`/api/tasks/${id}/assignments`, { assignments });
+    const payload = Array.isArray(assignments) ? { assignments } : assignments;
+    const res = await apiClient.put(`/api/tasks/${id}/assignments`, payload);
     return res.data;
   },
 
