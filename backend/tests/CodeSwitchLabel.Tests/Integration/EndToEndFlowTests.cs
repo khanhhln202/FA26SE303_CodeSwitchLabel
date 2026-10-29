@@ -53,10 +53,10 @@ public sealed class EndToEndFlowTests : ApiTestBase
         //    trong chiến dịch đã giao cho người tạo.
         var managerId = await GetUserIdAsync(manager);
         var speakerId = await GetUserIdAsync(speaker);
-        var campaignId = await CreateCampaignAssignedToAsync(admin, managerId);
+        var waveId = await CreateWaveAssignedToAsync(admin, managerId);
 
         // 4) Task Manager tạo task thu âm, lấp đúng câu vừa nhập, giao cho Speaker.
-        var taskId = await CreateRecordingTaskAsync(manager, campaignId);
+        var taskId = await CreateRecordingTaskAsync(manager, waveId);
 
         var addItems = await PostAsync($"/api/tasks/{taskId}/items", new { ids = new[] { scriptId } }, manager);
         Assert.Equal(HttpStatusCode.OK, addItems.StatusCode);
@@ -217,8 +217,8 @@ public sealed class EndToEndFlowTests : ApiTestBase
         var manager = await GetManagerTokenAsync();
 
         var managerId = await GetUserIdAsync(manager);
-        var campaignId = await CreateCampaignAssignedToAsync(admin, managerId);
-        var taskId = await CreateRecordingTaskAsync(manager, campaignId);
+        var waveId = await CreateWaveAssignedToAsync(admin, managerId);
+        var taskId = await CreateRecordingTaskAsync(manager, waveId);
 
         var response = await PostAsync($"/api/tasks/{taskId}/items",
             new { autoFill = new { count = 1, domain = "ItTechnology" } }, manager);
@@ -235,8 +235,8 @@ public sealed class EndToEndFlowTests : ApiTestBase
         var admin = await GetAdminTokenAsync();
         var manager = await GetManagerTokenAsync();
         var managerId = await GetUserIdAsync(manager);
-        var campaignId = await CreateCampaignAssignedToAsync(admin, managerId);
-        var taskId = await CreateRecordingTaskAsync(manager, campaignId);
+        var waveId = await CreateWaveAssignedToAsync(admin, managerId);
+        var taskId = await CreateRecordingTaskAsync(manager, waveId);
 
         var response = await PostAsync($"/api/tasks/{taskId}/items",
             new { autoFill = new { count = 1, domain = "Education" } }, manager);
@@ -247,31 +247,31 @@ public sealed class EndToEndFlowTests : ApiTestBase
     }
 
     [Fact]
-    public async Task TaskCreation_InCampaignNotAssignedToManager_IsRejected()
+    public async Task TaskCreation_InWaveNotAssignedToManager_IsRejected()
     {
         var admin = await GetAdminTokenAsync();
         var manager = await GetManagerTokenAsync();
 
         // Chiến dịch do Admin tạo nhưng CHƯA giao cho ai — chưa nhận task.
-        var createCampaign = await PostAsync("/api/campaigns", new
+        var createWave = await PostAsync("/api/waves", new
         {
-            campaignName = $"E2E unassigned {Guid.NewGuid():N}",
+            waveName = $"E2E unassigned {Guid.NewGuid():N}",
             domain = "ItTechnology",
             targetQty = 2000,
             startDate = DateOnly.FromDateTime(DateTime.UtcNow),
             endDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30))
         }, admin);
-        Assert.Equal(HttpStatusCode.Created, createCampaign.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, createWave.StatusCode);
 
-        long campaignId;
-        using (var doc = await ReadJsonAsync(createCampaign))
+        long waveId;
+        using (var doc = await ReadJsonAsync(createWave))
         {
-            campaignId = doc.RootElement.GetProperty("campaignId").GetInt64();
+            waveId = doc.RootElement.GetProperty("waveId").GetInt64();
         }
 
         var createTask = await PostAsync("/api/tasks", new
         {
-            campaignId,
+            waveId,
             taskType = "Recording",
             description = "E2E unassigned",
             targetQty = 1,
@@ -281,7 +281,7 @@ public sealed class EndToEndFlowTests : ApiTestBase
         Assert.Equal(HttpStatusCode.UnprocessableEntity, createTask.StatusCode);
 
         using var problem = await ReadJsonAsync(createTask);
-        Assert.Equal("campaign_not_assigned_to_manager", problem.RootElement.GetProperty("code").GetString());
+        Assert.Equal("wave_not_assigned_to_manager", problem.RootElement.GetProperty("code").GetString());
     }
 
     // ------------------------------------------------------------------ helpers
@@ -398,11 +398,11 @@ public sealed class EndToEndFlowTests : ApiTestBase
         return doc.RootElement.GetProperty("scriptIds")[0].GetString()!;
     }
 
-    private async Task<long> CreateCampaignAssignedToAsync(string adminToken, long managerId)
+    private async Task<long> CreateWaveAssignedToAsync(string adminToken, long managerId)
     {
-        var response = await PostAsync("/api/campaigns", new
+        var response = await PostAsync("/api/waves", new
         {
-            campaignName = $"E2E {Guid.NewGuid():N}",
+            waveName = $"E2E {Guid.NewGuid():N}",
             domain = "ItTechnology",
             targetQty = 2000,
             startDate = DateOnly.FromDateTime(DateTime.UtcNow),
@@ -411,24 +411,24 @@ public sealed class EndToEndFlowTests : ApiTestBase
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
-        long campaignId;
+        long waveId;
         using (var doc = await ReadJsonAsync(response))
         {
-            campaignId = doc.RootElement.GetProperty("campaignId").GetInt64();
+            waveId = doc.RootElement.GetProperty("waveId").GetInt64();
         }
 
-        var assign = await PostAsync($"/api/campaigns/{campaignId}/assign",
+        var assign = await PostAsync($"/api/waves/{waveId}/assign",
             new { assignedToUserId = managerId }, adminToken);
         Assert.Equal(HttpStatusCode.OK, assign.StatusCode);
 
-        return campaignId;
+        return waveId;
     }
 
-    private async Task<long> CreateRecordingTaskAsync(string managerToken, long campaignId)
+    private async Task<long> CreateRecordingTaskAsync(string managerToken, long waveId)
     {
         var response = await PostAsync("/api/tasks", new
         {
-            campaignId,
+            waveId,
             taskType = "Recording",
             description = "E2E flow",
             targetQty = 1,

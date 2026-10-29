@@ -32,18 +32,18 @@ public sealed class WorkAfterTargetTests(DatabaseFixture fixture)
         Scope.ServiceProvider.GetRequiredService<ISpeakerRoundsService>();
 
     /// <summary>Tạo Task Manager + đợt đã giao cho họ — mọi task trong test đều đi qua đường này.</summary>
-    private async Task<(AppUser Manager, Campaign Campaign)> TaoDotAsync(string nhan, CancellationToken ct)
+    private async Task<(AppUser Manager, Wave Wave)> TaoDotAsync(string nhan, CancellationToken ct)
     {
         var manager = await CreateUserAsync($"tm-{nhan}-{Guid.NewGuid():N}@test.local", RoleName.TaskManager);
 
-        var campaign = await CreateCampaignAsync($"Đợt {nhan} {Guid.NewGuid():N}", 2000,
+        var wave = await CreateWaveAsync($"Đợt {nhan} {Guid.NewGuid():N}", 2000,
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
-            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), manager.UserId, CampaignStatus.Open);
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), manager.UserId, WaveStatus.Open);
 
-        campaign.AssignedTo = manager.UserId;
+        wave.AssignedTo = manager.UserId;
         await Db.SaveChangesAsync(ct);
 
-        return (manager, campaign);
+        return (manager, wave);
     }
 
     /// <summary>
@@ -54,10 +54,10 @@ public sealed class WorkAfterTargetTests(DatabaseFixture fixture)
     private async Task<(WorkTask Task, AppUser Speaker, Script Done, Script Next)> TaoTaskGhiAmDaDatChiTieuAsync(
         CancellationToken ct)
     {
-        var (manager, campaign) = await TaoDotAsync("ghi-am-vuot", ct);
+        var (manager, wave) = await TaoDotAsync("ghi-am-vuot", ct);
         var speaker = await CreateUserAsync($"sp-vuot-{Guid.NewGuid():N}@test.local", RoleName.Speaker);
 
-        var task = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 1,
+        var task = await CreateTaskAsync(wave.WaveId, TaskType.Recording, 1,
             manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
 
         var done = await CreateValidatedScriptAsync(
@@ -113,11 +113,11 @@ public sealed class WorkAfterTargetTests(DatabaseFixture fixture)
     private async Task<(WorkTask Task, AppUser Reviewer, Recording Pending)> TaoTaskDuyetDaDatChiTieuAsync(
         CancellationToken ct)
     {
-        var (manager, campaign) = await TaoDotAsync("duyet-vuot", ct);
+        var (manager, wave) = await TaoDotAsync("duyet-vuot", ct);
         var speaker = await CreateUserAsync($"sp-duyet-{Guid.NewGuid():N}@test.local", RoleName.Speaker);
         var reviewer = await CreateUserAsync($"rv-vuot-{Guid.NewGuid():N}@test.local", RoleName.Reviewer);
 
-        var task = await CreateTaskAsync(campaign.CampaignId, TaskType.Review, 1,
+        var task = await CreateTaskAsync(wave.WaveId, TaskType.Review, 1,
             manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
 
         var doneScript = await CreateValidatedScriptAsync(
@@ -213,11 +213,11 @@ public sealed class WorkAfterTargetTests(DatabaseFixture fixture)
     public async Task DanhSachTaskDuyet_CoBanThuLaiCungBienThe_TraDuocVaAnhEmLaBanMoiNhat()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (manager, campaign) = await TaoDotAsync("thu-lai", ct);
+        var (manager, wave) = await TaoDotAsync("thu-lai", ct);
         var speaker = await CreateUserAsync($"sp-lai-{Guid.NewGuid():N}@test.local", RoleName.Speaker);
         var reviewer = await CreateUserAsync($"rv-lai-{Guid.NewGuid():N}@test.local", RoleName.Reviewer);
 
-        var task = await CreateTaskAsync(campaign.CampaignId, TaskType.Review, 2,
+        var task = await CreateTaskAsync(wave.WaveId, TaskType.Review, 2,
             manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
 
         var script = await CreateValidatedScriptAsync(
@@ -279,12 +279,12 @@ public sealed class WorkAfterTargetTests(DatabaseFixture fixture)
     public async Task TaskDaHuy_VanChanThuAmVaDuyet()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (manager, campaign) = await TaoDotAsync("da-huy", ct);
+        var (manager, wave) = await TaoDotAsync("da-huy", ct);
         var speaker = await CreateUserAsync($"sp-huy-{Guid.NewGuid():N}@test.local", RoleName.Speaker);
         var reviewer = await CreateUserAsync($"rv-huy-{Guid.NewGuid():N}@test.local", RoleName.Reviewer);
 
         // Task thu âm đã huỷ nhưng vẫn còn mục chờ và lượt giao Active.
-        var recTask = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 1,
+        var recTask = await CreateTaskAsync(wave.WaveId, TaskType.Recording, 1,
             manager.UserId, DateTimeOffset.UtcNow.AddDays(10), WorkTaskStatus.Cancelled);
 
         var script = await CreateValidatedScriptAsync(
@@ -326,7 +326,7 @@ public sealed class WorkAfterTargetTests(DatabaseFixture fixture)
         Assert.Equal("task_not_recordable", loiLay.Code);
 
         // Task duyệt đã huỷ: nhận bản để duyệt cũng chặn.
-        var reviewTask = await CreateTaskAsync(campaign.CampaignId, TaskType.Review, 1,
+        var reviewTask = await CreateTaskAsync(wave.WaveId, TaskType.Review, 1,
             manager.UserId, DateTimeOffset.UtcNow.AddDays(10), WorkTaskStatus.Cancelled);
 
         Db.TaskAssignments.Add(new TaskAssignment
@@ -350,12 +350,12 @@ public sealed class WorkAfterTargetTests(DatabaseFixture fixture)
     public async Task BangXepHang_XepTheoBanDaNop_KhongTinhBanTruotQc()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (manager, campaign) = await TaoDotAsync("xep-hang", ct);
+        var (manager, wave) = await TaoDotAsync("xep-hang", ct);
 
         var speaker1 = await CreateUserAsync($"sp-h1-{Guid.NewGuid():N}@test.local", RoleName.Speaker);
         var speaker2 = await CreateUserAsync($"sp-h2-{Guid.NewGuid():N}@test.local", RoleName.Speaker);
 
-        var task = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 10,
+        var task = await CreateTaskAsync(wave.WaveId, TaskType.Recording, 10,
             manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
 
         // Speaker 1: chờ duyệt + đạt + bị từ chối = 3 bản đã nộp; 1 bản trượt QC không tính.
@@ -390,13 +390,13 @@ public sealed class WorkAfterTargetTests(DatabaseFixture fixture)
 
         await Db.SaveChangesAsync(ct);
 
-        var board = await Rounds.GetLeaderboardAsync(campaign.CampaignId, speaker1.UserId, 5, ct);
+        var board = await Rounds.GetLeaderboardAsync(wave.WaveId, speaker1.UserId, 5, ct);
 
         // Hai người có bản đã nộp; thứ tự theo số bản đã nộp, không theo bản được duyệt.
         Assert.Equal(2, board.Items.Count);
 
         // Mốc để giao diện vẽ thanh tiến độ: chỉ tiêu cả đợt và tổng chỉ tiêu các nhiệm vụ đã chia.
-        Assert.Equal(campaign.TargetQty, board.CampaignTargetQty);
+        Assert.Equal(wave.TargetQty, board.WaveTargetQty);
         Assert.True(board.AllocatedTargetQty > 0, "Đợt đã có nhiệm vụ thu âm nên phần đã chia phải lớn hơn 0.");
 
         var hang1 = board.Items[0];

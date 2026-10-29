@@ -74,14 +74,14 @@ public enum TaskType { Recording, Review }
 public enum WorkTaskStatus { InProgress, Completed, Cancelled }
 
 /// <summary>
-/// Ứng với kiểu campaign_status. Một chiến dịch là đơn vị kế hoạch của Task Manager
+/// Ứng với kiểu wave_status. Một chiến dịch là đơn vị kế hoạch của Task Manager
 /// cho một đợt thu thập.
 ///
 /// trạng thái KHÔNG bấm tay — nó là hàm của các task bên trong đợt, xem
-/// <c>CampaignStateMachine</c>. Không còn `Draft` (đợt mới tạo ra `Open`) và
+/// <c>WaveStateMachine</c>. Không còn `Draft` (đợt mới tạo ra `Open`) và
 /// `Cancelled` (không có đường huỷ cả đợt).
 /// </summary>
-public enum CampaignStatus { Open, InProgress, Completed }
+public enum WaveStatus { Open, InProgress, Completed }
 
 public enum AssignmentStatus { Active, Completed, Reassigned, Cancelled }
 

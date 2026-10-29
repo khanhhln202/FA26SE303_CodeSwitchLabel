@@ -43,15 +43,15 @@ public class DatasetService(
             .ToList();
 
         // Gom thêm bản duyệt đạt trong các chiến dịch chỉ định.
-        if (request.CampaignIds.Count > 0)
+        if (request.WaveIds.Count > 0)
         {
-            var fromCampaigns = await db.Recordings.AsNoTracking()
+            var fromWaves = await db.Recordings.AsNoTracking()
                 .Where(r => r.Status == RecordingStatus.Approved)
-                .Where(r => r.Task != null && r.Task.CampaignId.HasValue && request.CampaignIds.Contains(r.Task.CampaignId.Value))
+                .Where(r => r.Task != null && r.Task.WaveId.HasValue && request.WaveIds.Contains(r.Task.WaveId.Value))
                 .Select(r => r.RecordingId)
                 .ToListAsync(ct);
 
-            wanted = [.. wanted.Union(fromCampaigns)];
+            wanted = [.. wanted.Union(fromWaves)];
         }
 
         var skipped = new List<SkippedItemDto>();
@@ -101,7 +101,7 @@ public class DatasetService(
             Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
             FilterCriteria = JsonSerializer.Serialize(new
             {
-                campaignIds = request.CampaignIds,
+                waveIds = request.WaveIds,
                 recordingIds = request.RecordingIds
             }),
             Status = DatasetStatus.Draft,
@@ -345,7 +345,7 @@ public class DatasetService(
     {
         var speakerIds = request.SpeakerIds.Where(id => id > 0).Distinct().ToList();
 
-        if (speakerIds.Count == 0 && request.CampaignId is null)
+        if (speakerIds.Count == 0 && request.WaveId is null)
         {
             throw new UnprocessableException(
                 "export_scope_required", "Chọn ít nhất một Speaker hoặc một chiến dịch để tải dữ liệu.");
@@ -356,7 +356,7 @@ public class DatasetService(
             .Include(r => r.Speaker)
             .Where(r => r.Status == RecordingStatus.Approved)
             .Where(r => speakerIds.Count == 0 || speakerIds.Contains(r.SpeakerId))
-            .Where(r => request.CampaignId == null || (r.Task != null && r.Task.CampaignId == request.CampaignId))
+            .Where(r => request.WaveId == null || (r.Task != null && r.Task.WaveId == request.WaveId))
             .ToListAsync(ct);
 
         // Chỉ đóng gói cặp đủ hai bản. Thiếu một bản thì bỏ cả cặp, không để JSON trỏ tới file không có.
@@ -439,7 +439,7 @@ public class DatasetService(
         }
 
         var fileName = speakerIds.Count == 0
-            ? $"campaign-{request.CampaignId}-{date}.zip"
+            ? $"wave-{request.WaveId}-{date}.zip"
             : $"speakers-{date}.zip";
 
         stream.Position = 0;

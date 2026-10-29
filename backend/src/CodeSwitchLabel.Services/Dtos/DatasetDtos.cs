@@ -20,7 +20,7 @@ public record CreateDatasetRequest
     public List<string> RecordingIds { get; init; } = [];
 
     /// <summary>Gom toàn bộ bản đã duyệt đạt trong các chiến dịch này.</summary>
-    public List<long> CampaignIds { get; init; } = [];
+    public List<long> WaveIds { get; init; } = [];
 }
 
 public record ReleaseDatasetRequest
@@ -62,5 +62,5 @@ public record DatasetFileDto(string FileName, string ContentType, Stream Content
 public record ExportSpeakerDataRequest
 {
     public List<long> SpeakerIds { get; init; } = [];
-    public long? CampaignId { get; init; }
+    public long? WaveId { get; init; }
 }

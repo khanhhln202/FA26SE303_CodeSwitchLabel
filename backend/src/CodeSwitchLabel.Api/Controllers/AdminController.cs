@@ -86,10 +86,10 @@ public class StatisticsController(IStatisticsService statistics) : ControllerBas
         => Ok(await statistics.GetRejectionStatsAsync(ct));
 
     /// <summary>Tiến độ từng chiến dịch: chỉ tiêu, phần đã chia cho task, phần còn lại, số task đã xong.</summary>
-    [HttpGet("statistics/campaigns")]
-    [ProducesResponseType(typeof(IEnumerable<CampaignProgressDto>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IEnumerable<CampaignProgressDto>>> Campaigns(CancellationToken ct)
-        => Ok(await statistics.GetCampaignProgressAsync(ct));
+    [HttpGet("statistics/waves")]
+    [ProducesResponseType(typeof(IEnumerable<WaveProgressDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<WaveProgressDto>>> Waves(CancellationToken ct)
+        => Ok(await statistics.GetWaveProgressAsync(ct));
 }
 
 public record UpdateConfigRequest

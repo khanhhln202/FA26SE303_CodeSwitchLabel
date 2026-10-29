@@ -41,7 +41,7 @@ public interface IUserRepository
 
     /// <summary>Bảng Speaker của Admin; lọc theo chiến dịch thì chỉ giữ người có cặp đã duyệt trong đợt.</summary>
     Task<(IReadOnlyList<SpeakerListRow> Items, int Total)> SearchSpeakersAsync(
-        long? campaignId, string? keyword, int page, int pageSize, CancellationToken ct = default);
+        long? waveId, string? keyword, int page, int pageSize, CancellationToken ct = default);
 
     Task<bool> EmailExistsAsync(string email, CancellationToken ct = default);
 
@@ -130,7 +130,7 @@ public class UserRepository(CodeSwitchLabelDbContext db) : IUserRepository
     }
 
     public async Task<(IReadOnlyList<SpeakerListRow> Items, int Total)> SearchSpeakersAsync(
-        long? campaignId, string? keyword, int page, int pageSize, CancellationToken ct = default)
+        long? waveId, string? keyword, int page, int pageSize, CancellationToken ct = default)
     {
         var query = db.AppUsers.AsNoTracking()
             .Include(u => u.Role)
@@ -140,9 +140,9 @@ public class UserRepository(CodeSwitchLabelDbContext db) : IUserRepository
         var approved = db.Recordings.AsNoTracking()
             .Where(r => r.Status == RecordingStatus.Approved);
 
-        if (campaignId.HasValue)
+        if (waveId.HasValue)
         {
-            approved = approved.Where(r => r.Task != null && r.Task.CampaignId == campaignId.Value);
+            approved = approved.Where(r => r.Task != null && r.Task.WaveId == waveId.Value);
 
             // Unique index bảo đảm mỗi (câu, biến thể) chỉ một bản approved, nên nhóm đủ
             // hai dòng nghĩa là đủ cả CS lẫn VI. Ghép theo cả speaker để cặp khác người không lọt.

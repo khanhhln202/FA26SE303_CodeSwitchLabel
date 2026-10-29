@@ -26,84 +26,84 @@ public class CheckConstraintTests : IntegrationTestBase
 
     /// <summary>Biên hợp lệ: đúng min/max thì database PHẢI nhận — kiểm cả hai chiều của ràng buộc.</summary>
     [Fact]
-    public async Task Campaign_TargetQty_AtBoundaries_Accepted()
+    public async Task Wave_TargetQty_AtBoundaries_Accepted()
     {
         // Arrange
-        var min = await CreateCampaignAsync(
+        var min = await CreateWaveAsync(
             $"Boundary min {Guid.NewGuid():N}", 2000,
             DateOnly.FromDateTime(DateTime.Today), DateOnly.FromDateTime(DateTime.Today.AddDays(30)),
-            AdminUserId, CampaignStatus.Open);
-        var max = await CreateCampaignAsync(
+            AdminUserId, WaveStatus.Open);
+        var max = await CreateWaveAsync(
             $"Boundary max {Guid.NewGuid():N}", 5000,
             DateOnly.FromDateTime(DateTime.Today), DateOnly.FromDateTime(DateTime.Today.AddDays(30)),
-            AdminUserId, CampaignStatus.Open);
+            AdminUserId, WaveStatus.Open);
 
         // Act + Assert
-        Assert.NotEqual(0, min.CampaignId);
-        Assert.NotEqual(0, max.CampaignId);
+        Assert.NotEqual(0, min.WaveId);
+        Assert.NotEqual(0, max.WaveId);
     }
 
-    // ---------- Campaign constraints ----------
+    // ---------- Wave constraints ----------
 
     [Fact]
-    public async Task Campaign_TargetQty_BelowMinimum_Rejected()
+    public async Task Wave_TargetQty_BelowMinimum_Rejected()
     {
         await AssertRejectedAsync(async () =>
         {
-            var campaign = new Campaign
+            var wave = new Wave
             {
-                CampaignName = "Invalid Campaign",
+                WaveName = "Invalid Wave",
                 TargetQty = 1000, // Below minimum 2000
                 StartDate = DateOnly.FromDateTime(DateTime.Today),
                 EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(30)),
-                Status = CampaignStatus.Open,
+                Status = WaveStatus.Open,
                 CreatedBy = AdminUserId,
                 CreatedAt = DateTimeOffset.UtcNow
             };
 
-            Db.Campaigns.Add(campaign);
+            Db.Waves.Add(wave);
             await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
         });
     }
 
     [Fact]
-    public async Task Campaign_TargetQty_AboveMaximum_Rejected()
+    public async Task Wave_TargetQty_AboveMaximum_Rejected()
     {
         await AssertRejectedAsync(async () =>
         {
-            var campaign = new Campaign
+            var wave = new Wave
             {
-                CampaignName = "Invalid Campaign",
+                WaveName = "Invalid Wave",
                 TargetQty = 6000, // Above maximum 5000
                 StartDate = DateOnly.FromDateTime(DateTime.Today),
                 EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(30)),
-                Status = CampaignStatus.Open,
+                Status = WaveStatus.Open,
                 CreatedBy = AdminUserId,
                 CreatedAt = DateTimeOffset.UtcNow
             };
 
-            Db.Campaigns.Add(campaign);
+            Db.Waves.Add(wave);
             await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
         });
     }
 
     [Fact]
-    public async Task Campaign_StartDateAfterEndDate_Rejected()
+    public async Task Wave_StartDateAfterEndDate_Rejected()
     {
         await AssertRejectedAsync(async () =>
         {
-            var campaign = new Campaign
+            var wave = new Wave
             {
-                CampaignName = "Invalid Campaign",
+                WaveName = "Invalid Wave",
                 TargetQty = 2000,
                 StartDate = DateOnly.FromDateTime(DateTime.Today.AddDays(10)),
                 EndDate = DateOnly.FromDateTime(DateTime.Today), // Before start
-                Status = CampaignStatus.Open,
+                Status = WaveStatus.Open,
                 CreatedBy = AdminUserId,
                 CreatedAt = DateTimeOffset.UtcNow
             };
 
-            Db.Campaigns.Add(campaign);
+            Db.Waves.Add(wave);
             await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
         });
     }
@@ -343,7 +343,7 @@ public class CheckConstraintTests : IntegrationTestBase
         {
             var task = new WorkTask
             {
-                CampaignId = CampaignId,
+                WaveId = WaveId,
                 TaskType = TaskType.Recording,
                 TargetQty = 0, // Must be > 0
                 Status = WorkTaskStatus.InProgress,

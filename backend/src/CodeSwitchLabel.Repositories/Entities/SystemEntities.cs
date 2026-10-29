@@ -106,9 +106,9 @@ public class DatasetRecording
 
 public class DashboardSummary
 {
-    public long TotalCampaigns { get; set; }
-    public long OpenCampaigns { get; set; }
-    public long ActiveCampaigns { get; set; }
+    public long TotalWaves { get; set; }
+    public long OpenWaves { get; set; }
+    public long ActiveWaves { get; set; }
     public long TotalScripts { get; set; }
     public long ValidatedScripts { get; set; }
     public long PendingScripts { get; set; }
@@ -149,20 +149,20 @@ public class RejectionReasonStat
 
 /// <summary>
 /// Tiến độ một chiến dịch: chỉ tiêu, phần đã chia cho các task, phần còn lại, số task và số task xong.
-/// Đọc thẳng từ view v_campaign_progress.
+/// Đọc thẳng từ view v_wave_progress.
 /// </summary>
-public class CampaignProgress
+public class WaveProgress
 {
-    public long CampaignId { get; set; }
-    public string CampaignName { get; set; } = string.Empty;
+    public long WaveId { get; set; }
+    public string WaveName { get; set; } = string.Empty;
 
     /// <summary>Chủ đề của đợt; mọi task gắn vào đều phải cùng chủ đề.</summary>
     public ScriptDomain Domain { get; set; }
 
-    public int CampaignTargetQty { get; set; }
+    public int WaveTargetQty { get; set; }
     public DateOnly StartDate { get; set; }
     public DateOnly EndDate { get; set; }
-    public CampaignStatus CampaignStatus { get; set; }
+    public WaveStatus WaveStatus { get; set; }
     public long? AssignedTo { get; set; }
     public long AllocatedTaskQty { get; set; }
     public long RemainingTaskQty { get; set; }

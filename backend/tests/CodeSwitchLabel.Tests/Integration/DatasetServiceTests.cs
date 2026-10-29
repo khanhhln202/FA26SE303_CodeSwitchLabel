@@ -33,13 +33,13 @@ public sealed class DatasetServiceTests : IntegrationTestBase
     private Task<CreateDatasetRequest> NewRequest(
         string version = "v1",
         List<string>? recordingIds = null,
-        List<long>? campaignIds = null) =>
+        List<long>? waveIds = null) =>
         Task.FromResult(new CreateDatasetRequest
         {
             DatasetName = $"Dataset {Guid.NewGuid():N}",
             Version = version,
             RecordingIds = recordingIds ?? [],
-            CampaignIds = campaignIds ?? []
+            WaveIds = waveIds ?? []
         });
 
     /// <summary>Tạo một cặp câu đã duyệt với đủ hai bản ghi đã duyệt đạt.</summary>
@@ -117,7 +117,7 @@ public sealed class DatasetServiceTests : IntegrationTestBase
             var created = await _datasets.CreateAsync(
                 new CreateDatasetRequest
                 {
-                    DatasetName = $"{prefix} {name}", Version = "v1", RecordingIds = [], CampaignIds = []
+                    DatasetName = $"{prefix} {name}", Version = "v1", RecordingIds = [], WaveIds = []
                 },
                 AdminUserId, TestContext.Current.CancellationToken);
 

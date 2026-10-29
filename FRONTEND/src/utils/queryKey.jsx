@@ -45,7 +45,7 @@ export const GET_SPEAKER_RECORDING_HISTORY_API = 'GET_SPEAKER_RECORDING_HISTORY_
 export const GET_SPEAKER_STATS_API = 'GET_SPEAKER_STATS_API'
 // Đợt đang tham gia của Speaker (GET /api/speaker/rounds/current)
 export const GET_SPEAKER_CURRENT_ROUND_API = 'GET_SPEAKER_CURRENT_ROUND_API'
-// Bảng xếp hạng của một đợt (GET /api/speaker/rounds/{campaignId}/leaderboard)
+// Bảng xếp hạng của một đợt (GET /api/speaker/rounds/{waveId}/leaderboard)
 export const GET_ROUND_LEADERBOARD_API = 'GET_ROUND_LEADERBOARD_API'
 // Bản ghi bị từ chối cần ghi lại (GET /api/speaker/recordings/rejected)
 export const GET_SPEAKER_REJECTED_RECORDINGS_API = 'GET_SPEAKER_REJECTED_RECORDINGS_API'

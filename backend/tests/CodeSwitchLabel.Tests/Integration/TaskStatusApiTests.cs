@@ -135,7 +135,7 @@ public sealed class TaskStatusApiTests(DatabaseFixture fixture) : ApiTestBase(fi
 
         Assert.Equal("InProgress", await TrangThaiDotAsync(ctx));
 
-        var xoa = await DeleteAsync($"/api/campaigns/{ctx.CampaignId}/tasks/{taskId}", ctx.Token);
+        var xoa = await DeleteAsync($"/api/waves/{ctx.WaveId}/tasks/{taskId}", ctx.Token);
         Assert.Equal(HttpStatusCode.NoContent, xoa.StatusCode);
 
         Assert.Equal("Open", await TrangThaiDotAsync(ctx));
@@ -143,15 +143,15 @@ public sealed class TaskStatusApiTests(DatabaseFixture fixture) : ApiTestBase(fi
 
     // ----------------------------------------------------------------- dựng dữ liệu
 
-    private sealed record ChuBi(string Token, long CampaignId);
+    private sealed record ChuBi(string Token, long WaveId);
 
     private async Task<ChuBi> ChuBiAsync()
     {
         var token = await GetManagerTokenAsync();
 
-        var res = await PostAsync("/api/campaigns", new
+        var res = await PostAsync("/api/waves", new
         {
-            campaignName = $"Đổi trạng thái tay {Guid.NewGuid():N}",
+            waveName = $"Đổi trạng thái tay {Guid.NewGuid():N}",
             domain = "ItTechnology",
             targetQty = 2000,
             startDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
@@ -159,7 +159,7 @@ public sealed class TaskStatusApiTests(DatabaseFixture fixture) : ApiTestBase(fi
         }, token);
 
         Assert.Equal(HttpStatusCode.Created, res.StatusCode);
-        var id = (await Doc(res)).GetProperty("campaignId").GetInt64();
+        var id = (await Doc(res)).GetProperty("waveId").GetInt64();
 
         return new ChuBi(token, id);
     }
@@ -168,7 +168,7 @@ public sealed class TaskStatusApiTests(DatabaseFixture fixture) : ApiTestBase(fi
     {
         var res = await PostAsync("/api/tasks", new
         {
-            campaignId = ctx.CampaignId,
+            waveId = ctx.WaveId,
             taskType = "Recording",
             description = "Nhiệm vụ kiểm thử đổi trạng thái tay",
             targetQty,
@@ -181,7 +181,7 @@ public sealed class TaskStatusApiTests(DatabaseFixture fixture) : ApiTestBase(fi
 
     private async Task<string?> TrangThaiDotAsync(ChuBi ctx)
     {
-        var res = await GetAsync($"/api/campaigns/{ctx.CampaignId}", ctx.Token);
+        var res = await GetAsync($"/api/waves/{ctx.WaveId}", ctx.Token);
         return (await Doc(res)).GetProperty("status").GetString();
     }
 

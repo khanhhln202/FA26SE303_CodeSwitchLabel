@@ -39,8 +39,8 @@ internal static class TaskMapper
     // Tính toán khả năng xoá của task (đã gỡ khỏi đợt + chưa có dữ liệu nộp thật)
     public static (bool CanDelete, string? Reason) EvaluateCanDelete(this TaskRow r)
     {
-        if (r.CampaignId.HasValue)
-            return (false, $"Nhiệm vụ đang nằm trong đợt \"{r.CampaignName ?? ("#" + r.CampaignId)}\". Hãy gỡ khỏi đợt trước khi xoá.");
+        if (r.WaveId.HasValue)
+            return (false, $"Nhiệm vụ đang nằm trong đợt \"{r.WaveName ?? ("#" + r.WaveId)}\". Hãy gỡ khỏi đợt trước khi xoá.");
 
         if (r.Status == WorkTaskStatus.Completed)
             return (false, "Nhiệm vụ đã hoàn thành, không xoá được.");
@@ -55,8 +55,8 @@ internal static class TaskMapper
     {
         var (canDelete, reason) = r.EvaluateCanDelete();
         return new(r.TaskId,
-            r.CampaignId,
-            r.CampaignName,
+            r.WaveId,
+            r.WaveName,
             r.TaskType,
             r.Domain,
             r.Description,
@@ -82,7 +82,7 @@ internal static class TaskMapper
         new(r.TaskId,
             r.Description,
             r.Description,
-            r.CampaignName,
+            r.WaveName,
             r.TaskType,
             r.Status,
             r.Deadline,
@@ -99,7 +99,7 @@ internal static class TaskMapper
 
 public class TaskService(
     ITaskRepository tasks,
-    ICampaignRepository campaigns,
+    IWaveRepository waves,
     IScriptQueueRepository queue,
     ITaskProgressTracker tracker,
     ISystemConfigService config,
@@ -144,27 +144,27 @@ public class TaskService(
             }
         }
 
-        // campaignId null = task độc lập (C1): bềEqua mọi kiểm tra chiến dịch.
-        // Trigger trg_task_campaign_window / trg_task_campaign_target / trg_task_creator_assigned
-        // đều RETURN NEW ngay khi NEW.campaign_id IS NULL.
-        Campaign? campaign = null;
-        if (request.CampaignId.HasValue)
+        // waveId null = task độc lập (C1): bềEqua mọi kiểm tra chiến dịch.
+        // Trigger trg_task_wave_window / trg_task_wave_target / trg_task_creator_assigned
+        // đều RETURN NEW ngay khi NEW.wave_id IS NULL.
+        Wave? wave = null;
+        if (request.WaveId.HasValue)
         {
-            var campaignId = request.CampaignId.Value;
+            var waveId = request.WaveId.Value;
 
-            campaign = await campaigns.GetAsync(campaignId, ct)
-                ?? throw new NotFoundException("campaign_not_found", $"Không tìm thấy chiến dịch #{campaignId}.");
+            wave = await waves.GetAsync(waveId, ct)
+                ?? throw new NotFoundException("wave_not_found", $"Không tìm thấy chiến dịch #{waveId}.");
 
             // ERD  ETask Manager chềEtạo được task trong chiến dịch Admin đã giao cho chính
             // mình; chiến dịch chưa giao thì chưa nhận task. Trigger trg_task_creator_assigned của
             // database chặn lần nữa ềEtầng sâu.
-            if (campaign.AssignedTo != createdById)
+            if (wave.AssignedTo != createdById)
             {
                 throw new UnprocessableException(
-                    "campaign_not_assigned_to_manager",
-                    campaign.AssignedTo is null
-                        ? $"Chiến dịch #{campaignId} chưa được giao cho Task Manager nào nên chưa nhận task. NhềEAdmin giao chiến dịch trước."
-                        : $"Chiến dịch #{campaignId} đang giao cho người khác  Ebạn chềEtạo được task trong chiến dịch của mình.");
+                    "wave_not_assigned_to_manager",
+                    wave.AssignedTo is null
+                        ? $"Chiến dịch #{waveId} chưa được giao cho Task Manager nào nên chưa nhận task. NhềEAdmin giao chiến dịch trước."
+                        : $"Chiến dịch #{waveId} đang giao cho người khác  Ebạn chềEtạo được task trong chiến dịch của mình.");
             }
 
             // bềEluật "đợt đã đóng thì không nhận thêm task". Trước đây đợt `Completed`
@@ -175,37 +175,37 @@ public class TaskService(
             // Hạn task phải nằm trong khoảng ngày của chiến dịch (trigger của database cũng chặn).
             var deadlineDate = ToVietnamDate(deadline);
 
-            if (deadlineDate < campaign.StartDate || deadlineDate > campaign.EndDate)
+            if (deadlineDate < wave.StartDate || deadlineDate > wave.EndDate)
             {
                 throw new UnprocessableException(
-                    "task_deadline_outside_campaign",
+                    "task_deadline_outside_wave",
                     $"Hạn {deadlineDate:yyyy-MM-dd} phải nằm trong khoảng ngày của chiến dịch " +
-                    $"{campaign.StartDate:yyyy-MM-dd} đến {campaign.EndDate:yyyy-MM-dd}.");
+                    $"{wave.StartDate:yyyy-MM-dd} đến {wave.EndDate:yyyy-MM-dd}.");
             }
 
-            var domain = request.Domain ?? campaign.Domain;
+            var domain = request.Domain ?? wave.Domain;
 
             // Nhiệm vụ phải cùng chủ đềEvới chiến dịch
-            if (domain != campaign.Domain)
+            if (domain != wave.Domain)
             {
                 throw new UnprocessableException(
-                    "task_domain_mismatch_campaign",
-                    $"Chủ đềEnhiệm vụ ({domain}) không khớp với chủ đềEcủa chiến dịch #{campaignId} ({campaign.Domain}).");
+                    "task_domain_mismatch_wave",
+                    $"Chủ đềEnhiệm vụ ({domain}) không khớp với chủ đềEcủa chiến dịch #{waveId} ({wave.Domain}).");
             }
 
             // Tổng chềEtiêu các task không được vượt chềEtiêu chiến dịch.
-            var allocated = await campaigns.SumAllocatedAsync(campaignId, ct);
+            var allocated = await waves.SumAllocatedAsync(waveId, ct);
 
-            if (allocated + targetQty > campaign.TargetQty)
+            if (allocated + targetQty > wave.TargetQty)
             {
                 throw new UnprocessableException(
-                    "task_target_exceeds_campaign",
-                    $"Chiến dịch #{campaignId} đã chia {allocated}/{campaign.TargetQty} cặp câu; " +
+                    "task_target_exceeds_wave",
+                    $"Chiến dịch #{waveId} đã chia {allocated}/{wave.TargetQty} cặp câu; " +
                     $"thêm {targetQty} là vượt chềEtiêu.");
             }
         }
 
-        var taskDomain = request.Domain ?? (campaign != null ? campaign.Domain : ScriptDomain.ItTechnology);
+        var taskDomain = request.Domain ?? (wave != null ? wave.Domain : ScriptDomain.ItTechnology);
 
         // Task thu âm: lấy danh sách câu RIÊNG cho từng Speaker. Hai Speaker được nhận
         // cùng một câu, nên kho câu ít hơn chềEtiêu vẫn tạo task  Emỗi người chềEnhận
@@ -223,7 +223,7 @@ public class TaskService(
 
         var task = new WorkTask
         {
-            CampaignId = request.CampaignId,
+            WaveId = request.WaveId,
             CreatedBy = createdById,
             TaskType = request.TaskType!.Value,
             Domain = taskDomain, // TEAM_007
@@ -284,79 +284,79 @@ public class TaskService(
         }
 
         // đợt vừa nhận nhiệm vụ đầu tiên thì phải rời Open.
-        if (campaign is not null) await campaigns.RefreshStatusAsync(campaign.CampaignId, ct);
+        if (wave is not null) await waves.RefreshStatusAsync(wave.WaveId, ct);
 
         var detail = await LoadDetailAsync(task.TaskId, ct);
         if (transaction is not null) await transaction.CommitAsync(ct);
         return detail;
     }
 
-    /// <summary>Gắn task vào chiến dịch (attach/move), hoặc gỡ ra (detach) khi campaignId = null.</summary>
+    /// <summary>Gắn task vào chiến dịch (attach/move), hoặc gỡ ra (detach) khi waveId = null.</summary>
     public async Task<TaskDetailDto> AttachAsync(
-        long taskId, long? campaignId, CancellationToken ct = default,
+        long taskId, long? waveId, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false)
     {
         await using var transaction = await BeginTransactionIfNeededAsync(ct);
         var task = await LoadEditableAsync(taskId, ct);
-        await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
+        await EnsureWaveOwnerAsync(task, callerId, isAdmin, ct);
 
         // đợt cũ cũng phải được tính lại  Erút task ra khỏi đợt xong thì đợt có
         // thềEhết nhiệm vụ (vềElại Open) hoặc mọi task còn lại đều xong (vềECompleted).
-        var previousCampaignId = task.CampaignId;
+        var previousWaveId = task.WaveId;
 
-        if (campaignId.HasValue)
+        if (waveId.HasValue)
         {
-            var campaign = await campaigns.GetAsync(campaignId.Value, ct)
-                ?? throw new NotFoundException("campaign_not_found", $"Không tìm thấy chiến dịch #{campaignId}.");
+            var wave = await waves.GetAsync(waveId.Value, ct)
+                ?? throw new NotFoundException("wave_not_found", $"Không tìm thấy chiến dịch #{waveId}.");
 
-            if (campaign.AssignedTo.HasValue && callerId.HasValue && !isAdmin
-                && campaign.AssignedTo.Value != callerId.Value)
+            if (wave.AssignedTo.HasValue && callerId.HasValue && !isAdmin
+                && wave.AssignedTo.Value != callerId.Value)
             {
                 throw new ForbiddenException(
                     "task_not_owned",
-                    $"Chiến dịch #{campaignId} không giao cho bạn nên không gắn task vào được.");
+                    $"Chiến dịch #{waveId} không giao cho bạn nên không gắn task vào được.");
             }
 
             // bềEluật chặn nhận thêm task vào đợt đã đóng  Exem ềECreateAsync.
 
             // Nhiệm vụ phải cùng chủ đềEvới chiến dịch
-            if (task.Domain != campaign.Domain)
+            if (task.Domain != wave.Domain)
             {
                 throw new UnprocessableException(
-                    "task_domain_mismatch_campaign",
-                    $"Chủ đềEnhiệm vụ ({task.Domain}) không khớp với chủ đềEcủa chiến dịch #{campaignId.Value} ({campaign.Domain}).");
+                    "task_domain_mismatch_wave",
+                    $"Chủ đềEnhiệm vụ ({task.Domain}) không khớp với chủ đềEcủa chiến dịch #{waveId.Value} ({wave.Domain}).");
             }
 
             if (task.Deadline.HasValue)
             {
                 var deadlineDate = ToVietnamDate(task.Deadline.Value);
-                if (deadlineDate < campaign.StartDate || deadlineDate > campaign.EndDate)
+                if (deadlineDate < wave.StartDate || deadlineDate > wave.EndDate)
                 {
                     throw new UnprocessableException(
-                        "task_deadline_outside_campaign",
+                        "task_deadline_outside_wave",
                         $"Hạn {deadlineDate:yyyy-MM-dd} phải nằm trong khoảng ngày của chiến dịch " +
-                        $"{campaign.StartDate:yyyy-MM-dd} đến {campaign.EndDate:yyyy-MM-dd}.");
+                        $"{wave.StartDate:yyyy-MM-dd} đến {wave.EndDate:yyyy-MM-dd}.");
                 }
             }
 
-            var allocated = await campaigns.SumAllocatedAsync(campaignId.Value, ct);
-            var withoutThis = task.CampaignId == campaignId.Value ? allocated - task.TargetQty : allocated;
-            if (withoutThis + task.TargetQty > campaign.TargetQty)
+            var allocated = await waves.SumAllocatedAsync(waveId.Value, ct);
+            var withoutThis = task.WaveId == waveId.Value ? allocated - task.TargetQty : allocated;
+            if (withoutThis + task.TargetQty > wave.TargetQty)
             {
                 throw new UnprocessableException(
-                    "task_target_exceeds_campaign",
-                    $"Chiến dịch #{campaignId} đã chia {allocated}/{campaign.TargetQty} cặp câu; " +
+                    "task_target_exceeds_wave",
+                    $"Chiến dịch #{waveId} đã chia {allocated}/{wave.TargetQty} cặp câu; " +
                     $"gắn task này ({task.TargetQty}) là vượt chềEtiêu.");
             }
         }
 
-        task.CampaignId = campaignId;
+        task.WaveId = waveId;
         await SaveTasksAsync(ct);
 
-        if (campaignId.HasValue) await campaigns.RefreshStatusAsync(campaignId.Value, ct);
-        if (previousCampaignId.HasValue && previousCampaignId != campaignId)
+        if (waveId.HasValue) await waves.RefreshStatusAsync(waveId.Value, ct);
+        if (previousWaveId.HasValue && previousWaveId != waveId)
         {
-            await campaigns.RefreshStatusAsync(previousCampaignId.Value, ct);
+            await waves.RefreshStatusAsync(previousWaveId.Value, ct);
         }
 
         if (transaction is not null) await transaction.CommitAsync(ct);
@@ -369,24 +369,24 @@ public class TaskService(
     /// Lượt giao, mục công việc, hàng đợi và liên kết task_recording xoá theo task (ON DELETE CASCADE).
     /// Bản ghi thu âm và lượt duyệt ềElại, task_id chuyển NULL (ON DELETE SET NULL).
     /// </remarks>
-    public async Task DeleteFromCampaignAsync(
-        long campaignId, long taskId, CancellationToken ct = default,
+    public async Task DeleteFromWaveAsync(
+        long waveId, long taskId, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false)
     {
         await using var transaction = await BeginTransactionIfNeededAsync(ct);
         var task = await tasks.GetForUpdateAsync(taskId, ct) ?? throw NotFound(taskId);
 
-        if (task.CampaignId != campaignId)
+        if (task.WaveId != waveId)
         {
             throw new NotFoundException(
-                "task_not_found", $"Task #{taskId} không thuộc chiến dịch #{campaignId}.");
+                "task_not_found", $"Task #{taskId} không thuộc chiến dịch #{waveId}.");
         }
 
-        await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
+        await EnsureWaveOwnerAsync(task, callerId, isAdmin, ct);
 
         tasks.RemoveTask(task);
         await SaveTasksAsync(ct);
-        await campaigns.RefreshStatusAsync(campaignId, ct);
+        await waves.RefreshStatusAsync(waveId, ct);
 
         if (transaction is not null) await transaction.CommitAsync(ct);
     }
@@ -410,7 +410,7 @@ public class TaskService(
         long taskId, long? callerId = null, bool isAdmin = false, CancellationToken ct = default)
     {
         var task = await tasks.GetForUpdateAsync(taskId, ct) ?? throw NotFound(taskId);
-        await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
+        await EnsureWaveOwnerAsync(task, callerId, isAdmin, ct);
         return await LoadDetailAsync(taskId, ct);
     }
 
@@ -420,48 +420,48 @@ public class TaskService(
     /// đã duyệt nội dung cho tới khi đủ chềEtiêu hoặc hết câu phù hợp.
     /// </summary>
     public async Task<TaskDetailDto> GetOrCreateRecordingTaskAsync(
-        long campaignId, bool autoFill, long callerId, bool isAdmin, CancellationToken ct = default)
+        long waveId, bool autoFill, long callerId, bool isAdmin, CancellationToken ct = default)
     {
         await using var transaction = await BeginTransactionIfNeededAsync(ct);
 
-        // Khoá dòng campaign đềEhai request đồng thời không tạo hai task.
-        var campaign = await campaigns.GetForUpdateAsync(campaignId, ct)
-            ?? throw new NotFoundException("campaign_not_found", $"Không tìm thấy chiến dịch #{campaignId}.");
+        // Khoá dòng wave đềEhai request đồng thời không tạo hai task.
+        var wave = await waves.GetForUpdateAsync(waveId, ct)
+            ?? throw new NotFoundException("wave_not_found", $"Không tìm thấy chiến dịch #{waveId}.");
 
-        if (!campaign.AssignedTo.HasValue)
+        if (!wave.AssignedTo.HasValue)
         {
             throw new UnprocessableException(
-                "campaign_not_assigned_to_manager",
-                $"Chiến dịch #{campaignId} chưa được giao cho Task Manager nào nên chưa nhận task. " +
+                "wave_not_assigned_to_manager",
+                $"Chiến dịch #{waveId} chưa được giao cho Task Manager nào nên chưa nhận task. " +
                 "NhềEAdmin giao chiến dịch trước.");
         }
 
-        if (!isAdmin && campaign.AssignedTo.Value != callerId)
+        if (!isAdmin && wave.AssignedTo.Value != callerId)
         {
             throw new ForbiddenException(
-                "campaign_not_owned",
-                $"Chiến dịch #{campaignId} đang giao cho người khác  Ebạn chềEtạo được task trong chiến dịch của mình.");
+                "wave_not_owned",
+                $"Chiến dịch #{waveId} đang giao cho người khác  Ebạn chềEtạo được task trong chiến dịch của mình.");
         }
 
-        var task = await tasks.GetRecordingTaskForCampaignAsync(campaignId, ct);
+        var task = await tasks.GetRecordingTaskForWaveAsync(waveId, ct);
         var now = clock.GetUtcNow();
 
         if (task is null)
         {
             // Hạn cuối ngày cuối chiến dịch theo giềEViệt Nam, đúng khung trigger chấp nhận.
             var deadline = new DateTimeOffset(
-                campaign.EndDate.ToDateTime(TimeOnly.MaxValue), VietnamOffset).ToUniversalTime();
+                wave.EndDate.ToDateTime(TimeOnly.MaxValue), VietnamOffset).ToUniversalTime();
 
             task = new WorkTask
             {
-                CampaignId = campaignId,
+                WaveId = waveId,
                 // Trigger trg_task_creator_assigned đòi người tạo là Task Manager được giao đợt.
                 // Admin gọi endpoint này cũng phải đứng tên người phụ trách đợt.
-                CreatedBy = campaign.AssignedTo.Value,
+                CreatedBy = wave.AssignedTo.Value,
                 TaskType = TaskType.Recording,
-                Domain = campaign.Domain,
-                Description = campaign.CampaignName,
-                TargetQty = campaign.TargetQty,
+                Domain = wave.Domain,
+                Description = wave.WaveName,
+                TargetQty = wave.TargetQty,
                 Deadline = deadline,
                 Status = WorkTaskStatus.InProgress,
                 CreatedAt = now
@@ -469,7 +469,7 @@ public class TaskService(
 
             tasks.Add(task);
             await SaveTasksAsync(ct);
-            await campaigns.RefreshStatusAsync(campaignId, ct);
+            await waves.RefreshStatusAsync(waveId, ct);
         }
 
         var taskId = task.TaskId;
@@ -487,7 +487,7 @@ public class TaskService(
                     taskId,
                     new AddTaskItemsRequest
                     {
-                        AutoFill = new AutoFillCriteria { Count = count, Domain = campaign.Domain }
+                        AutoFill = new AutoFillCriteria { Count = count, Domain = wave.Domain }
                     },
                     ct, callerId, isAdmin);
 
@@ -507,7 +507,7 @@ public class TaskService(
     {
         await using var transaction = await BeginTransactionIfNeededAsync(ct);
         var task = await LoadEditableAsync(taskId, ct);
-        await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
+        await EnsureWaveOwnerAsync(task, callerId, isAdmin, ct);
 
         if (request.Description is not null) task.Description = Clean(request.Description);
 
@@ -515,14 +515,14 @@ public class TaskService(
         if (request.Domain.HasValue)
         {
             var newDomain = request.Domain.Value;
-            if (task.CampaignId.HasValue)
+            if (task.WaveId.HasValue)
             {
-                var campaign = await campaigns.GetAsync(task.CampaignId.Value, ct);
-                if (campaign is not null && campaign.Domain != newDomain)
+                var wave = await waves.GetAsync(task.WaveId.Value, ct);
+                if (wave is not null && wave.Domain != newDomain)
                 {
                     throw new UnprocessableException(
-                        "task_domain_mismatch_campaign",
-                        $"Chủ đềEnhiệm vụ ({newDomain}) không khớp với chủ đềEcủa chiến dịch #{task.CampaignId.Value} ({campaign.Domain}).");
+                        "task_domain_mismatch_wave",
+                        $"Chủ đềEnhiệm vụ ({newDomain}) không khớp với chủ đềEcủa chiến dịch #{task.WaveId.Value} ({wave.Domain}).");
                 }
             }
             task.Domain = newDomain;
@@ -531,18 +531,18 @@ public class TaskService(
         if (request.Deadline.HasValue)
         {
             var deadline = ToUtcFuture(request.Deadline.Value, clock.GetUtcNow());
-            var campaign = task.CampaignId.HasValue
-                ? await campaigns.GetAsync(task.CampaignId.Value, ct)
+            var wave = task.WaveId.HasValue
+                ? await waves.GetAsync(task.WaveId.Value, ct)
                 : null;
-            if (campaign is not null)
+            if (wave is not null)
             {
                 var deadlineDate = ToVietnamDate(deadline);
-                if (deadlineDate < campaign.StartDate || deadlineDate > campaign.EndDate)
+                if (deadlineDate < wave.StartDate || deadlineDate > wave.EndDate)
                 {
                     throw new UnprocessableException(
-                        "task_deadline_outside_campaign",
+                        "task_deadline_outside_wave",
                         $"Hạn {deadlineDate:yyyy-MM-dd} phải nằm trong khoảng ngày của chiến dịch " +
-                        $"{campaign.StartDate:yyyy-MM-dd} đến {campaign.EndDate:yyyy-MM-dd}.");
+                        $"{wave.StartDate:yyyy-MM-dd} đến {wave.EndDate:yyyy-MM-dd}.");
                 }
             }
             task.Deadline = deadline;
@@ -551,19 +551,19 @@ public class TaskService(
         if (request.TargetQty.HasValue)
         {
             // Giữ quota chiến dịch như lúc Create: tổng đã chia (trừ task này) + chềEtiêu mới <= target.
-            // Task độc lập (campaign_id NULL) bềEqua kiểm tra này; trigger cũng RETURN NEW ngay.
-            var campaign = task.CampaignId.HasValue
-                ? await campaigns.GetAsync(task.CampaignId.Value, ct)
+            // Task độc lập (wave_id NULL) bềEqua kiểm tra này; trigger cũng RETURN NEW ngay.
+            var wave = task.WaveId.HasValue
+                ? await waves.GetAsync(task.WaveId.Value, ct)
                 : null;
-            if (campaign is not null)
+            if (wave is not null)
             {
-                var allocated = await campaigns.SumAllocatedAsync(task.CampaignId!.Value, ct);
+                var allocated = await waves.SumAllocatedAsync(task.WaveId!.Value, ct);
                 var withoutThis = allocated - task.TargetQty;
-                if (withoutThis + request.TargetQty.Value > campaign.TargetQty)
+                if (withoutThis + request.TargetQty.Value > wave.TargetQty)
                 {
                     throw new UnprocessableException(
-                        "task_target_exceeds_campaign",
-                        $"Chiến dịch #{campaign.CampaignId} đã chia {allocated}/{campaign.TargetQty} cặp câu; " +
+                        "task_target_exceeds_wave",
+                        $"Chiến dịch #{wave.WaveId} đã chia {allocated}/{wave.TargetQty} cặp câu; " +
                         $"đổi task này thành {request.TargetQty.Value} là vượt chềEtiêu.");
                 }
             }
@@ -620,7 +620,7 @@ public class TaskService(
             await tracker.RefreshStatusAsync(taskId, ct);
         }
 
-        if (task.CampaignId.HasValue) await campaigns.RefreshStatusAsync(task.CampaignId.Value, ct);
+        if (task.WaveId.HasValue) await waves.RefreshStatusAsync(task.WaveId.Value, ct);
 
         if (transaction is not null) await transaction.CommitAsync(ct);
 
@@ -655,7 +655,7 @@ public class TaskService(
     {
         await using var transaction = await BeginTransactionIfNeededAsync(ct);
         var task = await LoadMutableAsync(taskId, ct);
-        await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
+        await EnsureWaveOwnerAsync(task, callerId, isAdmin, ct);
 
         var hasIds = request.Ids.Count > 0;
         var hasAutoFill = request.AutoFill is not null;
@@ -765,7 +765,7 @@ public class TaskService(
     {
         await using var transaction = await BeginTransactionIfNeededAsync(ct);
         var task = await LoadMutableAsync(taskId, ct);
-        await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
+        await EnsureWaveOwnerAsync(task, callerId, isAdmin, ct);
 
         if (task.TaskType == TaskType.Recording)
         {
@@ -829,7 +829,7 @@ public class TaskService(
         }
 
         var task = await LoadMutableAsync(taskId, ct);
-        await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
+        await EnsureWaveOwnerAsync(task, callerId, isAdmin, ct);
 
         var current = await tasks.GetOpenAssignmentsAsync(taskId, ct);
         var already = current.Select(a => a.UserId).ToHashSet();
@@ -933,7 +933,7 @@ public class TaskService(
     {
         await using var transaction = await BeginTransactionIfNeededAsync(ct);
         var task = await LoadMutableAsync(taskId, ct);
-        await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
+        await EnsureWaveOwnerAsync(task, callerId, isAdmin, ct);
 
         var requested = request.Assignments ?? [];
         if (requested.Count == 0)
@@ -1112,7 +1112,7 @@ public class TaskService(
     {
         await using var transaction = await BeginTransactionIfNeededAsync(ct);
         var task = await LoadEditableAsync(taskId, ct);
-        await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
+        await EnsureWaveOwnerAsync(task, callerId, isAdmin, ct);
 
         var active = await tasks.GetOpenAssignmentsAsync(taskId, ct);
         var mine = active.FirstOrDefault(a => a.UserId == userId);
@@ -1336,14 +1336,14 @@ public class TaskService(
     /// Task thu âm và task duyệt ngoài đợt vẫn phải đủ mục trước khi giao/nâng chềEtiêu.
     /// </summary>
     private static bool RequiresItemsToAssign(WorkTask task) =>
-        task.TaskType != TaskType.Review || task.CampaignId is null;
+        task.TaskType != TaskType.Review || task.WaveId is null;
 
     public async Task<TaskDetailDto> CancelAsync(
         long taskId, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false)
     {
         var task = await LoadEditableAsync(taskId, ct);
-        await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
+        await EnsureWaveOwnerAsync(task, callerId, isAdmin, ct);
 
         if (task.Status == WorkTaskStatus.Completed)
         {
@@ -1356,7 +1356,7 @@ public class TaskService(
 
         // Các mục giữ nguyên đềEcòn dấu vết. Task đã huỷ không giữ chềEgì nữa:
         // truy vấn tự lấp chềEtránh những mục đang nằm trong task còn chạy.
-        if (task.CampaignId.HasValue) await campaigns.RefreshStatusAsync(task.CampaignId.Value, ct);
+        if (task.WaveId.HasValue) await waves.RefreshStatusAsync(task.WaveId.Value, ct);
 
         return await LoadDetailAsync(taskId, ct);
     }
@@ -1368,15 +1368,15 @@ public class TaskService(
     {
         await using var transaction = await BeginTransactionIfNeededAsync(ct);
         var task = await tasks.GetForUpdateAsync(taskId, ct) ?? throw NotFound(taskId);
-        await EnsureCampaignOwnerAsync(task, callerId, isAdmin, ct);
+        await EnsureWaveOwnerAsync(task, callerId, isAdmin, ct);
 
         // 1. Chặn xoá khi task vẫn đang nằm trong chiến dịch
-        if (task.CampaignId.HasValue)
+        if (task.WaveId.HasValue)
         {
-            var cName = (await campaigns.GetAsync(task.CampaignId.Value, ct))?.CampaignName;
+            var cName = (await waves.GetAsync(task.WaveId.Value, ct))?.WaveName;
             throw new ConflictException(
-                "task_in_campaign",
-                $"Nhiệm vụ đang nằm trong đợt \"{cName ?? ("#" + task.CampaignId)}\". Hãy gỡ khỏi đợt trước khi xoá.");
+                "task_in_wave",
+                $"Nhiệm vụ đang nằm trong đợt \"{cName ?? ("#" + task.WaveId)}\". Hãy gỡ khỏi đợt trước khi xoá.");
         }
 
         // 2. Chặn xoá khi task đã hoàn thành
@@ -1466,13 +1466,13 @@ public class TaskService(
     {
         var now = clock.GetUtcNow();
 
-        var progress = await campaigns.GetProgressAsync(null, ct);
+        var progress = await waves.GetProgressAsync(null, ct);
 
         var mine = progress
             .Where(p => isAdmin || p.AssignedTo == managerId)
-            .Select(p => new CampaignProgressDto(
-                p.CampaignId, p.CampaignName, p.Domain, p.CampaignTargetQty, p.StartDate, p.EndDate,
-                p.CampaignStatus, p.AssignedTo, p.AllocatedTaskQty, p.RemainingTaskQty,
+            .Select(p => new WaveProgressDto(
+                p.WaveId, p.WaveName, p.Domain, p.WaveTargetQty, p.StartDate, p.EndDate,
+                p.WaveStatus, p.AssignedTo, p.AllocatedTaskQty, p.RemainingTaskQty,
                 p.TaskCount, p.CompletedTaskCount))
             .ToList();
 
@@ -1667,16 +1667,16 @@ public class TaskService(
     }
 
     /// <summary>
-    /// ChềETask Manager sềEhữu chiến dịch (campaign.AssignedTo) hoặc Admin được sửa task.
-    /// Task độc lập (campaign_id NULL): chềEngười tạo hoặc Admin được sửa.
+    /// ChềETask Manager sềEhữu chiến dịch (wave.AssignedTo) hoặc Admin được sửa task.
+    /// Task độc lập (wave_id NULL): chềEngười tạo hoặc Admin được sửa.
     /// callerId null nghĩa là caller cũ (test)  EbềEqua đềEtương thích ngược.
     /// </summary>
-    private async Task EnsureCampaignOwnerAsync(WorkTask task, long? callerId, bool isAdmin, CancellationToken ct)
+    private async Task EnsureWaveOwnerAsync(WorkTask task, long? callerId, bool isAdmin, CancellationToken ct)
     {
         if (!callerId.HasValue) return;
         if (isAdmin) return;
 
-        if (!task.CampaignId.HasValue)
+        if (!task.WaveId.HasValue)
         {
             if (task.CreatedBy != callerId.Value)
             {
@@ -1687,14 +1687,14 @@ public class TaskService(
             return;
         }
 
-        var campaign = await campaigns.GetAsync(task.CampaignId.Value, ct)
-            ?? throw new NotFoundException("campaign_not_found", $"Không tìm thấy chiến dịch #{task.CampaignId}.");
+        var wave = await waves.GetAsync(task.WaveId.Value, ct)
+            ?? throw new NotFoundException("wave_not_found", $"Không tìm thấy chiến dịch #{task.WaveId}.");
 
-        if (campaign.AssignedTo != callerId.Value)
+        if (wave.AssignedTo != callerId.Value)
         {
             throw new ForbiddenException(
                 "task_not_owned",
-                $"Task #{task.TaskId} thuộc chiến dịch #{campaign.CampaignId} không giao cho bạn.");
+                $"Task #{task.TaskId} thuộc chiến dịch #{wave.WaveId} không giao cho bạn.");
         }
     }
 
@@ -1765,14 +1765,14 @@ public class TaskService(
         if (message.Contains("target exceeded", StringComparison.OrdinalIgnoreCase))
         {
             return new UnprocessableException(
-                "task_target_exceeds_campaign",
+                "task_target_exceeds_wave",
                 "ChềEtiêu task vượt phần còn lại của chiến dịch. Lấy allocatedTaskQty ềEdanh sách chiến dịch đềEchia lại.");
         }
 
-        if (message.Contains("must be within campaign", StringComparison.OrdinalIgnoreCase))
+        if (message.Contains("must be within wave", StringComparison.OrdinalIgnoreCase))
         {
             return new UnprocessableException(
-                "task_deadline_outside_campaign",
+                "task_deadline_outside_wave",
                 "Hạn của task nằm ngoài khoảng ngày của chiến dịch. Giới hạn ô chọn ngày theo startDate/endDate.");
         }
 
@@ -1780,7 +1780,7 @@ public class TaskService(
             || message.Contains("must be the assigned task manager", StringComparison.OrdinalIgnoreCase))
         {
             return new UnprocessableException(
-                "campaign_not_assigned_to_manager",
+                "wave_not_assigned_to_manager",
                 "Chiến dịch chưa được giao cho bạn nên chưa nhận task. NhềEAdmin giao chiến dịch trước.");
         }
 

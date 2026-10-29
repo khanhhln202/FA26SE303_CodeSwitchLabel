@@ -10,7 +10,7 @@ namespace CodeSwitchLabel.Api.Controllers;
 
 /// <summary>
 /// Chiến dịch thu thập — Task Manager lập kế hoạch cho một đợt (thường 1-2 tuần / tháng).
-/// Task có thể độc lập (campaign_id NULL) rồi gắn vào chiến dịch sau; xoá task khỏi
+/// Task có thể độc lập (wave_id NULL) rồi gắn vào chiến dịch sau; xoá task khỏi
 /// chiến dịch là xoá vĩnh viễn task đó.
 /// </summary>
 /// <remarks>
@@ -19,22 +19,22 @@ namespace CodeSwitchLabel.Api.Controllers;
 /// trong khoảng ngày của chiến dịch, và không được hạ chỉ tiêu xuống dưới phần đã chia.
 /// </remarks>
 [ApiController]
-[Route("api/campaigns")]
-[Tags(ApiTags.Campaigns)]
+[Route("api/waves")]
+[Tags(ApiTags.Waves)]
 [Authorize(Roles = "TaskManager,Admin")]
-public class CampaignsController(ICampaignService campaignService) : ControllerBase
+public class WavesController(IWaveService waveService) : ControllerBase
 {
     // TaskManager và Admin đều tạo được đợt; TaskManager tự gán đợt cho mình
     /// <summary>Tạo chiến dịch mới — ở trạng thái Open (chưa có nhiệm vụ nào).
     /// Chỉ tiêu từ 2000 đến 5000 cặp câu.</summary>
     [HttpPost]
-    [ProducesResponseType(typeof(CampaignDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(WaveDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
-    public async Task<ActionResult<CampaignDto>> Create(
-        [FromBody] CreateCampaignRequest request, CancellationToken ct)
+    public async Task<ActionResult<WaveDto>> Create(
+        [FromBody] CreateWaveRequest request, CancellationToken ct)
     {
-        var created = await campaignService.CreateAsync(request, User.GetUserId(), User.IsInRole("Admin"), ct);
-        return CreatedAtAction(nameof(Get), new { id = created.CampaignId }, created);
+        var created = await waveService.CreateAsync(request, User.GetUserId(), User.IsInRole("Admin"), ct);
+        return CreatedAtAction(nameof(Get), new { id = created.WaveId }, created);
     }
 
     /// <summary>Danh sách chiến dịch, lọc theo trạng thái, có phân trang.</summary>
@@ -42,13 +42,13 @@ public class CampaignsController(ICampaignService campaignService) : ControllerB
     /// Mỗi dòng kèm tiến độ: tổng chỉ tiêu đã chia cho các task, số task và số task đã xong.
     /// Task Manager chỉ xem được chiến dịch được giao cho mình (read-only).
     ///
-    /// `?sort=` nhận `campaignId`, `startDate`, `endDate`, `status`, `createdAt`;
+    /// `?sort=` nhận `waveId`, `startDate`, `endDate`, `status`, `createdAt`;
     /// `?dir=asc|desc` (mặc định `asc`). Bỏ trống `sort` thì ra đợt mới nhất trước.
     /// </remarks>
     [HttpGet]
-    [ProducesResponseType(typeof(PagedResult<CampaignListItemDto>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<PagedResult<CampaignListItemDto>>> Search(
-        [FromQuery] CampaignSearchRequest request, CancellationToken ct)
+    [ProducesResponseType(typeof(PagedResult<WaveListItemDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResult<WaveListItemDto>>> Search(
+        [FromQuery] WaveSearchRequest request, CancellationToken ct)
     {
         var userId = User.GetUserId();
         var roleClaim = User.FindFirst(ClaimTypes.Role)?.Value;
@@ -58,7 +58,7 @@ public class CampaignsController(ICampaignService campaignService) : ControllerB
             userRole = r;
         }
 
-        return Ok(await campaignService.SearchAsync(request, userId, userRole, ct));
+        return Ok(await waveService.SearchAsync(request, userId, userRole, ct));
     }
 
     /// <summary>
@@ -78,15 +78,15 @@ public class CampaignsController(ICampaignService campaignService) : ControllerB
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<TaskDetailDto>> GetOrCreateRecordingTask(
         long id, [FromQuery] bool autoFill = true, CancellationToken ct = default)
-        => Ok(await campaignService.GetOrCreateRecordingTaskAsync(
+        => Ok(await waveService.GetOrCreateRecordingTaskAsync(
             id, autoFill, User.GetUserId(), User.IsInRole("Admin"), ct));
 
     /// <summary>Chi tiết một chiến dịch.</summary>
     [HttpGet("{id:long}")]
-    [ProducesResponseType(typeof(CampaignDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(WaveDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<CampaignDto>> Get(long id, CancellationToken ct)
-        => Ok(await campaignService.GetAsync(id, User.GetUserId(), User.IsInRole("Admin"), ct));
+    public async Task<ActionResult<WaveDto>> Get(long id, CancellationToken ct)
+        => Ok(await waveService.GetAsync(id, User.GetUserId(), User.IsInRole("Admin"), ct));
 
     // TaskManager phụ trách đợt và Admin đều sửa được
     /// <summary>Sửa tên, chủ đề, chỉ tiêu hoặc khoảng ngày. Trường nào để trống thì giữ nguyên.</summary>
@@ -99,23 +99,23 @@ public class CampaignsController(ICampaignService campaignService) : ControllerB
     /// đường nào để bấm tay đặt nó.
     /// </remarks>
     [HttpPatch("{id:long}")]
-    [ProducesResponseType(typeof(CampaignDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(WaveDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
-    public async Task<ActionResult<CampaignDto>> Update(
-        long id, [FromBody] UpdateCampaignRequest request, CancellationToken ct)
-        => Ok(await campaignService.UpdateAsync(id, request, User.GetUserId(), User.IsInRole("Admin"), ct));
+    public async Task<ActionResult<WaveDto>> Update(
+        long id, [FromBody] UpdateWaveRequest request, CancellationToken ct)
+        => Ok(await waveService.UpdateAsync(id, request, User.GetUserId(), User.IsInRole("Admin"), ct));
 
     // Xoá đợt — các task con tự động thành task độc lập nhờ ON DELETE SET NULL
-    /// <summary>Xoá chiến dịch. Task đang gắn tự động thành task độc lập (campaign_id = null).</summary>
+    /// <summary>Xoá chiến dịch. Task đang gắn tự động thành task độc lập (wave_id = null).</summary>
     [HttpDelete("{id:long}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(long id, CancellationToken ct)
     {
-        await campaignService.DeleteAsync(id, User.GetUserId(), User.IsInRole("Admin"), ct);
+        await waveService.DeleteAsync(id, User.GetUserId(), User.IsInRole("Admin"), ct);
         return NoContent();
     }
 
@@ -131,7 +131,7 @@ public class CampaignsController(ICampaignService campaignService) : ControllerB
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteTask(long id, long taskId, CancellationToken ct)
     {
-        await campaignService.DeleteTaskAsync(id, taskId, User.GetUserId(), User.IsInRole("Admin"), ct);
+        await waveService.DeleteTaskAsync(id, taskId, User.GetUserId(), User.IsInRole("Admin"), ct);
         return NoContent();
     }
 
@@ -142,15 +142,15 @@ public class CampaignsController(ICampaignService campaignService) : ControllerB
     /// </remarks>
     [HttpPost("{id:long}/assign")]
     [Authorize(Roles = "Admin")]
-    [ProducesResponseType(typeof(CampaignDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(WaveDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
-    public async Task<ActionResult<CampaignDto>> Assign(
-        long id, [FromBody] AssignCampaignRequest request, CancellationToken ct)
-        => Ok(await campaignService.AssignAsync(id, request.AssignedToUserId, ct));
+    public async Task<ActionResult<WaveDto>> Assign(
+        long id, [FromBody] AssignWaveRequest request, CancellationToken ct)
+        => Ok(await waveService.AssignAsync(id, request.AssignedToUserId, ct));
 }
 
-public record AssignCampaignRequest
+public record AssignWaveRequest
 {
     public long? AssignedToUserId { get; init; }
 }

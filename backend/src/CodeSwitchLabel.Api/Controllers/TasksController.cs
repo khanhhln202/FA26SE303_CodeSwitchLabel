@@ -33,7 +33,7 @@ namespace CodeSwitchLabel.Api.Controllers;
 [Authorize(Roles = "TaskManager,Admin")]
 public class TasksController(ITaskService taskService) : ControllerBase
 {
-    /// <summary>Tạo task mới — ở trạng thái InProgress. campaignId để trống = task độc lập, gắn sau.</summary>
+    /// <summary>Tạo task mới — ở trạng thái InProgress. waveId để trống = task độc lập, gắn sau.</summary>
     /// <remarks>
     /// Task gắn chiến dịch thì hạn hoàn thành phải nằm trong khoảng ngày của chiến dịch;
     /// task độc lập bỏ qua kiểm tra này. Hạn gửi kèm múi giờ nào cũng được, ví dụ
@@ -41,7 +41,7 @@ public class TasksController(ITaskService taskService) : ControllerBase
     /// Task thu âm tạo kèm người nhận phải giữ đủ <c>targetQty</c> cặp câu hợp lệ;
     /// thiếu câu thì trả 422 và không tạo task. Không gửi người nhận thì task được tạo rỗng.
     /// Lỗi trigger do race (vượt quota/khung hạn) cũng trả mã
-    /// <c>task_target_exceeds_campaign</c> / <c>task_deadline_outside_campaign</c> (422).
+    /// <c>task_target_exceeds_wave</c> / <c>task_deadline_outside_wave</c> (422).
     /// </remarks>
     [HttpPost]
     [Authorize(Roles = "TaskManager")]
@@ -189,18 +189,18 @@ public class TasksController(ITaskService taskService) : ControllerBase
     public async Task<ActionResult<TaskDetailDto>> Unassign(long id, long userId, CancellationToken ct)
         => Ok(await taskService.UnassignAsync(id, userId, ct, User.GetUserId(), User.IsInRole("Admin")));
 
-    /// <summary>Gắn task vào chiến dịch (attach), chuyển giữa các chiến dịch (move), hoặc gỡ ra (detach khi campaignId null).</summary>
+    /// <summary>Gắn task vào chiến dịch (attach), chuyển giữa các chiến dịch (move), hoặc gỡ ra (detach khi waveId null).</summary>
     /// <remarks>
     /// Task độc lập chỉ người tạo hoặc Admin được gắn; task đang gắn thì phải là Task Manager
     /// sở hữu chiến dịch cũ (hoặc Admin). Gắn vào chiến dịch kiểm tra quota + khung hạn như lúc tạo.
     /// </remarks>
-    [HttpPatch("{id:long}/campaign")]
+    [HttpPatch("{id:long}/wave")]
     [ProducesResponseType(typeof(TaskDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<TaskDetailDto>> Attach(
         long id, [FromBody] AttachTaskRequest request, CancellationToken ct)
-        => Ok(await taskService.AttachAsync(id, request.CampaignId, ct, User.GetUserId(), User.IsInRole("Admin")));
+        => Ok(await taskService.AttachAsync(id, request.WaveId, ct, User.GetUserId(), User.IsInRole("Admin")));
 
     /// <summary>Huỷ task.</summary>
     /// <remarks>

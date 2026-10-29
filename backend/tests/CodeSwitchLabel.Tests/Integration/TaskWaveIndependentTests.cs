@@ -12,34 +12,34 @@ using Xunit;
 namespace CodeSwitchLabel.Tests.Integration;
 
 /// <summary>
-/// C1/C2: task độc lập (campaign_id NULL), attach/detach/move, cancel (không xoá cứng).
+/// C1/C2: task độc lập (wave_id NULL), attach/detach/move, cancel (không xoá cứng).
 /// Mỗi test chạy trong transaction riêng (rollback khi Dispose).
 /// </summary>
 [Collection("Database")]
 [Trait("Category", "Integration")]
-public sealed class TaskCampaignIndependentTests : IntegrationTestBase
+public sealed class TaskWaveIndependentTests : IntegrationTestBase
 {
     private readonly DatabaseFixture _fixture;
 
-    public TaskCampaignIndependentTests(DatabaseFixture fixture) : base(fixture)
+    public TaskWaveIndependentTests(DatabaseFixture fixture) : base(fixture)
     {
         _fixture = fixture;
     }
 
     [Fact]
-    public async Task StandaloneCreate_Succeeds_WithNullCampaign()
+    public async Task StandaloneCreate_Succeeds_WithNullWave()
     {
         var detail = await TaskService.CreateAsync(new CreateTaskRequest
         {
-            CampaignId = null,
+            WaveId = null,
             TaskType = TaskType.Recording,
             Description = "Task độc lập",
             TargetQty = 5,
             Deadline = DateTimeOffset.UtcNow.AddDays(7)
         }, ManagerUserId, TestContext.Current.CancellationToken);
 
-        Assert.Null(detail.Summary.CampaignId);
-        Assert.Null(detail.Summary.CampaignName);
+        Assert.Null(detail.Summary.WaveId);
+        Assert.Null(detail.Summary.WaveName);
     }
 
     [Fact]
@@ -47,7 +47,7 @@ public sealed class TaskCampaignIndependentTests : IntegrationTestBase
     {
         var standalone = await TaskService.CreateAsync(new CreateTaskRequest
         {
-            CampaignId = null,
+            WaveId = null,
             TaskType = TaskType.Recording,
             Description = "Gắn sau",
             TargetQty = 1,
@@ -55,20 +55,20 @@ public sealed class TaskCampaignIndependentTests : IntegrationTestBase
         }, ManagerUserId, TestContext.Current.CancellationToken);
 
         var attached = await TaskService.AttachAsync(
-            standalone.Summary.TaskId, CampaignId, TestContext.Current.CancellationToken,
+            standalone.Summary.TaskId, WaveId, TestContext.Current.CancellationToken,
             ManagerUserId, false);
 
-        Assert.Equal(CampaignId, attached.Summary.CampaignId);
-        Assert.NotNull(attached.Summary.CampaignName);
+        Assert.Equal(WaveId, attached.Summary.WaveId);
+        Assert.NotNull(attached.Summary.WaveName);
     }
 
     [Fact]
     public async Task Attach_ExceedsQuota_Fails()
     {
-        // Lấp đầy campaign (target 2000) rồi gắn thêm task độc lập target 1.
+        // Lấp đầy wave (target 2000) rồi gắn thêm task độc lập target 1.
         var filler = await TaskService.CreateAsync(new CreateTaskRequest
         {
-            CampaignId = CampaignId,
+            WaveId = WaveId,
             TaskType = TaskType.Recording,
             Description = "Lấp đầy",
             TargetQty = 2000,
@@ -77,7 +77,7 @@ public sealed class TaskCampaignIndependentTests : IntegrationTestBase
 
         var standalone = await TaskService.CreateAsync(new CreateTaskRequest
         {
-            CampaignId = null,
+            WaveId = null,
             TaskType = TaskType.Recording,
             Description = "Vượt quota",
             TargetQty = 1,
@@ -85,10 +85,10 @@ public sealed class TaskCampaignIndependentTests : IntegrationTestBase
         }, ManagerUserId, TestContext.Current.CancellationToken);
 
         var ex = await Assert.ThrowsAsync<UnprocessableException>(() =>
-            TaskService.AttachAsync(standalone.Summary.TaskId, CampaignId,
+            TaskService.AttachAsync(standalone.Summary.TaskId, WaveId,
                 TestContext.Current.CancellationToken, ManagerUserId, false));
 
-        Assert.Equal("task_target_exceeds_campaign", ex.Code);
+        Assert.Equal("task_target_exceeds_wave", ex.Code);
         _ = filler;
     }
 
@@ -97,29 +97,29 @@ public sealed class TaskCampaignIndependentTests : IntegrationTestBase
     {
         var standalone = await TaskService.CreateAsync(new CreateTaskRequest
         {
-            CampaignId = null,
+            WaveId = null,
             TaskType = TaskType.Recording,
             Description = "Hạn ngoài khung",
             TargetQty = 1,
             Deadline = DateTimeOffset.UtcNow.AddDays(7)
         }, ManagerUserId, TestContext.Current.CancellationToken);
 
-        var future = await CreateCampaignAsync(
+        var future = await CreateWaveAsync(
             $"Khung xa {Guid.NewGuid():N}", 2000,
             DateOnly.FromDateTime(DateTime.Today.AddDays(30)),
             DateOnly.FromDateTime(DateTime.Today.AddDays(60)),
-            AdminUserId, CampaignStatus.Open);
-        await CampaignService.AssignAsync(future.CampaignId, ManagerUserId, TestContext.Current.CancellationToken);
+            AdminUserId, WaveStatus.Open);
+        await WaveService.AssignAsync(future.WaveId, ManagerUserId, TestContext.Current.CancellationToken);
 
         var ex = await Assert.ThrowsAsync<UnprocessableException>(() =>
-            TaskService.AttachAsync(standalone.Summary.TaskId, future.CampaignId,
+            TaskService.AttachAsync(standalone.Summary.TaskId, future.WaveId,
                 TestContext.Current.CancellationToken, ManagerUserId, false));
 
-        Assert.Equal("task_deadline_outside_campaign", ex.Code);
+        Assert.Equal("task_deadline_outside_wave", ex.Code);
     }
 
     [Fact]
-    public async Task DeleteFromCampaign_RemovesTaskAndItems_KeepsRecordingAndReview()
+    public async Task DeleteFromWave_RemovesTaskAndItems_KeepsRecordingAndReview()
     {
         var script = await CreateValidatedScriptAsync(
             "[vi]Em nên [en]scan [vi]tài liệu này.", "[vi]Em nên quét tài liệu này.",
@@ -127,7 +127,7 @@ public sealed class TaskCampaignIndependentTests : IntegrationTestBase
 
         var recordingTask = await TaskService.CreateAsync(new CreateTaskRequest
         {
-            CampaignId = CampaignId,
+            WaveId = WaveId,
             TaskType = TaskType.Recording,
             Domain = ScriptDomain.ItTechnology,
             Description = "Xoá vĩnh viễn task thu âm",
@@ -143,7 +143,7 @@ public sealed class TaskCampaignIndependentTests : IntegrationTestBase
 
         var reviewTask = await TaskService.CreateAsync(new CreateTaskRequest
         {
-            CampaignId = CampaignId,
+            WaveId = WaveId,
             TaskType = TaskType.Review,
             Domain = ScriptDomain.ItTechnology,
             Description = "Xoá vĩnh viễn task duyệt",
@@ -175,9 +175,9 @@ public sealed class TaskCampaignIndependentTests : IntegrationTestBase
         Db.Reviews.Add(review);
         await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        await CampaignService.DeleteTaskAsync(CampaignId, recordingTask.Summary.TaskId,
+        await WaveService.DeleteTaskAsync(WaveId, recordingTask.Summary.TaskId,
             ManagerUserId, false, TestContext.Current.CancellationToken);
-        await CampaignService.DeleteTaskAsync(CampaignId, reviewTask.Summary.TaskId,
+        await WaveService.DeleteTaskAsync(WaveId, reviewTask.Summary.TaskId,
             ManagerUserId, false, TestContext.Current.CancellationToken);
 
         Assert.Null(await Tasks.GetRowAsync(recordingTask.Summary.TaskId, TestContext.Current.CancellationToken));
@@ -201,10 +201,10 @@ public sealed class TaskCampaignIndependentTests : IntegrationTestBase
     }
 
     [Fact]
-    public async Task DeleteViaCampaignEndpoint_RemovesTask()
+    public async Task DeleteViaWaveEndpoint_RemovesTask()
     {
         // Hồi quy cho bug FE: màn hình đợt phải gọi đúng endpoint này,
-        // không phải PATCH /api/tasks/{id} với {campaignId: null} (bị backend lờ đi).
+        // không phải PATCH /api/tasks/{id} với {waveId: null} (bị backend lờ đi).
         // Toàn bộ đi qua HTTP (mỗi request commit riêng), vì dữ liệu tạo bằng
         // service nằm trong transaction ambient mà connection HTTP không thấy.
         var adminToken = await _fixture.GetAdminTokenAsync();
@@ -218,29 +218,29 @@ public sealed class TaskCampaignIndependentTests : IntegrationTestBase
         using var meDoc = JsonDocument.Parse(await me.Content.ReadAsStringAsync(ct));
         var managerId = meDoc.RootElement.GetProperty("userId").GetInt64();
 
-        var campaignName = $"Xoá task E2E {Guid.NewGuid():N}";
-        using var createCampaign = await admin.PostAsJsonAsync("/api/campaigns",
+        var waveName = $"Xoá task E2E {Guid.NewGuid():N}";
+        using var createWave = await admin.PostAsJsonAsync("/api/waves",
             new
             {
-                campaignName,
+                waveName,
                 domain = "ItTechnology", // domain is required
                 targetQty = 2000,
                 startDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
                 endDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30))
             }, ct);
-        Assert.Equal(HttpStatusCode.Created, createCampaign.StatusCode);
-        using var campaignDoc = JsonDocument.Parse(
-            await createCampaign.Content.ReadAsStringAsync(ct));
-        var campaignId = campaignDoc.RootElement.GetProperty("campaignId").GetInt64();
+        Assert.Equal(HttpStatusCode.Created, createWave.StatusCode);
+        using var waveDoc = JsonDocument.Parse(
+            await createWave.Content.ReadAsStringAsync(ct));
+        var waveId = waveDoc.RootElement.GetProperty("waveId").GetInt64();
 
-        using var assign = await admin.PostAsJsonAsync($"/api/campaigns/{campaignId}/assign",
+        using var assign = await admin.PostAsJsonAsync($"/api/waves/{waveId}/assign",
             new { assignedToUserId = managerId }, ct);
         Assert.Equal(HttpStatusCode.OK, assign.StatusCode);
 
         using var createTask = await manager.PostAsJsonAsync("/api/tasks",
             new
             {
-                campaignId,
+                waveId,
                 taskType = "Recording",
                 description = "Xoá qua endpoint",
                 targetQty = 1,
@@ -251,7 +251,7 @@ public sealed class TaskCampaignIndependentTests : IntegrationTestBase
         var taskId = taskDoc.RootElement.GetProperty("summary").GetProperty("taskId").GetInt64();
 
         using var delete = await manager.DeleteAsync(
-            $"/api/campaigns/{campaignId}/tasks/{taskId}", ct);
+            $"/api/waves/{waveId}/tasks/{taskId}", ct);
         Assert.Equal(HttpStatusCode.NoContent, delete.StatusCode);
 
         using var get = await manager.GetAsync($"/api/tasks/{taskId}", ct);
@@ -259,11 +259,11 @@ public sealed class TaskCampaignIndependentTests : IntegrationTestBase
     }
 
     [Fact]
-    public async Task DeleteFromCampaign_NotCampaignOwner_ForbiddenAndTaskRemains()
+    public async Task DeleteFromWave_NotWaveOwner_ForbiddenAndTaskRemains()
     {
         var created = await TaskService.CreateAsync(new CreateTaskRequest
         {
-            CampaignId = CampaignId,
+            WaveId = WaveId,
             TaskType = TaskType.Recording,
             Domain = ScriptDomain.ItTechnology,
             Description = "Task của manager khác",
@@ -272,7 +272,7 @@ public sealed class TaskCampaignIndependentTests : IntegrationTestBase
         }, ManagerUserId, TestContext.Current.CancellationToken);
 
         var ex = await Assert.ThrowsAsync<ForbiddenException>(() =>
-            CampaignService.DeleteTaskAsync(CampaignId, created.Summary.TaskId,
+            WaveService.DeleteTaskAsync(WaveId, created.Summary.TaskId,
                 AdminUserId, false, TestContext.Current.CancellationToken));
 
         Assert.Equal("task_not_owned", ex.Code);
@@ -280,26 +280,26 @@ public sealed class TaskCampaignIndependentTests : IntegrationTestBase
     }
 
     [Fact]
-    public async Task DeleteCampaign_SetsTasksNull()
+    public async Task DeleteWave_SetsTasksNull()
     {
         var created = await TaskService.CreateAsync(new CreateTaskRequest
         {
-            CampaignId = CampaignId,
+            WaveId = WaveId,
             TaskType = TaskType.Recording,
-            Description = "Xoá campaign giữ task",
+            Description = "Xoá wave giữ task",
             TargetQty = 1,
             Deadline = DateTimeOffset.UtcNow.AddDays(7)
         }, ManagerUserId, TestContext.Current.CancellationToken);
 
-        // Xoá campaign bằng SQL trực tiếp (không endpoint xoá campaign):
+        // Xoá wave bằng SQL trực tiếp (không endpoint xoá wave):
         // FK ON DELETE SET NULL phải giữ lại task.
-        var doomedId = created.Summary.CampaignId ?? CampaignId;
+        var doomedId = created.Summary.WaveId ?? WaveId;
         await Db.Database.ExecuteSqlInterpolatedAsync(
-            $"DELETE FROM campaign WHERE campaign_id = {doomedId}", TestContext.Current.CancellationToken);
+            $"DELETE FROM wave WHERE wave_id = {doomedId}", TestContext.Current.CancellationToken);
 
         var row = await Tasks.GetRowAsync(created.Summary.TaskId, TestContext.Current.CancellationToken);
         Assert.NotNull(row);
-        Assert.Null(row!.CampaignId);
+        Assert.Null(row!.WaveId);
     }
 
     [Fact]
@@ -313,7 +313,7 @@ public sealed class TaskCampaignIndependentTests : IntegrationTestBase
 
         var created = await TaskService.CreateAsync(new CreateTaskRequest
         {
-            CampaignId = null,
+            WaveId = null,
             TaskType = TaskType.Recording,
             Domain = ScriptDomain.DailyLife, // match script domain
             Description = "Đóng thay vì xoá",
@@ -344,7 +344,7 @@ public sealed class TaskCampaignIndependentTests : IntegrationTestBase
         // Route DELETE /api/tasks/{id} đã bị gỡ: API phải trả 404/405, không xoá gì.
         var created = await TaskService.CreateAsync(new CreateTaskRequest
         {
-            CampaignId = null,
+            WaveId = null,
             TaskType = TaskType.Recording,
             Description = "Route đã gỡ",
             TargetQty = 1,
@@ -369,7 +369,7 @@ public sealed class TaskCampaignIndependentTests : IntegrationTestBase
     {
         var created = await TaskService.CreateAsync(new CreateTaskRequest
         {
-            CampaignId = null,
+            WaveId = null,
             TaskType = TaskType.Recording,
             Description = "Hiện trong tiến độ",
             TargetQty = 2,
@@ -378,13 +378,13 @@ public sealed class TaskCampaignIndependentTests : IntegrationTestBase
 
         var row = await Tasks.GetRowAsync(created.Summary.TaskId, TestContext.Current.CancellationToken);
         Assert.NotNull(row);
-        Assert.Null(row!.CampaignId);
-        Assert.Null(row.CampaignName);
+        Assert.Null(row!.WaveId);
+        Assert.Null(row.WaveName);
 
         var listed = await TaskService.SearchAsync(
             new TaskSearchRequest { Page = 1, PageSize = 100 },
             ct: TestContext.Current.CancellationToken);
-        Assert.Contains(listed.Items, i => i.TaskId == created.Summary.TaskId && i.CampaignId == null);
+        Assert.Contains(listed.Items, i => i.TaskId == created.Summary.TaskId && i.WaveId == null);
 
         // View SQL trực tiếp: unattached task vẫn xuất hiện (LEFT JOIN).
         var inView = await Db.Database
@@ -394,18 +394,18 @@ public sealed class TaskCampaignIndependentTests : IntegrationTestBase
     }
 
     [Fact]
-    public async Task Move_BetweenCampaigns_RespectsQuota()
+    public async Task Move_BetweenWaves_RespectsQuota()
     {
-        var second = await CreateCampaignAsync(
+        var second = await CreateWaveAsync(
             $"Đợt hai {Guid.NewGuid():N}", 2000,
             DateOnly.FromDateTime(DateTime.Today.AddDays(-1)),
             DateOnly.FromDateTime(DateTime.Today.AddDays(30)),
-            AdminUserId, CampaignStatus.Open);
-        await CampaignService.AssignAsync(second.CampaignId, ManagerUserId, TestContext.Current.CancellationToken);
+            AdminUserId, WaveStatus.Open);
+        await WaveService.AssignAsync(second.WaveId, ManagerUserId, TestContext.Current.CancellationToken);
 
         var created = await TaskService.CreateAsync(new CreateTaskRequest
         {
-            CampaignId = CampaignId,
+            WaveId = WaveId,
             TaskType = TaskType.Recording,
             Description = "Chuyển đợt",
             TargetQty = 1,
@@ -413,9 +413,9 @@ public sealed class TaskCampaignIndependentTests : IntegrationTestBase
         }, ManagerUserId, TestContext.Current.CancellationToken);
 
         var moved = await TaskService.AttachAsync(
-            created.Summary.TaskId, second.CampaignId,
+            created.Summary.TaskId, second.WaveId,
             TestContext.Current.CancellationToken, ManagerUserId, false);
 
-        Assert.Equal(second.CampaignId, moved.Summary.CampaignId);
+        Assert.Equal(second.WaveId, moved.Summary.WaveId);
     }
 }

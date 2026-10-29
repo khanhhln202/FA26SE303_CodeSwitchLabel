@@ -39,7 +39,7 @@ const MEDALS = {
 
 const PROGRESS_TICKS = [0, 25, 50, 75, 100];
 
-// Trạng thái đợt (CampaignStatus của API) -> chữ hiện cạnh tên đợt
+// Trạng thái đợt (WaveStatus của API) -> chữ hiện cạnh tên đợt
 const ROUND_STATUS_TEXT = {
   Draft: 'chưa mở',
   Open: 'đang mở',
@@ -66,11 +66,11 @@ export default function SpeakerDashboard() {
   });
 
   // Call API lấy top 5 của đợt đang tham gia (chỉ khi có đợt)
-  // API trả { campaignTargetQty, allocatedTargetQty, items: [{ rank, userId, name, submitted, isMe }] }
+  // API trả { waveTargetQty, allocatedTargetQty, items: [{ rank, userId, name, submitted, isMe }] }
   const { data: leaderboard } = useQuery({
-    queryKey: [GET_ROUND_LEADERBOARD_API, round?.campaignId],
-    queryFn: () => getRoundLeaderboardApi({ campaignId: round.campaignId, top: LIST_SLOTS }),
-    enabled: Boolean(round?.campaignId),
+    queryKey: [GET_ROUND_LEADERBOARD_API, round?.waveId],
+    queryFn: () => getRoundLeaderboardApi({ waveId: round.waveId, top: LIST_SLOTS }),
+    enabled: Boolean(round?.waveId),
   });
 
   // Call API lấy bản ghi bị từ chối cần ghi lại (tối đa 5)

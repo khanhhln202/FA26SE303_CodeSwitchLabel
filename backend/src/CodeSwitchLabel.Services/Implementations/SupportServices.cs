@@ -176,7 +176,7 @@ public class ReasonService(IReasonRepository repository) : IReasonService
 /// <summary>
 /// SềEliệu quản trềE Mọi con sềEđọc thẳng từ view của lược đềE không tính lại trong C#  E/// dashboard và báo cáo SQL vì thế không bao giềElệch nhau.
 /// </summary>
-public class StatisticsService(IStatisticsRepository repository, ICampaignRepository campaigns)
+public class StatisticsService(IStatisticsRepository repository, IWaveRepository waves)
     : IStatisticsService
 {
     public async Task<DashboardDto> GetDashboardAsync(CancellationToken ct = default)
@@ -184,7 +184,7 @@ public class StatisticsService(IStatisticsRepository repository, ICampaignReposi
         var s = await repository.GetDashboardAsync(ct);
 
         return new DashboardDto(
-            s.TotalCampaigns, s.OpenCampaigns, s.ActiveCampaigns,
+            s.TotalWaves, s.OpenWaves, s.ActiveWaves,
             s.TotalScripts, s.ValidatedScripts, s.PendingScripts,
             s.TotalRecordings, s.ApprovedRecordings, s.RejectedRecordings,
             s.ApprovedDurationSec,
@@ -204,10 +204,10 @@ public class StatisticsService(IStatisticsRepository repository, ICampaignReposi
         [.. (await repository.GetRejectionStatsAsync(ct)).Select(r => new RejectionStatDto(
             r.ReasonCode, r.Category.ToString(), r.TimesUsed))];
 
-    public async Task<IReadOnlyList<CampaignProgressDto>> GetCampaignProgressAsync(
+    public async Task<IReadOnlyList<WaveProgressDto>> GetWaveProgressAsync(
         CancellationToken ct = default) =>
-        [.. (await campaigns.GetProgressAsync(null, ct)).Select(p => new CampaignProgressDto(
-            p.CampaignId, p.CampaignName, p.Domain, p.CampaignTargetQty, p.StartDate, p.EndDate,
-            p.CampaignStatus, p.AssignedTo, p.AllocatedTaskQty, p.RemainingTaskQty,
+        [.. (await waves.GetProgressAsync(null, ct)).Select(p => new WaveProgressDto(
+            p.WaveId, p.WaveName, p.Domain, p.WaveTargetQty, p.StartDate, p.EndDate,
+            p.WaveStatus, p.AssignedTo, p.AllocatedTaskQty, p.RemainingTaskQty,
             p.TaskCount, p.CompletedTaskCount))];
 }

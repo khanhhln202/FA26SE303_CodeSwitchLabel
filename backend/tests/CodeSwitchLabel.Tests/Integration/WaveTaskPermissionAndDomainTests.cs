@@ -12,7 +12,7 @@ namespace CodeSwitchLabel.Tests.Integration;
 /// </summary>
 [Collection("Database")]
 [Trait("Category", "Integration")]
-public sealed class CampaignTaskPermissionAndDomainTests(DatabaseFixture fixture) : ApiTestBase(fixture)
+public sealed class WaveTaskPermissionAndDomainTests(DatabaseFixture fixture) : ApiTestBase(fixture)
 {
     [Fact]
     public async Task TaskManager_TaoChienDich_TuDongGanChoChinhMinh()
@@ -20,9 +20,9 @@ public sealed class CampaignTaskPermissionAndDomainTests(DatabaseFixture fixture
         var managerToken = await GetManagerTokenAsync();
         var managerId = await LayUserIdAsync(managerToken);
 
-        var response = await PostAsync("/api/campaigns", new
+        var response = await PostAsync("/api/waves", new
         {
-            campaignName = $"Đợt của TaskManager {Guid.NewGuid():N}",
+            waveName = $"Đợt của TaskManager {Guid.NewGuid():N}",
             domain = "ItTechnology",
             targetQty = 2000,
             startDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
@@ -42,11 +42,11 @@ public sealed class CampaignTaskPermissionAndDomainTests(DatabaseFixture fixture
     public async Task TaskManager_TaoTaskTrongChienDichChinhMinh_ThanhCong()
     {
         var managerToken = await GetManagerTokenAsync();
-        var campaignId = await TaoChienDichBoiManagerAsync(managerToken, "ItTechnology");
+        var waveId = await TaoChienDichBoiManagerAsync(managerToken, "ItTechnology");
 
         var response = await PostAsync("/api/tasks", new
         {
-            campaignId,
+            waveId,
             taskType = "Recording",
             domain = "ItTechnology",
             description = "Task trong đợt do chính manager tạo",
@@ -61,21 +61,21 @@ public sealed class CampaignTaskPermissionAndDomainTests(DatabaseFixture fixture
     public async Task TaskManager_SuaVaXoaChienDichCuaChinhMinh_ThanhCong()
     {
         var managerToken = await GetManagerTokenAsync();
-        var campaignId = await TaoChienDichBoiManagerAsync(managerToken, "ItTechnology");
+        var waveId = await TaoChienDichBoiManagerAsync(managerToken, "ItTechnology");
 
         // 1. Sửa
-        var patchRes = await PatchAsync($"/api/campaigns/{campaignId}", new
+        var patchRes = await PatchAsync($"/api/waves/{waveId}", new
         {
-            campaignName = "Tên đợt đã đổi"
+            waveName = "Tên đợt đã đổi"
         }, managerToken);
         Assert.Equal(HttpStatusCode.OK, patchRes.StatusCode);
 
         // 2. Xoá
-        var deleteRes = await DeleteAsync($"/api/campaigns/{campaignId}", managerToken);
+        var deleteRes = await DeleteAsync($"/api/waves/{waveId}", managerToken);
         Assert.Equal(HttpStatusCode.NoContent, deleteRes.StatusCode);
 
         // 3. Không còn tìm thấy
-        var getRes = await GetAsync($"/api/campaigns/{campaignId}", managerToken);
+        var getRes = await GetAsync($"/api/waves/{waveId}", managerToken);
         Assert.Equal(HttpStatusCode.NotFound, getRes.StatusCode);
     }
 
@@ -84,9 +84,9 @@ public sealed class CampaignTaskPermissionAndDomainTests(DatabaseFixture fixture
     {
         var adminToken = await GetAdminTokenAsync();
 
-        var response = await PostAsync("/api/campaigns", new
+        var response = await PostAsync("/api/waves", new
         {
-            campaignName = $"Đợt do Admin tạo {Guid.NewGuid():N}",
+            waveName = $"Đợt do Admin tạo {Guid.NewGuid():N}",
             domain = "Education",
             targetQty = 2000,
             startDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
@@ -106,9 +106,9 @@ public sealed class CampaignTaskPermissionAndDomainTests(DatabaseFixture fixture
         var managerToken = await GetManagerTokenAsync();
 
         // Admin tạo chiến dịch và chưa giao cho manager này
-        var response = await PostAsync("/api/campaigns", new
+        var response = await PostAsync("/api/waves", new
         {
-            campaignName = $"Đợt của Admin {Guid.NewGuid():N}",
+            waveName = $"Đợt của Admin {Guid.NewGuid():N}",
             domain = "ItTechnology",
             targetQty = 2000,
             startDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
@@ -117,17 +117,17 @@ public sealed class CampaignTaskPermissionAndDomainTests(DatabaseFixture fixture
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
-        var campaignId = doc.RootElement.GetProperty("campaignId").GetInt64();
+        var waveId = doc.RootElement.GetProperty("waveId").GetInt64();
 
         // Manager cố sửa -> 403
-        var patchRes = await PatchAsync($"/api/campaigns/{campaignId}", new
+        var patchRes = await PatchAsync($"/api/waves/{waveId}", new
         {
-            campaignName = "Manager cố sửa đợt của Admin"
+            waveName = "Manager cố sửa đợt của Admin"
         }, managerToken);
         Assert.Equal(HttpStatusCode.Forbidden, patchRes.StatusCode);
 
         // Manager cố xoá -> 403
-        var deleteRes = await DeleteAsync($"/api/campaigns/{campaignId}", managerToken);
+        var deleteRes = await DeleteAsync($"/api/waves/{waveId}", managerToken);
         Assert.Equal(HttpStatusCode.Forbidden, deleteRes.StatusCode);
     }
 
@@ -135,12 +135,12 @@ public sealed class CampaignTaskPermissionAndDomainTests(DatabaseFixture fixture
     public async Task XoaChienDich_TaskConTuDongThanhDocLap()
     {
         var managerToken = await GetManagerTokenAsync();
-        var campaignId = await TaoChienDichBoiManagerAsync(managerToken, "ItTechnology");
+        var waveId = await TaoChienDichBoiManagerAsync(managerToken, "ItTechnology");
 
         // Tạo task trong đợt
         var taskRes = await PostAsync("/api/tasks", new
         {
-            campaignId,
+            waveId,
             taskType = "Recording",
             domain = "ItTechnology",
             description = "Task sẽ thành độc lập sau khi đợt bị xoá",
@@ -153,28 +153,28 @@ public sealed class CampaignTaskPermissionAndDomainTests(DatabaseFixture fixture
         var taskId = taskDoc.RootElement.GetProperty("summary").GetProperty("taskId").GetInt64();
 
         // Xoá đợt
-        var delCampRes = await DeleteAsync($"/api/campaigns/{campaignId}", managerToken);
+        var delCampRes = await DeleteAsync($"/api/waves/{waveId}", managerToken);
         Assert.Equal(HttpStatusCode.NoContent, delCampRes.StatusCode);
 
-        // Kiểm tra task con: vẫn còn và campaignId == null!
+        // Kiểm tra task con: vẫn còn và waveId == null!
         var getTaskRes = await GetAsync($"/api/tasks/{taskId}", managerToken);
         Assert.Equal(HttpStatusCode.OK, getTaskRes.StatusCode);
 
         using var getTaskDoc = JsonDocument.Parse(await getTaskRes.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         var summary = getTaskDoc.RootElement.GetProperty("summary");
-        Assert.True(summary.GetProperty("campaignId").ValueKind == JsonValueKind.Null);
+        Assert.True(summary.GetProperty("waveId").ValueKind == JsonValueKind.Null);
     }
 
     [Fact]
     public async Task GanTaskLechChuDeVaoChienDich_BaoLoi422()
     {
         var managerToken = await GetManagerTokenAsync();
-        var eduCampaignId = await TaoChienDichBoiManagerAsync(managerToken, "Education");
+        var eduWaveId = await TaoChienDichBoiManagerAsync(managerToken, "Education");
 
         // 1. Tạo trực tiếp task lệch chủ đề vào đợt -> 422
         var createMismatchedRes = await PostAsync("/api/tasks", new
         {
-            campaignId = eduCampaignId,
+            waveId = eduWaveId,
             taskType = "Recording",
             domain = "ItTechnology", // Lệch với Education!
             description = "Task IT trong đợt Giáo dục",
@@ -183,12 +183,12 @@ public sealed class CampaignTaskPermissionAndDomainTests(DatabaseFixture fixture
         }, managerToken);
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, createMismatchedRes.StatusCode);
-        Assert.Equal("task_domain_mismatch_campaign", await LayMaLoiAsync(createMismatchedRes));
+        Assert.Equal("task_domain_mismatch_wave", await LayMaLoiAsync(createMismatchedRes));
 
         // 2. Tạo task độc lập IT, sau đó attach vào đợt Education -> 422
         var createStandaloneRes = await PostAsync("/api/tasks", new
         {
-            campaignId = (long?)null,
+            waveId = (long?)null,
             taskType = "Recording",
             domain = "ItTechnology",
             description = "Task độc lập IT",
@@ -200,13 +200,13 @@ public sealed class CampaignTaskPermissionAndDomainTests(DatabaseFixture fixture
         using var doc = JsonDocument.Parse(await createStandaloneRes.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         var taskId = doc.RootElement.GetProperty("summary").GetProperty("taskId").GetInt64();
 
-        var attachRes = await PatchAsync($"/api/tasks/{taskId}/campaign", new
+        var attachRes = await PatchAsync($"/api/tasks/{taskId}/wave", new
         {
-            campaignId = eduCampaignId
+            waveId = eduWaveId
         }, managerToken);
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, attachRes.StatusCode);
-        Assert.Equal("task_domain_mismatch_campaign", await LayMaLoiAsync(attachRes));
+        Assert.Equal("task_domain_mismatch_wave", await LayMaLoiAsync(attachRes));
     }
 
     [Fact]
@@ -216,7 +216,7 @@ public sealed class CampaignTaskPermissionAndDomainTests(DatabaseFixture fixture
 
         var createRes = await PostAsync("/api/tasks", new
         {
-            campaignId = (long?)null,
+            waveId = (long?)null,
             taskType = "Recording",
             domain = "ItTechnology",
             description = "Task độc lập rảnh để xoá",
@@ -241,11 +241,11 @@ public sealed class CampaignTaskPermissionAndDomainTests(DatabaseFixture fixture
     public async Task XoaTask_DangTrongChienDich_BaoLoi409()
     {
         var managerToken = await GetManagerTokenAsync();
-        var campaignId = await TaoChienDichBoiManagerAsync(managerToken, "ItTechnology");
+        var waveId = await TaoChienDichBoiManagerAsync(managerToken, "ItTechnology");
 
         var createRes = await PostAsync("/api/tasks", new
         {
-            campaignId,
+            waveId,
             taskType = "Recording",
             domain = "ItTechnology",
             description = "Task đang nằm trong đợt",
@@ -260,7 +260,7 @@ public sealed class CampaignTaskPermissionAndDomainTests(DatabaseFixture fixture
         // Xoá task khi còn trong đợt -> 409
         var deleteRes = await DeleteAsync($"/api/tasks/{taskId}", managerToken);
         Assert.Equal(HttpStatusCode.Conflict, deleteRes.StatusCode);
-        Assert.Equal("task_in_campaign", await LayMaLoiAsync(deleteRes));
+        Assert.Equal("task_in_wave", await LayMaLoiAsync(deleteRes));
     }
 
     [Fact]
@@ -290,7 +290,7 @@ public sealed class CampaignTaskPermissionAndDomainTests(DatabaseFixture fixture
         // 2. Tạo task độc lập với targetQty = 1
         var createRes = await PostAsync("/api/tasks", new
         {
-            campaignId = (long?)null,
+            waveId = (long?)null,
             taskType = "Recording",
             domain = "ItTechnology",
             description = "Task có người nhận",
@@ -323,11 +323,11 @@ public sealed class CampaignTaskPermissionAndDomainTests(DatabaseFixture fixture
     public async Task XoaTaskKhoiDot_TaskDaHoanThanh_XoaDuoc()
     {
         var managerToken = await GetManagerTokenAsync();
-        var campaignId = await TaoChienDichBoiManagerAsync(managerToken, "ItTechnology");
+        var waveId = await TaoChienDichBoiManagerAsync(managerToken, "ItTechnology");
 
         var createRes = await PostAsync("/api/tasks", new
         {
-            campaignId,
+            waveId,
             taskType = "Recording",
             domain = "ItTechnology",
             description = "Task đã hoàn thành vẫn xoá được",
@@ -342,7 +342,7 @@ public sealed class CampaignTaskPermissionAndDomainTests(DatabaseFixture fixture
         var completeRes = await PatchAsync($"/api/tasks/{taskId}", new { status = "Completed" }, managerToken);
         Assert.Equal(HttpStatusCode.OK, completeRes.StatusCode);
 
-        var deleteRes = await DeleteAsync($"/api/campaigns/{campaignId}/tasks/{taskId}", managerToken);
+        var deleteRes = await DeleteAsync($"/api/waves/{waveId}/tasks/{taskId}", managerToken);
         Assert.Equal(HttpStatusCode.NoContent, deleteRes.StatusCode);
 
         var getRes = await GetAsync($"/api/tasks/{taskId}", managerToken);
@@ -353,12 +353,12 @@ public sealed class CampaignTaskPermissionAndDomainTests(DatabaseFixture fixture
     public async Task XoaTaskKhoiDot_TaskKhongThuocDot_Tra404VaTaskCon()
     {
         var managerToken = await GetManagerTokenAsync();
-        var campaignA = await TaoChienDichBoiManagerAsync(managerToken, "ItTechnology");
-        var campaignB = await TaoChienDichBoiManagerAsync(managerToken, "ItTechnology");
+        var waveA = await TaoChienDichBoiManagerAsync(managerToken, "ItTechnology");
+        var waveB = await TaoChienDichBoiManagerAsync(managerToken, "ItTechnology");
 
         var createRes = await PostAsync("/api/tasks", new
         {
-            campaignId = campaignA,
+            waveId = waveA,
             taskType = "Recording",
             domain = "ItTechnology",
             description = "Task thuộc đợt A",
@@ -370,7 +370,7 @@ public sealed class CampaignTaskPermissionAndDomainTests(DatabaseFixture fixture
         using var doc = JsonDocument.Parse(await createRes.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         var taskId = doc.RootElement.GetProperty("summary").GetProperty("taskId").GetInt64();
 
-        var deleteRes = await DeleteAsync($"/api/campaigns/{campaignB}/tasks/{taskId}", managerToken);
+        var deleteRes = await DeleteAsync($"/api/waves/{waveB}/tasks/{taskId}", managerToken);
         Assert.Equal(HttpStatusCode.NotFound, deleteRes.StatusCode);
 
         var getRes = await GetAsync($"/api/tasks/{taskId}", managerToken);
@@ -381,9 +381,9 @@ public sealed class CampaignTaskPermissionAndDomainTests(DatabaseFixture fixture
 
     private async Task<long> TaoChienDichBoiManagerAsync(string managerToken, string domain = "ItTechnology")
     {
-        var response = await PostAsync("/api/campaigns", new
+        var response = await PostAsync("/api/waves", new
         {
-            campaignName = $"Đợt test {domain} {Guid.NewGuid():N}",
+            waveName = $"Đợt test {domain} {Guid.NewGuid():N}",
             domain,
             targetQty = 2000,
             startDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
@@ -393,7 +393,7 @@ public sealed class CampaignTaskPermissionAndDomainTests(DatabaseFixture fixture
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
-        return doc.RootElement.GetProperty("campaignId").GetInt64();
+        return doc.RootElement.GetProperty("waveId").GetInt64();
     }
 
     private async Task<long> LayUserIdAsync(string accessToken)

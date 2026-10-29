@@ -96,44 +96,44 @@ public interface IStatisticsService
     Task<IReadOnlyList<SpeakerQualityDto>> GetSpeakerQualityAsync(CancellationToken ct = default);
     Task<IReadOnlyList<ReviewerQualityDto>> GetReviewerQualityAsync(CancellationToken ct = default);
     Task<IReadOnlyList<RejectionStatDto>> GetRejectionStatsAsync(CancellationToken ct = default);
-    Task<IReadOnlyList<CampaignProgressDto>> GetCampaignProgressAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<WaveProgressDto>> GetWaveProgressAsync(CancellationToken ct = default);
 }
 
-/// <summary>Chiến dịch thu thập — task có thể độc lập (campaign_id NULL) rồi gắn sau.</summary>
-public interface ICampaignService
+/// <summary>Chiến dịch thu thập — task có thể độc lập (wave_id NULL) rồi gắn sau.</summary>
+public interface IWaveService
 {
-    Task<PagedResult<CampaignListItemDto>> SearchAsync(
-        CampaignSearchRequest request, long? userId, RoleName? userRole, CancellationToken ct = default);
+    Task<PagedResult<WaveListItemDto>> SearchAsync(
+        WaveSearchRequest request, long? userId, RoleName? userRole, CancellationToken ct = default);
 
-    Task<CampaignDto> GetAsync(
-        long campaignId, long? callerId = null, bool isAdmin = false, CancellationToken ct = default);
+    Task<WaveDto> GetAsync(
+        long waveId, long? callerId = null, bool isAdmin = false, CancellationToken ct = default);
 
-    Task<CampaignDto> CreateAsync(
-        CreateCampaignRequest request, long createdById, bool isAdmin, CancellationToken ct = default);
+    Task<WaveDto> CreateAsync(
+        CreateWaveRequest request, long createdById, bool isAdmin, CancellationToken ct = default);
 
-    Task<CampaignDto> UpdateAsync(
-        long campaignId, UpdateCampaignRequest request, long? callerId, bool isAdmin, CancellationToken ct = default);
+    Task<WaveDto> UpdateAsync(
+        long waveId, UpdateWaveRequest request, long? callerId, bool isAdmin, CancellationToken ct = default);
 
-    Task<CampaignDto> AssignAsync(
-        long campaignId, long? assignedToUserId, CancellationToken ct = default);
+    Task<WaveDto> AssignAsync(
+        long waveId, long? assignedToUserId, CancellationToken ct = default);
 
     /// <summary>
     /// Xoá chiến dịch. Task đang gắn KHÔNG bị xoá: FK ON DELETE SET NULL nên chúng
     /// tự thành task độc lập và vẫn xoá được ở trang quản lý nhiệm vụ.
     /// </summary>
     Task DeleteAsync(
-        long campaignId, long? callerId, bool isAdmin, CancellationToken ct = default);
+        long waveId, long? callerId, bool isAdmin, CancellationToken ct = default);
 
     /// <summary>Xoá vĩnh viễn một task khỏi chiến dịch; bản ghi thu âm và lượt duyệt được giữ lại.</summary>
     Task DeleteTaskAsync(
-        long campaignId, long taskId, long? callerId, bool isAdmin, CancellationToken ct = default);
+        long waveId, long taskId, long? callerId, bool isAdmin, CancellationToken ct = default);
 
     /// <summary>
     /// Lấy task thu âm duy nhất của chiến dịch; chưa có thì tạo với chỉ tiêu bằng cả chiến dịch.
     /// Idempotent và có thể tự lấp cặp câu đã duyệt nội dung.
     /// </summary>
     Task<TaskDetailDto> GetOrCreateRecordingTaskAsync(
-        long campaignId, bool autoFill, long callerId, bool isAdmin, CancellationToken ct = default);
+        long waveId, bool autoFill, long callerId, bool isAdmin, CancellationToken ct = default);
 }
 
 public record SystemConfigDto(
@@ -141,9 +141,9 @@ public record SystemConfigDto(
 
 /// <param name="ApprovedDurationSec">Tổng thời lượng các bản đã duyệt đạt, tính bằng giây.</param>
 public record DashboardDto(
-    long TotalCampaigns,
-    long OpenCampaigns,
-    long ActiveCampaigns,
+    long TotalWaves,
+    long OpenWaves,
+    long ActiveWaves,
     long TotalScripts,
     long ValidatedScripts,
     long PendingScripts,
@@ -164,15 +164,15 @@ public record ReviewerQualityDto(
 
 public record RejectionStatDto(string ReasonCode, string Category, long TimesUsed);
 
-/// <summary>Tiến độ một chiến dịch, đọc thẳng từ view v_campaign_progress.</summary>
-public record CampaignProgressDto(
-    long CampaignId,
-    string CampaignName,
+/// <summary>Tiến độ một chiến dịch, đọc thẳng từ view v_wave_progress.</summary>
+public record WaveProgressDto(
+    long WaveId,
+    string WaveName,
     ScriptDomain Domain,
-    int CampaignTargetQty,
+    int WaveTargetQty,
     DateOnly StartDate,
     DateOnly EndDate,
-    CampaignStatus CampaignStatus,
+    WaveStatus WaveStatus,
     long? AssignedTo,
     long AllocatedTaskQty,
     long RemainingTaskQty,

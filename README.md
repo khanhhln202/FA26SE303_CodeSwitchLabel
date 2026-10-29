@@ -3,7 +3,7 @@
 Nền tảng web thu thập và kiểm soát chất lượng dữ liệu tiếng nói Việt–Anh code-switching.
 Đồ án tốt nghiệp **FA26SE303**.
 
-> Web platform for collecting and quality-controlling Vietnamese–English code-switching speech data: Speakers record script pairs (`cs` + `vi`), Reviewers blind-review each recording 3 times by majority vote, Task Managers assign work via Campaigns/Tasks, Admins manage texts, users, datasets and stats.
+> Web platform for collecting and quality-controlling Vietnamese–English code-switching speech data: Speakers record script pairs (`cs` + `vi`), Reviewers blind-review each recording 3 times by majority vote, Task Managers assign work via Waves/Tasks, Admins manage texts, users, datasets and stats.
 
 ## Tính năng theo vai (Features by role)
 
@@ -197,7 +197,7 @@ Luồng chính (7 bước):
 - **Một task giao cho NHIỀU người.** `task.target_qty` là chỉ tiêu của **cả nhóm**, không nhân theo số người; mỗi lượt giao giữ **quota riêng** trong `task_assignment.target_qty`, tổng quota bằng đúng chỉ tiêu task. Giao không kèm quota thì backend chia phần nguyên + dư (100 cho 3 người = 34/33/33); sửa cả bảng phân công bằng `PUT /api/tasks/{id}/assignments`. Mỗi người thấy **tiến độ của chính mình** (`myProgress`, tính trên quota của mình) lẫn của cả nhóm (`teamProgress`). Ràng buộc còn lại: cùng một người không được nhận trùng một task.
 - **Lượt giao tự chuyển `Completed` khi đạt quota riêng** (V17): `done >= task_assignment.target_qty` → `Completed`, tụt xuống dưới (bản ghi bị từ chối, nâng chỉ tiêu) → `Active`. `Completed` **vẫn là người nhận** — không khoá việc, mọi truy vấn "còn trong task" tính cả `Active` lẫn `Completed`; chỉ `Reassigned`/`Cancelled` mới rời task.
 - **Có thể giao người nhận ngay khi tạo task** bằng `assigneeUserIds` trong `POST /api/tasks`. Với task thu âm, backend lấy các cặp câu `Validated` theo chủ đề mà từng Speaker chưa có bản chờ duyệt/đạt, tối đa quota; kho ít hơn chỉ tiêu thì vẫn tạo task, mỗi người nhận tối đa số câu còn thu được. Nhiều Speaker có thể nhận cùng một cặp (mỗi người một dòng `task_script` và một bản ghi riêng); một Speaker không nhận trùng cặp trong cùng task. Task duyệt chỉ tạo phân công Reviewer.
-- **Chỉ tiêu trên trang chủ Speaker là của riêng người đọc.** `target` của `GET /api/speaker/rounds/current` và `targetQty` trong bảng xếp hạng là tổng quota các lượt giao trong đợt, **không phải** `campaign.target_qty`; số đã nộp vẫn là số thật và có thể vượt mốc.
+- **Chỉ tiêu trên trang chủ Speaker là của riêng người đọc.** `target` của `GET /api/speaker/rounds/current` và `targetQty` trong bảng xếp hạng là tổng quota các lượt giao trong đợt, **không phải** `wave.target_qty`; số đã nộp vẫn là số thật và có thể vượt mốc.
 - **Chỉ tiêu tụt thì task tự mở lại.** Bản ghi bị từ chối → mục câu lùi `Completed → Pending`, mục duyệt `Reviewed → Skipped`; `TaskStateMachine` tính lại và kéo task rời `Completed`. Trước đây chỉ tiêu không bao giờ tụt nên task treo ở "Hoàn thành" dù người nhận chưa làm đủ.
 - **Không dùng EF migration** — sửa lược đồ thì sửa `docs/codeswitchlabel.sql` trước, rồi sửa `DbContext` cho khớp. Migration triển khai mới nhất là V21 (nhiều Speaker dùng chung cặp câu: khoá `task_script_id`, recording ID 64 ký tự có `_u<speakerId>`, bỏ trigger một người đọc, hàng đợi phát theo từng Speaker). Database cũ vẫn cần V14/V15 trước V17 và V21.
 
@@ -232,7 +232,7 @@ docker exec csl-postgres psql -U csl -d codeswitchlabel -c "select changed_at, u
 
 - Swagger là nguồn sự thật khi backend chạy: `http://localhost:5053` (dev) / `https://api.<domain>` (prod). Export: `curl -o swagger.json http://localhost:5053/swagger/v1/swagger.json`
 - `docs/FE-INTEGRATION.md`: auth, format lỗi (`401/403` rỗng, `400` validation `errors`, nghiệp vụ `code+title+traceId`), recording/review/tasks/enum
-- 13 controller: `Auth, Scripts, Recordings, Reviews, ScriptQueue, Speaker, Tasks, Campaigns, Datasets, Users, Admin, Config, Proposals` — xem chi tiết trong [`backend/README.md`](backend/README.md). Thêm controller thì đếm lại: `ls backend/src/CodeSwitchLabel.Api/Controllers/*.cs | wc -l`
+- 13 controller: `Auth, Scripts, Recordings, Reviews, ScriptQueue, Speaker, Tasks, Waves, Datasets, Users, Admin, Config, Proposals` — xem chi tiết trong [`backend/README.md`](backend/README.md). Thêm controller thì đếm lại: `ls backend/src/CodeSwitchLabel.Api/Controllers/*.cs | wc -l`
 
 ## Deploy
 
@@ -251,7 +251,7 @@ docker compose -f deploy/docker-compose.prod.yml logs -f api
 - **Ngưỡng thời lượng 1–30s là đề xuất của nhóm backend**, chưa được duyệt chính thức; hệ thống chưa đo khoảng lặng đầu/cuối.
 - **Chưa có hệ thống nhắc nhở tự động** (ghi là "yêu cầu 3.3" nhưng `docs/Requirement.txt` không có mục này) — không có bảng `notification`, không có background service. Mọi số liệu để nhắc (`deadline`, `hoursRemaining`, `isOverdue`, `overdueTasks`) backend đã trả sẵn, nên khi nào thật sự cần thì làm bằng một endpoint + một con badge là đủ, không cần bảng riêng.
 - **Trạng thái task: máy tính, người chốt.** Trạng thái tự tính lại từ số liệu thật sau mỗi việc xảy ra (đạt chỉ tiêu → `Completed`, chưa đạt → `InProgress`), chỉ còn ba giá trị (`InProgress`/`Completed`/`Cancelled`). Task Manager đổi tay được qua `PATCH /api/tasks/{id}` với `status` — `InProgress` mở lại task đã xong, `Completed` chốt sớm, `Cancelled` dừng hẳn (y hệt nút Huỷ) — và giá trị bấm tay được giữ tới khi có việc thật (đổi chỉ tiêu, nộp bản ghi, duyệt). Trạng thái đợt thì **không bấm tay**: nó là hàm của task (`Open`/`InProgress`/`Completed`). Ghi là "yêu cầu 4.1" ở `README.md` cũ nhưng `Requirement.txt` cũng không có.
-- **Xoá task** qua `DELETE /api/tasks/{id}` (xoá cứng được task đã gỡ khỏi chiến dịch và chưa có dữ liệu nộp thật — lượt giao và hàng chờ xoá theo task; trả 409 `task_in_campaign` / `task_has_work` nếu còn trong đợt hoặc đã có bản ghi nộp/lượt duyệt).
+- **Xoá task** qua `DELETE /api/tasks/{id}` (xoá cứng được task đã gỡ khỏi đợt và chưa có dữ liệu nộp thật — lượt giao và hàng chờ xoá theo task; trả 409 `task_in_wave` / `task_has_work` nếu còn trong đợt hoặc đã có bản ghi nộp/lượt duyệt).
 - **Không xoá tài khoản** (chỉ khoá), không xoá cứng `rejection_reason` (chỉ tắt `is_active`), không tự đặt `recording.status` / trạng thái task ngoài `TaskStateMachine`. Câu **chờ duyệt** xoá cứng được qua `DELETE /api/scripts/{id}` (chặn nếu đã có bản ghi âm). Cặp câu đã thu dùng **xoá mềm** (`script.status = 'deactivated'`) — dữ liệu vẫn còn để truy vết.
 
 ### Việc chưa làm ở frontend

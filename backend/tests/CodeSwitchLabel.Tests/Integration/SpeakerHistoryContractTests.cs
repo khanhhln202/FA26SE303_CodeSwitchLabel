@@ -262,19 +262,19 @@ public sealed class SpeakerHistoryContractTests(DatabaseFixture fixture) : Integ
         var dau = Dau();
 
         var manager = await CreateUserAsync($"tm-ct-{dau}@test.local", RoleName.TaskManager);
-        // ck_campaign_target_qty: chỉ tiêu đợt phải nằm trong 2000–5000.
-        var campaign = await CreateCampaignAsync($"Đợt chỉ tiêu {dau}", 2000,
+        // ck_wave_target_qty: chỉ tiêu đợt phải nằm trong 2000–5000.
+        var wave = await CreateWaveAsync($"Đợt chỉ tiêu {dau}", 2000,
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), manager.UserId);
 
         // Đợt phải có Task Manager phụ trách trước khi tạo nhiệm vụ (trigger của lược đồ).
-        campaign.AssignedTo = manager.UserId;
+        wave.AssignedTo = manager.UserId;
         await Db.SaveChangesAsync(ct);
 
         // Người thứ nhất nhận hai task: quota 1 + 2 = 3.
-        var taskA = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 1,
+        var taskA = await CreateTaskAsync(wave.WaveId, TaskType.Recording, 1,
             manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
-        var taskB = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 3,
+        var taskB = await CreateTaskAsync(wave.WaveId, TaskType.Recording, 3,
             manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
 
         var vuot = await CreateUserAsync($"sp-vuot-{dau}@test.local", RoleName.Speaker);
@@ -303,7 +303,7 @@ public sealed class SpeakerHistoryContractTests(DatabaseFixture fixture) : Integ
         await NopAsync(duoi.UserId, taskB.TaskId, 1, $"d{dau}", ct);
         await NopAsync(khongNhan.UserId, taskB.TaskId, 2, $"k{dau}", ct);
 
-        var bang = await Rounds.GetLeaderboardAsync(campaign.CampaignId, vuot.UserId, 10, ct);
+        var bang = await Rounds.GetLeaderboardAsync(wave.WaveId, vuot.UserId, 10, ct);
 
         // Thứ hạng theo số đã nộp THẬT: 4 > 2 > 1, không theo số đã chặn ở quota.
         Assert.Equal(vuot.UserId, bang.Items[0].UserId);
@@ -328,13 +328,13 @@ public sealed class SpeakerHistoryContractTests(DatabaseFixture fixture) : Integ
         Assert.Equal(2, dongKhongNhan.SubmittedCapped);
 
         // Mốc cả đợt không đổi: tổng chỉ tiêu đợt và tổng chỉ tiêu nhiệm vụ đã chia.
-        Assert.Equal(2000, bang.CampaignTargetQty);
+        Assert.Equal(2000, bang.WaveTargetQty);
         Assert.Equal(4, bang.AllocatedTargetQty);
     }
 
     /// <summary>
     /// Trang chủ lấy `target` từ tổng quota cá nhân trên các task trong đợt, không lấy
-    /// `campaign.targetQty` (2000). Lượt giao cũ chưa có quota vẫn chia theo số người nhận,
+    /// `wave.targetQty` (2000). Lượt giao cũ chưa có quota vẫn chia theo số người nhận,
     /// đúng quy tắc của API tiến độ Speaker.
     /// </summary>
     [Fact]
@@ -344,18 +344,18 @@ public sealed class SpeakerHistoryContractTests(DatabaseFixture fixture) : Integ
         var dau = Dau();
 
         var manager = await CreateUserAsync($"tm-dot-{dau}@test.local", RoleName.TaskManager);
-        var campaign = await CreateCampaignAsync($"Đợt trang chủ {dau}", 2000,
+        var wave = await CreateWaveAsync($"Đợt trang chủ {dau}", 2000,
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), manager.UserId);
-        campaign.AssignedTo = manager.UserId;
+        wave.AssignedTo = manager.UserId;
         await Db.SaveChangesAsync(ct);
 
-        var taskA = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 4,
+        var taskA = await CreateTaskAsync(wave.WaveId, TaskType.Recording, 4,
             manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
-        var taskB = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 6,
+        var taskB = await CreateTaskAsync(wave.WaveId, TaskType.Recording, 6,
             manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
         // Task cũ: chưa có quota trên lượt giao, phải chia đều theo số người nhận.
-        var taskC = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 3,
+        var taskC = await CreateTaskAsync(wave.WaveId, TaskType.Recording, 3,
             manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
 
         var toi = await CreateUserAsync($"sp-dot-{dau}@test.local", RoleName.Speaker, $"A {dau}");
@@ -390,7 +390,7 @@ public sealed class SpeakerHistoryContractTests(DatabaseFixture fixture) : Integ
 
     /// <summary>
     /// Task lẻ (không thuộc đợt nào) đến hạn SỚM hơn không được che mất đợt đang tham gia.
-    /// Trước đây endpoint lấy task hạn gần nhất rồi mới đọc campaignId, nên gặp task lẻ là
+    /// Trước đây endpoint lấy task hạn gần nhất rồi mới đọc waveId, nên gặp task lẻ là
     /// trả 204 — người đọc mất luôn khối "đợt đang tham gia" lẫn chỉ tiêu của mình.
     /// </summary>
     [Fact]
@@ -400,21 +400,21 @@ public sealed class SpeakerHistoryContractTests(DatabaseFixture fixture) : Integ
         var dau = Dau();
 
         var manager = await CreateUserAsync($"tm-le-{dau}@test.local", RoleName.TaskManager);
-        var campaign = await CreateCampaignAsync($"Đợt có task lẻ {dau}", 2000,
+        var wave = await CreateWaveAsync($"Đợt có task lẻ {dau}", 2000,
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), manager.UserId);
-        campaign.AssignedTo = manager.UserId;
+        wave.AssignedTo = manager.UserId;
         await Db.SaveChangesAsync(ct);
 
         var toi = await CreateUserAsync($"sp-le-{dau}@test.local", RoleName.Speaker);
 
-        var trongDot = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 5,
+        var trongDot = await CreateTaskAsync(wave.WaveId, TaskType.Recording, 5,
             manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
 
         // Task lẻ: không thuộc đợt nào, hạn SỚM hơn task của đợt.
         var taskLe = new WorkTask
         {
-            CampaignId = null,
+            WaveId = null,
             TaskType = TaskType.Recording,
             TargetQty = 2,
             Deadline = DateTimeOffset.UtcNow.AddDays(1),
@@ -442,7 +442,7 @@ public sealed class SpeakerHistoryContractTests(DatabaseFixture fixture) : Integ
         var dot = await Rounds.GetCurrentAsync(toi.UserId, ct);
 
         Assert.NotNull(dot);
-        Assert.Equal(campaign.CampaignId, dot.CampaignId);
+        Assert.Equal(wave.WaveId, dot.WaveId);
         // Chỉ tiêu chỉ cộng quota trong đợt — task lẻ nằm ngoài đợt nên không tính vào.
         Assert.Equal(5, dot.Target);
     }
@@ -458,13 +458,13 @@ public sealed class SpeakerHistoryContractTests(DatabaseFixture fixture) : Integ
         var dau = Dau();
 
         var manager = await CreateUserAsync($"tm-chua-{dau}@test.local", RoleName.TaskManager);
-        var campaign = await CreateCampaignAsync($"Đợt mới mở {dau}", 2000,
+        var wave = await CreateWaveAsync($"Đợt mới mở {dau}", 2000,
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), manager.UserId);
-        campaign.AssignedTo = manager.UserId;
+        wave.AssignedTo = manager.UserId;
         await Db.SaveChangesAsync(ct);
 
-        var task = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 10,
+        var task = await CreateTaskAsync(wave.WaveId, TaskType.Recording, 10,
             manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
 
         var daThu = await CreateUserAsync($"sp-da-{dau}@test.local", RoleName.Speaker, $"A {dau}");
@@ -485,7 +485,7 @@ public sealed class SpeakerHistoryContractTests(DatabaseFixture fixture) : Integ
         await Db.SaveChangesAsync(ct);
         await NopAsync(daThu.UserId, task.TaskId, 2, $"t{dau}", ct);
 
-        var bang = await Rounds.GetLeaderboardAsync(campaign.CampaignId, chuaThu.UserId, 10, ct);
+        var bang = await Rounds.GetLeaderboardAsync(wave.WaveId, chuaThu.UserId, 10, ct);
 
         Assert.Equal(2, bang.Items.Count);
 

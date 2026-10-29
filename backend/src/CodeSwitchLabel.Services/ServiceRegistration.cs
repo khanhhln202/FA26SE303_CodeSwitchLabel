@@ -78,7 +78,7 @@ public static class ServiceRegistration
         services.AddScoped<IRecordingRepository, RecordingRepository>();
         services.AddScoped<IReviewRepository, ReviewRepository>();
         services.AddScoped<ITaskRepository, TaskRepository>();
-        services.AddScoped<ICampaignRepository, CampaignRepository>();
+        services.AddScoped<IWaveRepository, WaveRepository>();
         services.AddScoped<IUserDomainRepository, UserDomainRepository>();
         services.AddScoped<ISystemConfigRepository, SystemConfigRepository>();
         services.AddScoped<IReasonRepository, ReasonRepository>();
@@ -96,7 +96,7 @@ public static class ServiceRegistration
         // nằm chung transaction với việc nộp bản ghi hay duyệt.
         services.AddScoped<ITaskProgressTracker, TaskProgressTracker>();
         services.AddScoped<ITaskService, TaskService>();
-        services.AddScoped<ICampaignService, CampaignService>();
+        services.AddScoped<IWaveService, WaveService>();
 
         services.AddScoped<ISystemConfigService, SystemConfigService>();
         services.AddScoped<IReasonService, ReasonService>();
@@ -126,7 +126,7 @@ public static class ServiceRegistration
         (typeof(ScriptWordRelation), "script_word_relation"),
         (typeof(TaskType), "task_type"),
         (typeof(WorkTaskStatus), "task_status"),
-        (typeof(CampaignStatus), "campaign_status"),
+        (typeof(WaveStatus), "wave_status"),
         (typeof(AssignmentStatus), "assignment_status"),
         (typeof(TaskScriptStatus), "task_script_status"),
         (typeof(SentenceVariant), "sentence_variant"),

@@ -27,25 +27,25 @@ public sealed class RecordingAutoQueueTests(DatabaseFixture fixture) : Integrati
     private ITaskProgressTracker Tracker => Scope.ServiceProvider.GetRequiredService<ITaskProgressTracker>();
 
     /// <summary>Task Manager + đợt đã giao cho họ — mọi task trong test đều qua đường này.</summary>
-    private async Task<(AppUser Manager, Campaign Campaign)> TaoDotAsync(string nhan, CancellationToken ct)
+    private async Task<(AppUser Manager, Wave Wave)> TaoDotAsync(string nhan, CancellationToken ct)
     {
         var manager = await CreateUserAsync($"tm-{nhan}-{Guid.NewGuid():N}@test.local", RoleName.TaskManager);
 
-        var campaign = await CreateCampaignAsync($"Đợt {nhan} {Guid.NewGuid():N}", 2000,
+        var wave = await CreateWaveAsync($"Đợt {nhan} {Guid.NewGuid():N}", 2000,
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
-            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), manager.UserId, CampaignStatus.Open);
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), manager.UserId, WaveStatus.Open);
 
-        campaign.AssignedTo = manager.UserId;
+        wave.AssignedTo = manager.UserId;
         await Db.SaveChangesAsync(ct);
 
-        return (manager, campaign);
+        return (manager, wave);
     }
 
     /// <summary>Task thu âm trong đợt: câu đã duyệt nội dung + lượt giao Active cho Speaker.</summary>
     private async Task<(WorkTask Task, Script Script)> TaoTaskGhiAmAsync(
-        Campaign campaign, AppUser manager, AppUser speaker, CancellationToken ct)
+        Wave wave, AppUser manager, AppUser speaker, CancellationToken ct)
     {
-        var task = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 5,
+        var task = await CreateTaskAsync(wave.WaveId, TaskType.Recording, 5,
             manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
 
         var script = await CreateValidatedScriptAsync(
@@ -81,26 +81,26 @@ public sealed class RecordingAutoQueueTests(DatabaseFixture fixture) : Integrati
     public async Task BanChoTuyetCuaDot_VaoMoiTaskDuyetChuaHuy()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (manager, campaign) = await TaoDotAsync("auto-queue", ct);
+        var (manager, wave) = await TaoDotAsync("auto-queue", ct);
         var (managerDotKhac, dotKhac) = await TaoDotAsync("dot-khac", ct);
         var speaker = await CreateUserAsync($"sp-aq-{Guid.NewGuid():N}@test.local", RoleName.Speaker);
         var reviewer = await CreateUserAsync($"rv-aq-{Guid.NewGuid():N}@test.local", RoleName.Reviewer);
 
-        var (recTask, script) = await TaoTaskGhiAmAsync(campaign, manager, speaker, ct);
+        var (recTask, script) = await TaoTaskGhiAmAsync(wave, manager, speaker, ct);
 
         // Ba task duyệt cùng đợt: đang chạy (đã giao Reviewer), đã đủ chỉ tiêu, đã huỷ.
-        var reviewTask = await CreateTaskAsync(campaign.CampaignId, TaskType.Review, 4,
+        var reviewTask = await CreateTaskAsync(wave.WaveId, TaskType.Review, 4,
             manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
 
-        var reviewTaskDuChiTieu = await CreateTaskAsync(campaign.CampaignId, TaskType.Review, 1,
+        var reviewTaskDuChiTieu = await CreateTaskAsync(wave.WaveId, TaskType.Review, 1,
             manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
         reviewTaskDuChiTieu.Status = WorkTaskStatus.Completed;
 
-        var reviewTaskDaHuy = await CreateTaskAsync(campaign.CampaignId, TaskType.Review, 4,
+        var reviewTaskDaHuy = await CreateTaskAsync(wave.WaveId, TaskType.Review, 4,
             manager.UserId, DateTimeOffset.UtcNow.AddDays(10), WorkTaskStatus.Cancelled);
 
         // Task duyệt của đợt khác — không được nhận bản ghi này.
-        var reviewTaskDotKhac = await CreateTaskAsync(dotKhac.CampaignId, TaskType.Review, 4,
+        var reviewTaskDotKhac = await CreateTaskAsync(dotKhac.WaveId, TaskType.Review, 4,
             managerDotKhac.UserId, DateTimeOffset.UtcNow.AddDays(10));
 
         Db.TaskAssignments.Add(new TaskAssignment
@@ -140,12 +140,12 @@ public sealed class RecordingAutoQueueTests(DatabaseFixture fixture) : Integrati
     public async Task BanTrungQc_KhongVaoHangChoTaskDuyet()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (manager, campaign) = await TaoDotAsync("qc-truot", ct);
+        var (manager, wave) = await TaoDotAsync("qc-truot", ct);
         var speaker = await CreateUserAsync($"sp-qc-{Guid.NewGuid():N}@test.local", RoleName.Speaker);
 
-        var (recTask, script) = await TaoTaskGhiAmAsync(campaign, manager, speaker, ct);
+        var (recTask, script) = await TaoTaskGhiAmAsync(wave, manager, speaker, ct);
 
-        await CreateTaskAsync(campaign.CampaignId, TaskType.Review, 4,
+        await CreateTaskAsync(wave.WaveId, TaskType.Review, 4,
             manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
 
         // Mock QC trong test luôn cho qua, nên dựng thẳng bản trượt rồi gọi đúng cầu nối
@@ -164,13 +164,13 @@ public sealed class RecordingAutoQueueTests(DatabaseFixture fixture) : Integrati
     public async Task ThuNgoaiDot_KhongVaoHangChoTaskDuyet()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (manager, campaign) = await TaoDotAsync("ngoai-dot", ct);
+        var (manager, wave) = await TaoDotAsync("ngoai-dot", ct);
         var speaker = await CreateUserAsync($"sp-nd-{Guid.NewGuid():N}@test.local", RoleName.Speaker);
 
         // Task thu âm độc lập (C1): không thuộc đợt nào.
         var taskTran = new WorkTask
         {
-            CampaignId = null,
+            WaveId = null,
             TaskType = TaskType.Recording,
             TargetQty = 5,
             Deadline = DateTimeOffset.UtcNow.AddDays(10),
@@ -200,7 +200,7 @@ public sealed class RecordingAutoQueueTests(DatabaseFixture fixture) : Integrati
         });
 
         // Có task duyệt đang mở trong đợt — nhưng bản thu này không thuộc đợt nên không được nhận.
-        await CreateTaskAsync(campaign.CampaignId, TaskType.Review, 4,
+        await CreateTaskAsync(wave.WaveId, TaskType.Review, 4,
             manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
         await Db.SaveChangesAsync(ct);
 

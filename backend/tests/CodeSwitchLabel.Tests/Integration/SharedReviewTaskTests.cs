@@ -35,25 +35,25 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
             .SingleAsync(ct);
 
     /// <summary>Đợt + Task Manager phụ trách — lược đồ không cho tạo nhiệm vụ khi đợt chưa có ai phụ trách.</summary>
-    private async Task<(AppUser Manager, Campaign Campaign)> TaoDotAsync(string dau, CancellationToken ct)
+    private async Task<(AppUser Manager, Wave Wave)> TaoDotAsync(string dau, CancellationToken ct)
     {
         var manager = await CreateUserAsync($"tm-{dau}@test.local", RoleName.TaskManager);
 
-        var campaign = await CreateCampaignAsync($"Đợt duyệt {dau}", 2000,
+        var wave = await CreateWaveAsync($"Đợt duyệt {dau}", 2000,
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), manager.UserId);
 
-        campaign.AssignedTo = manager.UserId;
+        wave.AssignedTo = manager.UserId;
         await Db.SaveChangesAsync(ct);
 
-        return (manager, campaign);
+        return (manager, wave);
     }
 
     private async Task<WorkTask> TaoLoDuyetAsync(
-        long campaignId, long managerId, string recordingId, long[] reviewerIds,
+        long waveId, long managerId, string recordingId, long[] reviewerIds,
         int targetQty, CancellationToken ct)
     {
-        var task = await CreateTaskAsync(campaignId, TaskType.Review, targetQty,
+        var task = await CreateTaskAsync(waveId, TaskType.Review, targetQty,
             managerId, DateTimeOffset.UtcNow.AddDays(10));
 
         Db.TaskRecordings.Add(new TaskRecording
@@ -99,7 +99,7 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
         var ct = TestContext.Current.CancellationToken;
         var dau = Dau();
 
-        var (manager, campaign) = await TaoDotAsync(dau, ct);
+        var (manager, wave) = await TaoDotAsync(dau, ct);
         var speaker = await CreateUserAsync($"sp-{dau}@test.local", RoleName.Speaker);
 
         var rv1 = await CreateUserAsync($"rv1-{dau}@test.local", RoleName.Reviewer);
@@ -114,7 +114,7 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
             script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
 
         var task = await TaoLoDuyetAsync(
-            campaign.CampaignId, manager.UserId, recording.RecordingId,
+            wave.WaveId, manager.UserId, recording.RecordingId,
             [rv1.UserId, rv2.UserId, rv3.UserId], 1, ct);
 
         var vong1 = await DuyetAsync(recording.RecordingId, rv1.UserId, task.TaskId, 1, ct);
@@ -151,7 +151,7 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
         var ct = TestContext.Current.CancellationToken;
         var dau = Dau();
 
-        var (manager, campaign) = await TaoDotAsync(dau, ct);
+        var (manager, wave) = await TaoDotAsync(dau, ct);
         var speaker = await CreateUserAsync($"sp-{dau}@test.local", RoleName.Speaker);
         var reviewer = await CreateUserAsync($"rv-{dau}@test.local", RoleName.Reviewer);
 
@@ -163,7 +163,7 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
             script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
 
         var task = await TaoLoDuyetAsync(
-            campaign.CampaignId, manager.UserId, recording.RecordingId, [reviewer.UserId], 1, ct);
+            wave.WaveId, manager.UserId, recording.RecordingId, [reviewer.UserId], 1, ct);
 
         var ketQua = await DuyetAsync(recording.RecordingId, reviewer.UserId, task.TaskId, 1, ct);
 
@@ -181,7 +181,7 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
         var ct = TestContext.Current.CancellationToken;
         var dau = Dau();
 
-        var (manager, campaign) = await TaoDotAsync(dau, ct);
+        var (manager, wave) = await TaoDotAsync(dau, ct);
         var speaker = await CreateUserAsync($"sp-{dau}@test.local", RoleName.Speaker);
         var rv1 = await CreateUserAsync($"rv1-{dau}@test.local", RoleName.Reviewer);
         var rv2 = await CreateUserAsync($"rv2-{dau}@test.local", RoleName.Reviewer);
@@ -196,7 +196,7 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
             script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
 
         var task = await TaoLoDuyetAsync(
-            campaign.CampaignId, manager.UserId, recording.RecordingId,
+            wave.WaveId, manager.UserId, recording.RecordingId,
             [rv1.UserId, rv2.UserId, rv3.UserId], 1, ct);
 
         var vong1 = await DuyetAsync(
@@ -233,7 +233,7 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
         var ct = TestContext.Current.CancellationToken;
         var dau = Dau();
 
-        var (manager, campaign) = await TaoDotAsync(dau, ct);
+        var (manager, wave) = await TaoDotAsync(dau, ct);
         var speaker = await CreateUserAsync($"sp-{dau}@test.local", RoleName.Speaker);
         var reviewer = await CreateUserAsync($"rv-{dau}@test.local", RoleName.Reviewer);
 
@@ -245,7 +245,7 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
         var vi = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.PureVietnamese);
 
         var task = await TaoLoDuyetAsync(
-            campaign.CampaignId, manager.UserId, cs.RecordingId, [reviewer.UserId], 2, ct);
+            wave.WaveId, manager.UserId, cs.RecordingId, [reviewer.UserId], 2, ct);
 
         // Từ chối KHÔNG kèm bình luận: lý do phải lấy từ mã đã chọn, nếu không FE nhận null.
         await ReviewService.SubmitAsync(cs.RecordingId, reviewer.UserId, new SubmitReviewRequest
@@ -289,11 +289,11 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
         var ct = TestContext.Current.CancellationToken;
         var dau = Dau();
 
-        var (manager, campaign) = await TaoDotAsync(dau, ct);
+        var (manager, wave) = await TaoDotAsync(dau, ct);
         var speaker = await CreateUserAsync($"sp-gom-{dau}@test.local", RoleName.Speaker);
         var reviewer = await CreateUserAsync($"rv-gom-{dau}@test.local", RoleName.Reviewer);
 
-        var task = await CreateTaskAsync(campaign.CampaignId, TaskType.Review, 4,
+        var task = await CreateTaskAsync(wave.WaveId, TaskType.Review, 4,
             manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
 
         Db.TaskAssignments.Add(new TaskAssignment
@@ -408,7 +408,7 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
         var ct = TestContext.Current.CancellationToken;
         var dau = Dau();
 
-        var (manager, campaign) = await TaoDotAsync(dau, ct);
+        var (manager, wave) = await TaoDotAsync(dau, ct);
         var speaker = await CreateUserAsync($"sp-cap-{dau}@test.local", RoleName.Speaker);
         var rv1 = await CreateUserAsync($"rv1-cap-{dau}@test.local", RoleName.Reviewer);
         var rv2 = await CreateUserAsync($"rv2-cap-{dau}@test.local", RoleName.Reviewer);
@@ -421,7 +421,7 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
         var vi = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.PureVietnamese);
 
         var task = await TaoLoDuyetAsync(
-            campaign.CampaignId, manager.UserId, cs.RecordingId, [rv1.UserId, rv2.UserId], 2, ct);
+            wave.WaveId, manager.UserId, cs.RecordingId, [rv1.UserId, rv2.UserId], 2, ct);
 
         Db.TaskRecordings.Add(new TaskRecording
         {
@@ -479,7 +479,7 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
         var ct = TestContext.Current.CancellationToken;
         var dau = Dau();
 
-        var (manager, campaign) = await TaoDotAsync(dau, ct);
+        var (manager, wave) = await TaoDotAsync(dau, ct);
         var speaker = await CreateUserAsync($"sp-nd-{dau}@test.local", RoleName.Speaker);
         var rv1 = await CreateUserAsync($"rv1-nd-{dau}@test.local", RoleName.Reviewer);
         var rv2 = await CreateUserAsync($"rv2-nd-{dau}@test.local", RoleName.Reviewer);
@@ -492,7 +492,7 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
         var cs = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
 
         var task = await TaoLoDuyetAsync(
-            campaign.CampaignId, manager.UserId, cs.RecordingId, [rv1.UserId, rv2.UserId], 1, ct);
+            wave.WaveId, manager.UserId, cs.RecordingId, [rv1.UserId, rv2.UserId], 1, ct);
 
         // Hai phiếu từ chối với đúng lý do thuộc nhóm nội dung.
         foreach (var (reviewer, vong) in new[] { (rv1, 1), (rv2, 2) })
@@ -534,7 +534,7 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
         var ct = TestContext.Current.CancellationToken;
         var dau = Dau();
 
-        var (manager, campaign) = await TaoDotAsync(dau, ct);
+        var (manager, wave) = await TaoDotAsync(dau, ct);
         var speaker = await CreateUserAsync($"sp-cho-{dau}@test.local", RoleName.Speaker);
         var rv1 = await CreateUserAsync($"rv1-cho-{dau}@test.local", RoleName.Reviewer);
         var rv2 = await CreateUserAsync($"rv2-cho-{dau}@test.local", RoleName.Reviewer);
@@ -548,7 +548,7 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
         var vi = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.PureVietnamese);
 
         var task = await TaoLoDuyetAsync(
-            campaign.CampaignId, manager.UserId, cs.RecordingId, [rv1.UserId, rv2.UserId], 2, ct);
+            wave.WaveId, manager.UserId, cs.RecordingId, [rv1.UserId, rv2.UserId], 2, ct);
 
         Db.TaskRecordings.Add(new TaskRecording
         {

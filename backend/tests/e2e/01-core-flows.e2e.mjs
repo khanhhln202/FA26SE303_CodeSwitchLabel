@@ -261,38 +261,38 @@ record('5.9', 'Bản ghi thứ hai đã đạt', await call(T.admin, 'GET', `/ap
 // giao cho chính mình. Hai bước này là điều kiện cần của toàn bộ phần giao việc bên dưới.
 console.log('\n== Chiến dịch: điều kiện của mọi task ==');
 r = record('6.0a', 'admin tạo chiến dịch',
-  await call(T.admin, 'POST', '/api/campaigns',
-    { campaignName: 'Thu dữ liệu đợt 1', targetQty: 2000, domain: 'ItTechnology', startDate: isoDate(0), endDate: isoDate(90) }),
+  await call(T.admin, 'POST', '/api/waves',
+    { waveName: 'Thu dữ liệu đợt 1', targetQty: 2000, domain: 'ItTechnology', startDate: isoDate(0), endDate: isoDate(90) }),
   { status: 201, check: (b) => b.status === 'Draft' },
-  (b) => ({ campaignId: b.campaignId, targetQty: b.targetQty, status: b.status, assignedTo: b.assignedTo }));
-ID.campaign = r.body?.campaignId;
+  (b) => ({ waveId: b.waveId, targetQty: b.targetQty, status: b.status, assignedTo: b.assignedTo }));
+ID.wave = r.body?.waveId;
 
 record('6.0b', 'Chỉ tiêu chiến dịch dưới 2000 bị chặn',
-  await call(T.admin, 'POST', '/api/campaigns',
-    { campaignName: 'Chiến dịch quá nhỏ', targetQty: 100, startDate: isoDate(0), endDate: isoDate(30) }),
+  await call(T.admin, 'POST', '/api/waves',
+    { waveName: 'Chiến dịch quá nhỏ', targetQty: 100, startDate: isoDate(0), endDate: isoDate(30) }),
   { status: 400 });
 
 record('6.0c', 'task manager tạo được chiến dịch và tự giao cho mình',
-  await call(T.manager, 'POST', '/api/campaigns',
-    { campaignName: 'Chiến dịch của manager', targetQty: 2000, domain: 'ItTechnology', startDate: isoDate(0), endDate: isoDate(30) }),
+  await call(T.manager, 'POST', '/api/waves',
+    { waveName: 'Chiến dịch của manager', targetQty: 2000, domain: 'ItTechnology', startDate: isoDate(0), endDate: isoDate(30) }),
   // quyền tạo/sửa đợt nới cho TaskManager, tạo xong tự giao đợt cho chính mình
   // nên manager tạo task trong đợt đó được (6.0d kiểm đúng nhánh "chưa giao" là đợt của Admin).
   { status: 201, check: (b) => b.assignedTo === ID.manager && b.createdBy === ID.manager },
-  (b) => ({ campaignId: b.campaignId, assignedTo: b.assignedTo, status: b.status }));
+  (b) => ({ waveId: b.waveId, assignedTo: b.assignedTo, status: b.status }));
 
 record('6.0d', 'Chiến dịch chưa giao thì manager chưa tạo được task',
   await call(T.manager, 'POST', '/api/tasks',
-    { campaignId: ID.campaign, taskType: 'Recording', description: 'Task sớm quá', targetQty: 1, deadline: deadline(7) }),
-  { status: 422, code: 'campaign_not_assigned_to_manager' });
+    { waveId: ID.wave, taskType: 'Recording', description: 'Task sớm quá', targetQty: 1, deadline: deadline(7) }),
+  { status: 422, code: 'wave_not_assigned_to_manager' });
 
 record('6.0e', 'admin giao chiến dịch cho manager',
-  await call(T.admin, 'POST', `/api/campaigns/${ID.campaign}/assign`, { assignedToUserId: ID.manager }),
+  await call(T.admin, 'POST', `/api/waves/${ID.wave}/assign`, { assignedToUserId: ID.manager }),
   { status: 200, check: (b) => b.assignedTo === ID.manager }, (b) => ({ assignedTo: b.assignedTo, status: b.status }));
 
 // ------------------------------------------------------------ giao việc
 console.log('\n== Giao việc: chỉ tiêu đếm theo cặp câu ==');
 r = record('6.1', 'manager tạo task thu âm, chỉ tiêu 1 cặp câu',
-  await call(T.manager, 'POST', '/api/tasks', { campaignId: ID.campaign, taskType: 'Recording', description: 'Thu 1 cặp câu', targetQty: 1, deadline: deadline(7) }),
+  await call(T.manager, 'POST', '/api/tasks', { waveId: ID.wave, taskType: 'Recording', description: 'Thu 1 cặp câu', targetQty: 1, deadline: deadline(7) }),
   { status: 201, check: (b) => b.summary.progress.unit === 'cặp câu' },
   (b) => ({ taskId: b.summary.taskId, status: b.summary.status, unit: b.summary.progress.unit }));
 ID.task = r.body?.summary?.taskId;
@@ -389,7 +389,7 @@ r = record('10.2d', 'speaker1 nộp thêm một bản nữa',
 const rvRec3 = r.body?.recording?.recordingId;
 
 r = record('10.3', 'manager tạo task duyệt',
-  await call(T.manager, 'POST', '/api/tasks', { campaignId: ID.campaign, taskType: 'Review', description: 'Duyệt bản ghi mới', targetQty: 3, deadline: deadline(7) }),
+  await call(T.manager, 'POST', '/api/tasks', { waveId: ID.wave, taskType: 'Review', description: 'Duyệt bản ghi mới', targetQty: 3, deadline: deadline(7) }),
   { status: 201, check: (b) => b.summary.progress.unit === 'bản ghi' },
   (b) => ({ taskId: b.summary.taskId, unit: b.summary.progress.unit }));
 const rvTask = r.body?.summary?.taskId;

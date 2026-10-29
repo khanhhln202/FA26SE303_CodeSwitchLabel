@@ -105,7 +105,7 @@ const phut = String(bayGio.getMinutes()).padStart(2, '0');
 const giay = String(bayGio.getSeconds()).padStart(2, '0');
 
 // Cả hai câu cùng chủ đề IT/Technology, khớp chủ đề của chiến dịch/task ở MÀN 3. Lệch chủ đề
-// thì câu bị bỏ qua khi thêm vào task (rule task_domain_mismatch_campaign), rồi chỉ tiêu 2 vượt
+// thì câu bị bỏ qua khi thêm vào task (rule task_domain_mismatch_wave), rồi chỉ tiêu 2 vượt
 // số mục thật và lệnh giao task trả 422 — lỗi của dữ liệu mẫu, không phải của hệ thống.
 const cauNhap = [
   {
@@ -167,19 +167,19 @@ sql('Trạng thái hai câu sau khi duyệt',
 // ====================================================== MÀN 3 · PHÂN TASK
 man('MÀN 3 · CHIẾN DỊCH VÀ PHÂN TASK  (Admin → Task Manager → Speaker)');
 
-const chienDich = B('3.1', 'admin', 'POST', '/api/campaigns',
-  await goi(admin.token, 'POST', '/api/campaigns',
-    { campaignName: `Đợt thu thập demo ${dau}`, targetQty: 2000, domain: 'ItTechnology', startDate: ngay(-1), endDate: ngay(30) }), 201,
-  (b) => ({ maChienDich: b.campaignId, trangThai: b.status, chiTieu: b.targetQty }));
-const maChienDich = chienDich.body.campaignId;
+const chienDich = B('3.1', 'admin', 'POST', '/api/waves',
+  await goi(admin.token, 'POST', '/api/waves',
+    { waveName: `Đợt thu thập demo ${dau}`, targetQty: 2000, domain: 'ItTechnology', startDate: ngay(-1), endDate: ngay(30) }), 201,
+  (b) => ({ maChienDich: b.waveId, trangThai: b.status, chiTieu: b.targetQty }));
+const maChienDich = chienDich.body.waveId;
 
-B('3.2', 'admin', 'POST', `/api/campaigns/${maChienDich}/assign`,
-  await goi(admin.token, 'POST', `/api/campaigns/${maChienDich}/assign`, { assignedToUserId: manager.userId }), 200,
+B('3.2', 'admin', 'POST', `/api/waves/${maChienDich}/assign`,
+  await goi(admin.token, 'POST', `/api/waves/${maChienDich}/assign`, { assignedToUserId: manager.userId }), 200,
   (b) => ({ giaoCho: b.assignedTo ?? manager.hoTen }));
 
 const task = B('3.3', 'manager', 'POST', '/api/tasks',
   await goi(manager.token, 'POST', '/api/tasks',
-    { campaignId: maChienDich, taskType: 'Recording', description: 'Thu âm hai câu vừa nhập', targetQty: 2, deadline: ngay(7) }), 201,
+    { waveId: maChienDich, taskType: 'Recording', description: 'Thu âm hai câu vừa nhập', targetQty: 2, deadline: ngay(7) }), 201,
   (b) => ({ maTask: b.summary.taskId, trangThai: b.summary.status }));
 const maTask = task.body.summary.taskId;
 
@@ -196,7 +196,7 @@ B('3.6', 'manager', 'GET', `/api/tasks/${maTask}`,
   (b) => ({ trangThai: b.summary.status, soCauTrongTask: b.items.length, soNguoiNhan: b.assignments.length }));
 
 sql('Task vừa tạo, thuộc chiến dịch nào',
-  `select t.task_id, t.campaign_id, c.campaign_name, t.task_type, t.target_qty, t.status from task t join campaign c on c.campaign_id = t.campaign_id where t.task_id = ${maTask};`);
+  `select t.task_id, t.wave_id, c.wave_name, t.task_type, t.target_qty, t.status from task t join wave c on c.wave_id = t.wave_id where t.task_id = ${maTask};`);
 sql('Ai được giao task này',
   `select a.assignment_id, a.task_id, u.email, a.assignment_status from task_assignment a join app_user u on u.user_id = a.user_id where a.task_id = ${maTask};`);
 sql('Những câu nằm trong task',

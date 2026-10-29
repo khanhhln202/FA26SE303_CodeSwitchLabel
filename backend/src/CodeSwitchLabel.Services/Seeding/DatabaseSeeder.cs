@@ -37,7 +37,7 @@ public static partial class DatabaseSeeder
         var ids = await LoadDemoUserIdsAsync(db, ct);
         if (ids is null) return;
 
-        await SeedCampaignAsync(db, ids.Admin, ct);
+        await SeedWaveAsync(db, ids.Admin, ct);
         await SeedScriptsAsync(db, ids, ct);
 
         // Dữ liệu để thao tác thử: câu của người đọc và hai task mẫu.
@@ -238,9 +238,9 @@ public static partial class DatabaseSeeder
     /// Admin đứng tên người tạo rồi GIAO cho manager — trigger của lược đồ chặn mọi cách khác.
     /// Chỉ tiêu nằm trong khoảng lược đồ cho phép (2000..5000).
     /// </summary>
-    private static async Task SeedCampaignAsync(CodeSwitchLabelDbContext db, long adminId, CancellationToken ct)
+    private static async Task SeedWaveAsync(CodeSwitchLabelDbContext db, long adminId, CancellationToken ct)
     {
-        if (await db.Campaigns.AnyAsync(ct)) return;
+        if (await db.Waves.AnyAsync(ct)) return;
 
         var managerId = await db.AppUsers
             .Where(u => u.Email == "manager@codeswitchlabel.local")
@@ -251,16 +251,16 @@ public static partial class DatabaseSeeder
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
-        // Bản cũ đặt CreatedBy = manager nên vi phạm trigger trg_campaign_creator_role
-        // (người tạo campaign phải là admin) — database trống là vỡ ngay lúc khởi động.
-        db.Campaigns.Add(new Campaign
+        // Bản cũ đặt CreatedBy = manager nên vi phạm trigger trg_wave_creator_role
+        // (người tạo wave phải là admin) — database trống là vỡ ngay lúc khởi động.
+        db.Waves.Add(new Wave
         {
-            CampaignName = "Đợt thu thập mẫu",
+            WaveName = "Đợt thu thập mẫu",
             Domain = ScriptDomain.ItTechnology, // TEAM_003
             TargetQty = 2000,
             StartDate = today,
             EndDate = today.AddDays(30),
-            Status = CampaignStatus.Open,
+            Status = WaveStatus.Open,
             CreatedBy = adminId,
             AssignedTo = managerId,
             CreatedAt = DateTimeOffset.UtcNow

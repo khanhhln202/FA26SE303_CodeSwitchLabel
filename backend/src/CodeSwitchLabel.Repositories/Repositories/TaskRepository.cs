@@ -18,8 +18,8 @@ namespace CodeSwitchLabel.Repositories.Repositories;
 /// <param name="UsableItems">Số mục còn làm được — không tính mục đã bị loại.</param>
 public record TaskRow(
     long TaskId,
-    long? CampaignId,
-    string? CampaignName,
+    long? WaveId,
+    string? WaveName,
     TaskType TaskType,
     ScriptDomain Domain,
     string? Description,
@@ -90,19 +90,19 @@ public interface ITaskRepository
     Task<TaskRow?> GetRowAsync(long taskId, CancellationToken ct = default);
 
     /// <summary>đợt của một task, để định tuyến công việc sang các task cùng đợt.</summary>
-    Task<long?> GetCampaignIdAsync(long taskId, CancellationToken ct = default);
+    Task<long?> GetWaveIdAsync(long taskId, CancellationToken ct = default);
 
     /// <summary>
     /// các task duyệt còn nhận việc của một đợt (chưa huỷ), theo thứ tự tạo.
     /// Gồm cả task đã đủ chỉ tiêu — người nhận vẫn duyệt thêm được, KPI không chặn.
     /// </summary>
-    Task<List<long>> GetReviewTaskIdsForCampaignAsync(long campaignId, CancellationToken ct = default);
+    Task<List<long>> GetReviewTaskIdsForWaveAsync(long waveId, CancellationToken ct = default);
 
     /// <summary>
     /// Task thu âm duy nhất còn sống của một chiến dịch. Dùng cho luồng
-    /// POST /api/campaigns/{id}/recording-task (idempotent).
+    /// POST /api/waves/{id}/recording-task (idempotent).
     /// </summary>
-    Task<WorkTask?> GetRecordingTaskForCampaignAsync(long campaignId, CancellationToken ct = default);
+    Task<WorkTask?> GetRecordingTaskForWaveAsync(long waveId, CancellationToken ct = default);
 
     /// <summary><paramref name="sort"/> rỗng (Field = null) là thứ tự mặc định.</summary>
     /// <param name="ownerId">chỉ trả task do người này tạo hoặc đợt do người này phụ trách (không phải Admin).</param>
@@ -239,7 +239,7 @@ public interface ITaskRepository
         string scriptId, long speakerId, CancellationToken ct = default);
 
     /// <summary>
-    /// Các câu còn chờ trong task/campaign mà người này được giao hoặc chưa gán ai —
+    /// Các câu còn chờ trong task/wave mà người này được giao hoặc chưa gán ai —
     /// dùng cho màn hình "câu tiếp theo" khi làm trong task.
     /// </summary>
     Task<List<string>> GetAssignedScriptIdsAsync(
@@ -299,26 +299,26 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
     public Task<TaskRow?> GetRowAsync(long taskId, CancellationToken ct = default) =>
         ProjectRows(db.WorkTasks.AsNoTracking().Where(t => t.TaskId == taskId)).FirstOrDefaultAsync(ct);
 
-    public Task<long?> GetCampaignIdAsync(long taskId, CancellationToken ct = default) =>
+    public Task<long?> GetWaveIdAsync(long taskId, CancellationToken ct = default) =>
         db.WorkTasks.AsNoTracking()
             .Where(t => t.TaskId == taskId)
-            .Select(t => t.CampaignId)
+            .Select(t => t.WaveId)
             .FirstOrDefaultAsync(ct);
 
-    public Task<List<long>> GetReviewTaskIdsForCampaignAsync(
-        long campaignId, CancellationToken ct = default) =>
+    public Task<List<long>> GetReviewTaskIdsForWaveAsync(
+        long waveId, CancellationToken ct = default) =>
         db.WorkTasks.AsNoTracking()
-            .Where(t => t.CampaignId == campaignId &&
+            .Where(t => t.WaveId == waveId &&
                         t.TaskType == TaskType.Review &&
                         t.Status != WorkTaskStatus.Cancelled)
             .OrderBy(t => t.TaskId)
             .Select(t => t.TaskId)
             .ToListAsync(ct);
 
-    public Task<WorkTask?> GetRecordingTaskForCampaignAsync(
-        long campaignId, CancellationToken ct = default) =>
+    public Task<WorkTask?> GetRecordingTaskForWaveAsync(
+        long waveId, CancellationToken ct = default) =>
         db.WorkTasks
-            .Where(t => t.CampaignId == campaignId &&
+            .Where(t => t.WaveId == waveId &&
                         t.TaskType == TaskType.Recording &&
                         t.Status != WorkTaskStatus.Cancelled)
             .OrderBy(t => t.TaskId)
@@ -340,8 +340,8 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         if (ownerId.HasValue && !isAdmin)
         {
             query = query.Where(t => t.CreatedBy == ownerId.Value ||
-                (t.CampaignId.HasValue && db.Campaigns.Any(c =>
-                    c.CampaignId == t.CampaignId.Value &&
+                (t.WaveId.HasValue && db.Waves.Any(c =>
+                    c.WaveId == t.WaveId.Value &&
                     (c.AssignedTo == ownerId.Value || c.CreatedBy == ownerId.Value))));
         }
 
@@ -716,7 +716,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
     {
         var task = await db.WorkTasks.AsNoTracking()
             .Where(t => t.TaskId == taskId)
-            .Select(t => new { t.TaskType, t.Status, t.CampaignId })
+            .Select(t => new { t.TaskType, t.Status, t.WaveId })
             .FirstOrDefaultAsync(ct);
 
         if (task is null ||
@@ -731,8 +731,8 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
             a.AssignmentStatus != AssignmentStatus.Reassigned &&
             a.AssignmentStatus != AssignmentStatus.Cancelled &&
             (a.TaskId == taskId ||
-             (task.CampaignId != null &&
-              a.Task.CampaignId == task.CampaignId &&
+             (task.WaveId != null &&
+              a.Task.WaveId == task.WaveId &&
               a.Task.TaskType == TaskType.Recording &&
               a.Task.Status != WorkTaskStatus.Cancelled)), ct);
     }
@@ -882,9 +882,9 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
     public async Task<List<string>> GetAssignedScriptIdsAsync(
         long speakerId, long taskId, int count, CancellationToken ct = default)
     {
-        var campaignId = await db.WorkTasks.AsNoTracking()
+        var waveId = await db.WorkTasks.AsNoTracking()
             .Where(t => t.TaskId == taskId)
-            .Select(t => t.CampaignId)
+            .Select(t => t.WaveId)
             .FirstOrDefaultAsync(ct);
 
         return await db.TaskScripts.AsNoTracking()
@@ -893,7 +893,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
                          ts.Task.Status != WorkTaskStatus.Cancelled)
             .Where(ts => (ts.AssigneeUserId == null || ts.AssigneeUserId == speakerId) &&
                          (ts.TaskId == taskId ||
-                          (campaignId != null && ts.Task.CampaignId == campaignId)))
+                          (waveId != null && ts.Task.WaveId == waveId)))
             // Speaker đã có đủ hai bản chờ duyệt/đạt thì câu này không còn việc. Lọc ngay
             // trong SQL để các mục đầu không chiếm hết hạn mức lấy câu kế tiếp.
             .Where(ts => !(
@@ -1012,8 +1012,8 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
     private IQueryable<TaskRow> ProjectRows(IQueryable<WorkTask> source) =>
         source.Select(t => new TaskRow(
             t.TaskId,
-            t.CampaignId,
-            t.Campaign!.CampaignName,
+            t.WaveId,
+            t.Wave!.WaveName,
             t.TaskType,
             t.Domain,
             t.Description,

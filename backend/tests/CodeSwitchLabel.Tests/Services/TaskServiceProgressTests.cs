@@ -22,7 +22,7 @@ public sealed class TaskServiceProgressTests
     {
         _service = new TaskService(
             _tasks.Object,
-            Mock.Of<ICampaignRepository>(),
+            Mock.Of<IWaveRepository>(),
             Mock.Of<IScriptQueueRepository>(),
             Mock.Of<ITaskProgressTracker>(),
             Mock.Of<ISystemConfigService>(),

@@ -24,7 +24,7 @@ import { taskService } from "../../../services/taskService";
 export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
   const [isHovered, setIsHovered] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [campaigns, setCampaigns] = useState([]);
+  const [waves, setWaves] = useState([]);
   const [assignTasks, setAssignTasks] = useState([]);
   const [batchMapping, setBatchMapping] = useState({});
   const [adminTargets, setAdminTargets] = useState({
@@ -35,9 +35,9 @@ export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [overviewData, campaignData, taskData] = await Promise.all([
+      const [overviewData, waveData, taskData] = await Promise.all([
         taskService.getOverview().catch(() => null),
-        taskService.getCampaigns().catch(() => ({ items: [] })),
+        taskService.getWaves().catch(() => ({ items: [] })),
         taskService.getTasks().catch(() => ({ items: [] }))
       ]);
 
@@ -54,13 +54,13 @@ export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
         });
       }
 
-      const rawCampaigns = campaignData?.items || campaignData?.data || (Array.isArray(campaignData) ? campaignData : []);
+      const rawWaves = waveData?.items || waveData?.data || (Array.isArray(waveData) ? waveData : []);
       
       // Sắp xếp các Đợt nhiệm vụ theo thứ tự ID số tăng dần (giống hệt TaskManagerManagement)
-      const campaignList = rawCampaigns
+      const waveList = rawWaves
         .map((c) => ({
           ...c,
-          id: Number(c.campaignId || c.id)
+          id: Number(c.waveId || c.id)
         }))
         .sort((a, b) => a.id - b.id);
 
@@ -77,20 +77,20 @@ export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
 
         return {
           id: t.taskId || t.id,
-          campaignId: Number(t.campaignId),
+          waveId: Number(t.waveId),
           status: calculatedStatus
         };
       });
 
       const mapping = {};
       mappedTasks.forEach((t) => {
-        if (t.campaignId) {
-          if (!mapping[t.campaignId]) mapping[t.campaignId] = [];
-          mapping[t.campaignId].push(t.id);
+        if (t.waveId) {
+          if (!mapping[t.waveId]) mapping[t.waveId] = [];
+          mapping[t.waveId].push(t.id);
         }
       });
 
-      setCampaigns(campaignList);
+      setWaves(waveList);
       setAssignTasks(mappedTasks);
       setBatchMapping(mapping);
     } catch (error) {
@@ -240,17 +240,17 @@ export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0EEE6] dark:divide-gray-800">
-              {campaigns.length === 0 ? (
+              {waves.length === 0 ? (
                 <tr>
                   <td colSpan={3} className="py-8 text-center text-[#9A9CA3] dark:text-gray-400 type-ui">
                     Chưa có đợt nhiệm vụ nào được khởi tạo.
                   </td>
                 </tr>
               ) : (
-                campaigns.map((item, index) => {
-                  const campaignId = item.campaignId || item.id;
-                  const mappedIds = batchMapping[campaignId] || [];
-                  const batchTasks = assignTasks.filter((t) => t.campaignId === campaignId || mappedIds.includes(t.id));
+                waves.map((item, index) => {
+                  const waveId = item.waveId || item.id;
+                  const mappedIds = batchMapping[waveId] || [];
+                  const batchTasks = assignTasks.filter((t) => t.waveId === waveId || mappedIds.includes(t.id));
 
                   const isCompleted = batchTasks.length > 0 && batchTasks.every((t) => t.status === "Hoàn thành");
                   const isOpenStatus = batchTasks.length === 0 || item.status === "Open";
@@ -274,12 +274,12 @@ export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
                       : CHIP_WARNING_TEXT;
 
                   return (
-                    <tr key={campaignId} className="hover:bg-[#F7F5EF]/70 dark:hover:bg-[#25272E]/50 transition-colors h-11">
+                    <tr key={waveId} className="hover:bg-[#F7F5EF]/70 dark:hover:bg-[#25272E]/50 transition-colors h-11">
                       <td className="py-2 px-3.5 font-bold text-[#16171C] dark:text-white">
                         Đợt {index + 1}
                       </td>
                       <td className="py-2 px-3.5 font-medium text-[#16171C] dark:text-gray-200">
-                        {item.campaignName || item.title || item.name}
+                        {item.waveName || item.title || item.name}
                       </td>
                       <td className="py-2 px-3.5 text-center">
                         <span 

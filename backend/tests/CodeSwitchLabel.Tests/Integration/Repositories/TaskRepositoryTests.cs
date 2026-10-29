@@ -19,7 +19,7 @@ public class TaskRepositoryTests : IntegrationTestBase
     public async Task GetForUpdateAsync_ReturnsTask_WhenTaskExists()
     {
         // Arrange
-        var task = await CreateTaskAsync(CampaignId, TaskType.Recording, 50, ManagerUserId);
+        var task = await CreateTaskAsync(WaveId, TaskType.Recording, 50, ManagerUserId);
 
         // Act
         var result = await Tasks.GetForUpdateAsync(task.TaskId, TestContext.Current.CancellationToken);
@@ -34,7 +34,7 @@ public class TaskRepositoryTests : IntegrationTestBase
     public async Task GetRowAsync_ReturnsTaskRow_WhenTaskExists()
     {
         // Arrange
-        var task = await CreateTaskAsync(CampaignId, TaskType.Recording, 50, ManagerUserId);
+        var task = await CreateTaskAsync(WaveId, TaskType.Recording, 50, ManagerUserId);
 
         // Act
         var result = await Tasks.GetRowAsync(task.TaskId, TestContext.Current.CancellationToken);
@@ -50,8 +50,8 @@ public class TaskRepositoryTests : IntegrationTestBase
     public async Task SearchAsync_ReturnsTasks_WhenTasksExist()
     {
         // Arrange
-        await CreateTaskAsync(CampaignId, TaskType.Recording, 50, ManagerUserId);
-        await CreateTaskAsync(CampaignId, TaskType.Review, 30, ManagerUserId);
+        await CreateTaskAsync(WaveId, TaskType.Recording, 50, ManagerUserId);
+        await CreateTaskAsync(WaveId, TaskType.Review, 30, ManagerUserId);
 
         // Act
         var (items, total) = await Tasks.SearchAsync(null, null, null, null, null, DateTimeOffset.UtcNow, 1, 10, default, null, false, TestContext.Current.CancellationToken);
@@ -68,19 +68,19 @@ public class TaskRepositoryTests : IntegrationTestBase
     /// </summary>
     private async Task<WorkTask[]> CreateThreeSortedTasksAsync()
     {
-        // Trigger trg_task_campaign_window: hạn của task phải nằm trong cửa sổ chiến dịch,
+        // Trigger trg_task_wave_window: hạn của task phải nằm trong cửa sổ chiến dịch,
         // tính theo giờ Việt Nam — nên lấy hạn từ chính chiến dịch đó, không đặt mốc cứng.
         // Npgsql chỉ nhận DateTimeOffset có offset 0, nên phải quy ra UTC.
-        var campaign = await Campaigns.GetAsync(CampaignId, TestContext.Current.CancellationToken);
+        var wave = await Waves.GetAsync(WaveId, TestContext.Current.CancellationToken);
         var deadline = new DateTimeOffset(
-                campaign!.StartDate.AddDays(2).ToDateTime(TimeOnly.MinValue), TimeSpan.FromHours(7))
+                wave!.StartDate.AddDays(2).ToDateTime(TimeOnly.MinValue), TimeSpan.FromHours(7))
             .ToUniversalTime();
 
         return
         [
-            await CreateTaskAsync(CampaignId, TaskType.Recording, 30, ManagerUserId, deadline),
-            await CreateTaskAsync(CampaignId, TaskType.Recording, 10, ManagerUserId),
-            await CreateTaskAsync(CampaignId, TaskType.Recording, 20, ManagerUserId)
+            await CreateTaskAsync(WaveId, TaskType.Recording, 30, ManagerUserId, deadline),
+            await CreateTaskAsync(WaveId, TaskType.Recording, 10, ManagerUserId),
+            await CreateTaskAsync(WaveId, TaskType.Recording, 20, ManagerUserId)
         ];
     }
 
@@ -141,7 +141,7 @@ public class TaskRepositoryTests : IntegrationTestBase
     public async Task GetAssigneeDoneAsync_CapCuaNguoiKhacBiTuChoi_TinhChoNguoiDaDuyet()
     {
         var ct = TestContext.Current.CancellationToken;
-        var task = await CreateTaskAsync(CampaignId, TaskType.Recording, 1, ManagerUserId);
+        var task = await CreateTaskAsync(WaveId, TaskType.Recording, 1, ManagerUserId);
         var rejectedSpeaker = await CreateUserWithBuilderAsync(
             RoleName.Speaker, NewUniqueEmail("done-rejected"), "Done Rejected");
         var approvedSpeaker = await CreateUserWithBuilderAsync(
@@ -187,8 +187,8 @@ public class TaskRepositoryTests : IntegrationTestBase
         rejected.Status = RecordingStatus.Rejected;
         await Db.SaveChangesAsync(ct);
 
-        var assignedTask = await CreateTaskAsync(CampaignId, TaskType.Recording, 1, ManagerUserId);
-        var openTask = await CreateTaskAsync(CampaignId, TaskType.Recording, 1, ManagerUserId);
+        var assignedTask = await CreateTaskAsync(WaveId, TaskType.Recording, 1, ManagerUserId);
+        var openTask = await CreateTaskAsync(WaveId, TaskType.Recording, 1, ManagerUserId);
 
         // Người khác nhận task vẫn thấy câu vì bản rejected đã trả cặp về hàng đợi.
         var forOther = await Tasks.FindScriptCandidatesAsync(
@@ -216,7 +216,7 @@ public class TaskRepositoryTests : IntegrationTestBase
     public async Task IsActiveTaskOfAsync_ReturnsFalse_WhenNotAssigned()
     {
         // Arrange
-        var task = await CreateTaskAsync(CampaignId, TaskType.Recording, 50, ManagerUserId);
+        var task = await CreateTaskAsync(WaveId, TaskType.Recording, 50, ManagerUserId);
 
         // Act
         var result = await Tasks.IsActiveTaskOfAsync(task.TaskId, ReviewerUserId, TaskType.Recording, TestContext.Current.CancellationToken);
@@ -248,9 +248,9 @@ public class TaskRepositoryTests : IntegrationTestBase
         await CreateRecordingAsync(mineBusy.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching);
 
         var running = await CreateTaskAsync(
-            CampaignId, TaskType.Recording, 1, ManagerUserId, status: WorkTaskStatus.InProgress);
+            WaveId, TaskType.Recording, 1, ManagerUserId, status: WorkTaskStatus.InProgress);
         var cancelled = await CreateTaskAsync(
-            CampaignId, TaskType.Recording, 1, ManagerUserId, status: WorkTaskStatus.Cancelled);
+            WaveId, TaskType.Recording, 1, ManagerUserId, status: WorkTaskStatus.Cancelled);
 
         Db.TaskScripts.AddRange(
             new TaskScript
@@ -307,13 +307,13 @@ public class TaskRepositoryTests : IntegrationTestBase
 
         // Overdue active task on good speaker — approval still wins, but overdue is
         // visible for Task Manager triage. The deadline trigger requires the date
-        // inside the campaign window, so pull the campaign start back first
+        // inside the wave window, so pull the wave start back first
         // (per-test transaction rolls this back).
-        var campaign = await Db.Campaigns.FirstAsync(c => c.CampaignId == CampaignId, TestContext.Current.CancellationToken);
-        campaign.StartDate = DateOnly.FromDateTime(DateTime.Today.AddDays(-10));
+        var wave = await Db.Waves.FirstAsync(c => c.WaveId == WaveId, TestContext.Current.CancellationToken);
+        wave.StartDate = DateOnly.FromDateTime(DateTime.Today.AddDays(-10));
         await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var overdue = await CreateTaskAsync(CampaignId, TaskType.Recording, 1, ManagerUserId,
+        var overdue = await CreateTaskAsync(WaveId, TaskType.Recording, 1, ManagerUserId,
             deadline: DateTimeOffset.UtcNow.AddDays(-1), status: WorkTaskStatus.InProgress);
         Db.TaskAssignments.Add(new TaskAssignment
         {

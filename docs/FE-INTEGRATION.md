@@ -1,5 +1,7 @@
 # Hướng dẫn tích hợp Frontend — CodeSwitchLabel API
 
+> **Breaking change V22:** Campaign is now Wave throughout the API and database. Existing clients must switch to the Wave routes and JSON fields.
+
 Tài liệu cho đội frontend. **Chi tiết từng endpoint** (tham số, kiểu dữ liệu, mẫu request/response) xem trên
 Swagger — đó là nguồn chính xác nhất vì sinh thẳng từ code. File này nói những gì Swagger không nói được:
 màn hình nào gọi API nào theo thứ tự nào, cách xử lý đăng nhập, lỗi, thu âm và nghe lại.
@@ -227,7 +229,7 @@ POST /api/auth/login
   | `GET /api/recordings` | `recordingId` `recordedAt` `status` `scriptId` `durationSec` | `recordedAt` giảm dần |
   | `GET /api/tasks` | `taskId` `deadline` `status` `taskType` `createdAt` `targetQty` | hạn gần nhất trước, không hạn ở cuối |
   | `GET /api/users` | `userId` `fullName` `email` `status` `role` `createdAt` | `fullName` tăng dần |
-  | `GET /api/campaigns` | `campaignId` `startDate` `endDate` `status` `createdAt` | `startDate` giảm dần |
+  | `GET /api/waves` | `waveId` `startDate` `endDate` `status` `createdAt` | `startDate` giảm dần |
   | `GET /api/datasets` | `datasetId` `createdAt` `status` `datasetName` `recordingCount` | `createdAt` giảm dần |
   | `GET /api/reviewer/tasks/{id}/recordings` | `recordedAt` `status` `reviewCount` `scriptId` | bản gần đủ lượt duyệt trước |
   | `GET /api/reviewer/history/recordings` | `reviewedAt` `decision` `scriptId` | `reviewedAt` giảm dần |
@@ -321,9 +323,9 @@ Lỗi hệ thống trả 500 với `code: "internal_error"`. Gặp lỗi này th
 | `assignment_quota_exceeds_target` | 422 | Tổng quota đã đặt vượt chỉ tiêu task | Giảm quota từng người cho khớp tổng |
 | `assignment_quota_not_equal_target` | 422 | Đặt quota cho tất cả mọi người nhưng tổng không bằng đúng chỉ tiêu task | Chia lại cho đủ tổng |
 | `assignment_quota_not_enough` | 422 | Chỉ tiêu còn lại ít hơn số người chưa đặt quota | Tăng chỉ tiêu task hoặc bớt người nhận |
-| `campaign_not_owned` | 403 | Chiến dịch thuộc Task Manager khác quản lý | Ẩn nút sửa/xoá chiến dịch ngoài danh sách của mình |
-| `task_in_campaign` / `task_has_work` / `task_not_owned` | 409 / 409 / 403 | Xoá task đang gắn chiến dịch, task đã có dữ liệu nộp/duyệt, hay task không của mình | Hiện `title`; gỡ task khỏi đợt trước khi xoá — lượt giao và hàng chờ bị xoá theo task, chỉ dữ liệu nộp thật mới chặn |
-| `task_domain_mismatch_campaign` | 422 | Chủ đề của task khác chủ đề của chiến dịch | Khoá ô chọn chủ đề theo chủ đề chiến dịch |
+| `wave_not_owned` | 403 | Chiến dịch thuộc Task Manager khác quản lý | Ẩn nút sửa/xoá chiến dịch ngoài danh sách của mình |
+| `task_in_wave` / `task_has_work` / `task_not_owned` | 409 / 409 / 403 | Xoá task đang gắn chiến dịch, task đã có dữ liệu nộp/duyệt, hay task không của mình | Hiện `title`; gỡ task khỏi đợt trước khi xoá — lượt giao và hàng chờ bị xoá theo task, chỉ dữ liệu nộp thật mới chặn |
+| `task_domain_mismatch_wave` | 422 | Chủ đề của task khác chủ đề của chiến dịch | Khoá ô chọn chủ đề theo chủ đề chiến dịch |
 | `batch_size_invalid` | 422 | Chia lô câu với `count` < 1 | Chặn ở ô nhập số câu |
 | `not_a_review_task` / `text_review_not_assigned` | 422 / 403 | Chia lô câu cho task không phải task duyệt, hoặc duyệt câu chưa được giao cho mình | Tải lại danh sách lô được giao |
 | `text_review_already_done` | 409 | Câu đã có người duyệt nội dung rồi | Bỏ câu khỏi danh sách, tải lại |
@@ -336,9 +338,9 @@ Lỗi hệ thống trả 500 với `code: "internal_error"`. Gặp lỗi này th
 | `invalid_current_password` | 422 | Đổi mật khẩu mà nhập sai mật khẩu hiện tại | Hiện lỗi cạnh ô mật khẩu hiện tại |
 | `same_password` | 422 | Mật khẩu mới trùng mật khẩu hiện tại | Hiện lỗi cạnh ô mật khẩu mới |
 | `task_completed` | 409 | Huỷ hoặc xoá task đã xong — muốn huỷ thì mở lại bằng `PATCH ... { "status": "InProgress" }` trước | Hiện nút **Huỷ** nhưng kèm bước mở lại trong hộp thoại xác nhận |
-| `task_target_exceeds_campaign` | 422 | Chỉ tiêu task vượt phần còn lại của chiến dịch | Hiện `title` — trong đó có số đã chia và chỉ tiêu chiến dịch. Lấy `allocatedTaskQty` ở danh sách chiến dịch để chặn ngay trên form |
-| `task_deadline_outside_campaign` | 422 | Hạn của task nằm ngoài khoảng ngày của chiến dịch | Giới hạn ô chọn ngày theo `startDate` và `endDate` của chiến dịch |
-| `campaign_target_below_allocated` | 422 | Hạ chỉ tiêu chiến dịch xuống dưới phần đã chia cho task | Hiện `title`, có kèm con số đã chia |
+| `task_target_exceeds_wave` | 422 | Chỉ tiêu task vượt phần còn lại của chiến dịch | Hiện `title` — trong đó có số đã chia và chỉ tiêu chiến dịch. Lấy `allocatedTaskQty` ở danh sách chiến dịch để chặn ngay trên form |
+| `task_deadline_outside_wave` | 422 | Hạn của task nằm ngoài khoảng ngày của chiến dịch | Giới hạn ô chọn ngày theo `startDate` và `endDate` của chiến dịch |
+| `wave_target_below_allocated` | 422 | Hạ chỉ tiêu chiến dịch xuống dưới phần đã chia cho task | Hiện `title`, có kèm con số đã chia |
 | `assigned_to_invalid_role` | 422 | Giao chiến dịch cho người không phải Task Manager | Ô chọn người nhận chỉ lọc Task Manager |
 | `already_registered` | 409 | Đăng ký đợt đã đăng ký rồi | Hiện `title`, không làm gì thêm |
 | `registration_not_found` | 404 | Huỷ đăng ký đợt chưa đăng ký | Tải lại trạng thái đăng ký |
@@ -350,7 +352,7 @@ Lỗi hệ thống trả 500 với `code: "internal_error"`. Gặp lỗi này th
 | `dataset_incomplete` | 422 | Phát hành khi còn cặp câu thiếu một biến thể | Hiện `title` + mở chi tiết xem `missingPairs` |
 
 Các mã còn lại: `alignment_incomplete`, `alignment_word_missing`, `batch_not_found`,
-`campaign_dates_invalid`, `campaign_not_found`, `config_not_found`, `deadline_in_past`, `duplicate_content`,
+`wave_dates_invalid`, `wave_not_found`, `config_not_found`, `deadline_in_past`, `duplicate_content`,
 `empty_content`, `empty_file`, `en_word_count_out_of_range`, `error_reason_inactive`, `error_reason_required`,
 `error_reason_unknown`, `external_recording`, `import_too_large`, `invalid_json`, `invalid_language_tags`,
 `items_source_required`, `last_admin`, `recording_not_found`, `rejection_reason_inactive`,
@@ -466,7 +468,7 @@ Bản trượt kiểm tra **vẫn được lưu** kèm toàn bộ số đo (th�
 
 Câu phải có từ 1 đến 9 từ tiếng Anh, vì con số này nằm trong mã câu. Câu thuần Việt không được có nhãn `[en]`.
 
-**Tiến độ** — `GET /api/speaker/progress`: tổng bản đã nộp, số bản đạt, và các task thu âm đang giao. Mỗi task trong `activeTasks` có `taskTitle` (tên nhiệm vụ — **không phụ thuộc** task có thuộc chiến dịch hay không), cùng `description` và `campaignName`.
+**Tiến độ** — `GET /api/speaker/progress`: tổng bản đã nộp, số bản đạt, và các task thu âm đang giao. Mỗi task trong `activeTasks` có `taskTitle` (tên nhiệm vụ — **không phụ thuộc** task có thuộc chiến dịch hay không), cùng `description` và `waveName`.
 
 - `progress.done` của task thu âm là **số cặp câu đã gửi đủ cả hai bản**, chưa cần chờ duyệt —
   thu xong là cộng 1. Task Manager (`GET /api/tasks`) vẫn đếm cặp câu **đã duyệt đạt**.
@@ -482,8 +484,8 @@ trả 204 khi người đọc **chưa có task thu âm nào**, kể cả họ đ
 |---|---|
 | Đợt đang tham gia | `GET /api/speaker/rounds/current` — 204 = chưa tham gia đợt nào |
 | Các đợt đang mở | `GET /api/speaker/rounds/upcoming` — kèm `isRegistered`, `period`, `registerEndsIn` |
-| Bảng xếp hạng top 5 | `GET /api/speaker/rounds/{campaignId}/leaderboard?top=5` — xếp theo số bản đã nộp (không tính bản trượt kiểm tra tự động) |
-| Đăng ký / huỷ | `POST /api/speaker/rounds/{campaignId}/register`, `DELETE /api/speaker/rounds/{campaignId}/registration` |
+| Bảng xếp hạng top 5 | `GET /api/speaker/rounds/{waveId}/leaderboard?top=5` — xếp theo số bản đã nộp (không tính bản trượt kiểm tra tự động) |
+| Đăng ký / huỷ | `POST /api/speaker/rounds/{waveId}/register`, `DELETE /api/speaker/rounds/{waveId}/registration` |
 | Bản bị từ chối cần thu lại | `GET /api/speaker/recordings/rejected?limit=5` — kèm `reason` + `audioUrl` nghe lại |
 | Lịch sử ghi âm | `GET /api/speaker/recordings/history?status&taskId&search&page&pageSize=` — mỗi dòng là một **cặp**, kèm `reviews` của cả hai bản (hiện ngay khi có lượt) và link nghe tạm 15 phút (`csAudioUrl`/`viAudioUrl`) |
 | Lịch sử đóng góp | `GET /api/speaker/contributions/history?category&search&page&pageSize=` |
@@ -491,19 +493,19 @@ trả 204 khi người đọc **chưa có task thu âm nào**, kể cả họ đ
 
 **Chỉ tiêu trên trang chủ là của riêng người đọc.** `target` của `GET /api/speaker/rounds/current`
 là tổng quota trên các lượt giao task thu âm còn hiệu lực trong đợt — **không phải**
-`campaign.targetQty`. Task giao nhiều người thì mỗi người nhận quota của mình; lượt giao cũ
+`wave.targetQty`. Task giao nhiều người thì mỗi người nhận quota của mình; lượt giao cũ
 chưa có quota được chia theo số người nhận, cùng quy tắc với `GET /api/speaker/progress`.
 `submitted` vẫn là số bản đã nộp thật và **có thể vượt `target`** (hệ thống không chặn ghi âm
 sau khi đạt chỉ tiêu); giao diện chặn phần hiển thị ở `target`.
 
-Mỗi dòng của `GET /api/speaker/rounds/{campaignId}/leaderboard` mang:
+Mỗi dòng của `GET /api/speaker/rounds/{waveId}/leaderboard` mang:
 
 - `submitted` — số bản đã nộp thật, dùng để xếp hạng và so sánh thứ hạng;
 - `targetQty` — quota riêng của người đó, cùng quy tắc trên; `0` nghĩa là không còn nhiệm vụ
   được giao, giao diện nên hiện mẫu số `—`;
 - `submittedCapped` — `min(submitted, targetQty)`, dùng hiển thị tiến độ để không vượt mốc 100%.
 
-`campaignTargetQty` và `allocatedTargetQty` vẫn là hai mốc của cả đợt.
+`waveTargetQty` và `allocatedTargetQty` vẫn là hai mốc của cả đợt.
 
 **Lịch sử ghi âm — mỗi dòng là MỘT CẶP** (cả cs + vi), phân trang theo cặp:
 
@@ -709,42 +711,42 @@ giao) — các dòng có `canReview: false`, nộp duyệt vẫn trả 403 `task
 
 **Task có thể độc lập (không thuộc chiến dịch nào), gắn vào chiến dịch sau, hoặc gỡ ra mà không bị xoá.**
 
-1. **Chiến dịch thì Admin hoặc Task Manager cùng quản lý được** (`POST/PATCH/DELETE /api/campaigns` cho
-   cả hai vai). Chỉ bước **giao chiến dịch** là của Admin: `POST /api/campaigns/{id}/assign` trả **403**
+1. **Chiến dịch thì Admin hoặc Task Manager cùng quản lý được** (`POST/PATCH/DELETE /api/waves` cho
+   cả hai vai). Chỉ bước **giao chiến dịch** là của Admin: `POST /api/waves/{id}/assign` trả **403**
    với `code: "forbidden"` khi gọi bằng vai Task Manager. Chiến dịch đã giao cho Task Manager khác thì
-   người đó không sửa/xoá được: **403 `campaign_not_owned`**.
-2. Task Manager tạo task **không cần `campaignId`** (bỏ trống hoặc `null` = task độc lập),
-   rồi gắn sau bằng `PATCH /api/tasks/{id}/campaign`. Tạo kèm `campaignId` thì kiểm tra
-   quota/hạn như cũ. Quy tắc quota (`task_target_exceeds_campaign`) và khung hạn
-   (`task_deadline_outside_campaign`) **chỉ áp dụng khi task đang gắn với chiến dịch**.
-3. **Xoá hẳn khỏi đợt:** `DELETE /api/campaigns/{id}/tasks/{taskId}` → **204** xoá vĩnh viễn task.
+   người đó không sửa/xoá được: **403 `wave_not_owned`**.
+2. Task Manager tạo task **không cần `waveId`** (bỏ trống hoặc `null` = task độc lập),
+   rồi gắn sau bằng `PATCH /api/tasks/{id}/wave`. Tạo kèm `waveId` thì kiểm tra
+   quota/hạn như cũ. Quy tắc quota (`task_target_exceeds_wave`) và khung hạn
+   (`task_deadline_outside_wave`) **chỉ áp dụng khi task đang gắn với chiến dịch**.
+3. **Xoá hẳn khỏi đợt:** `DELETE /api/waves/{id}/tasks/{taskId}` → **204** xoá vĩnh viễn task.
    Task biến mất khỏi đợt, trang Speaker/Reviewer và API chi tiết task (404). Xoá được cả task đã
    hoàn thành hoặc đã có dữ liệu nộp. Lượt giao, mục công việc và hàng đợi bị xoá theo; bản ghi thu âm
    và lượt duyệt được giữ lại với `taskId` NULL. Muốn giữ task thì dùng
-   `PATCH /api/tasks/{id}/campaign` với `campaignId: null`, hoặc đóng bằng `POST /api/tasks/{id}/cancel`.
+   `PATCH /api/tasks/{id}/wave` với `waveId: null`, hoặc đóng bằng `POST /api/tasks/{id}/cancel`.
 4. **Xoá task độc lập** là việc không hoàn tác được: `DELETE /api/tasks/{id}` → **204**.
-   Xoá cứng được task **đã gỡ khỏi chiến dịch** (`campaignId: null`) và **chưa có dữ liệu
+   Xoá cứng được task **đã gỡ khỏi chiến dịch** (`waveId: null`) và **chưa có dữ liệu
    nộp thật** — không có bản ghi nộp về hay lượt duyệt nào trỏ tới task; lượt giao
    (`task_assignment`) và hàng chờ (`task_script`/`task_recording`) bị xoá theo. Đã gắn
-   chiến dịch thì **409 `task_in_campaign`**, đã hoàn thành thì **409 `task_completed`**,
+   chiến dịch thì **409 `task_in_wave`**, đã hoàn thành thì **409 `task_completed`**,
    đã có dữ liệu nộp thì **409 `task_has_work`** (dùng `POST /api/tasks/{id}/cancel` để
    giữ dấu vết). Task không của mình thì **403 `task_not_owned`** (Admin thì qua được).
 
 | Lỗi | Nghĩa |
 |---|---|
-| **404** `campaign_not_found` | `campaignId` không tồn tại |
-| **422** `campaign_not_assigned_to_manager` | Chiến dịch chưa được giao, hoặc được giao cho Task Manager khác. Nhờ Admin giao trước |
+| **404** `wave_not_found` | `waveId` không tồn tại |
+| **422** `wave_not_assigned_to_manager` | Chiến dịch chưa được giao, hoặc được giao cho Task Manager khác. Nhờ Admin giao trước |
 
 | Màn hình | API |
 |---|---|
-| Danh sách chiến dịch | `GET /api/campaigns` — lọc tuỳ chọn `status`, `page`, `pageSize`. Mỗi dòng kèm `allocatedTaskQty` (tổng chỉ tiêu đã chia cho các task), `taskCount`, `completedTaskCount`, `assignedTo` |
-| Chi tiết chiến dịch | `GET /api/campaigns/{id}` |
-| Danh sách task | `GET /api/tasks` — lọc tuỳ chọn: `taskType`, `status`, `assigneeId`, `overdue`, `page`, `pageSize`. Mỗi dòng kèm `campaignId`, `campaignName` |
-| Tạo task | `POST /api/tasks` `{ "campaignId": 2, "taskType": "Recording", "description": "…", "targetQty": 10, "deadline": "2026-09-30T17:00:00+07:00", "assigneeUserIds": [6, 7] }` — `campaignId` để trống/`null` = task độc lập; `assigneeUserIds` tuỳ chọn, bỏ qua hoặc `[]` để tạo chưa phân công. Recording tạo kèm người nhận vẫn tạo được khi kho câu ít hơn `targetQty`; mỗi Speaker nhận tối đa số câu còn thu được, nhiều Speaker có thể nhận cùng cặp |
-| Gắn/chuyển/gỡ chiến dịch | `PATCH /api/tasks/{id}/campaign` `{ "campaignId": 2 }` — `null` = gỡ về độc lập |
-| Xoá task khỏi chiến dịch (vĩnh viễn) | `DELETE /api/campaigns/{id}/tasks/{taskId}` → 204 — task và dữ liệu điều phối bị xoá; bản ghi thu âm/lượt duyệt giữ lại |
+| Danh sách chiến dịch | `GET /api/waves` — lọc tuỳ chọn `status`, `page`, `pageSize`. Mỗi dòng kèm `allocatedTaskQty` (tổng chỉ tiêu đã chia cho các task), `taskCount`, `completedTaskCount`, `assignedTo` |
+| Chi tiết chiến dịch | `GET /api/waves/{id}` |
+| Danh sách task | `GET /api/tasks` — lọc tuỳ chọn: `taskType`, `status`, `assigneeId`, `overdue`, `page`, `pageSize`. Mỗi dòng kèm `waveId`, `waveName` |
+| Tạo task | `POST /api/tasks` `{ "waveId": 2, "taskType": "Recording", "description": "…", "targetQty": 10, "deadline": "2026-09-30T17:00:00+07:00", "assigneeUserIds": [6, 7] }` — `waveId` để trống/`null` = task độc lập; `assigneeUserIds` tuỳ chọn, bỏ qua hoặc `[]` để tạo chưa phân công. Recording tạo kèm người nhận vẫn tạo được khi kho câu ít hơn `targetQty`; mỗi Speaker nhận tối đa số câu còn thu được, nhiều Speaker có thể nhận cùng cặp |
+| Gắn/chuyển/gỡ chiến dịch | `PATCH /api/tasks/{id}/wave` `{ "waveId": 2 }` — `null` = gỡ về độc lập |
+| Xoá task khỏi chiến dịch (vĩnh viễn) | `DELETE /api/waves/{id}/tasks/{taskId}` → 204 — task và dữ liệu điều phối bị xoá; bản ghi thu âm/lượt duyệt giữ lại |
 | Xoá task độc lập | `DELETE /api/tasks/{id}` → 204 — task đã gỡ khỏi chiến dịch và chưa có dữ liệu nộp thật (lượt giao, hàng chờ xoá theo) |
-| Chi tiết task | `GET /api/tasks/{id}` — tiến độ, lịch sử giao, danh sách mục (`campaignId`/`campaignName` có thể `null`). Task thu âm: `id` vẫn là `scriptId`, thêm `taskScriptId` để phân biệt khi nhiều Speaker cùng nhận một cặp |
+| Chi tiết task | `GET /api/tasks/{id}` — tiến độ, lịch sử giao, danh sách mục (`waveId`/`waveName` có thể `null`). Task thu âm: `id` vẫn là `scriptId`, thêm `taskScriptId` để phân biệt khi nhiều Speaker cùng nhận một cặp |
 | Sửa task | `PATCH /api/tasks/{id}` — chỉ gửi trường cần đổi (không đổi chiến dịch ở đây) |
 | Thêm mục chọn tay | `POST /api/tasks/{id}/items` `{ "ids": ["s_211000000001", "s_131000000002"] }` |
 | Thêm mục tự động | `POST /api/tasks/{id}/items` `{ "autoFill": { "count": 10, "domain": "ItTechnology" } }` — cố thêm 10 mục hợp lệ (hoặc ít hơn nếu hết ứng viên phù hợp); `domain` phải khớp chủ đề task, nếu không trả 422; task duyệt thì dùng `"speakerId"` thay cho `"domain"` |
@@ -812,7 +814,7 @@ Speaker được thu cùng một cặp. `POST /api/tasks/{id}/items` chỉ bỏ 
 | Xoá cứng câu chờ duyệt | `DELETE /api/scripts/{id}` — chỉ `PendingValidation`; `409 script_not_pending` nếu đã duyệt, `409 script_already_recorded` nếu đã có bản ghi âm |
 | Ngừng dùng câu (xoá mềm) | `POST /api/scripts/{id}/deactivate` — `PendingValidation`/`Validated` → `Deactivated`; chặn nếu đã có bản ghi âm |
 | Khôi phục câu đã loại/ngừng dùng | `POST /api/scripts/{id}/reactivate` — `Rejected`/`Deactivated` về `PendingValidation` |
-| Dataset | `POST /api/datasets` (gom bản duyệt đạt theo `recordingIds` và/hoặc `campaignIds`), `GET /api/datasets`, `GET /api/datasets/{id}` (kèm `missingPairs`), `POST /api/datasets/{id}/release`, `POST /api/datasets/{id}/archive`, `GET /api/datasets/{id}/download` (ZIP `manifest.json` + `metadata.csv` + `audio/{recordingId}.wav`; `?includeAudio=false` để chỉ lấy metadata, vẫn kèm link nghe 15 phút) |
+| Dataset | `POST /api/datasets` (gom bản duyệt đạt theo `recordingIds` và/hoặc `waveIds`), `GET /api/datasets`, `GET /api/datasets/{id}` (kèm `missingPairs`), `POST /api/datasets/{id}/release`, `POST /api/datasets/{id}/archive`, `GET /api/datasets/{id}/download` (ZIP `manifest.json` + `metadata.csv` + `audio/{recordingId}.wav`; `?includeAudio=false` để chỉ lấy metadata, vẫn kèm link nghe 15 phút) |
 | Bản ghi | `GET /api/recordings` — lọc tuỳ chọn: `status`, `scriptId`, `speakerId`, `page`, `pageSize`. Nghe: `GET /api/recordings/{id}/audio-url` |
 | Cấu hình | `GET /api/config`, `PUT /api/admin/config/{key}` `{ "value": "30" }` |
 | Danh mục lý do | `GET /api/rejection-reasons?activeOnly=false`, `GET /api/script-error-reasons?activeOnly=false` |
@@ -820,7 +822,7 @@ Speaker được thu cùng một cặp. `POST /api/tasks/{id}/items` chỉ bỏ 
 | Chất lượng người đọc | `GET /api/admin/statistics/speakers` |
 | Hiệu suất người duyệt | `GET /api/admin/statistics/reviewers` |
 | Lý do từ chối phổ biến | `GET /api/admin/statistics/rejection-reasons` |
-| Tiến độ theo chiến dịch | `GET /api/admin/statistics/campaigns` |
+| Tiến độ theo chiến dịch | `GET /api/admin/statistics/waves` |
 
 Kết quả nhập file có `imported`, `scriptIds` và `skipped` (kèm lý do từng câu bị loại). Một câu hỏng không làm hỏng cả file.
 
@@ -837,11 +839,11 @@ Kết quả nhập file có `imported`, `scriptIds` và `skipped` (kèm lý do t
 
 | Việc | API |
 |---|---|
-| Tạo | `POST /api/campaigns` `{ "campaignName": "Thu dữ liệu đợt 1", "targetQty": 2000, "startDate": "2026-10-05", "endDate": "2027-01-05" }` |
-| Danh sách, chi tiết | `GET /api/campaigns`, `GET /api/campaigns/{id}` |
-| Sửa | `PATCH /api/campaigns/{id}` — chỉ gửi trường cần đổi (tên, chủ đề, chỉ tiêu, ngày). **Không nhận `status`**: trạng thái đợt tự tính từ task (`Open` chưa có nhiệm vụ nào, `InProgress` đang làm, `Completed` khi mọi nhiệm vụ xong) |
-| Xoá | `DELETE /api/campaigns/{id}` — 204; không phải của mình thì **403 `campaign_not_owned`** (Admin qua được). Task đang gắn vào không mất: nó thành task độc lập (`campaignId: null`). **Đăng ký của người đọc thì bị xoá hẳn** (`campaign_registration` khai `ON DELETE CASCADE`) — không có API lấy lại, nên hỏi trước khi bấm |
-| Giao cho Task Manager | `POST /api/campaigns/{id}/assign` `{ "assignedToUserId": 2 }` — **chỉ Admin** |
+| Tạo | `POST /api/waves` `{ "waveName": "Thu dữ liệu đợt 1", "targetQty": 2000, "startDate": "2026-10-05", "endDate": "2027-01-05" }` |
+| Danh sách, chi tiết | `GET /api/waves`, `GET /api/waves/{id}` |
+| Sửa | `PATCH /api/waves/{id}` — chỉ gửi trường cần đổi (tên, chủ đề, chỉ tiêu, ngày). **Không nhận `status`**: trạng thái đợt tự tính từ task (`Open` chưa có nhiệm vụ nào, `InProgress` đang làm, `Completed` khi mọi nhiệm vụ xong) |
+| Xoá | `DELETE /api/waves/{id}` — 204; không phải của mình thì **403 `wave_not_owned`** (Admin qua được). Task đang gắn vào không mất: nó thành task độc lập (`waveId: null`). **Đăng ký của người đọc thì bị xoá hẳn** (`wave_registration` khai `ON DELETE CASCADE`) — không có API lấy lại, nên hỏi trước khi bấm |
+| Giao cho Task Manager | `POST /api/waves/{id}/assign` `{ "assignedToUserId": 2 }` — **chỉ Admin** |
 
 - `targetQty` **phải từ 2000 đến 5000** cặp câu; ngoài khoảng đó là **400**. Đây là giới hạn của lược đồ database.
 - `startDate` và `endDate` là **ngày thuần** dạng `YYYY-MM-DD`, không có giờ và không có múi giờ.
@@ -942,7 +944,7 @@ recorder.onstop = async () => {
 | `ReviewBlocker` | `None`, `OwnRecording`, `AlreadyReviewedByMe`, `NotPendingReview`, `RoundsFull` |
 | `RoleName` | `Speaker`, `Reviewer`, `TaskManager`, `Admin` |
 | `UserStatus` | `Active`, `Inactive` (bị khoá), `Suspended` |
-| `CampaignStatus` | `Open` (chưa có nhiệm vụ nào), `InProgress` (đang làm), `Completed` (mọi nhiệm vụ xong) — không bấm tay, tự tính từ task |
+| `WaveStatus` | `Open` (chưa có nhiệm vụ nào), `InProgress` (đang làm), `Completed` (mọi nhiệm vụ xong) — không bấm tay, tự tính từ task |
 | `Occupation` | `Student`, `Employed`, `Other` |
 
 Mã lý do từ chối và lý do lỗi câu **luôn lấy từ API** (`/api/rejection-reasons`, `/api/script-error-reasons`),
@@ -1012,7 +1014,7 @@ Hiển thị đồng thời cả hai. Chỉ trả một bộ thì người đó 
 hoặc tưởng cả nhóm không làm gì cả. `myProgress.targetQty` là **quota của người đang xem**
 (tổng quota các lượt giao của họ trong task), `teamProgress.targetQty` là chỉ tiêu của task.
 Trang chủ Speaker (`GET /api/speaker/rounds/current`) và bảng xếp hạng đợt cũng dùng quota
-cá nhân, không dùng `campaign.targetQty`; số đã nộp vẫn là số thật và có thể vượt mốc.
+cá nhân, không dùng `wave.targetQty`; số đã nộp vẫn là số thật và có thể vượt mốc.
 
 ### 8.5 Endpoint mới
 
@@ -1082,10 +1084,10 @@ Ai đã code theo bản API trước ngày 22/09/2026 thì cần sửa:
 | — | Mới: quản lý người dùng `/api/users`, trang cá nhân `/api/me/*`, ô chọn người nhận `GET /api/tasks/assignable-users` |
 | `PUT /api/me/password` trả 204 | Trả **200 kèm token mới** — thay token đang lưu |
 | Token cấp trước bản cập nhật này | Hết hiệu lực — đăng nhập lại một lần |
-| `POST /api/tasks` không cần chiến dịch | Từng bắt buộc **`campaignId`** — nay **không bắt buộc** nữa: thiếu/`null` là task độc lập, gắn sau bằng `PATCH /api/tasks/{id}/campaign`. Chiến dịch (khi có) vẫn phải được Admin giao cho đúng Task Manager đó |
+| `POST /api/tasks` không cần chiến dịch | Từng bắt buộc **`waveId`** — nay **không bắt buộc** nữa: thiếu/`null` là task độc lập, gắn sau bằng `PATCH /api/tasks/{id}/wave`. Chiến dịch (khi có) vẫn phải được Admin giao cho đúng Task Manager đó |
 | Nhập file và thêm câu tay không kiểm chủ đề | Vẫn vào `Validated`, nhưng Admin phải có đúng chủ đề của câu; nhập file thiếu chủ đề là **cả lần nhập** trả 422 `reviewer_domain_required` |
 | Ai duyệt câu cũng chốt được sang `Validated` | Chỉ **Reviewer được phân đúng chủ đề**; Speaker và Admin nhận 422 `reviewer_domain_required` |
-| — | Mới: chiến dịch `/api/campaigns/*`, phân chủ đề `/api/users/{id}/domains`, tự xem chủ đề `GET /api/me/domains` |
+| — | Mới: chiến dịch `/api/waves/*`, phân chủ đề `/api/users/{id}/domains`, tự xem chủ đề `GET /api/me/domains` |
 | — | Mới: Reviewer xem danh sách bản ghi trong task `GET /api/reviewer/tasks/{taskId}/recordings` và mở một bản `GET /api/reviewer/recordings/{id}` |
 | `GET /api/speaker/stats` → `{total,approved,rejected,pending}` | → `{ recording: {total,approved,rejected,pending}, contribution: {total,validated,rejected,pending} }` |
 | `GET /api/speaker/recordings/history` → `csAudioUrl`, `viAudioUrl` (luôn null), `recordingId` là khoá dòng | → `scriptId` là khoá dòng (mỗi dòng là **một cặp**), `csAudioUrl`/`viAudioUrl` **có thật** (hết hạn sau 15 phút), thêm `csRecordingId`/`viRecordingId` (null = cặp mới ghi được một bản). Bỏ `recordingId`, `sentenceVariant`, `audioUrl`, `audioUrlExpiresAt`. `status` giờ là **trạng thái của cặp**: có bản từ chối → `Rejected`, cả hai bản đạt → `Approved`, trượt QC hết → `QcFailed`, còn lại → `PendingReview`. Phân trang theo **cặp**, `total` là số cặp. |

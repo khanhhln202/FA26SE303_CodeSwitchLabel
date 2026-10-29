@@ -26,80 +26,80 @@ public class SpeakerRoundsService(
             .Where(a => a.Task.TaskType == TaskType.Recording)
             .Where(a => a.Task.Status != WorkTaskStatus.Cancelled)
             // Chỉ xét task THUỘC MỘT ĐỢT. Trước đây lấy task hạn gần nhất rồi mới đọc
-            // campaignId, nên ai có một task lẻ (không thuộc đợt nào) đến hạn sớm hơn là
+            // waveId, nên ai có một task lẻ (không thuộc đợt nào) đến hạn sớm hơn là
             // mất sạch khối "đợt đang tham gia", dù đang nhận việc trong hai đợt khác.
-            .Where(a => a.Task.CampaignId != null)
+            .Where(a => a.Task.WaveId != null)
             .OrderBy(a => a.Task.Status == WorkTaskStatus.Completed)
             .ThenBy(a => a.Task.Deadline)
             .Select(a => a.Task)
             .FirstOrDefaultAsync(ct);
 
-        long? campaignId = task?.CampaignId;
+        long? waveId = task?.WaveId;
 
         // Không đăng ký chiến dịch nào cũng ghi âm được — việc thu dẫn ra từ task được giao.
         // Nên "đợt đang làm" cũng lấy theo task: không có task thì không có đợt, thay vì dựng
         // một đợt từ việc đăng ký mà việc đăng ký không còn là điều kiện gì.
-        if (campaignId is null) return null;
+        if (waveId is null) return null;
 
-        return await BuildRoundAsync(campaignId.Value, speakerId, ct);
+        return await BuildRoundAsync(waveId.Value, speakerId, ct);
     }
 
     public async Task<IReadOnlyList<UpcomingRoundDto>> GetUpcomingAsync(
         long speakerId, CancellationToken ct = default)
     {
         var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
-        var mine = await db.CampaignRegistrations.AsNoTracking()
+        var mine = await db.WaveRegistrations.AsNoTracking()
             .Where(r => r.SpeakerId == speakerId)
-            .Select(r => r.CampaignId)
+            .Select(r => r.WaveId)
             .ToListAsync(ct);
 
         // đợt chưa có nhiệm vụ nào (Open) thì người đọc còn đăng ký được;
         // đợt đã có nhiệm vụ rồi thì việc đến từ task, không phải từ đăng ký.
         // Trước đây lọc cả `Draft` — trạng thái đó không tồn tại nữa, và đợt mới tạo đã là Open.
-        var campaigns = await db.Campaigns.AsNoTracking()
-            .Where(c => c.Status == CampaignStatus.Open)
+        var waves = await db.Waves.AsNoTracking()
+            .Where(c => c.Status == WaveStatus.Open)
             .Where(c => c.EndDate >= today)
             .OrderBy(c => c.StartDate)
             .Take(3)
             .ToListAsync(ct);
 
-        return [.. campaigns.Select(c => new UpcomingRoundDto(
-            c.CampaignId,
-            c.CampaignName,
+        return [.. waves.Select(c => new UpcomingRoundDto(
+            c.WaveId,
+            c.WaveName,
             null,
             c.TargetQty,
             $"{c.StartDate:dd/MM} – {c.EndDate:dd/MM}",
             HumanizeDays((c.StartDate.ToDateTime(TimeOnly.MinValue) - today.ToDateTime(TimeOnly.MinValue)).Days),
             null,
-            mine.Contains(c.CampaignId)))];
+            mine.Contains(c.WaveId)))];
     }
 
     public async Task<LeaderboardDto> GetLeaderboardAsync(
-        long campaignId, long speakerId, int top, CancellationToken ct = default)
+        long waveId, long speakerId, int top, CancellationToken ct = default)
     {
-        var chiTieu = await db.Campaigns.AsNoTracking()
-            .Where(c => c.CampaignId == campaignId)
+        var chiTieu = await db.Waves.AsNoTracking()
+            .Where(c => c.WaveId == waveId)
             .Select(c => (int?)c.TargetQty)
             .FirstOrDefaultAsync(ct)
-            ?? throw new NotFoundException("campaign_not_found", $"Không tìm thấy chiến dịch #{campaignId}.");
+            ?? throw new NotFoundException("wave_not_found", $"Không tìm thấy chiến dịch #{waveId}.");
 
         // Tổng chỉ tiêu các nhiệm vụ thu âm đã chia trong đợt — mốc sát thực tế hơn chỉ tiêu
         // cả đợt khi đợt mới mở và mới giao được một phần việc.
         var daChia = await db.WorkTasks.AsNoTracking()
-            .Where(t => t.CampaignId == campaignId && t.TaskType == TaskType.Recording)
+            .Where(t => t.WaveId == waveId && t.TaskType == TaskType.Recording)
             .SumAsync(t => (int?)t.TargetQty, ct) ?? 0;
 
         // xếp hạng theo CÂU ĐÃ NỘP — đếm mọi bản ghi đã qua kiểm tra tự động
         // (chờ duyệt / đạt / bị từ chối), không chỉ bản được duyệt. Bản trượt QC không tính.
         var daNop = await db.Recordings.AsNoTracking()
             .Where(r => r.Status != RecordingStatus.QcFailed)
-            .Where(r => r.Task != null && r.Task.CampaignId == campaignId)
+            .Where(r => r.Task != null && r.Task.WaveId == waveId)
             .GroupBy(r => new { r.SpeakerId, r.Speaker.FullName })
             .Select(g => new { g.Key.SpeakerId, g.Key.FullName, Submitted = g.Count() })
             .ToListAsync(ct);
 
         // Chỉ tiêu riêng từng người: quota trên từng lượt giao, không phải chỉ tiêu cả task.
-        var chiTieuRieng = await PersonalTargetsAsync(campaignId, ct);
+        var chiTieuRieng = await PersonalTargetsAsync(waveId, ct);
 
         // Người ĐƯỢC GIAO việc trong đợt nhưng chưa thu câu nào vẫn có mặt, với 0 bản đã nộp.
         // Không có họ thì đợt vừa mở ra bảng rỗng trơn, trong khi cả nhóm đã nhận chỉ tiêu —
@@ -134,42 +134,42 @@ public class SpeakerRoundsService(
     }
 
     public async Task<SpeakerRoundDto> RegisterAsync(
-        long campaignId, long speakerId, CancellationToken ct = default)
+        long waveId, long speakerId, CancellationToken ct = default)
     {
-        var campaign = await db.Campaigns.FirstOrDefaultAsync(c => c.CampaignId == campaignId, ct)
-            ?? throw new NotFoundException("campaign_not_found", $"Không tìm thấy chiến dịch #{campaignId}.");
+        var wave = await db.Waves.FirstOrDefaultAsync(c => c.WaveId == waveId, ct)
+            ?? throw new NotFoundException("wave_not_found", $"Không tìm thấy chiến dịch #{waveId}.");
 
         // đợt chỉ còn Open/InProgress/Completed, và trạng thái đợt là hàm của task —
         // đăng ký là việc của người đọc chứ không phải việc của task, nên đợt đang chạy hay
         // đã xong đều không chặn. Luật cũ chặn cả Completed lẫn Cancelled đã bị gỡ.
-        var exists = await db.CampaignRegistrations.AnyAsync(
-            r => r.CampaignId == campaignId && r.SpeakerId == speakerId, ct);
+        var exists = await db.WaveRegistrations.AnyAsync(
+            r => r.WaveId == waveId && r.SpeakerId == speakerId, ct);
 
         if (exists)
         {
             throw new ConflictException(
-                "already_registered", $"Bạn đã đăng ký chiến dịch #{campaignId} rồi.");
+                "already_registered", $"Bạn đã đăng ký chiến dịch #{waveId} rồi.");
         }
 
-        db.CampaignRegistrations.Add(new CampaignRegistration
+        db.WaveRegistrations.Add(new WaveRegistration
         {
-            CampaignId = campaignId,
+            WaveId = waveId,
             SpeakerId = speakerId,
             RegisteredAt = clock.GetUtcNow()
         });
         await db.SaveChangesAsync(ct);
 
-        return (await BuildRoundAsync(campaignId, speakerId, ct))!;
+        return (await BuildRoundAsync(waveId, speakerId, ct))!;
     }
 
-    public async Task UnregisterAsync(long campaignId, long speakerId, CancellationToken ct = default)
+    public async Task UnregisterAsync(long waveId, long speakerId, CancellationToken ct = default)
     {
-        var reg = await db.CampaignRegistrations.FirstOrDefaultAsync(
-            r => r.CampaignId == campaignId && r.SpeakerId == speakerId, ct)
+        var reg = await db.WaveRegistrations.FirstOrDefaultAsync(
+            r => r.WaveId == waveId && r.SpeakerId == speakerId, ct)
             ?? throw new NotFoundException(
-                "registration_not_found", $"Bạn chưa đăng ký chiến dịch #{campaignId}.");
+                "registration_not_found", $"Bạn chưa đăng ký chiến dịch #{waveId}.");
 
-        db.CampaignRegistrations.Remove(reg);
+        db.WaveRegistrations.Remove(reg);
         await db.SaveChangesAsync(ct);
     }
 
@@ -510,18 +510,18 @@ public class SpeakerRoundsService(
     // ----------------------------------------------------------------- nội bộ
 
     private async Task<SpeakerRoundDto?> BuildRoundAsync(
-        long campaignId, long speakerId, CancellationToken ct)
+        long waveId, long speakerId, CancellationToken ct)
     {
-        var campaign = await db.Campaigns.AsNoTracking()
-            .FirstOrDefaultAsync(c => c.CampaignId == campaignId, ct);
+        var wave = await db.Waves.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.WaveId == waveId, ct);
 
-        if (campaign is null) return null;
+        if (wave is null) return null;
 
         var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
 
         var speakerCounts = await db.Recordings.AsNoTracking()
             .Where(r => r.SpeakerId == speakerId)
-            .Where(r => r.Task != null && r.Task.CampaignId == campaignId)
+            .Where(r => r.Task != null && r.Task.WaveId == waveId)
             .GroupBy(r => r.Status)
             .Select(g => new { g.Key, Count = g.Count() })
             .ToListAsync(ct);
@@ -532,35 +532,35 @@ public class SpeakerRoundsService(
         var pending = byStatus.GetValueOrDefault(RecordingStatus.PendingReview);
         var submitted = approved + rejected + pending;
 
-        var speakersInCampaign = await db.Recordings.AsNoTracking()
-            .Where(r => r.Task != null && r.Task.CampaignId == campaignId)
+        var speakersInWave = await db.Recordings.AsNoTracking()
+            .Where(r => r.Task != null && r.Task.WaveId == waveId)
             .Select(r => r.SpeakerId)
             .Distinct()
             .CountAsync(ct);
 
-        var registered = await db.CampaignRegistrations.AsNoTracking()
-            .Where(r => r.CampaignId == campaignId)
+        var registered = await db.WaveRegistrations.AsNoTracking()
+            .Where(r => r.WaveId == waveId)
             .Select(r => r.SpeakerId)
             .Distinct()
             .CountAsync(ct);
 
-        var isRegistered = await db.CampaignRegistrations.AsNoTracking()
-            .AnyAsync(r => r.CampaignId == campaignId && r.SpeakerId == speakerId, ct);
+        var isRegistered = await db.WaveRegistrations.AsNoTracking()
+            .AnyAsync(r => r.WaveId == waveId && r.SpeakerId == speakerId, ct);
 
-        var topic = await DominantTopicAsync(campaignId, ct);
+        var topic = await DominantTopicAsync(waveId, ct);
 
         // Trang chủ hiện tiến độ của chính người đọc, nên chỉ tiêu cũng phải là quota cá nhân.
-        var target = (await PersonalTargetsAsync(campaignId, ct)).GetValueOrDefault(speakerId);
+        var target = (await PersonalTargetsAsync(waveId, ct)).GetValueOrDefault(speakerId);
 
         return new SpeakerRoundDto(
-            campaign.CampaignId,
-            campaign.CampaignName,
+            wave.WaveId,
+            wave.WaveName,
             topic,
-            campaign.Status,
-            campaign.StartDate,
-            campaign.EndDate,
-            HumanizeDays((campaign.EndDate.ToDateTime(TimeOnly.MinValue) - today.ToDateTime(TimeOnly.MinValue)).Days),
-            Math.Max(speakersInCampaign, registered),
+            wave.Status,
+            wave.StartDate,
+            wave.EndDate,
+            HumanizeDays((wave.EndDate.ToDateTime(TimeOnly.MinValue) - today.ToDateTime(TimeOnly.MinValue)).Days),
+            Math.Max(speakersInWave, registered),
             target,
             submitted,
             approved,
@@ -574,12 +574,12 @@ public class SpeakerRoundsService(
     /// thì chia theo vị trí trong danh sách người nhận (sắp theo tên) để hai màn hình khớp nhau.
     /// </summary>
     private async Task<Dictionary<long, int>> PersonalTargetsAsync(
-        long campaignId, CancellationToken ct)
+        long waveId, CancellationToken ct)
     {
         var assignments = await db.TaskAssignments.AsNoTracking()
             .Where(a => a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled)
             .Where(a => a.Task.Status != WorkTaskStatus.Cancelled)
-            .Where(a => a.Task.CampaignId == campaignId && a.Task.TaskType == TaskType.Recording)
+            .Where(a => a.Task.WaveId == waveId && a.Task.TaskType == TaskType.Recording)
             .Select(a => new
             {
                 a.UserId,
@@ -604,10 +604,10 @@ public class SpeakerRoundsService(
                     a.Assignees.FindIndex(x => x.UserId == g.Key))));
     }
 
-    private async Task<string?> DominantTopicAsync(long campaignId, CancellationToken ct)
+    private async Task<string?> DominantTopicAsync(long waveId, CancellationToken ct)
     {
         var top = await db.TaskScripts.AsNoTracking()
-            .Where(ts => ts.Task.CampaignId == campaignId)
+            .Where(ts => ts.Task.WaveId == waveId)
             .GroupBy(ts => ts.Script.Domain)
             .Select(g => new { Domain = g.Key, Count = g.Count() })
             .OrderByDescending(x => x.Count)

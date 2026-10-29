@@ -164,7 +164,7 @@ public class RecordingRepository(CodeSwitchLabelDbContext db) : IRecordingReposi
     {
         var scope = await db.WorkTasks.AsNoTracking()
             .Where(t => t.TaskId == requestedTaskId)
-            .Select(t => new { t.TaskId, t.TaskType, t.Status, t.CampaignId })
+            .Select(t => new { t.TaskId, t.TaskType, t.Status, t.WaveId })
             .FirstOrDefaultAsync(ct);
 
         if (scope is null ||
@@ -181,8 +181,8 @@ public class RecordingRepository(CodeSwitchLabelDbContext db) : IRecordingReposi
             a.AssignmentStatus != AssignmentStatus.Reassigned &&
             a.AssignmentStatus != AssignmentStatus.Cancelled &&
             (a.TaskId == scope.TaskId ||
-             (scope.CampaignId != null &&
-              a.Task.CampaignId == scope.CampaignId &&
+             (scope.WaveId != null &&
+              a.Task.WaveId == scope.WaveId &&
               a.Task.TaskType == TaskType.Recording &&
               a.Task.Status != WorkTaskStatus.Cancelled)), ct);
 
@@ -194,7 +194,7 @@ public class RecordingRepository(CodeSwitchLabelDbContext db) : IRecordingReposi
             .Where(ts => ts.Task.TaskType == TaskType.Recording &&
                          ts.Task.Status != WorkTaskStatus.Cancelled)
             .Where(ts => ts.TaskId == scope.TaskId ||
-                         (scope.CampaignId != null && ts.Task.CampaignId == scope.CampaignId))
+                         (scope.WaveId != null && ts.Task.WaveId == scope.WaveId))
             // Ưu tiên task được hỏi để bản ghi vào đúng chỗ người dùng đang làm.
             .OrderByDescending(ts => ts.TaskId == scope.TaskId)
             .Select(ts => (long?)ts.TaskId)

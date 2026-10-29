@@ -18,7 +18,7 @@ public interface ITaskService
     /// <paramref name="autoFill"/> tự lấp cặp câu đã duyệt nội dung cho tới khi đủ chỉ tiêu.
     /// </summary>
     Task<TaskDetailDto> GetOrCreateRecordingTaskAsync(
-        long campaignId, bool autoFill, long callerId, bool isAdmin, CancellationToken ct = default);
+        long waveId, bool autoFill, long callerId, bool isAdmin, CancellationToken ct = default);
 
     Task<TaskDetailDto> UpdateAsync(
         long taskId, UpdateTaskRequest request, CancellationToken ct = default,
@@ -57,14 +57,14 @@ public interface ITaskService
         long taskId, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false);
 
-    /// <summary>Gắn task vào chiến dịch (attach/move), hoặc gỡ ra (detach) khi campaignId = null.</summary>
+    /// <summary>Gắn task vào chiến dịch (attach/move), hoặc gỡ ra (detach) khi waveId = null.</summary>
     Task<TaskDetailDto> AttachAsync(
-        long taskId, long? campaignId, CancellationToken ct = default,
+        long taskId, long? waveId, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false);
 
     /// <summary>Xoá vĩnh viễn task khỏi chiến dịch; bản ghi thu âm và lượt duyệt được giữ lại.</summary>
-    Task DeleteFromCampaignAsync(
-        long campaignId, long taskId, CancellationToken ct = default,
+    Task DeleteFromWaveAsync(
+        long waveId, long taskId, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false);
 
     // Xoá cứng task rảnh (độc lập + chưa có việc).

@@ -522,21 +522,21 @@ private async Task SeedTestDataAsync()
                 }
             }
 
-            var campaign = await db.Campaigns.FirstOrDefaultAsync(c => c.CampaignName == "Test Campaign", TestContext.Current.CancellationToken);
-            if (campaign == null)
+            var wave = await db.Waves.FirstOrDefaultAsync(c => c.WaveName == "Test Wave", TestContext.Current.CancellationToken);
+            if (wave == null)
             {
-                campaign = new Campaign
+                wave = new Wave
                 {
-                    CampaignName = "Test Campaign",
+                    WaveName = "Test Wave",
                     TargetQty = 2000,
                     StartDate = DateOnly.FromDateTime(DateTime.Today),
                     EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(30)),
-                    Status = CampaignStatus.Open,
+                    Status = WaveStatus.Open,
                     CreatedBy = admin.UserId,
                     AssignedTo = manager.UserId,
                     CreatedAt = DateTimeOffset.UtcNow
                 };
-                db.Campaigns.Add(campaign);
+                db.Waves.Add(wave);
             }
 
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);

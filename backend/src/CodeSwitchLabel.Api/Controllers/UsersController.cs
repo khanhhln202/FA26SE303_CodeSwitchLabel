@@ -30,7 +30,7 @@ public class UsersController(IUserService userService) : ControllerBase
 
     /// <summary>Bảng Speaker của Admin: họ tên, email, giới tính, trạng thái và số cặp đã duyệt.</summary>
     /// <remarks>
-    /// Một cặp được đếm khi cả bản CS và bản VI đều đã duyệt đạt. Có `campaignId` thì chỉ đếm cặp
+    /// Một cặp được đếm khi cả bản CS và bản VI đều đã duyệt đạt. Có `waveId` thì chỉ đếm cặp
     /// trong chiến dịch đó và chỉ trả về người có ít nhất một cặp như vậy; bỏ trống thì cộng tất cả.
     /// </remarks>
     [HttpGet("speakers")]

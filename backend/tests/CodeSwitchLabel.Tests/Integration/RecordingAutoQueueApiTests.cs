@@ -58,11 +58,11 @@ public sealed class RecordingAutoQueueApiTests : ApiTestBase
         var managerId = await GetUserIdAsync(manager);
         var speakerId = await GetUserIdAsync(speaker);
         var reviewerId = await GetUserIdAsync(reviewer);
-        var campaignX = await CreateCampaignAssignedToAsync(admin, managerId);
-        var campaignY = await CreateCampaignAssignedToAsync(admin, managerId);
+        var waveX = await CreateWaveAssignedToAsync(admin, managerId);
+        var waveY = await CreateWaveAssignedToAsync(admin, managerId);
 
         // 3) Task thu âm trong đợt X: 1 mục, giao Speaker.
-        var recordingTask = await CreateTaskAsync(manager, campaignX, "Recording", 1, "TEAM_018 ghi âm");
+        var recordingTask = await CreateTaskAsync(manager, waveX, "Recording", 1, "TEAM_018 ghi âm");
         var addItems = await PostAsync($"/api/tasks/{recordingTask}/items", new { ids = new[] { scriptId } }, manager);
         Assert.Equal(HttpStatusCode.OK, addItems.StatusCode);
         var assignSpeaker = await PostAsync($"/api/tasks/{recordingTask}/assign", new { userIds = new[] { speakerId } }, manager);
@@ -70,11 +70,11 @@ public sealed class RecordingAutoQueueApiTests : ApiTestBase
 
         // 4) Hai task duyệt cùng đợt X (một huỷ) + một task duyệt đợt Y — hàng chờ lúc này TRỐNG.
         //    Đúng tình huống cần luật này: Task Manager cầm task duyệt sẵn, chưa có bản ghi nào.
-        var reviewTask = await CreateTaskAsync(manager, campaignX, "Review", 1, "TEAM_018 duyệt");
-        var reviewTaskCancelled = await CreateTaskAsync(manager, campaignX, "Review", 1, "TEAM_018 duyệt nhưng huỷ");
+        var reviewTask = await CreateTaskAsync(manager, waveX, "Review", 1, "TEAM_018 duyệt");
+        var reviewTaskCancelled = await CreateTaskAsync(manager, waveX, "Review", 1, "TEAM_018 duyệt nhưng huỷ");
         var cancel = await PostAsync($"/api/tasks/{reviewTaskCancelled}/cancel", new { }, manager);
         Assert.Equal(HttpStatusCode.OK, cancel.StatusCode);
-        var reviewTaskOtherCampaign = await CreateTaskAsync(manager, campaignY, "Review", 1, "TEAM_018 duyệt đợt khác");
+        var reviewTaskOtherWave = await CreateTaskAsync(manager, waveY, "Review", 1, "TEAM_018 duyệt đợt khác");
 
         // 5) Speaker nộp bản ghi — kèm taskId hoặc để hệ thống tự gắn về task của chính mình.
         var uploaded = await UploadAsync(speaker, scriptId, kemTaskId ? recordingTask : null);
@@ -87,7 +87,7 @@ public sealed class RecordingAutoQueueApiTests : ApiTestBase
 
         // Task đã huỷ và task của đợt khác thì không nhận.
         Assert.Null(await QueueStatusAsync(uploaded.RecordingId, reviewTaskCancelled));
-        Assert.Null(await QueueStatusAsync(uploaded.RecordingId, reviewTaskOtherCampaign));
+        Assert.Null(await QueueStatusAsync(uploaded.RecordingId, reviewTaskOtherWave));
 
         // 7) Giờ hàng chờ đã có 1 mục cho chỉ tiêu 1 nên giao được Reviewer; Reviewer mở danh sách
         //    task của mình và thấy bản ghi — chốt cả luồng "thu xong là đẩy qua RV".
@@ -151,11 +151,11 @@ public sealed class RecordingAutoQueueApiTests : ApiTestBase
         return doc.RootElement.GetProperty("scriptIds")[0].GetString()!;
     }
 
-    private async Task<long> CreateCampaignAssignedToAsync(string adminToken, long managerId)
+    private async Task<long> CreateWaveAssignedToAsync(string adminToken, long managerId)
     {
-        var response = await PostAsync("/api/campaigns", new
+        var response = await PostAsync("/api/waves", new
         {
-            campaignName = $"TEAM_018 {Guid.NewGuid():N}",
+            waveName = $"TEAM_018 {Guid.NewGuid():N}",
             domain = "ItTechnology",
             targetQty = 2000,
             startDate = DateOnly.FromDateTime(DateTime.UtcNow),
@@ -164,25 +164,25 @@ public sealed class RecordingAutoQueueApiTests : ApiTestBase
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
-        long campaignId;
+        long waveId;
         using (var doc = await ReadJsonAsync(response))
         {
-            campaignId = doc.RootElement.GetProperty("campaignId").GetInt64();
+            waveId = doc.RootElement.GetProperty("waveId").GetInt64();
         }
 
-        var assign = await PostAsync($"/api/campaigns/{campaignId}/assign",
+        var assign = await PostAsync($"/api/waves/{waveId}/assign",
             new { assignedToUserId = managerId }, adminToken);
         Assert.Equal(HttpStatusCode.OK, assign.StatusCode);
 
-        return campaignId;
+        return waveId;
     }
 
     private async Task<long> CreateTaskAsync(
-        string managerToken, long campaignId, string taskType, int targetQty, string description)
+        string managerToken, long waveId, string taskType, int targetQty, string description)
     {
         var response = await PostAsync("/api/tasks", new
         {
-            campaignId,
+            waveId,
             taskType,
             description,
             targetQty,

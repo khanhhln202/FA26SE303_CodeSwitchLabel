@@ -73,7 +73,7 @@ public class DatasetsController(IDatasetService datasets) : ControllerBase
 
     /// <summary>Tải thẳng ZIP dữ liệu đã duyệt theo Speaker hoặc theo chiến dịch, không cần tạo dataset.</summary>
     /// <remarks>
-    /// Gửi `speakerIds` để lấy các Speaker đã chọn; bỏ trống rồi gửi `campaignId` để lấy cả chiến dịch.
+    /// Gửi `speakerIds` để lấy các Speaker đã chọn; bỏ trống rồi gửi `waveId` để lấy cả chiến dịch.
     /// Mỗi Speaker một thư mục `{email}_{ngày Bangkok}` gồm `test/{scriptId}.json` (đúng schema nhập)
     /// và `audio/{scriptId}_CS.wav`, `audio/{scriptId}_VI.wav`. Cặp thiếu một bản hoặc thiếu audio bị bỏ.
     /// </remarks>

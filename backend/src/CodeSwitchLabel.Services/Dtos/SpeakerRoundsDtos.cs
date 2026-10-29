@@ -5,14 +5,14 @@ namespace CodeSwitchLabel.Services.Dtos;
 /// <summary>Một "Đợt" ở FE = một chiến dịch ở BE, kèm tiến độ của chính người đọc.</summary>
 /// <param name="Target">
 /// Chỉ tiêu riêng của người đọc: tổng quota trên các lượt giao task thu âm còn hiệu lực
-/// trong đợt — không phải <c>campaign.TargetQty</c>. 0 nghĩa là chưa nhận nhiệm vụ nào.
+/// trong đợt — không phải <c>wave.TargetQty</c>. 0 nghĩa là chưa nhận nhiệm vụ nào.
 /// </param>
 /// <param name="Submitted">Số bản đã nộp thật trong đợt; có thể vượt <paramref name="Target"/>.</param>
 public record SpeakerRoundDto(
-    long CampaignId,
+    long WaveId,
     string Name,
     string? Topic,
-    CampaignStatus Status,
+    WaveStatus Status,
     DateOnly StartDate,
     DateOnly EndDate,
     string? EndsIn,
@@ -24,7 +24,7 @@ public record SpeakerRoundDto(
     bool IsRegistered);
 
 public record UpcomingRoundDto(
-    long CampaignId,
+    long WaveId,
     string Name,
     string? Topic,
     int Target,
@@ -56,12 +56,12 @@ public record LeaderboardEntryDto(
 /// Bảng xếp hạng kèm mốc để vẽ thanh tiến độ.
 ///
 /// Hai mốc vì chúng khác nhau rất xa và dùng cho hai câu hỏi khác nhau:
-/// <see cref="CampaignTargetQty"/> là chỉ tiêu cả đợt (còn bao xa tới đích),
+/// <see cref="WaveTargetQty"/> là chỉ tiêu cả đợt (còn bao xa tới đích),
 /// <see cref="AllocatedTargetQty"/> là tổng chỉ tiêu các nhiệm vụ đã chia (còn bao nhiêu
 /// việc đang thật sự giao). Đợt mới mở thường có mốc thứ hai nhỏ hơn mốc thứ nhất rất nhiều.
 /// </summary>
 public record LeaderboardDto(
-    int CampaignTargetQty,
+    int WaveTargetQty,
     int AllocatedTargetQty,
     IReadOnlyList<LeaderboardEntryDto> Items);
 

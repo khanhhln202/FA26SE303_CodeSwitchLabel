@@ -47,7 +47,7 @@ public interface ITaskProgressTracker
 }
 
 public class TaskProgressTracker(
-    ITaskRepository tasks, ICampaignRepository campaigns, TimeProvider clock)
+    ITaskRepository tasks, IWaveRepository waves, TimeProvider clock)
     : ITaskProgressTracker
 {
     public async Task OnRecordingSubmittedAsync(Recording recording, CancellationToken ct = default)
@@ -56,7 +56,7 @@ public class TaskProgressTracker(
 
         if (recording.Status == RecordingStatus.PendingReview)
         {
-            await PushToCampaignReviewTasksAsync(recording, taskId, ct);
+            await PushToWaveReviewTasksAsync(recording, taskId, ct);
         }
 
         await RefreshStatusAsync(taskId, ct);
@@ -67,13 +67,13 @@ public class TaskProgressTracker(
     /// của đợt — gồm cả task đã đủ chỉ tiêu, theo người nhận vẫn duyệt thêm được.
     /// Bản trượt QC không tới vòng duyệt; bản thu ngoài đợt thì Reviewer nhặt ở hàng chờ chung.
     /// </summary>
-    private async Task PushToCampaignReviewTasksAsync(
+    private async Task PushToWaveReviewTasksAsync(
         Recording recording, long taskId, CancellationToken ct)
     {
-        var campaignId = await tasks.GetCampaignIdAsync(taskId, ct);
-        if (campaignId is null) return;
+        var waveId = await tasks.GetWaveIdAsync(taskId, ct);
+        if (waveId is null) return;
 
-        var reviewTaskIds = await tasks.GetReviewTaskIdsForCampaignAsync(campaignId.Value, ct);
+        var reviewTaskIds = await tasks.GetReviewTaskIdsForWaveAsync(waveId.Value, ct);
         if (reviewTaskIds.Count == 0) return;
 
         // Bản ghi vừa được tạo nên chưa thể nằm trong task nào — không cần lọc trùng.
@@ -246,15 +246,15 @@ public class TaskProgressTracker(
         if (!taskStatusChanged && !assignmentsChanged)
         {
             // status không đổi thì đợt cũng không đổi theo — bỏ qua cho khỏi
-            // khoá dòng campaign ở mọi lần nộp bản ghi/duyệt (hàng chục lần một task).
+            // khoá dòng wave ở mọi lần nộp bản ghi/duyệt (hàng chục lần một task).
             return;
         }
 
         await tasks.SaveChangesAsync(ct);
 
         // trạng thái đợt là hàm của task, nên task đổi trạng thái thì đợt tính lại.
-        if (taskStatusChanged && task.CampaignId.HasValue)
-            await campaigns.RefreshStatusAsync(task.CampaignId.Value, ct);
+        if (taskStatusChanged && task.WaveId.HasValue)
+            await waves.RefreshStatusAsync(task.WaveId.Value, ct);
     }
 
     /// <summary>

@@ -20,7 +20,7 @@ CREATE TYPE script_review_action  AS ENUM ('accepted','edited','rejected');
 CREATE TYPE script_word_relation  AS ENUM ('semantic_equivalent','proper_noun');
 CREATE TYPE task_type             AS ENUM ('recording','review');
 -- task còn ba trạng thái. Đợt còn ba trạng thái và là HÀM của task, không bấm tay.
-CREATE TYPE campaign_status         AS ENUM ('open','in_progress','completed');
+CREATE TYPE wave_status         AS ENUM ('open','in_progress','completed');
 CREATE TYPE task_status           AS ENUM ('in_progress','completed','cancelled');
 -- 'completed' = người nhận đã đạt quota riêng; lượt giao vẫn còn hiệu lực (xem V17).
 CREATE TYPE assignment_status     AS ENUM ('active','completed','reassigned','cancelled');
@@ -292,51 +292,51 @@ CREATE INDEX idx_script_proposal_queue ON script_proposal (created_at) WHERE sta
 
 
 -- ------------------------------------------------------------
--- CAMPAIGN / TASK
+-- WAVE / TASK
 -- ------------------------------------------------------------
--- A campaign is the planning unit created by the Task Manager for a
+-- A wave is the planning unit created by the Task Manager for a
 -- collection period (typically 1-2 weeks / month).
 -- domain = chủ đề của cả đợt. Một đợt chỉ đi trên MỘT chủ đề;
--- trg_task_campaign_domain chặn gắn task khác chủ đề vào đợt này.
-CREATE TABLE campaign (
-    campaign_id   BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    campaign_name VARCHAR(255) NOT NULL,
+-- trg_task_wave_domain chặn gắn task khác chủ đề vào đợt này.
+CREATE TABLE wave (
+    wave_id   BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    wave_name VARCHAR(255) NOT NULL,
     domain        script_domain NOT NULL,
     target_qty    INT NOT NULL,
     start_date    DATE NOT NULL,
     end_date      DATE NOT NULL,
-    status        campaign_status NOT NULL DEFAULT 'open',
+    status        wave_status NOT NULL DEFAULT 'open',
     created_by    BIGINT NOT NULL REFERENCES app_user(user_id),
     assigned_to   BIGINT REFERENCES app_user(user_id) ON DELETE SET NULL,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT ck_campaign_target_qty CHECK (target_qty BETWEEN 2000 AND 5000),
-    CONSTRAINT ck_campaign_dates CHECK (start_date <= end_date)
+    CONSTRAINT ck_wave_target_qty CHECK (target_qty BETWEEN 2000 AND 5000),
+    CONSTRAINT ck_wave_dates CHECK (start_date <= end_date)
 );
 
-CREATE INDEX idx_campaign_created_by ON campaign (created_by);
-CREATE INDEX idx_campaign_status     ON campaign (status);
-CREATE INDEX idx_campaign_dates      ON campaign (start_date, end_date);
-CREATE INDEX idx_campaign_assigned_to ON campaign (assigned_to);
-CREATE INDEX idx_campaign_domain     ON campaign (domain);
+CREATE INDEX idx_wave_created_by ON wave (created_by);
+CREATE INDEX idx_wave_status     ON wave (status);
+CREATE INDEX idx_wave_dates      ON wave (start_date, end_date);
+CREATE INDEX idx_wave_assigned_to ON wave (assigned_to);
+CREATE INDEX idx_wave_domain     ON wave (domain);
 
 -- Speaker đăng ký tham gia một chiến dịch ("Đợt" ở FE) — không giới hạn số người.
-CREATE TABLE campaign_registration (
-    campaign_id   BIGINT NOT NULL REFERENCES campaign(campaign_id) ON DELETE CASCADE,
+CREATE TABLE wave_registration (
+    wave_id   BIGINT NOT NULL REFERENCES wave(wave_id) ON DELETE CASCADE,
     speaker_id    BIGINT NOT NULL REFERENCES app_user(user_id) ON DELETE CASCADE,
     registered_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (campaign_id, speaker_id)
+    PRIMARY KEY (wave_id, speaker_id)
 );
-CREATE INDEX idx_campaign_registration_speaker ON campaign_registration (speaker_id);
+CREATE INDEX idx_wave_registration_speaker ON wave_registration (speaker_id);
 
--- campaign_id is NULL for standalone tasks (created outside any campaign,
--- attached to a campaign later, or detached back). Deleting a campaign
--- keeps its tasks: FK is ON DELETE SET NULL; use the campaign-scoped
--- detach endpoint to remove a task from a campaign without deleting it.
+-- wave_id is NULL for standalone tasks (created outside any wave,
+-- attached to a wave later, or detached back). Deleting a wave
+-- keeps its tasks: FK is ON DELETE SET NULL; use the wave-scoped
+-- detach endpoint to remove a task from a wave without deleting it.
 -- domain = chủ đề của nhiệm vụ. Task độc lập thì tự do; task gắn
--- vào đợt thì phải trùng chủ đề với đợt (trg_task_campaign_domain).
+-- vào đợt thì phải trùng chủ đề với đợt (trg_task_wave_domain).
 CREATE TABLE task (
     task_id      BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    campaign_id  BIGINT REFERENCES campaign(campaign_id) ON DELETE SET NULL,
+    wave_id  BIGINT REFERENCES wave(wave_id) ON DELETE SET NULL,
     created_by   BIGINT NOT NULL REFERENCES app_user(user_id),
     task_type    task_type NOT NULL,
     domain       script_domain NOT NULL,
@@ -347,7 +347,7 @@ CREATE TABLE task (
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_task_campaign ON task (campaign_id);
+CREATE INDEX idx_task_wave ON task (wave_id);
 CREATE INDEX idx_task_domain   ON task (domain);
 
 CREATE TABLE task_assignment (
@@ -590,7 +590,7 @@ BEGIN
 END $$;
 
 -- Safety net: if the date ever passes the last monthly partition above
--- (2027-12), audited INSERT/UPDATE on script, campaign and task would fail
+-- (2027-12), audited INSERT/UPDATE on script, wave and task would fail
 -- with "no partition found". Rows landing here are caught instead.
 -- Before creating a new monthly partition, move any rows out of the default
 -- partition that fall in that month (or use pg_partman).
@@ -611,7 +611,7 @@ CREATE TRIGGER trg_script_touch        BEFORE UPDATE ON script
 CREATE TRIGGER trg_system_config_touch BEFORE UPDATE ON system_config
     FOR EACH ROW EXECUTE FUNCTION fn_touch_updated_at();
 
--- [ERD / CAMPAIGN] Campaign creators must be Admin or Task Manager.
+-- [ERD / WAVE] Wave creators must be Admin or Task Manager.
 -- Task creators must be Task Manager.
 -- Task Manager tự lập kế hoạch cho đợt của mình nên cũng được
 -- tạo chiến dịch. Việc gán đợt cho ai vẫn do trg_task_creator_assigned
@@ -626,10 +626,10 @@ BEGIN
       JOIN role r ON r.role_id = u.role_id
      WHERE u.user_id = NEW.created_by;
 
-    IF TG_TABLE_NAME = 'campaign' THEN
+    IF TG_TABLE_NAME = 'wave' THEN
         IF v_role_name IS DISTINCT FROM 'admin'
            AND v_role_name IS DISTINCT FROM 'task_manager' THEN
-            RAISE EXCEPTION 'campaign creator (user %) must have admin or task_manager role', NEW.created_by;
+            RAISE EXCEPTION 'wave creator (user %) must have admin or task_manager role', NEW.created_by;
         END IF;
     ELSIF TG_TABLE_NAME = 'task' THEN
         IF v_role_name IS DISTINCT FROM 'task_manager' THEN
@@ -640,33 +640,33 @@ BEGIN
     RETURN NEW;
 END $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trg_campaign_creator_role
-    BEFORE INSERT OR UPDATE OF created_by ON campaign
+CREATE TRIGGER trg_wave_creator_role
+    BEFORE INSERT OR UPDATE OF created_by ON wave
     FOR EACH ROW EXECUTE FUNCTION fn_require_task_manager_creator();
 
 CREATE TRIGGER trg_task_creator_role
     BEFORE INSERT OR UPDATE OF created_by ON task
     FOR EACH ROW EXECUTE FUNCTION fn_require_task_manager_creator();
 
--- [ERD / CAMPAIGN] Every task deadline, when present, must fall
--- inside its campaign period (inclusive of the end date).
-CREATE OR REPLACE FUNCTION fn_validate_task_campaign_window() RETURNS trigger AS $$
+-- [ERD / WAVE] Every task deadline, when present, must fall
+-- inside its wave period (inclusive of the end date).
+CREATE OR REPLACE FUNCTION fn_validate_task_wave_window() RETURNS trigger AS $$
 DECLARE
     v_start_date DATE;
     v_end_date   DATE;
 BEGIN
-    -- Standalone task (NULL campaign_id): no campaign window to check.
-    IF NEW.campaign_id IS NULL THEN
+    -- Standalone task (NULL wave_id): no wave window to check.
+    IF NEW.wave_id IS NULL THEN
         RETURN NEW;
     END IF;
 
     SELECT start_date, end_date
       INTO v_start_date, v_end_date
-      FROM campaign
-     WHERE campaign_id = NEW.campaign_id;
+      FROM wave
+     WHERE wave_id = NEW.wave_id;
 
     IF NOT FOUND THEN
-        RAISE EXCEPTION 'campaign % does not exist', NEW.campaign_id;
+        RAISE EXCEPTION 'wave % does not exist', NEW.wave_id;
     END IF;
 
     IF NEW.deadline IS NOT NULL
@@ -675,251 +675,251 @@ BEGIN
            OR NEW.deadline >= ((v_end_date + 1)::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh')
        ) THEN
         RAISE EXCEPTION
-            'task % deadline % must be within campaign % (% to %)',
-            NEW.task_id, NEW.deadline, NEW.campaign_id, v_start_date, v_end_date;
+            'task % deadline % must be within wave % (% to %)',
+            NEW.task_id, NEW.deadline, NEW.wave_id, v_start_date, v_end_date;
     END IF;
 
     RETURN NEW;
 END $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trg_task_campaign_window
-    BEFORE INSERT OR UPDATE OF campaign_id, deadline ON task
-    FOR EACH ROW EXECUTE FUNCTION fn_validate_task_campaign_window();
+CREATE TRIGGER trg_task_wave_window
+    BEFORE INSERT OR UPDATE OF wave_id, deadline ON task
+    FOR EACH ROW EXECUTE FUNCTION fn_validate_task_wave_window();
 
--- [ERD / CAMPAIGN] The sum of task target quantities in one campaign
--- may not exceed the campaign target.
+-- [ERD / WAVE] The sum of task target quantities in one wave
+-- may not exceed the wave target.
 --
--- The campaign row is locked in a deterministic order so concurrent
--- allocations to the same campaign (or moves between campaigns)
+-- The wave row is locked in a deterministic order so concurrent
+-- allocations to the same wave (or moves between waves)
 -- cannot race or deadlock because of lock-order inversion.
-CREATE OR REPLACE FUNCTION fn_validate_campaign_task_target() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION fn_validate_wave_task_target() RETURNS trigger AS $$
 DECLARE
     v_new_target       INT;
     v_new_total        BIGINT;
     v_old_target       INT;
-    v_first_campaign   BIGINT;
-    v_second_campaign  BIGINT;
+    v_first_wave   BIGINT;
+    v_second_wave  BIGINT;
 BEGIN
     IF TG_OP = 'DELETE' THEN
         -- Deleting a task cannot increase allocation.
         RETURN OLD;
     END IF;
 
-    -- Detach: leaving a campaign cannot over-allocate anything.
-    IF NEW.campaign_id IS NULL THEN
+    -- Detach: leaving a wave cannot over-allocate anything.
+    IF NEW.wave_id IS NULL THEN
         RETURN NEW;
     END IF;
 
     IF TG_OP = 'INSERT' THEN
         SELECT c.target_qty
           INTO v_new_target
-          FROM campaign c
-         WHERE c.campaign_id = NEW.campaign_id
+          FROM wave c
+         WHERE c.wave_id = NEW.wave_id
          FOR UPDATE;
 
         IF NOT FOUND THEN
-            RAISE EXCEPTION 'campaign % does not exist', NEW.campaign_id;
+            RAISE EXCEPTION 'wave % does not exist', NEW.wave_id;
         END IF;
 
         SELECT COALESCE(SUM(t.target_qty), 0)
           INTO v_new_total
           FROM task t
-         WHERE t.campaign_id = NEW.campaign_id;
+         WHERE t.wave_id = NEW.wave_id;
 
         IF v_new_total + NEW.target_qty > v_new_target THEN
             RAISE EXCEPTION
-                'campaign % target exceeded: allocated task quantity % + task quantity % > campaign target %',
-                NEW.campaign_id, v_new_total, NEW.target_qty, v_new_target;
+                'wave % target exceeded: allocated task quantity % + task quantity % > wave target %',
+                NEW.wave_id, v_new_total, NEW.target_qty, v_new_target;
         END IF;
 
         RETURN NEW;
     END IF;
 
-    -- Attach: OLD.campaign_id IS NULL, NEW.campaign_id IS NOT NULL.
-    -- Same checks as INSERT (lock new campaign, count its tasks).
-    IF OLD.campaign_id IS NULL THEN
+    -- Attach: OLD.wave_id IS NULL, NEW.wave_id IS NOT NULL.
+    -- Same checks as INSERT (lock new wave, count its tasks).
+    IF OLD.wave_id IS NULL THEN
         SELECT c.target_qty
           INTO v_new_target
-          FROM campaign c
-         WHERE c.campaign_id = NEW.campaign_id
+          FROM wave c
+         WHERE c.wave_id = NEW.wave_id
          FOR UPDATE;
 
         IF NOT FOUND THEN
-            RAISE EXCEPTION 'campaign % does not exist', NEW.campaign_id;
+            RAISE EXCEPTION 'wave % does not exist', NEW.wave_id;
         END IF;
 
         SELECT COALESCE(SUM(t.target_qty), 0)
           INTO v_new_total
           FROM task t
-         WHERE t.campaign_id = NEW.campaign_id
+         WHERE t.wave_id = NEW.wave_id
            AND t.task_id <> OLD.task_id;
 
         IF v_new_total + NEW.target_qty > v_new_target THEN
             RAISE EXCEPTION
-                'campaign % target exceeded: allocated task quantity % + task quantity % > campaign target %',
-                NEW.campaign_id, v_new_total, NEW.target_qty, v_new_target;
+                'wave % target exceeded: allocated task quantity % + task quantity % > wave target %',
+                NEW.wave_id, v_new_total, NEW.target_qty, v_new_target;
         END IF;
 
         RETURN NEW;
     END IF;
 
-    IF NEW.campaign_id = OLD.campaign_id THEN
+    IF NEW.wave_id = OLD.wave_id THEN
         SELECT c.target_qty
           INTO v_new_target
-          FROM campaign c
-         WHERE c.campaign_id = NEW.campaign_id
+          FROM wave c
+         WHERE c.wave_id = NEW.wave_id
          FOR UPDATE;
 
         IF NOT FOUND THEN
-            RAISE EXCEPTION 'campaign % does not exist', NEW.campaign_id;
+            RAISE EXCEPTION 'wave % does not exist', NEW.wave_id;
         END IF;
 
         SELECT COALESCE(SUM(t.target_qty), 0)
           INTO v_new_total
           FROM task t
-         WHERE t.campaign_id = NEW.campaign_id
+         WHERE t.wave_id = NEW.wave_id
            AND t.task_id <> OLD.task_id;
 
         IF v_new_total + NEW.target_qty > v_new_target THEN
             RAISE EXCEPTION
-                'campaign % target exceeded: allocated task quantity % + task quantity % > campaign target %',
-                NEW.campaign_id, v_new_total, NEW.target_qty, v_new_target;
+                'wave % target exceeded: allocated task quantity % + task quantity % > wave target %',
+                NEW.wave_id, v_new_total, NEW.target_qty, v_new_target;
         END IF;
 
         RETURN NEW;
     END IF;
 
-    -- UPDATE moving a task from one campaign to another (both non-NULL here).
-    -- Lock both campaign rows in ascending campaign_id order.
-    v_first_campaign := LEAST(OLD.campaign_id, NEW.campaign_id);
-    v_second_campaign := GREATEST(OLD.campaign_id, NEW.campaign_id);
+    -- UPDATE moving a task from one wave to another (both non-NULL here).
+    -- Lock both wave rows in ascending wave_id order.
+    v_first_wave := LEAST(OLD.wave_id, NEW.wave_id);
+    v_second_wave := GREATEST(OLD.wave_id, NEW.wave_id);
 
     PERFORM 1
-      FROM campaign
-     WHERE campaign_id = v_first_campaign
+      FROM wave
+     WHERE wave_id = v_first_wave
      FOR UPDATE;
 
     PERFORM 1
-      FROM campaign
-     WHERE campaign_id = v_second_campaign
+      FROM wave
+     WHERE wave_id = v_second_wave
      FOR UPDATE;
 
     SELECT c.target_qty
       INTO v_old_target
-      FROM campaign c
-     WHERE c.campaign_id = OLD.campaign_id;
+      FROM wave c
+     WHERE c.wave_id = OLD.wave_id;
 
     SELECT c.target_qty
       INTO v_new_target
-      FROM campaign c
-     WHERE c.campaign_id = NEW.campaign_id;
+      FROM wave c
+     WHERE c.wave_id = NEW.wave_id;
 
     IF v_old_target IS NULL OR v_new_target IS NULL THEN
-        RAISE EXCEPTION 'source or destination campaign does not exist';
+        RAISE EXCEPTION 'source or destination wave does not exist';
     END IF;
 
-    -- The old campaign cannot become over-allocated by moving a task out.
-    -- Check only the destination campaign, excluding the row being moved.
+    -- The old wave cannot become over-allocated by moving a task out.
+    -- Check only the destination wave, excluding the row being moved.
     SELECT COALESCE(SUM(t.target_qty), 0)
       INTO v_new_total
       FROM task t
-     WHERE t.campaign_id = NEW.campaign_id
+     WHERE t.wave_id = NEW.wave_id
        AND t.task_id <> OLD.task_id;
 
     IF v_new_total + NEW.target_qty > v_new_target THEN
         RAISE EXCEPTION
-            'campaign % target exceeded: allocated task quantity % + moved task quantity % > campaign target %',
-            NEW.campaign_id, v_new_total, NEW.target_qty, v_new_target;
+            'wave % target exceeded: allocated task quantity % + moved task quantity % > wave target %',
+            NEW.wave_id, v_new_total, NEW.target_qty, v_new_target;
     END IF;
 
     RETURN NEW;
 END $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trg_task_campaign_target
-    BEFORE INSERT OR UPDATE OF campaign_id, target_qty ON task
-    FOR EACH ROW EXECUTE FUNCTION fn_validate_campaign_task_target();
+CREATE TRIGGER trg_task_wave_target
+    BEFORE INSERT OR UPDATE OF wave_id, target_qty ON task
+    FOR EACH ROW EXECUTE FUNCTION fn_validate_wave_task_target();
 
--- [TEAM_001 / ERD / TASK] A Task Manager creates tasks only inside campaigns the
--- Admin assigned to them; a campaign with assigned_to NULL accepts no tasks yet.
+-- [TEAM_001 / ERD / TASK] A Task Manager creates tasks only inside waves the
+-- Admin assigned to them; a wave with assigned_to NULL accepts no tasks yet.
 -- The service layer returns a friendly 422 first; this trigger is the safety net.
 CREATE OR REPLACE FUNCTION fn_validate_task_creator_assigned() RETURNS trigger AS $$
 DECLARE
     v_assigned_to BIGINT;
 BEGIN
-    -- Standalone task: no campaign assignment rule applies.
-    IF NEW.campaign_id IS NULL THEN
+    -- Standalone task: no wave assignment rule applies.
+    IF NEW.wave_id IS NULL THEN
         RETURN NEW;
     END IF;
 
     SELECT c.assigned_to
       INTO v_assigned_to
-      FROM campaign c
-     WHERE c.campaign_id = NEW.campaign_id;
+      FROM wave c
+     WHERE c.wave_id = NEW.wave_id;
 
     IF NOT FOUND THEN
-        RAISE EXCEPTION 'campaign % does not exist', NEW.campaign_id;
+        RAISE EXCEPTION 'wave % does not exist', NEW.wave_id;
     END IF;
 
     IF v_assigned_to IS NULL THEN
         RAISE EXCEPTION
-            'campaign % has no assigned task manager yet; assign it before creating tasks',
-            NEW.campaign_id;
+            'wave % has no assigned task manager yet; assign it before creating tasks',
+            NEW.wave_id;
     END IF;
 
     IF v_assigned_to IS DISTINCT FROM NEW.created_by THEN
         RAISE EXCEPTION
-            'task creator (user %) must be the assigned task manager (user %) of campaign %',
-            NEW.created_by, v_assigned_to, NEW.campaign_id;
+            'task creator (user %) must be the assigned task manager (user %) of wave %',
+            NEW.created_by, v_assigned_to, NEW.wave_id;
     END IF;
 
     RETURN NEW;
 END $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trg_task_creator_assigned
-    BEFORE INSERT OR UPDATE OF campaign_id, created_by ON task
+    BEFORE INSERT OR UPDATE OF wave_id, created_by ON task
     FOR EACH ROW EXECUTE FUNCTION fn_validate_task_creator_assigned();
 
--- [TEAM_003 / CAMPAIGN] A task may only join a campaign of the SAME domain.
+-- [TEAM_003 / WAVE] A task may only join a wave of the SAME domain.
 -- Một đợt đi trên một chủ đề, nên không gắn được nhiệm vụ chủ đề khác vào —
 -- nếu không, báo cáo cuối đợt sẽ trộn nhiều chủ đề và số liệu sai nghĩa.
--- Standalone task (campaign_id NULL) has no campaign to compare against.
+-- Standalone task (wave_id NULL) has no wave to compare against.
 -- The service layer returns a friendly 422 first; this trigger is the safety net.
-CREATE OR REPLACE FUNCTION fn_validate_task_campaign_domain() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION fn_validate_task_wave_domain() RETURNS trigger AS $$
 DECLARE
-    v_campaign_domain script_domain;
+    v_wave_domain script_domain;
 BEGIN
     -- Detached task: any domain is fine.
-    IF NEW.campaign_id IS NULL THEN
+    IF NEW.wave_id IS NULL THEN
         RETURN NEW;
     END IF;
 
     SELECT c.domain
-      INTO v_campaign_domain
-      FROM campaign c
-     WHERE c.campaign_id = NEW.campaign_id;
+      INTO v_wave_domain
+      FROM wave c
+     WHERE c.wave_id = NEW.wave_id;
 
     IF NOT FOUND THEN
-        RAISE EXCEPTION 'campaign % does not exist', NEW.campaign_id;
+        RAISE EXCEPTION 'wave % does not exist', NEW.wave_id;
     END IF;
 
-    IF NEW.domain IS DISTINCT FROM v_campaign_domain THEN
+    IF NEW.domain IS DISTINCT FROM v_wave_domain THEN
         RAISE EXCEPTION
-            'task % domain % must match campaign % domain %',
-            NEW.task_id, NEW.domain, NEW.campaign_id, v_campaign_domain;
+            'task % domain % must match wave % domain %',
+            NEW.task_id, NEW.domain, NEW.wave_id, v_wave_domain;
     END IF;
 
     RETURN NEW;
 END $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trg_task_campaign_domain
-    BEFORE INSERT OR UPDATE OF campaign_id, domain ON task
-    FOR EACH ROW EXECUTE FUNCTION fn_validate_task_campaign_domain();
+CREATE TRIGGER trg_task_wave_domain
+    BEFORE INSERT OR UPDATE OF wave_id, domain ON task
+    FOR EACH ROW EXECUTE FUNCTION fn_validate_task_wave_domain();
 
--- [TEAM_003 / CAMPAIGN] Changing a campaign's domain must not orphan its tasks:
--- all attached tasks have to follow, otherwise the campaign would keep tasks of
--- a different domain (and trg_task_campaign_domain would then block the update
+-- [TEAM_003 / WAVE] Changing a wave's domain must not orphan its tasks:
+-- all attached tasks have to follow, otherwise the wave would keep tasks of
+-- a different domain (and trg_task_wave_domain would then block the update
 -- with a message about the wrong task). Reject instead of silently detaching.
-CREATE OR REPLACE FUNCTION fn_validate_campaign_domain_change() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION fn_validate_wave_domain_change() RETURNS trigger AS $$
 DECLARE
     v_mismatched INT;
 BEGIN
@@ -929,25 +929,25 @@ BEGIN
 
     SELECT COUNT(*) INTO v_mismatched
       FROM task t
-     WHERE t.campaign_id = NEW.campaign_id
+     WHERE t.wave_id = NEW.wave_id
        AND t.domain IS DISTINCT FROM NEW.domain;
 
     IF v_mismatched > 0 THEN
         RAISE EXCEPTION
-            'campaign % still has % task(s) of another domain; move or detach them before changing its domain',
-            NEW.campaign_id, v_mismatched;
+            'wave % still has % task(s) of another domain; move or detach them before changing its domain',
+            NEW.wave_id, v_mismatched;
     END IF;
 
     RETURN NEW;
 END $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trg_campaign_domain_change
-    BEFORE UPDATE OF domain ON campaign
-    FOR EACH ROW EXECUTE FUNCTION fn_validate_campaign_domain_change();
+CREATE TRIGGER trg_wave_domain_change
+    BEFORE UPDATE OF domain ON wave
+    FOR EACH ROW EXECUTE FUNCTION fn_validate_wave_domain_change();
 
--- [ERD / CAMPAIGN] Do not lower a campaign target below the
+-- [ERD / WAVE] Do not lower a wave target below the
 -- quantities already allocated to its tasks.
-CREATE OR REPLACE FUNCTION fn_validate_campaign_target_update() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION fn_validate_wave_target_update() RETURNS trigger AS $$
 DECLARE
     v_task_total BIGINT;
 BEGIN
@@ -955,27 +955,27 @@ BEGIN
         SELECT COALESCE(SUM(target_qty), 0)
           INTO v_task_total
           FROM task
-         WHERE campaign_id = NEW.campaign_id;
+         WHERE wave_id = NEW.wave_id;
 
         IF v_task_total > NEW.target_qty THEN
             RAISE EXCEPTION
-                'campaign % target % is below allocated task quantity %',
-                NEW.campaign_id, NEW.target_qty, v_task_total;
+                'wave % target % is below allocated task quantity %',
+                NEW.wave_id, NEW.target_qty, v_task_total;
         END IF;
     END IF;
 
     IF NEW.start_date > NEW.end_date THEN
-        RAISE EXCEPTION 'campaign % start_date must be on or before end_date',
-            NEW.campaign_id;
+        RAISE EXCEPTION 'wave % start_date must be on or before end_date',
+            NEW.wave_id;
     END IF;
 
-    -- Existing task deadlines must remain inside the new campaign window.
+    -- Existing task deadlines must remain inside the new wave window.
     IF NEW.start_date IS DISTINCT FROM OLD.start_date
        OR NEW.end_date IS DISTINCT FROM OLD.end_date THEN
         IF EXISTS (
             SELECT 1
               FROM task
-             WHERE campaign_id = NEW.campaign_id
+             WHERE wave_id = NEW.wave_id
                AND deadline IS NOT NULL
                AND (
                    deadline < (NEW.start_date::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh')
@@ -983,20 +983,20 @@ BEGIN
                )
         ) THEN
             RAISE EXCEPTION
-                'campaign % date range would make one or more task deadlines invalid',
-                NEW.campaign_id;
+                'wave % date range would make one or more task deadlines invalid',
+                NEW.wave_id;
         END IF;
     END IF;
 
     RETURN NEW;
 END $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trg_campaign_target_update
-    BEFORE UPDATE OF target_qty, start_date, end_date ON campaign
-    FOR EACH ROW EXECUTE FUNCTION fn_validate_campaign_target_update();
+CREATE TRIGGER trg_wave_target_update
+    BEFORE UPDATE OF target_qty, start_date, end_date ON wave
+    FOR EACH ROW EXECUTE FUNCTION fn_validate_wave_target_update();
 
--- [ERD / CAMPAIGN] assigned_to must be a Task Manager (or NULL).
-CREATE OR REPLACE FUNCTION fn_validate_campaign_assigned_to() RETURNS trigger AS $$
+-- [ERD / WAVE] assigned_to must be a Task Manager (or NULL).
+CREATE OR REPLACE FUNCTION fn_validate_wave_assigned_to() RETURNS trigger AS $$
 DECLARE
     v_role_name VARCHAR(32);
 BEGIN
@@ -1012,9 +1012,9 @@ BEGIN
     RETURN NEW;
 END $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trg_campaign_assigned_to_role
-    BEFORE INSERT OR UPDATE OF assigned_to ON campaign
-    FOR EACH ROW EXECUTE FUNCTION fn_validate_campaign_assigned_to();
+CREATE TRIGGER trg_wave_assigned_to_role
+    BEFORE INSERT OR UPDATE OF assigned_to ON wave
+    FOR EACH ROW EXECUTE FUNCTION fn_validate_wave_assigned_to();
 
 -- [ERD / USER_DOMAIN] A script may only become 'validated' after an
 -- accepted/edited SCRIPT_REVIEW by a user qualified for the script's domain.
@@ -1238,7 +1238,7 @@ CREATE OR REPLACE FUNCTION fn_queue_claim_next(
 DECLARE
     v_ttl    INT;
     v_row    script_queue%ROWTYPE;
-    v_campaign BIGINT;
+    v_wave BIGINT;
 BEGIN
     SELECT COALESCE(NULLIF(config_value, '')::int, 30)
       INTO v_ttl
@@ -1249,10 +1249,10 @@ BEGIN
     v_ttl := COALESCE(p_ttl_minutes, v_ttl);
 
     -- Chặng ghi âm làm việc theo CHIẾN DỊCH: câu của mọi task thu âm trong cùng đợt
-    -- đều phát chung cho những Speaker đang nhận việc của đợt. Task độc lập (campaign
+    -- đều phát chung cho những Speaker đang nhận việc của đợt. Task độc lập (wave
     -- NULL) vẫn giới hạn trong chính nó.
     IF p_task_id IS NOT NULL THEN
-        SELECT t.campaign_id INTO v_campaign FROM task t WHERE t.task_id = p_task_id;
+        SELECT t.wave_id INTO v_wave FROM task t WHERE t.task_id = p_task_id;
     END IF;
 
     SELECT q.* INTO v_row
@@ -1292,7 +1292,7 @@ BEGIN
                         AND t.task_type = 'recording'
                         AND t.status <> 'cancelled'
                         AND (t.task_id = p_task_id
-                             OR (v_campaign IS NOT NULL AND t.campaign_id = v_campaign))
+                             OR (v_wave IS NOT NULL AND t.wave_id = v_wave))
                  )
                END
            )
@@ -1640,9 +1640,9 @@ CREATE TRIGGER trg_audit_script
     AFTER INSERT OR UPDATE OR DELETE ON script
     FOR EACH ROW EXECUTE FUNCTION fn_audit('script', 'script_id');
 
-CREATE TRIGGER trg_audit_campaign
-    AFTER INSERT OR UPDATE OR DELETE ON campaign
-    FOR EACH ROW EXECUTE FUNCTION fn_audit('campaign', 'campaign_id');
+CREATE TRIGGER trg_audit_wave
+    AFTER INSERT OR UPDATE OR DELETE ON wave
+    FOR EACH ROW EXECUTE FUNCTION fn_audit('wave', 'wave_id');
 
 CREATE TRIGGER trg_audit_task
     AFTER INSERT OR UPDATE OR DELETE ON task
@@ -1787,9 +1787,9 @@ FROM role WHERE role_name = 'admin';
 
 CREATE VIEW v_dashboard_summary AS
 SELECT
-    (SELECT COUNT(*) FROM campaign)                                  AS total_campaigns,
-    (SELECT COUNT(*) FROM campaign WHERE status = 'open')             AS open_campaigns,
-    (SELECT COUNT(*) FROM campaign WHERE status = 'in_progress')     AS active_campaigns,
+    (SELECT COUNT(*) FROM wave)                                  AS total_waves,
+    (SELECT COUNT(*) FROM wave WHERE status = 'open')             AS open_waves,
+    (SELECT COUNT(*) FROM wave WHERE status = 'in_progress')     AS active_waves,
     (SELECT COUNT(*) FROM script)                                    AS total_scripts,
     (SELECT COUNT(*) FROM script WHERE status = 'validated')         AS validated_scripts,
     (SELECT COUNT(*) FROM script WHERE status = 'pending_validation') AS pending_scripts,
@@ -1840,8 +1840,8 @@ GROUP BY u.user_id, u.full_name;
 CREATE VIEW v_task_progress AS
 SELECT
     t.task_id,
-    t.campaign_id,
-    c.campaign_name,
+    t.wave_id,
+    c.wave_name,
     t.task_type,
     t.domain,
     t.status        AS task_status,
@@ -1856,28 +1856,28 @@ SELECT
         WHERE ts.task_id = t.task_id AND ts.status = 'completed')      AS scripts_completed,
     (SELECT COUNT(*) FROM review rv WHERE rv.task_id = t.task_id)      AS reviews_done
 FROM task t
-LEFT JOIN campaign c ON c.campaign_id = t.campaign_id;
+LEFT JOIN wave c ON c.wave_id = t.wave_id;
 
--- Campaign-level planning/progress summary
-CREATE VIEW v_campaign_progress AS
+-- Wave-level planning/progress summary
+CREATE VIEW v_wave_progress AS
 SELECT
-    c.campaign_id,
-    c.campaign_name,
+    c.wave_id,
+    c.wave_name,
     c.domain,
-    c.target_qty AS campaign_target_qty,
+    c.target_qty AS wave_target_qty,
     c.start_date,
     c.end_date,
-    c.status AS campaign_status,
+    c.status AS wave_status,
     c.assigned_to,
     COALESCE(SUM(t.target_qty), 0) AS allocated_task_qty,
     c.target_qty - COALESCE(SUM(t.target_qty), 0) AS remaining_task_qty,
     COUNT(t.task_id) AS task_count,
     COUNT(t.task_id) FILTER (WHERE t.status = 'completed') AS completed_task_count
-FROM campaign c
-LEFT JOIN task t ON t.campaign_id = c.campaign_id
+FROM wave c
+LEFT JOIN task t ON t.wave_id = c.wave_id
 GROUP BY
-    c.campaign_id,
-    c.campaign_name,
+    c.wave_id,
+    c.wave_name,
     c.domain,
     c.target_qty,
     c.start_date,

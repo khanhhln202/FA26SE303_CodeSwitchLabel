@@ -40,8 +40,8 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
     // trigger fn_script_queue_sync sinh và hàm fn_queue_claim_next xử lý giữ chỗ.
     public DbSet<ScriptQueue> ScriptQueue => Set<ScriptQueue>();
 
-    public DbSet<Campaign> Campaigns => Set<Campaign>();
-    public DbSet<CampaignRegistration> CampaignRegistrations => Set<CampaignRegistration>();
+    public DbSet<Wave> Waves => Set<Wave>();
+    public DbSet<WaveRegistration> WaveRegistrations => Set<WaveRegistration>();
     public DbSet<WorkTask> WorkTasks => Set<WorkTask>();
     public DbSet<TaskAssignment> TaskAssignments => Set<TaskAssignment>();
     public DbSet<TaskScript> TaskScripts => Set<TaskScript>();
@@ -59,7 +59,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
     public DbSet<SpeakerPerformance> SpeakerPerformance => Set<SpeakerPerformance>();
     public DbSet<ReviewerPerformance> ReviewerPerformance => Set<ReviewerPerformance>();
     public DbSet<RejectionReasonStat> RejectionReasonStats => Set<RejectionReasonStat>();
-    public DbSet<CampaignProgress> CampaignProgress => Set<CampaignProgress>();
+    public DbSet<WaveProgress> WaveProgress => Set<WaveProgress>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -116,7 +116,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         modelBuilder.HasPostgresEnum<ScriptWordRelation>();
         modelBuilder.HasPostgresEnum<TaskType>();
         modelBuilder.HasPostgresEnum<WorkTaskStatus>(name: "task_status");
-        modelBuilder.HasPostgresEnum<CampaignStatus>();
+        modelBuilder.HasPostgresEnum<WaveStatus>();
         modelBuilder.HasPostgresEnum<AssignmentStatus>();
         modelBuilder.HasPostgresEnum<TaskScriptStatus>();
         modelBuilder.HasPostgresEnum<SentenceVariant>();
@@ -282,11 +282,11 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
 
     private static void MapTasks(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<Campaign>(e =>
+        modelBuilder.Entity<Wave>(e =>
         {
-            e.ToTable("campaign");
-            e.HasKey(x => x.CampaignId);
-            e.Property(x => x.CampaignName).HasMaxLength(255);
+            e.ToTable("wave");
+            e.HasKey(x => x.WaveId);
+            e.Property(x => x.WaveName).HasMaxLength(255);
             e.Property(x => x.StartDate).HasColumnType("date");
             e.Property(x => x.EndDate).HasColumnType("date");
 
@@ -294,12 +294,12 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.HasOne(x => x.AssignedToUser).WithMany().HasForeignKey(x => x.AssignedTo);
         });
 
-        modelBuilder.Entity<CampaignRegistration>(e =>
+        modelBuilder.Entity<WaveRegistration>(e =>
         {
-            e.ToTable("campaign_registration");
-            e.HasKey(x => new { x.CampaignId, x.SpeakerId });
+            e.ToTable("wave_registration");
+            e.HasKey(x => new { x.WaveId, x.SpeakerId });
 
-            e.HasOne(x => x.Campaign).WithMany().HasForeignKey(x => x.CampaignId);
+            e.HasOne(x => x.Wave).WithMany().HasForeignKey(x => x.WaveId);
             e.HasOne(x => x.Speaker).WithMany().HasForeignKey(x => x.SpeakerId);
         });
 
@@ -308,8 +308,8 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.ToTable("task");
             e.HasKey(x => x.TaskId);
             e.HasOne(x => x.Creator).WithMany().HasForeignKey(x => x.CreatedBy);
-            // C1/C2: task độc lập (campaign_id NULL); xoá campaign giữ lại task (SET NULL).
-            e.HasOne(x => x.Campaign).WithMany(c => c.Tasks).HasForeignKey(x => x.CampaignId)
+            // C1/C2: task độc lập (wave_id NULL); xoá wave giữ lại task (SET NULL).
+            e.HasOne(x => x.Wave).WithMany(c => c.Tasks).HasForeignKey(x => x.WaveId)
                 .IsRequired(false)
                 .OnDelete(DeleteBehavior.SetNull);
         });
@@ -471,7 +471,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         modelBuilder.Entity<SpeakerPerformance>().HasNoKey().ToView("v_speaker_performance");
         modelBuilder.Entity<ReviewerPerformance>().HasNoKey().ToView("v_reviewer_performance");
         modelBuilder.Entity<RejectionReasonStat>().HasNoKey().ToView("v_rejection_reason_stats");
-        modelBuilder.Entity<CampaignProgress>().HasNoKey().ToView("v_campaign_progress");
+        modelBuilder.Entity<WaveProgress>().HasNoKey().ToView("v_wave_progress");
     }
 
     private static RoleName ParseRole(string value) =>

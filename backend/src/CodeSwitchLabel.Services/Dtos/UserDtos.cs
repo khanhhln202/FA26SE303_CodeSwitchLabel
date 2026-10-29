@@ -32,7 +32,7 @@ public record SpeakerListItemDto(
 public record SpeakerSearchRequest : PageRequest
 {
     /// <summary>Chỉ lấy Speaker có ít nhất một cặp đã duyệt trong chiến dịch này.</summary>
-    public long? CampaignId { get; init; }
+    public long? WaveId { get; init; }
 
     /// <summary>Tìm theo họ tên hoặc email.</summary>
     public string? Keyword { get; init; }

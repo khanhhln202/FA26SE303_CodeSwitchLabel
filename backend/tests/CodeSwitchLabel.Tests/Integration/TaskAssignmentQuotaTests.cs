@@ -25,23 +25,23 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
     }
 
     [Fact]
-    public async Task CampaignRecordingTask_GoiLai_KhongTaoTaskThuHai()
+    public async Task WaveRecordingTask_GoiLai_KhongTaoTaskThuHai()
     {
         var ct = TestContext.Current.CancellationToken;
 
-        var first = await CampaignService.GetOrCreateRecordingTaskAsync(
-            CampaignId, autoFill: false, ManagerUserId, isAdmin: false, ct);
-        var second = await CampaignService.GetOrCreateRecordingTaskAsync(
-            CampaignId, autoFill: false, ManagerUserId, isAdmin: false, ct);
+        var first = await WaveService.GetOrCreateRecordingTaskAsync(
+            WaveId, autoFill: false, ManagerUserId, isAdmin: false, ct);
+        var second = await WaveService.GetOrCreateRecordingTaskAsync(
+            WaveId, autoFill: false, ManagerUserId, isAdmin: false, ct);
 
         Assert.Equal(first.Summary.TaskId, second.Summary.TaskId);
         Assert.Equal(TaskType.Recording, second.Summary.TaskType);
-        Assert.Equal(CampaignId, second.Summary.CampaignId);
+        Assert.Equal(WaveId, second.Summary.WaveId);
         Assert.Equal(2000, second.Summary.Progress.TargetQty);
-        Assert.Equal("Test Campaign", second.Summary.Description);
+        Assert.Equal("Test Wave", second.Summary.Description);
 
         var count = await Db.WorkTasks.CountAsync(
-            t => t.CampaignId == CampaignId && t.TaskType == TaskType.Recording, ct);
+            t => t.WaveId == WaveId && t.TaskType == TaskType.Recording, ct);
         Assert.Equal(1, count);
     }
 
@@ -54,8 +54,8 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
         await CreateValidatedScriptAsync("[vi]Em nhớ [en]upload beta nhé.", "[vi]Em nhớ tải lên beta nhé.",
             ScriptDomain.ItTechnology, AdminUserId);
 
-        var source = await CreateTaskAsync(CampaignId, TaskType.Recording, 1, ManagerUserId);
-        var target = await CreateTaskAsync(CampaignId, TaskType.Recording, 1, ManagerUserId);
+        var source = await CreateTaskAsync(WaveId, TaskType.Recording, 1, ManagerUserId);
+        var target = await CreateTaskAsync(WaveId, TaskType.Recording, 1, ManagerUserId);
         var candidates = await Tasks.FindScriptCandidatesAsync(
             source.TaskId, [], ScriptDomain.ItTechnology, 2, [], ct);
         Assert.Equal(2, candidates.Count);
@@ -90,7 +90,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
 
         var rejected = await CreateRecordingAsync(script.ScriptId, owner.UserId, SentenceVariant.CodeSwitching);
         rejected.Status = RecordingStatus.Rejected;
-        var task = await CreateTaskAsync(CampaignId, TaskType.Recording, 1, ManagerUserId);
+        var task = await CreateTaskAsync(WaveId, TaskType.Recording, 1, ManagerUserId);
         Db.TaskAssignments.Add(new TaskAssignment
         {
             TaskId = task.TaskId, UserId = assignee.UserId,
@@ -109,7 +109,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
     public async Task SetAssignments_ThayDanhSach_ChiaQuotaVaGiuLichSu()
     {
         var ct = TestContext.Current.CancellationToken;
-        var task = await CreateTaskAsync(CampaignId, TaskType.Review, 10, ManagerUserId);
+        var task = await CreateTaskAsync(WaveId, TaskType.Review, 10, ManagerUserId);
         var reviewers = new[]
         {
             await CreateUserWithBuilderAsync(RoleName.Reviewer, fullName: "Reviewer A"),
@@ -164,7 +164,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
     public async Task Assign_ThemNguoi_ChiaLaiQuotaCaNhom()
     {
         var ct = TestContext.Current.CancellationToken;
-        var task = await CreateTaskAsync(CampaignId, TaskType.Review, 10, ManagerUserId);
+        var task = await CreateTaskAsync(WaveId, TaskType.Review, 10, ManagerUserId);
         var reviewers = new[]
         {
             await CreateUserWithBuilderAsync(RoleName.Reviewer, fullName: "Reviewer D"),
@@ -197,7 +197,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
     public async Task SetAssignments_DatDuQuotaNhungTongKhacChiTieu_BaoLoi()
     {
         var ct = TestContext.Current.CancellationToken;
-        var task = await CreateTaskAsync(CampaignId, TaskType.Review, 10, ManagerUserId);
+        var task = await CreateTaskAsync(WaveId, TaskType.Review, 10, ManagerUserId);
         var reviewers = new[]
         {
             await CreateUserWithBuilderAsync(RoleName.Reviewer, fullName: "Reviewer G"),
@@ -255,7 +255,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
 
         var created = await TaskService.CreateAsync(new CreateTaskRequest
         {
-            CampaignId = CampaignId,
+            WaveId = WaveId,
             TaskType = TaskType.Recording,
             Description = "Quota riêng cho Speaker",
             TargetQty = 4,
@@ -301,7 +301,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
 
         var detail = await TaskService.CreateAsync(new CreateTaskRequest
         {
-            CampaignId = CampaignId,
+            WaveId = WaveId,
             TaskType = TaskType.Recording,
             Description = "Ghi âm 10 cặp 3 người",
             TargetQty = 10,
@@ -336,7 +336,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
         };
         var detail = await TaskService.CreateAsync(new CreateTaskRequest
         {
-            CampaignId = CampaignId,
+            WaveId = WaveId,
             TaskType = TaskType.Review,
             Description = "Duyệt 10 bản ghi 3 người",
             TargetQty = 10,
@@ -366,7 +366,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
         // Kho câu ít hơn chỉ tiêu: vẫn tạo task, mỗi Speaker nhận tối đa số câu còn thu được.
         var detail = await TaskService.CreateAsync(new CreateTaskRequest
         {
-            CampaignId = CampaignId,
+            WaveId = WaveId,
             TaskType = TaskType.Recording,
             TargetQty = 10,
             Deadline = DateTimeOffset.UtcNow.AddDays(7),
@@ -400,7 +400,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
 
         var detail = await TaskService.CreateAsync(new CreateTaskRequest
         {
-            CampaignId = CampaignId,
+            WaveId = WaveId,
             TaskType = TaskType.Recording,
             TargetQty = 6,
             Deadline = DateTimeOffset.UtcNow.AddDays(7),
@@ -435,7 +435,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
         var ex = await Assert.ThrowsAsync<UnprocessableException>(() =>
             TaskService.CreateAsync(new CreateTaskRequest
             {
-                CampaignId = CampaignId,
+                WaveId = WaveId,
                 TaskType = TaskType.Recording,
                 TargetQty = 1,
                 Deadline = DateTimeOffset.UtcNow.AddDays(7),
@@ -452,7 +452,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
         var ex = await Assert.ThrowsAsync<UnprocessableException>(() =>
             TaskService.CreateAsync(new CreateTaskRequest
             {
-                CampaignId = CampaignId,
+                WaveId = WaveId,
                 TaskType = TaskType.Recording,
                 TargetQty = 5,
                 Deadline = DateTimeOffset.UtcNow.AddDays(7),
@@ -480,7 +480,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
 
         var task = await TaskService.CreateAsync(new CreateTaskRequest
         {
-            CampaignId = CampaignId,
+            WaveId = WaveId,
             TaskType = TaskType.Recording,
             TargetQty = 4,
             Deadline = DateTimeOffset.UtcNow.AddDays(7),
@@ -523,7 +523,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
         var ct = TestContext.Current.CancellationToken;
         var result = await TaskService.CreateAsync(new CreateTaskRequest
         {
-            CampaignId = CampaignId,
+            WaveId = WaveId,
             TaskType = TaskType.Review,
             Description = "Legacy no assignee",
             TargetQty = 5,

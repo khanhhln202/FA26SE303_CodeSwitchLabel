@@ -95,7 +95,7 @@ public sealed class AssignmentQuotaCompletionTests(DatabaseFixture fixture) : In
     public async Task Duyet_DatQuotaRieng_ChuyenCompleted()
     {
         var ct = TestContext.Current.CancellationToken;
-        var task = await CreateTaskAsync(CampaignId, TaskType.Review, 1, ManagerUserId);
+        var task = await CreateTaskAsync(WaveId, TaskType.Review, 1, ManagerUserId);
         var assignment = new TaskAssignment
         {
             TaskId = task.TaskId,
@@ -146,7 +146,7 @@ public sealed class AssignmentQuotaCompletionTests(DatabaseFixture fixture) : In
     private async Task<(WorkTask Task, TaskAssignment Assignment)> TaoGhiAmAsync(
         int quota, int done, CancellationToken ct)
     {
-        var task = await CreateTaskAsync(CampaignId, TaskType.Recording, quota, ManagerUserId);
+        var task = await CreateTaskAsync(WaveId, TaskType.Recording, quota, ManagerUserId);
         var assignment = new TaskAssignment
         {
             TaskId = task.TaskId,

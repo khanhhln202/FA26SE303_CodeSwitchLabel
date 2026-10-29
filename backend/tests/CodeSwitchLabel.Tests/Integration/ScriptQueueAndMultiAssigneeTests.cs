@@ -235,14 +235,14 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
         var manager = await CreateUserAsync($"tm-{nhan}-{Guid.NewGuid():N}@test.local", RoleName.TaskManager);
         var speaker = await CreateUserAsync($"sp-{nhan}-{Guid.NewGuid():N}@test.local", RoleName.Speaker);
 
-        var campaign = await CreateCampaignAsync($"Đợt {nhan}", 2000,
+        var wave = await CreateWaveAsync($"Đợt {nhan}", 2000,
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
-            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), manager.UserId, CampaignStatus.Open);
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), manager.UserId, WaveStatus.Open);
 
-        campaign.AssignedTo = manager.UserId;
+        wave.AssignedTo = manager.UserId;
         await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var task = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, soMuc,
+        var task = await CreateTaskAsync(wave.WaveId, TaskType.Recording, soMuc,
             manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
 
         foreach (var word in new[] { "alpha", "bravo", "charlie" }.Take(soMuc))
@@ -272,14 +272,14 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
     {
         var manager = await CreateUserAsync($"tm-{nhan}-{Guid.NewGuid():N}@test.local", RoleName.TaskManager);
 
-        var campaign = await CreateCampaignAsync($"Đợt {nhan}", 2000,
+        var wave = await CreateWaveAsync($"Đợt {nhan}", 2000,
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
-            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), manager.UserId, CampaignStatus.Open);
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), manager.UserId, WaveStatus.Open);
 
-        campaign.AssignedTo = manager.UserId;
+        wave.AssignedTo = manager.UserId;
         await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        return await CreateTaskAsync(campaign.CampaignId, TaskType.Review, chiTieu,
+        return await CreateTaskAsync(wave.WaveId, TaskType.Review, chiTieu,
             manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
     }
 
@@ -338,7 +338,7 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
         // Arrange
         var standalone = await TaskService.CreateAsync(new CreateTaskRequest
         {
-            CampaignId = null,
+            WaveId = null,
             TaskType = TaskType.Review,
             Description = "Duyệt độc lập, hàng chờ trống",
             TargetQty = 3,
@@ -435,15 +435,15 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
         var speakers = await TaoBaSpeakerAsync();
         var (a, b, c) = (speakers[0], speakers[1], speakers[2]);
 
-        var campaign = await CreateCampaignAsync(
+        var wave = await CreateWaveAsync(
             $"Đợt queue-{Guid.NewGuid():N}", 2000,
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
-            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), ManagerUserId, CampaignStatus.Open);
-        campaign.AssignedTo = ManagerUserId;
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), ManagerUserId, WaveStatus.Open);
+        wave.AssignedTo = ManagerUserId;
         await Db.SaveChangesAsync(ct);
 
-        var t1 = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 2, ManagerUserId);
-        var t2 = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 2, ManagerUserId);
+        var t1 = await CreateTaskAsync(wave.WaveId, TaskType.Recording, 2, ManagerUserId);
+        var t2 = await CreateTaskAsync(wave.WaveId, TaskType.Recording, 2, ManagerUserId);
 
         // Câu của task 2 vào hàng trước, câu của task 1 sau.
         var s2 = await CreateValidatedScriptAsync(
@@ -491,14 +491,14 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
         var ct = TestContext.Current.CancellationToken;
         var speaker = (await TaoBaSpeakerAsync())[0];
 
-        var campaign = await CreateCampaignAsync(
+        var wave = await CreateWaveAsync(
             $"Đợt full-{Guid.NewGuid():N}", 2000,
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
-            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), ManagerUserId, CampaignStatus.Open);
-        campaign.AssignedTo = ManagerUserId;
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), ManagerUserId, WaveStatus.Open);
+        wave.AssignedTo = ManagerUserId;
         await Db.SaveChangesAsync(ct);
 
-        var task = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 11, ManagerUserId);
+        var task = await CreateTaskAsync(wave.WaveId, TaskType.Recording, 11, ManagerUserId);
         Db.TaskAssignments.Add(new TaskAssignment
         {
             TaskId = task.TaskId, UserId = speaker.UserId,
@@ -576,13 +576,13 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
         var speakers = await TaoBaSpeakerAsync();
         var (a, b) = (speakers[0], speakers[1]);
 
-        var campaign = await CreateCampaignAsync(
+        var wave = await CreateWaveAsync(
             $"Đợt retry-{Guid.NewGuid():N}", 2000,
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
-            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), ManagerUserId, CampaignStatus.Open);
-        campaign.AssignedTo = ManagerUserId;
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), ManagerUserId, WaveStatus.Open);
+        wave.AssignedTo = ManagerUserId;
         await Db.SaveChangesAsync(ct);
-        var task = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 1, ManagerUserId);
+        var task = await CreateTaskAsync(wave.WaveId, TaskType.Recording, 1, ManagerUserId);
 
         var script = await CreateValidatedScriptAsync(
             "[vi]Thu [en]deadend [vi]nhe", "[vi]Thu deadend nhe",
@@ -639,13 +639,13 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
         var speakers = await TaoBaSpeakerAsync();
         var (a, b) = (speakers[0], speakers[1]);
 
-        var campaign = await CreateCampaignAsync(
+        var wave = await CreateWaveAsync(
             $"Đợt rerecord-{Guid.NewGuid():N}", 2000,
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
-            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), ManagerUserId, CampaignStatus.Open);
-        campaign.AssignedTo = ManagerUserId;
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), ManagerUserId, WaveStatus.Open);
+        wave.AssignedTo = ManagerUserId;
         await Db.SaveChangesAsync(ct);
-        var task = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 1, ManagerUserId);
+        var task = await CreateTaskAsync(wave.WaveId, TaskType.Recording, 1, ManagerUserId);
 
         var script = await CreateValidatedScriptAsync(
             "[vi]Thu [en]variant [vi]nhe", "[vi]Thu variant nhe",

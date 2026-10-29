@@ -151,7 +151,7 @@ curl -s -o /dev/null -w '%{http_code}\n' $BASE/swagger/v1/swagger.json   # 200
 TOKEN=$(curl -s -H 'Content-Type: application/json' \
   -d '{"email":"admin@codeswitchlabel.local","password":"'"$SEED_PASSWORD"'"}' \
   $BASE/api/auth/login | grep -o '"accessToken":"[^"]*"' | cut -d'"' -f4)
-curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $TOKEN" $BASE/api/campaigns   # 200
+curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $TOKEN" $BASE/api/waves   # 200
 curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $TOKEN" $BASE/api/tasks       # 200
 ```
 
@@ -262,7 +262,9 @@ Một lệnh duy nhất, chạy từ thư mục gốc của repo trên máy ch�
 | 4. Kéo code | `git pull --ff-only` | git lỗi |
 | 5. Migration | Chạy file `migrations/V*.sql` **chưa có** trong bảng `schema_migration` | migration lỗi (file tự rollback) |
 | 6. Dựng lại | `docker compose up -d --build` | — |
-| 7. Kiểm tra | `/health`, đăng nhập `admin@`, `GET /api/campaigns`; ghi commit vào `deploy/.deployed-sha` | API không lên, sai mật khẩu |
+| 7. Kiểm tra | `/health`, đăng nhập `admin@`, `GET /api/waves`; ghi commit vào `deploy/.deployed-sha` | API không lên, sai mật khẩu |
+
+V22 renames the legacy tables, columns, enum, views, functions, and triggers to Wave in place. It preserves the existing rows; clients must use the `/api/waves` routes and Wave JSON fields.
 
 **Bảng `schema_migration`** là sổ ghi những migration đã chạy, do script tự tạo ở bước 5. Nhờ đó
 "migration nào đã áp rồi" trả lời bằng truy vấn thay vì đọc lại tài liệu:
@@ -301,7 +303,7 @@ vì mất file audio là mất dữ liệu nghiên cứu, không tạo lại đ�
 
 `docs/codeswitchlabel.sql` chỉ chạy **một lần** qua `/docker-entrypoint-initdb.d/` lúc volume
 `pg-data` còn trống. DB đã có dữ liệu **không** tự nhận lược đồ mới khi `up -d --build`,
-và `DatabaseSeeder.EnsureSchemaAsync` chỉ tự vá bảng `campaign_registration` — nên mỗi file
+và `DatabaseSeeder.EnsureSchemaAsync` chỉ tự vá bảng `wave_registration` — nên mỗi file
 trong `migrations/` phải chạy đúng một lần. **Không bao giờ `down -v` trên máy deploy**
 (vì xoá sạch `pg-data` + metadata bản ghi).
 
@@ -353,7 +355,7 @@ docker compose -f deploy/docker-compose.prod.yml logs -f api
 
 Thứ tự ngược với lúc update: **phục hồi DB trước, lùi code sau** — API cũ không bao giờ
 được chạy với schema mới và ngược lại. Xong thì smoke check lại như mục nghiệm thu
-(health, Swagger, đăng nhập, `GET /api/campaigns`, `GET /api/tasks`).
+(health, Swagger, đăng nhập, `GET /api/waves`, `GET /api/tasks`).
 
 ## Khi chuyển sang bản chạy thật
 

@@ -89,7 +89,7 @@ public class SpeakerController(
     /// <remarks>
     /// Tổng số bản đã nộp, số bản được duyệt đạt, và từng task thu âm đang giao. Mỗi task có
     /// `taskTitle` (tên nhiệm vụ, cùng nghĩa với `taskTitle` ở `GET /api/speaker/recordings/history`)
-    /// cùng `description` và `campaignName` — tên nhiệm vụ không phụ thuộc vào việc task có thuộc chiến dịch hay không.
+    /// cùng `description` và `waveName` — tên nhiệm vụ không phụ thuộc vào việc task có thuộc chiến dịch hay không.
     /// Chỉ tiêu task thu âm đếm theo **cặp câu**: một cặp chỉ tính là xong khi **cả hai** bản
     /// cs và vi đều được duyệt đạt.
     /// </remarks>
@@ -124,29 +124,29 @@ public class SpeakerController(
     /// Mỗi dòng kèm <c>targetQty</c> — quota riêng của người đó trên các lượt giao trong đợt,
     /// 0 nếu không còn nhiệm vụ — và <c>submittedCapped</c> để vẽ tiến độ.
     /// </summary>
-    [HttpGet("rounds/{campaignId:long}/leaderboard")]
+    [HttpGet("rounds/{waveId:long}/leaderboard")]
     [ProducesResponseType(typeof(LeaderboardDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<LeaderboardDto>> Leaderboard(
-        long campaignId, [FromQuery] int top = 5, CancellationToken ct = default)
-        => Ok(await roundsService.GetLeaderboardAsync(campaignId, User.GetUserId(), top, ct));
+        long waveId, [FromQuery] int top = 5, CancellationToken ct = default)
+        => Ok(await roundsService.GetLeaderboardAsync(waveId, User.GetUserId(), top, ct));
 
     /// <summary>Đăng ký tham gia một đợt.</summary>
-    [HttpPost("rounds/{campaignId:long}/register")]
+    [HttpPost("rounds/{waveId:long}/register")]
     [ProducesResponseType(typeof(SpeakerRoundDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
-    public async Task<ActionResult<SpeakerRoundDto>> Register(long campaignId, CancellationToken ct)
-        => Ok(await roundsService.RegisterAsync(campaignId, User.GetUserId(), ct));
+    public async Task<ActionResult<SpeakerRoundDto>> Register(long waveId, CancellationToken ct)
+        => Ok(await roundsService.RegisterAsync(waveId, User.GetUserId(), ct));
 
     /// <summary>Huỷ đăng ký một đợt.</summary>
-    [HttpDelete("rounds/{campaignId:long}/registration")]
+    [HttpDelete("rounds/{waveId:long}/registration")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Unregister(long campaignId, CancellationToken ct)
+    public async Task<IActionResult> Unregister(long waveId, CancellationToken ct)
     {
-        await roundsService.UnregisterAsync(campaignId, User.GetUserId(), ct);
+        await roundsService.UnregisterAsync(waveId, User.GetUserId(), ct);
         return NoContent();
     }
 

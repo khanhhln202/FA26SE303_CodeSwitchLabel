@@ -155,15 +155,15 @@ Q('3c', `select script_id, status, created_by from script where script_id = '${m
 console.log('\n== Màn 4 · Giao việc');
 const batDau = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
 const ketThuc = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
-r = S('4.0a', 'admin', 'POST', '/api/campaigns', await call(T.admin, 'POST', '/api/campaigns',
-  { campaignName: 'Đợt thu thập demo ' + batDau, targetQty: 2000, domain: 'ItTechnology', startDate: batDau, endDate: ketThuc }), 201,
-  (b) => ({ campaignId: b.campaignId, status: b.status, targetQty: b.targetQty }));
-const campaignId = r.body.campaignId;
+r = S('4.0a', 'admin', 'POST', '/api/waves', await call(T.admin, 'POST', '/api/waves',
+  { waveName: 'Đợt thu thập demo ' + batDau, targetQty: 2000, domain: 'ItTechnology', startDate: batDau, endDate: ketThuc }), 201,
+  (b) => ({ waveId: b.waveId, status: b.status, targetQty: b.targetQty }));
+const waveId = r.body.waveId;
 S('4.0b', 'manager', 'POST', '/api/tasks', await call(T.manager, 'POST', '/api/tasks',
-  { campaignId, taskType: 'Recording', description: 'Chiến dịch chưa giao', targetQty: 1, deadline: DEADLINE }), 422);
-S('4.0c', 'admin', 'POST', '/api/campaigns/' + campaignId + '/assign',
-  await call(T.admin, 'POST', '/api/campaigns/' + campaignId + '/assign', { assignedToUserId: 2 }), 200, (b) => ({ assignedTo: b.assignedTo }));
-r = S('4.2', 'manager', 'POST', '/api/tasks', await call(T.manager, 'POST', '/api/tasks', { campaignId, taskType: 'Recording', description: 'Thu âm câu chủ đề IT', targetQty: 1, deadline: DEADLINE }), 201, (b) => ({ taskId: b.summary.taskId }));
+  { waveId, taskType: 'Recording', description: 'Chiến dịch chưa giao', targetQty: 1, deadline: DEADLINE }), 422);
+S('4.0c', 'admin', 'POST', '/api/waves/' + waveId + '/assign',
+  await call(T.admin, 'POST', '/api/waves/' + waveId + '/assign', { assignedToUserId: 2 }), 200, (b) => ({ assignedTo: b.assignedTo }));
+r = S('4.2', 'manager', 'POST', '/api/tasks', await call(T.manager, 'POST', '/api/tasks', { waveId, taskType: 'Recording', description: 'Thu âm câu chủ đề IT', targetQty: 1, deadline: DEADLINE }), 201, (b) => ({ taskId: b.summary.taskId }));
 const taskId = r.body.summary.taskId;
 S('4.3', 'manager', 'POST', `/api/tasks/${taskId}/items`, await call(T.manager, 'POST', `/api/tasks/${taskId}/items`, { autoFill: { count: 2, domain: 'ItTechnology' } }), 200, (b) => ({ added: b.added }));
 S('4.5', 'manager', 'POST', `/api/tasks/${taskId}/assign`, await call(T.manager, 'POST', `/api/tasks/${taskId}/assign`, { userIds: [6] }), 200, (b) => ({ status: b.summary.status }));
