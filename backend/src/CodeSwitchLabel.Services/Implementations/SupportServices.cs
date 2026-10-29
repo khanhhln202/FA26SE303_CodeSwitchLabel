@@ -16,26 +16,27 @@ public class AuthService(
     IAccessTokenIssuer tokens,
     TimeProvider clock) : IAuthService
 {
+    private static string? _dummyHash;
+    // shortcut: the first unknown-email login hashes once; prewarm if cold-start timing matters.
+
     public async Task<LoginResponse> LoginAsync(LoginRequest request, CancellationToken ct = default)
     {
         var user = await users.GetByEmailAsync(request.Email.Trim(), ct);
 
-        // CềEý trả CÙNG một thông báo cho cả hai ca sai email và sai mật khẩu:
-        // nói rõ "email không tồn tại" là tiết lềEtài khoản nào có thật trong hềEthống.
-        //
-        // Luôn chạy BCrypt dù không tìm thấy user: băm một hash giả thì thời gian
-        // phản hồi giống hệt cả hai ca, không bềEdò biết email nào có thật qua đềEchậm/nhanh.
-        var dummyHash = user is null ? hasher.Hash(Guid.NewGuid().ToString("N")) : user.PasswordHash;
-        var ok = user is not null && hasher.Verify(request.Password, dummyHash);
+        // Luôn chạy đúng một lần Verify, dù email có tồn tại hay không,
+        // để thời gian phản hồi không lộ email nào có thật.
+        var hash = user?.PasswordHash ?? (_dummyHash ??= hasher.Hash(Guid.NewGuid().ToString("N")));
+        var passwordOk = hasher.Verify(request.Password, hash);
 
-        if (!ok)
+        // Cố ý trả CÙNG một thông báo cho cả hai ca sai email và sai mật khẩu.
+        if (user is null || !passwordOk)
         {
             throw new BadRequestException("invalid_credentials", "Email hoặc mật khẩu không đúng.");
         }
 
-        if (user!.Status != UserStatus.Active)
+        if (user.Status != UserStatus.Active)
         {
-            throw new ForbiddenException("account_disabled", "Tài khoản đã bềEvô hiệu hoá.");
+            throw new ForbiddenException("account_disabled", "Tài khoản đã bị vô hiệu hoá.");
         }
 
         return user.ToLoginResponse(tokens.Issue(user));
@@ -109,7 +110,7 @@ public class SystemConfigService(ISystemConfigRepository repository) : ISystemCo
     {
         var raw = (await GetRawAsync(key, ct))?.Trim();
 
-        // Lược đềElưu 'true'/'false', nhưng người sửa tay hay gõ 1/0 nên nhận cả hai.
+        // Lược đồ lưu 'true'/'false', nhưng người sửa tay hay gõ 1/0 nên nhận cả hai.
         return raw switch
         {
             "1" => true,
@@ -137,7 +138,7 @@ public class SystemConfigService(ISystemConfigRepository repository) : ISystemCo
     public async Task<SystemConfigDto> GetAsync(string key, CancellationToken ct = default)
     {
         var c = await repository.GetAsync(key, ct)
-            ?? throw new NotFoundException("config_not_found", $"Không có tham sềEcấu hình \"{key}\".");
+            ?? throw new NotFoundException("config_not_found", $"Không có tham số cấu hình \"{key}\".");
 
         return new SystemConfigDto(
             c.ConfigKey, c.ConfigValue, c.ValueType.ToString(), c.Description, c.UpdatedAt);
@@ -147,7 +148,7 @@ public class SystemConfigService(ISystemConfigRepository repository) : ISystemCo
     {
         if (!await repository.UpdateValueAsync(key, value, updatedById, ct))
         {
-            throw new NotFoundException("config_not_found", $"Không có tham sềEcấu hình \"{key}\".");
+            throw new NotFoundException("config_not_found", $"Không có tham số cấu hình \"{key}\".");
         }
     }
 }
@@ -174,7 +175,8 @@ public class ReasonService(IReasonRepository repository) : IReasonService
 }
 
 /// <summary>
-/// SềEliệu quản trềE Mọi con sềEđọc thẳng từ view của lược đềE không tính lại trong C#  E/// dashboard và báo cáo SQL vì thế không bao giềElệch nhau.
+/// Số liệu quản trị. Mọi con số đọc thẳng từ view của lược đồ, không tính lại trong C# —
+/// dashboard và báo cáo SQL vì thế không bao giờ lệch nhau.
 /// </summary>
 public class StatisticsService(IStatisticsRepository repository, IWaveRepository waves)
     : IStatisticsService

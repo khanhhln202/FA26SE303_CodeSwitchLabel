@@ -74,7 +74,7 @@ FA26SE303_CodeSwitchLabel/
 │   ├── Requirement.txt           # yêu cầu 4 actor + mẫu input_text.json
 │   ├── diagrams/                 # sơ đồ kiến trúc, ERD, trạng thái, luồng nghiệp vụ (Mermaid)
 │   └── demo-test-api.html
-├── migrations/                   # V2..V21 (task độc lập, hàng đợi văn bản, đề xuất câu, quota, phân câu theo người nhận, hàng đợi ghi âm có người nhận, lượt giao tự Completed khi đạt quota, nhiều Speaker dùng chung cặp câu)
+├── migrations/                   # V2..V22 (task độc lập, hàng đợi văn bản, đề xuất câu, quota, phân câu theo người nhận, hàng đợi ghi âm có người nhận, lượt giao tự Completed khi đạt quota, nhiều Speaker dùng chung cặp câu, đổi tên campaign thành wave)
 ├── deploy/                       # prod: docker-compose.prod.yml, Caddyfile, deploy.sh, .env.example, README.md
 ├── demo/                         # input_text_demo.json + wav/m4a mẫu + test-them/; demo-live-import.json (7 câu, 3 câu lỗi cố ý) do kịch bản demo tự sinh, .gitignore loại ra
 └── .github/workflows/            # backend.yml (CI build + test), deploy.yml (tự động lên máy chủ)
@@ -199,7 +199,7 @@ Luồng chính (7 bước):
 - **Có thể giao người nhận ngay khi tạo task** bằng `assigneeUserIds` trong `POST /api/tasks`. Với task thu âm, backend lấy các cặp câu `Validated` theo chủ đề mà từng Speaker chưa có bản chờ duyệt/đạt, tối đa quota; kho ít hơn chỉ tiêu thì vẫn tạo task, mỗi người nhận tối đa số câu còn thu được. Nhiều Speaker có thể nhận cùng một cặp (mỗi người một dòng `task_script` và một bản ghi riêng); một Speaker không nhận trùng cặp trong cùng task. Task duyệt chỉ tạo phân công Reviewer.
 - **Chỉ tiêu trên trang chủ Speaker là của riêng người đọc.** `target` của `GET /api/speaker/rounds/current` và `targetQty` trong bảng xếp hạng là tổng quota các lượt giao trong đợt, **không phải** `wave.target_qty`; số đã nộp vẫn là số thật và có thể vượt mốc.
 - **Chỉ tiêu tụt thì task tự mở lại.** Bản ghi bị từ chối → mục câu lùi `Completed → Pending`, mục duyệt `Reviewed → Skipped`; `TaskStateMachine` tính lại và kéo task rời `Completed`. Trước đây chỉ tiêu không bao giờ tụt nên task treo ở "Hoàn thành" dù người nhận chưa làm đủ.
-- **Không dùng EF migration** — sửa lược đồ thì sửa `docs/codeswitchlabel.sql` trước, rồi sửa `DbContext` cho khớp. Migration triển khai mới nhất là V21 (nhiều Speaker dùng chung cặp câu: khoá `task_script_id`, recording ID 64 ký tự có `_u<speakerId>`, bỏ trigger một người đọc, hàng đợi phát theo từng Speaker). Database cũ vẫn cần V14/V15 trước V17 và V21.
+- **Không dùng EF migration** — sửa lược đồ thì sửa `docs/codeswitchlabel.sql` trước, rồi sửa `DbContext` cho khớp. Migration triển khai mới nhất là V22 (đổi tên campaign thành wave trong bảng, cột, enum, view, hàm, trigger, constraint, index và sequence). V21 cho phép nhiều Speaker dùng chung cặp câu: khoá `task_script_id`, recording ID 64 ký tự có `_u<speakerId>`, bỏ trigger một người đọc, hàng đợi phát theo từng Speaker. Database cũ vẫn cần V14/V15 trước V17, rồi V21 và V22 theo thứ tự.
 
 ## Cấu hình (Configuration)
 
