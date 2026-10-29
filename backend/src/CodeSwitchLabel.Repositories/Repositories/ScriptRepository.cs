@@ -59,9 +59,8 @@ public interface IScriptRepository
         string scriptId, long speakerId, CancellationToken ct = default);
 
     /// <summary>
-    /// câu đã có người KHÁC đọc và bản ghi chưa trượt QC. Câu như vậy không
-    /// phát ra cho người này được — trigger trg_recording_single_speaker sẽ chặn lúc
-    /// thu, tức là sau khi người đó đã đọc xong câu rồi.
+    /// câu đã có người KHÁC đọc và bản ghi chưa trượt QC. Chỉ để tham khảo — nhiều
+    /// Speaker được thu cùng câu, bản của người khác không chặn.
     /// </summary>
     Task<bool> IsRecordedByOtherAsync(string scriptId, long speakerId, CancellationToken ct = default);
 

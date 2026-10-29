@@ -200,9 +200,11 @@ record('4.4', 'Nộp lại đúng biến thể đó',
   await call(T.speaker1, 'POST', '/api/recordings', audioForm('giong-3s.wav', ID.script, 'CodeSwitching')),
   { status: 409, code: 'recording_already_exists' });
 
-record('4.5', 'speaker2 thu cặp câu người khác đã thu',
+record('4.5', 'speaker2 thu cùng cặp câu — mỗi người một bản riêng',
   await call(T.speaker2, 'POST', '/api/recordings', audioForm('giong-3s.wav', ID.script, 'CodeSwitching')),
-  { status: 409, code: 'script_owned_by_other_speaker' });
+  { status: 201, check: (b) => b.recording.recordingId.startsWith('r_cs_')
+      && b.recording.recordingId.includes(`_u${ID.speaker2}`) && b.take === 1 },
+  (b) => ({ recordingId: b.recording.recordingId, speakerId: b.recording.speakerId }));
 
 record('4.6', 'speaker1 lấy câu tiếp theo — cặp đang làm dở đã đủ hai bản',
   await call(T.speaker1, 'GET', '/api/speaker/scripts/next'),

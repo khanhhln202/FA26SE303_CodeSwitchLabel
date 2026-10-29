@@ -374,8 +374,8 @@ public class ReviewService(
             : null;
 
         // Chỉ xoá AUDIO. Câu văn bản giữ nguyên status 'validated', và câu quay về
-        // hàng đợi ghi âm. Bản 'rejected' không còn giữ cặp câu (trigger
-        // trg_recording_single_speaker bỏ qua nó), nên người khác trong đợt thu lại được.
+        // hàng đợi ghi âm. Bản 'rejected' không chặn ai: người cũ thu lại được, và
+        // Speaker khác vẫn có bản riêng trên cùng cặp câu.
         recording.Status = RecordingStatus.Rejected;
 
         if (taskRecording is not null) taskRecording.Status = TaskRecordingStatus.Reviewed;
@@ -460,7 +460,8 @@ public class ReviewService(
             ? SentenceVariant.PureVietnamese
             : SentenceVariant.CodeSwitching;
 
-        var kia = await recordings.GetActiveTakeAsync(recording.ScriptId, banConLai, ct);
+        var kia = await recordings.GetActiveTakeAsync(
+            recording.ScriptId, banConLai, recording.SpeakerId, ct);
         if (kia is null) return;
 
         kia.Status = RecordingStatus.Rejected;

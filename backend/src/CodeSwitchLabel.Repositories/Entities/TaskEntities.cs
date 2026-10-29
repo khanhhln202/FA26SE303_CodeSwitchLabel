@@ -98,12 +98,15 @@ public class TaskAssignment
 
 public class TaskScript
 {
+    /// <summary>Khoá thay thế: cùng một cặp câu có thể xuất hiện một lần cho mỗi Speaker.</summary>
+    public long TaskScriptId { get; set; }
+
     public long TaskId { get; set; }
     public string ScriptId { get; set; } = string.Empty;
 
     /// <summary>
-    /// Speaker được gán cặp câu này để hiển thị/chia quota; hàng đợi ghi âm phát theo
-    /// chiến dịch nên cột này không chặn người khác nhận câu. NULL = chưa gán / task duyệt.
+    /// Speaker được gán cặp câu này để hiển thị/chia quota. Nhiều Speaker có thể nhận
+    /// cùng một cặp câu; mỗi người chỉ một dòng. NULL = chưa gán / task duyệt.
     /// </summary>
     public long? AssigneeUserId { get; set; }
 

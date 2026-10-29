@@ -138,7 +138,7 @@ public sealed class TaskProgressTrackerTests
     public async Task OnReviewSubmitted_BanGhiConCho_ChiLamMoiMotTask()
     {
         // Arrange — task chưa có việc (started=0) nhưng vẫn là InProgress nên không đổi trạng thái.
-        var recording = new Recording { RecordingId = "r_cs_111000001", ScriptId = "s_111000001" };
+        var recording = new Recording { RecordingId = "r_cs_111000001", ScriptId = "s_111000001", SpeakerId = 9 };
         var task = Task(status: WorkTaskStatus.InProgress);
         GivenCampaigns();
         _tasks.Setup(t => t.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
@@ -157,7 +157,7 @@ public sealed class TaskProgressTrackerTests
     public async Task OnReviewSubmitted_BanGhiDaChotDat_VaDuHaiBan_DanhDauXong()
     {
         // Arrange
-        var recording = new Recording { RecordingId = "r_cs_111000001", ScriptId = "s_111000001" };
+        var recording = new Recording { RecordingId = "r_cs_111000001", ScriptId = "s_111000001", SpeakerId = 9 };
         var queued = new TaskRecording { TaskId = 8, RecordingId = recording.RecordingId, Status = TaskRecordingStatus.Queued };
         var scriptItem = new TaskScript { TaskId = 7, ScriptId = recording.ScriptId, Status = TaskScriptStatus.Pending };
         var task7 = Task(id: 7, status: WorkTaskStatus.InProgress);
@@ -166,9 +166,11 @@ public sealed class TaskProgressTrackerTests
         GivenCampaigns();
         _tasks.Setup(t => t.GetQueuedRecordingItemsAsync(recording.RecordingId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([queued]);
-        _tasks.Setup(t => t.IsScriptFullyApprovedAsync(recording.ScriptId, It.IsAny<CancellationToken>()))
+        _tasks.Setup(t => t.IsScriptFullyApprovedForSpeakerAsync(
+                recording.ScriptId, recording.SpeakerId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
-        _tasks.Setup(t => t.GetPendingScriptItemsAsync(recording.ScriptId, It.IsAny<CancellationToken>()))
+        _tasks.Setup(t => t.GetPendingScriptItemsForSpeakerAsync(
+                recording.ScriptId, recording.SpeakerId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([scriptItem]);
         _tasks.Setup(t => t.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
         _tasks.Setup(t => t.GetForUpdateAsync(7, It.IsAny<CancellationToken>())).ReturnsAsync(task7);
@@ -194,7 +196,7 @@ public sealed class TaskProgressTrackerTests
     public async Task OnReviewSubmitted_BanGhiTuChoi_LuiMucCauVaLuiMucDuyet()
     {
         // Arrange — task thu âm đã có 1 cặp câu xong, và task duyệt đã đếm 1 lượt.
-        var recording = new Recording { RecordingId = "r_cs_111000001", ScriptId = "s_111000001" };
+        var recording = new Recording { RecordingId = "r_cs_111000001", ScriptId = "s_111000001", SpeakerId = 9 };
 
         var doneScriptItem = new TaskScript
         {
@@ -211,9 +213,11 @@ public sealed class TaskProgressTrackerTests
         GivenCampaigns();
         _tasks.Setup(t => t.GetQueuedRecordingItemsAsync(recording.RecordingId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
-        _tasks.Setup(t => t.IsScriptFullyApprovedAsync(recording.ScriptId, It.IsAny<CancellationToken>()))
+        _tasks.Setup(t => t.IsScriptFullyApprovedForSpeakerAsync(
+                recording.ScriptId, recording.SpeakerId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(false);
-        _tasks.Setup(t => t.GetCompletedScriptItemsAsync(recording.ScriptId, It.IsAny<CancellationToken>()))
+        _tasks.Setup(t => t.GetCompletedScriptItemsForSpeakerAsync(
+                recording.ScriptId, recording.SpeakerId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([doneScriptItem]);
         _tasks.Setup(t => t.GetReviewedRecordingItemsAsync(recording.RecordingId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([reviewedItem]);
@@ -243,15 +247,17 @@ public sealed class TaskProgressTrackerTests
     public async Task OnReviewSubmitted_BanGhiDat_KhongLuiMucNao()
     {
         // Arrange
-        var recording = new Recording { RecordingId = "r_cs_111000001", ScriptId = "s_111000001" };
+        var recording = new Recording { RecordingId = "r_cs_111000001", ScriptId = "s_111000001", SpeakerId = 9 };
         var task = Task(id: 7, status: WorkTaskStatus.InProgress);
 
         GivenCampaigns();
         _tasks.Setup(t => t.GetQueuedRecordingItemsAsync(recording.RecordingId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
-        _tasks.Setup(t => t.IsScriptFullyApprovedAsync(recording.ScriptId, It.IsAny<CancellationToken>()))
+        _tasks.Setup(t => t.IsScriptFullyApprovedForSpeakerAsync(
+                recording.ScriptId, recording.SpeakerId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
-        _tasks.Setup(t => t.GetPendingScriptItemsAsync(recording.ScriptId, It.IsAny<CancellationToken>()))
+        _tasks.Setup(t => t.GetPendingScriptItemsForSpeakerAsync(
+                recording.ScriptId, recording.SpeakerId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
         _tasks.Setup(t => t.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
         _tasks.Setup(t => t.GetForUpdateAsync(7, It.IsAny<CancellationToken>())).ReturnsAsync(task);
@@ -263,7 +269,8 @@ public sealed class TaskProgressTrackerTests
 
         // Assert
         _tasks.Verify(
-            t => t.GetCompletedScriptItemsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            t => t.GetCompletedScriptItemsForSpeakerAsync(
+                It.IsAny<string>(), It.IsAny<long>(), It.IsAny<CancellationToken>()), Times.Never);
         _tasks.Verify(
             t => t.GetReviewedRecordingItemsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         Assert.Equal(WorkTaskStatus.Completed, task.Status);
@@ -438,14 +445,15 @@ public sealed class TaskProgressTrackerTests
     public async Task OnRecordingReturned_BanGhiBiGo_BoMucDangChoOMoiTask()
     {
         // Arrange — bản ghi đang chờ trong task duyệt 8 (task khác với nơi Reviewer bấm).
-        var recording = new Recording { RecordingId = "r_cs_111000001", ScriptId = "s_111000001" };
+        var recording = new Recording { RecordingId = "r_cs_111000001", ScriptId = "s_111000001", SpeakerId = 9 };
         var queuedItem = new TaskRecording
         {
             TaskId = 8, RecordingId = recording.RecordingId, Status = TaskRecordingStatus.Queued
         };
         var task8 = Task(id: 8, status: WorkTaskStatus.InProgress);
 
-        _tasks.Setup(t => t.GetCompletedScriptItemsAsync(recording.ScriptId, It.IsAny<CancellationToken>()))
+        _tasks.Setup(t => t.GetCompletedScriptItemsForSpeakerAsync(
+                recording.ScriptId, recording.SpeakerId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
         _tasks.Setup(t => t.GetQueuedRecordingItemsAsync(recording.RecordingId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([queuedItem]);

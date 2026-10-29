@@ -163,7 +163,7 @@ body.short .act.extra{display:none}
 <section id="noi-bat">
   <h2>Điểm kỹ thuật nổi bật</h2>
   <ul class="points">
-    <li><b>Database tự giữ luật.</b> Lược đồ nhóm chốt có 8 trigger: chốt đa số sau ba lượt duyệt, chặn tự duyệt, mỗi cặp câu một người đọc, lỗi nội dung đưa câu về duyệt lại, tự ghi nhật ký kèm người thao tác. Backend không tự đặt trạng thái bản ghi: ghi lượt duyệt rồi đọc lại kết quả.</li>
+    <li><b>Database tự giữ luật.</b> Lược đồ nhóm chốt có 7 trigger: chốt đa số sau ba lượt duyệt, chặn tự duyệt, lỗi nội dung đưa câu về duyệt lại, tự ghi nhật ký kèm người thao tác. Backend không tự đặt trạng thái bản ghi: ghi lượt duyệt rồi đọc lại kết quả.</li>
     <li><b>Ba lượt duyệt mù.</b> Không ai thấy ý kiến người khác khi bản ghi chưa chốt, kể cả qua API lịch sử. Hai người bấm cùng lúc thì khoá hàng bằng <code>SELECT … FOR UPDATE</code> và so vòng client đã thấy (<code>expectedRound</code>): người đến sau nhận <code>409 round_changed</code>.</li>
     <li><b>Âm thanh.</b> Nhận file trình duyệt ghi ra (WebM, M4A, WAV), ffmpeg chuyển sang WAV 16 kHz mono, đo thời lượng trên file đã chuyển rồi kiểm tra theo ngưỡng cấu hình. File nằm trong MinIO, người nghe nhận link tạm 15 phút.</li>
     <li><b>Task tự chạy trạng thái</b> Draft → Open → InProgress → Completed. Chỉ tiêu thu âm đếm theo cặp câu: một cặp chỉ xong khi cả hai bản được duyệt đạt.</li>
@@ -172,7 +172,7 @@ body.short .act.extra{display:none}
   </ul>
 
   <h3>Mã có nghĩa, do database sinh</h3>
-  <p class="muted">Nhìn mã là biết câu thuộc loại nào, bản ghi là biến thể nào và thu lần thứ mấy.</p>
+  <p class="muted">Nhìn mã là biết câu thuộc loại nào, bản ghi là biến thể nào, của Speaker nào và thu lần thứ mấy.</p>
   <div class="ids">
     <div class="idrow" role="group" aria-label="Cấu tạo mã cặp câu s_211000007">
       <div class="seg"><b>s_</b><span>Cặp câu</span></div>
@@ -181,9 +181,10 @@ body.short .act.extra{display:none}
       <div class="seg key"><b>1</b><span>Quan hệ: 1 dịch nghĩa, 2 tên riêng</span></div>
       <div class="seg"><b>000007</b><span>Số thứ tự toàn kho, tăng dần</span></div>
     </div>
-    <div class="idrow" role="group" aria-label="Cấu tạo mã bản ghi r_vi_111000003_t2">
+    <div class="idrow" role="group" aria-label="Cấu tạo mã bản ghi r_vi_111000003_u6_t2">
       <div class="seg key"><b>r_vi_</b><span>Bản thuần Việt; <code>r_cs_</code> là bản chen tiếng Anh</span></div>
       <div class="seg"><b>111000003</b><span>Chín số của cặp câu s_111000003</span></div>
+      <div class="seg key"><b>_u6</b><span>Speaker số 6 thu bản này; hai Speaker thu cùng câu vẫn có mã riêng</span></div>
       <div class="seg key"><b>_t2</b><span>Lần thu thứ 2</span></div>
     </div>
   </div>
@@ -207,7 +208,7 @@ body.short .act.extra{display:none}
     <thead><tr><th>Phần</th><th>Công nghệ</th><th>Dùng để</th></tr></thead>
     <tbody>
       <tr><td>Nền tảng</td><td>.NET 10 LTS · ASP.NET Core Web API · C# 14</td><td>REST API, tách 3 tầng Api → Services → Repositories. Được hỗ trợ tới 11/2028</td></tr>
-      <tr><td>Database</td><td>PostgreSQL 16</td><td>Lược đồ nhóm chốt <code>docs/codeswitchlabel.sql</code>: 19 bảng, 18 enum, 8 trigger, 6 view. Tự chạy khi tạo database, không dùng migration</td></tr>
+      <tr><td>Database</td><td>PostgreSQL 16</td><td>Lược đồ nhóm chốt <code>docs/codeswitchlabel.sql</code>: 19 bảng, 18 enum, 7 trigger, 6 view. Tự chạy khi tạo database, không dùng migration</td></tr>
       <tr><td>ORM</td><td>Entity Framework Core 10 · Npgsql 10</td><td>Ánh xạ bảng và enum của lược đồ, tên cột snake_case</td></tr>
       <tr><td>Xác thực</td><td>JWT Bearer · BCrypt.Net-Next 4.2</td><td>Đăng nhập, phân quyền 4 vai, thu hồi quyền ngay khi khoá tài khoản</td></tr>
       <tr><td>Tài liệu API</td><td>Swagger · Swashbuckle 10.2</td><td>48 endpoint chia 12 nhóm, chú thích tiếng Việt từng endpoint</td></tr>
@@ -293,7 +294,7 @@ body.short .act.extra{display:none}
   <h2>Cần cô góp ý</h2>
   <ul class="points">
     <li><b>Khối lượng duyệt.</b> Mỗi cặp câu cần 6 lượt duyệt (hai bản, mỗi bản ba lượt) trong khi nhóm có 4 người. Có khả thi khi thu dữ liệu thật không?</li>
-    <li><b>Một cặp câu chỉ một người đọc</b> — đúng ý cô chứ? Điều này ảnh hưởng tới độ đa dạng giọng trong dataset.</li>
+    <li><b>Nhiều Speaker cùng một cặp câu</b> — mỗi người vẫn có bản ghi riêng, mã kèm <code>_u&lt;speakerId&gt;</code>, nên một cặp có thể góp nhiều giọng vào dataset. Có cần giới hạn số giọng cho mỗi cặp không?</li>
     <li><b>Một người từ chối câu là câu bị loại với mọi người.</b> Có cần Admin xác nhận, hoặc khôi phục được không?</li>
     <li><b>Dataset xuất định dạng gì</b>, có kèm alignment và nhãn <code>[vi]</code>/<code>[en]</code> không?</li>
     <li><b>Các ngưỡng do nhóm đề xuất</b>, chưa được duyệt: bản ghi dài 1–30 giây. Hai tham số khoảng lặng đầu/cuối có trong lược đồ nhưng hệ thống chưa đo được.</li>
@@ -375,18 +376,18 @@ alignment  | [{"source": "scan", "target": "quét", "relation": "semantic_equiva
     ],
     recording: [
       { k: 'SQL', c: 'select recording_id, sentence_variant, status, duration_sec, audio_format, task_id from recording order by recorded_at;', o:
-`   recording_id    | sentence_variant |     status     | duration_sec | audio_format | task_id
--------------------+------------------+----------------+--------------+--------------+---------
- r_cs_111000003    | code_switching   | pending_review |         4.02 | wav          |       1
- r_vi_111000003    | pure_vietnamese  | qc_failed      |         0.50 | wav          |       1
- r_vi_111000003_t2 | pure_vietnamese  | pending_review |         3.00 | wav          |       1
+`   recording_id       | sentence_variant |     status     | duration_sec | audio_format | task_id
+----------------------+------------------+----------------+--------------+--------------+---------
+ r_cs_111000003_u6    | code_switching   | pending_review |         4.02 | wav          |       1
+ r_vi_111000003_u6    | pure_vietnamese  | qc_failed      |         0.50 | wav          |       1
+ r_vi_111000003_u6_t2 | pure_vietnamese  | pending_review |         3.00 | wav          |       1
 (3 rows)`, n: 'Cả ba lần nộp đều được lưu, kể cả bản trượt kiểm tra. Thời lượng đo trên file đã chuyển sang WAV.' },
-      { k: 'SQL', c: "select recording_id, cloud_link from recording where recording_id = 'r_cs_111000003';", o:
-`  recording_id  |                               cloud_link
-----------------+------------------------------------------------------------------------
- r_cs_111000003 | http://localhost:9000/recordings/recordings/2026/09/r_cs_111000003.wav
+      { k: 'SQL', c: "select recording_id, cloud_link from recording where recording_id = 'r_cs_111000003_u6';", o:
+`  recording_id     |                               cloud_link
+-------------------+------------------------------------------------------------------------
+ r_cs_111000003_u6 | http://localhost:9000/recordings/recordings/2026/09/r_cs_111000003_u6.wav
 (1 row)`, n: 'Database chỉ lưu đường dẫn, file thật nằm trong MinIO theo thư mục năm/tháng thu.' },
-      { k: 'WEB', c: 'http://localhost:9090  →  Buckets  →  recordings  →  recordings/2026/09/', n: 'Thấy 3 file <code>r_cs_111000003.wav</code>, <code>r_vi_111000003.wav</code>, <code>r_vi_111000003_t2.wav</code>. Tải về nghe được.' },
+      { k: 'WEB', c: 'http://localhost:9090  →  Buckets  →  recordings  →  recordings/2026/09/', n: 'Thấy 3 file <code>r_cs_111000003_u6.wav</code>, <code>r_vi_111000003_u6.wav</code>, <code>r_vi_111000003_u6_t2.wav</code>. Tải về nghe được.' },
       { k: 'CLI', c: 'ffprobe -v error -show_entries stream=codec_name,sample_rate,channels -of default=nw=1 "DÁN_LINK_Ở_BƯỚC_5.7"', o:
 `codec_name=pcm_s16le
 sample_rate=16000
@@ -398,33 +399,33 @@ channels=1`, n: 'File gửi lên là m4a nhưng file lưu là WAV PCM 16-bit, 16
 (1 row)`, n: 'Task tự chuyển trạng thái khi có bản nộp đầu tiên.' }
     ],
     reviewMid: [
-      { k: 'SQL', c: "select recording_id, status from recording where recording_id = 'r_cs_111000003';", o:
-`  recording_id  |     status
-----------------+----------------
- r_cs_111000003 | pending_review
+      { k: 'SQL', c: "select recording_id, status from recording where recording_id = 'r_cs_111000003_u6';", o:
+`  recording_id     |     status
+-------------------+----------------
+ r_cs_111000003_u6 | pending_review
 (1 row)`, n: 'Đã có 2 lượt nhưng trạng thái chưa đổi: phải đủ 3 lượt mới chốt.' }
     ],
     reviewDone: [
       { k: 'SQL', c: 'select recording_id, review_round, reviewer_id, decision, left(comment, 35) as ghi_chu from review order by review_id;', o:
-`   recording_id    | review_round | reviewer_id | decision |               ghi_chu
--------------------+--------------+-------------+----------+-------------------------------------
- r_cs_111000003    |            1 |           3 | approved |
- r_cs_111000003    |            2 |           4 | rejected | Có tiếng quạt ở nền
- r_cs_111000003    |            3 |           5 | approved | Tiếng quạt nhỏ, vẫn nghe rõ từng từ
- r_vi_111000003_t2 |            1 |           3 | approved |
- r_vi_111000003_t2 |            2 |           4 | approved |
- r_vi_111000003_t2 |            3 |           5 | approved |
+`   recording_id       | review_round | reviewer_id | decision |               ghi_chu
+----------------------+--------------+-------------+----------+-------------------------------------
+ r_cs_111000003_u6    |            1 |           3 | approved |
+ r_cs_111000003_u6    |            2 |           4 | rejected | Có tiếng quạt ở nền
+ r_cs_111000003_u6    |            3 |           5 | approved | Tiếng quạt nhỏ, vẫn nghe rõ từng từ
+ r_vi_111000003_u6_t2 |            1 |           3 | approved |
+ r_vi_111000003_u6_t2 |            2 |           4 | approved |
+ r_vi_111000003_u6_t2 |            3 |           5 | approved |
 (6 rows)`, n: 'Mỗi bản ghi đúng 3 lượt của 3 người khác nhau (3, 4, 5).' },
       { k: 'SQL', c: 'select r.recording_id, r.review_round, rr.reason_code, rr.category from review_rejection_reason x join review r on r.review_id = x.review_id join rejection_reason rr on rr.reason_id = x.reason_id;', o:
-`  recording_id  | review_round |   reason_code    |   category
-----------------+--------------+------------------+---------------
- r_cs_111000003 |            2 | background_noise | audio_quality
+`  recording_id     | review_round |   reason_code    |   category
+-------------------+--------------+------------------+---------------
+ r_cs_111000003_u6 |            2 | background_noise | audio_quality
 (1 row)`, n: 'Lý do từ chối nằm ở bảng nối <code>review_rejection_reason</code>, gắn với đúng lượt duyệt.' },
-      { k: 'SQL', c: "select recording_id, status from recording where recording_id in ('r_cs_111000003', 'r_vi_111000003_t2');", o:
-`   recording_id    |  status
--------------------+----------
- r_cs_111000003    | approved
- r_vi_111000003_t2 | approved
+      { k: 'SQL', c: "select recording_id, status from recording where recording_id in ('r_cs_111000003_u6', 'r_vi_111000003_u6_t2');", o:
+`   recording_id       |  status
+----------------------+----------
+ r_cs_111000003_u6    | approved
+ r_vi_111000003_u6_t2 | approved
 (2 rows)`, n: 'Backend không ghi cột này. Trigger <code>trg_review_majority</code> ghi khi đủ 3 lượt, theo đa số.' }
     ],
     taskDone: [
@@ -441,7 +442,7 @@ channels=1`, n: 'File gửi lên là m4a nhưng file lưu là WAV PCM 16-bit, 16
 total_scripts         | 11
 validated_scripts     | 8
 pending_scripts       | 2
-total_recordings      | 3
+total_recordings      | 4
 approved_recordings   | 2
 rejected_recordings   | 0
 approved_duration_sec | 7.02
@@ -464,10 +465,10 @@ released_datasets     | 0`, n: 'Số trên API lấy thẳng từ view này, nê
 (1 row)`, n: 'Ghi luôn ai đổi (<code>1</code> là admin) và lúc nào.' }
     ],
     configEffect: [
-      { k: 'SQL', c: "select recording_id, status, duration_sec from recording where recording_id = 'r_cs_121000004';", o:
-`  recording_id  |  status   | duration_sec
-----------------+-----------+--------------
- r_cs_121000004 | qc_failed |         4.02
+      { k: 'SQL', c: "select recording_id, status, duration_sec from recording where recording_id = 'r_cs_121000004_u7';", o:
+`  recording_id     |  status   | duration_sec
+-------------------+-----------+--------------
+ r_cs_121000004_u7 | qc_failed |         4.02
 (1 row)` }
     ],
     user: [
@@ -528,45 +529,45 @@ released_datasets     | 0`, n: 'Số trên API lấy thẳng từ view này, nê
     ]},
     { t: 'Màn 5 · Thu âm', g: 'Speaker · Recordings', time: '4 phút', steps: [
       ['5.1', 1, 'speaker1', 'GET', '/api/speaker/scripts/next?taskId=1', null, 200, '<code>s_111000003</code> “Mình cần review lại phần mã nguồn này”. <code>remainingVariants</code>: <code>CodeSwitching</code>, <code>PureVietnamese</code>. <code>guidance</code>: 1–30 giây.'],
-      ['5.2', 1, 'speaker1', 'POST', '/api/recordings', 'Audio = demo/giong-4s.m4a · ScriptId = s_111000003 · SentenceVariant = CodeSwitching · TaskId = 1', 201, '<code>r_cs_111000003</code>, <code>PendingReview</code>, <code>audioFormat = "wav"</code> (file m4a đã được chuyển sang WAV 16 kHz mono), <code>durationSec = 4.02</code>, <code>qcPassed = true</code>.'],
+      ['5.2', 1, 'speaker1', 'POST', '/api/recordings', 'Audio = demo/giong-4s.m4a · ScriptId = s_111000003 · SentenceVariant = CodeSwitching · TaskId = 1', 201, '<code>r_cs_111000003_u6</code>, <code>PendingReview</code>, <code>audioFormat = "wav"</code> (file m4a đã được chuyển sang WAV 16 kHz mono), <code>durationSec = 4.02</code>, <code>qcPassed = true</code>.'],
       ['5.3', 0, 'manager', 'GET', '/api/tasks/1', null, 200, 'Task tự sang <code>InProgress</code>. <code>submitted = 1</code>, <code>done = 0</code>: nộp rồi nhưng chưa được duyệt đạt thì chưa tính là xong.'],
       ['5.4', 0, 'manager', 'GET', '/api/tasks/by-assignee', null, 200, 'speaker1: 1 task, chỉ tiêu 1, đã xong 0, không trễ hạn.'],
-      ['5.5', 1, 'speaker1', 'POST', '/api/recordings', 'Audio = demo/qua-ngan.wav · ScriptId = s_111000003 · SentenceVariant = PureVietnamese · TaskId = 1', 201, '<code>r_vi_111000003</code>, <code>QcFailed</code>, <code>qcIssues</code> báo <code>too_short</code>: 0,5 giây. Vẫn lưu lại để thống kê, nhưng không vào hàng chờ duyệt.'],
-      ['5.6', 1, 'speaker1', 'POST', '/api/recordings', 'Audio = demo/giong-3s.wav · ScriptId = s_111000003 · SentenceVariant = PureVietnamese · TaskId = 1', 201, 'Thu lại: <code>r_vi_111000003_t2</code>, <code>take = 2</code>, <code>qcPassed = true</code>.', V.recording],
-      ['5.7', 0, 'speaker1', 'GET', '/api/recordings/r_cs_111000003/audio-url', null, 200, 'Mở <code>url</code> ở tab mới để nghe bản WAV đã chuyển. Link hết hạn sau 15 phút.'],
-      ['5.8', 0, 'speaker2', 'POST', '/api/recordings', 'Audio = demo/giong-3s.wav · ScriptId = s_111000003 · SentenceVariant = CodeSwitching', 409, '<code>script_owned_by_other_speaker</code>: mỗi cặp câu chỉ một người đọc.'],
+      ['5.5', 1, 'speaker1', 'POST', '/api/recordings', 'Audio = demo/qua-ngan.wav · ScriptId = s_111000003 · SentenceVariant = PureVietnamese · TaskId = 1', 201, '<code>r_vi_111000003_u6</code>, <code>QcFailed</code>, <code>qcIssues</code> báo <code>too_short</code>: 0,5 giây. Vẫn lưu lại để thống kê, nhưng không vào hàng chờ duyệt.'],
+      ['5.6', 1, 'speaker1', 'POST', '/api/recordings', 'Audio = demo/giong-3s.wav · ScriptId = s_111000003 · SentenceVariant = PureVietnamese · TaskId = 1', 201, 'Thu lại: <code>r_vi_111000003_u6_t2</code>, <code>take = 2</code>, <code>qcPassed = true</code>.', V.recording],
+      ['5.7', 0, 'speaker1', 'GET', '/api/recordings/r_cs_111000003_u6/audio-url', null, 200, 'Mở <code>url</code> ở tab mới để nghe bản WAV đã chuyển. Link hết hạn sau 15 phút.'],
+      ['5.8', 0, 'speaker2', 'POST', '/api/recordings', 'Audio = demo/giong-3s.wav · ScriptId = s_111000003 · SentenceVariant = CodeSwitching', 201, '<code>r_cs_111000003_u7</code>, <code>take = 1</code>, <code>qcPassed = true</code>: Speaker2 thu cùng cặp nhưng có bản riêng; hậu tố <code>_u7</code> tách khỏi bản của speaker1.'],
       ['5.9', 0, 'speaker1', 'POST', '/api/scripts/s_111000003/review', { action: 'Edited', editedCsContent: '[vi]Mình cần [en]review [vi]lại phần mã nguồn này', editedViContent: '[vi]Mình cần xem lại phần mã nguồn này nhé' }, 409, '<code>script_already_recorded</code>: câu đã có bản ghi thì không sửa được, nếu không transcript sẽ lệch với âm thanh.'],
       ['5.10', 0, 'speaker1', 'GET', '/api/recordings', null, 200, 'Ba bản của chính mình, kể cả bản trượt kiểm tra. Speaker không thấy bản của người khác.']
     ]},
     { t: 'Màn 6 · Duyệt ba lượt mù', g: 'Reviews · Rejection Reasons', time: '6 phút', steps: [
       ['6.1', 1, 'reviewer', 'GET', '/api/rejection-reasons', null, 200, '9 lý do chia 4 nhóm <code>Content</code>, <code>AudioQuality</code>, <code>Pronunciation</code>, <code>Other</code>, đúng câu trong đề: “lỗi về nội dung, âm thanh hoặc phát âm”.'],
-      ['6.2', 1, 'reviewer', 'GET', '/api/reviewer/recordings/next', null, 200, '<code>r_cs_111000003</code>, <code>round = 1</code>, <code>isBlind = true</code>, kèm câu cần đối chiếu và <code>audioUrl</code> để nghe.'],
-      ['6.3', 1, 'reviewer', 'POST', '/api/recordings/r_cs_111000003/reviews', { decision: 'Approved', expectedRound: 1 }, 201, '<code>isFinal = false</code>: mới 1/3 lượt.'],
-      ['6.4', 0, 'reviewer2', 'POST', '/api/recordings/r_cs_111000003/reviews', { decision: 'Approved', expectedRound: 1 }, 409, '<code>round_changed</code>: giả sử reviewer2 mở bản ghi từ lúc còn vòng 1. Server từ chối thay vì ghi nhầm sang vòng 2.'],
+      ['6.2', 1, 'reviewer', 'GET', '/api/reviewer/recordings/next', null, 200, '<code>r_cs_111000003_u6</code>, <code>round = 1</code>, <code>isBlind = true</code>, kèm câu cần đối chiếu và <code>audioUrl</code> để nghe.'],
+      ['6.3', 1, 'reviewer', 'POST', '/api/recordings/r_cs_111000003_u6/reviews', { decision: 'Approved', expectedRound: 1 }, 201, '<code>isFinal = false</code>: mới 1/3 lượt.'],
+      ['6.4', 0, 'reviewer2', 'POST', '/api/recordings/r_cs_111000003_u6/reviews', { decision: 'Approved', expectedRound: 1 }, 409, '<code>round_changed</code>: giả sử reviewer2 mở bản ghi từ lúc còn vòng 1. Server từ chối thay vì ghi nhầm sang vòng 2.'],
       ['6.5', 0, 'reviewer2', 'GET', '/api/reviewer/recordings/next', null, 200, 'Cùng bản ghi, <code>round = 2</code>, không kèm ý kiến của người trước.'],
-      ['6.6', 0, 'reviewer2', 'GET', '/api/recordings/r_cs_111000003/reviews', null, 200, '<code>[]</code>: gọi API lịch sử cũng không xem trộm được.'],
-      ['6.7', 0, 'reviewer2', 'POST', '/api/recordings/r_cs_111000003/reviews', { decision: 'Rejected', expectedRound: 2 }, 422, '<code>rejection_reason_required</code>.'],
-      ['6.8', 1, 'reviewer2', 'POST', '/api/recordings/r_cs_111000003/reviews', { decision: 'Rejected', expectedRound: 2, rejectionReasonCodes: ['background_noise'], comment: 'Có tiếng quạt ở nền' }, 201, '<code>isFinal = false</code>: 1 đạt, 1 từ chối, cần lượt thứ ba.', V.reviewMid],
-      ['6.9', 0, 'speaker1', 'GET', '/api/recordings/r_cs_111000003/reviews', null, 200, '<code>[]</code>: người đọc chỉ thấy kết quả khi bản ghi đã chốt.'],
+      ['6.6', 0, 'reviewer2', 'GET', '/api/recordings/r_cs_111000003_u6/reviews', null, 200, '<code>[]</code>: gọi API lịch sử cũng không xem trộm được.'],
+      ['6.7', 0, 'reviewer2', 'POST', '/api/recordings/r_cs_111000003_u6/reviews', { decision: 'Rejected', expectedRound: 2 }, 422, '<code>rejection_reason_required</code>.'],
+      ['6.8', 1, 'reviewer2', 'POST', '/api/recordings/r_cs_111000003_u6/reviews', { decision: 'Rejected', expectedRound: 2, rejectionReasonCodes: ['background_noise'], comment: 'Có tiếng quạt ở nền' }, 201, '<code>isFinal = false</code>: 1 đạt, 1 từ chối, cần lượt thứ ba.', V.reviewMid],
+      ['6.9', 0, 'speaker1', 'GET', '/api/recordings/r_cs_111000003_u6/reviews', null, 200, '<code>[]</code>: người đọc chỉ thấy kết quả khi bản ghi đã chốt.'],
       ['6.10', 0, 'reviewer3', 'GET', '/api/reviewer/recordings/next', null, 200, '<code>round = 3</code>.'],
-      ['6.11', 1, 'reviewer3', 'POST', '/api/recordings/r_cs_111000003/reviews', { decision: 'Approved', expectedRound: 3, comment: 'Tiếng quạt nhỏ, vẫn nghe rõ từng từ' }, 201, '<code>isFinal = true</code>, <code>recordingStatus = "Approved"</code>: 2 đạt, 1 từ chối, trigger trong database chốt theo đa số.'],
-      ['6.12', 1, 'speaker1', 'GET', '/api/recordings/r_cs_111000003/reviews', null, 200, 'Đủ 3 lượt, <code>reviewerId = null</code>. Lượt 2 hiện lý do <code>background_noise</code> và ghi chú: đây là chỗ người đọc xem lý do bị từ chối.'],
-      ['6.13', 1, 'reviewer → reviewer3', 'POST', '/api/recordings/r_vi_111000003_t2/reviews', { decision: 'Approved', expectedRound: 1 }, 201, 'Duyệt đạt cả ba lượt: tab reviewer gửi <code>expectedRound: 1</code>, reviewer2 gửi <code>2</code>, reviewer3 gửi <code>3</code>. Lượt 3 trả <code>isFinal = true</code>, <code>Approved</code>.', V.reviewDone]
+      ['6.11', 1, 'reviewer3', 'POST', '/api/recordings/r_cs_111000003_u6/reviews', { decision: 'Approved', expectedRound: 3, comment: 'Tiếng quạt nhỏ, vẫn nghe rõ từng từ' }, 201, '<code>isFinal = true</code>, <code>recordingStatus = "Approved"</code>: 2 đạt, 1 từ chối, trigger trong database chốt theo đa số.'],
+      ['6.12', 1, 'speaker1', 'GET', '/api/recordings/r_cs_111000003_u6/reviews', null, 200, 'Đủ 3 lượt, <code>reviewerId = null</code>. Lượt 2 hiện lý do <code>background_noise</code> và ghi chú: đây là chỗ người đọc xem lý do bị từ chối.'],
+      ['6.13', 1, 'reviewer → reviewer3', 'POST', '/api/recordings/r_vi_111000003_u6_t2/reviews', { decision: 'Approved', expectedRound: 1 }, 201, 'Duyệt đạt cả ba lượt: tab reviewer gửi <code>expectedRound: 1</code>, reviewer2 gửi <code>2</code>, reviewer3 gửi <code>3</code>. Lượt 3 trả <code>isFinal = true</code>, <code>Approved</code>.', V.reviewDone]
     ]},
     { t: 'Màn 7 · Tiến độ và thống kê', g: 'Tasks · Dashboard & Statistics', time: '3 phút', steps: [
       ['7.1', 1, 'manager', 'GET', '/api/tasks/1', null, 200, '<code>Completed</code>, <code>done = 1</code> / 1 cặp câu, 100%: cặp <code>s_111000003</code> đủ hai bản đạt nên task tự hoàn thành.', V.taskDone],
       ['7.2', 0, 'speaker1', 'GET', '/api/speaker/progress', null, 200, '<code>totalSubmitted = 2</code>, <code>totalApproved = 2</code>. Bản trượt kiểm tra tự động không tính là đã nộp.'],
       ['7.3', 0, 'reviewer2', 'GET', '/api/reviewer/progress', null, 200, '<code>totalReviews = 2</code>.'],
-      ['7.4', 1, 'admin', 'GET', '/api/admin/dashboard', null, 200, '11 câu (8 đã duyệt, 2 chờ duyệt), 3 bản ghi, 2 bản đạt, 7,02 giây đã duyệt, 2 người đọc, 3 người duyệt.', V.dashboard],
+      ['7.4', 1, 'admin', 'GET', '/api/admin/dashboard', null, 200, '11 câu (8 đã duyệt, 2 chờ duyệt), 4 bản ghi, 2 bản đạt, 7,02 giây đã duyệt, 2 người đọc, 3 người duyệt.', V.dashboard],
       ['7.5', 1, 'admin', 'GET', '/api/admin/statistics/rejection-reasons', null, 200, '<code>background_noise</code>: 1 lần. Con số đếm cả lượt từ chối bị đa số bác, nên nghĩa là số lần người duyệt báo lỗi này, không phải số bản bị loại.', V.stats],
-      ['7.6', 0, 'admin', 'GET', '/api/admin/statistics/speakers', null, 200, 'speaker1: 3 lần nộp, 2 đạt, tỉ lệ đạt 66,7%. Tỉ lệ này tính cả bản trượt kiểm tra tự động.'],
+      ['7.6', 0, 'admin', 'GET', '/api/admin/statistics/speakers', null, 200, 'speaker1: 3 lần nộp, 2 đạt, tỉ lệ đạt 66,7%. speaker2: 1 lần nộp (bản thu cùng câu ở bước 5.8), chưa có bản đạt/từ chối nên tỉ lệ để trống. Tỉ lệ của speaker1 tính cả bản trượt kiểm tra tự động.'],
       ['7.7', 0, 'admin', 'GET', '/api/admin/statistics/reviewers', null, 200, 'Mỗi người duyệt 2 lượt; reviewer2 có 1 lượt từ chối.']
     ]},
     { t: 'Màn 8 · Cấu hình hệ thống', g: 'System Configuration', time: '2 phút', steps: [
       ['8.1', 0, 'admin', 'GET', '/api/admin/config', null, 200, '9 tham số. Có tác dụng: thời lượng tối thiểu và tối đa, số lần thu lại, số câu mỗi lần nhập. <code>review.rounds_required</code> đọc động, trigger cũng đọc cùng tham số này; hai tham số khoảng lặng và định dạng âm thanh chưa được dùng.'],
       ['8.2', 1, 'admin', 'PUT', '/api/admin/config/recording.min_duration_sec', { value: '5' }, 204, 'Nâng thời lượng tối thiểu lên 5 giây, không phải sửa code hay khởi động lại.', V.config],
       ['8.3', 0, 'speaker2', 'GET', '/api/speaker/scripts/next', null, 200, '<code>s_121000004</code> “Thầy cho em xin slide của buổi hôm nay với”, <code>guidance.minDurationSec = 5</code>: hướng dẫn đổi theo ngay.'],
-      ['8.4', 1, 'speaker2', 'POST', '/api/recordings', 'Audio = demo/giong-4s.m4a · ScriptId = s_121000004 · SentenceVariant = CodeSwitching', 201, '<code>r_cs_121000004</code>, <code>QcFailed</code>: 4,02 giây ngắn hơn mức mới 5 giây. Cùng file này ở bước 5.2 thì đạt.', V.configEffect],
+      ['8.4', 1, 'speaker2', 'POST', '/api/recordings', 'Audio = demo/giong-4s.m4a · ScriptId = s_121000004 · SentenceVariant = CodeSwitching', 201, '<code>r_cs_121000004_u7</code>, <code>QcFailed</code>: 4,02 giây ngắn hơn mức mới 5 giây. Cùng file này ở bước 5.2 thì đạt.', V.configEffect],
       ['8.5', 1, 'admin', 'PUT', '/api/admin/config/recording.min_duration_sec', { value: '1' }, 204, 'Trả về như cũ.']
     ]},
     { t: 'Màn 9 · Quản lý người dùng', g: 'Users · Account', time: '3 phút', steps: [
@@ -581,7 +582,7 @@ released_datasets     | 0`, n: 'Số trên API lấy thẳng từ view này, nê
       ['9.9', 0, 'admin', 'GET', '/api/users?role=Speaker', null, 200, '3 người đọc: speaker1, speaker2, speaker3.']
     ]},
     { t: 'Màn 10 · Ngoài Swagger, nếu cô hỏi thêm', g: '', time: '3 phút', steps: [
-      ['10.1', 0, 'psql', 'SQL', 'Chặn tự duyệt ngay trong database', "insert into review (recording_id, reviewer_id, review_round, decision) values ('r_cs_121000004', 7, 1, 'approved');", 'ERR', 'Báo lỗi <code>self-review blocked: user 7 is the speaker of r_cs_121000004</code>, do trigger <code>trg_review_no_self</code> chặn, kể cả khi ghi thẳng bằng SQL.'],
+      ['10.1', 0, 'psql', 'SQL', 'Chặn tự duyệt ngay trong database', "insert into review (recording_id, reviewer_id, review_round, decision) values ('r_cs_121000004_u7', 7, 1, 'approved');", 'ERR', 'Báo lỗi <code>self-review blocked: user 7 is the speaker of r_cs_121000004_u7</code>, do trigger <code>trg_review_no_self</code> chặn, kể cả khi ghi thẳng bằng SQL.'],
       ['10.2', 0, 'psql', 'SQL', 'Nhật ký tự ghi người thao tác', 'select changed_at::time(0), user_id, entity_type, entity_id, action from audit_log order by changed_at desc limit 5;', 'OK', 'Các lượt duyệt câu ghi <code>user_id = 6</code> (speaker1), lượt nhập file ghi <code>user_id = 1</code> (admin). Trigger <code>fn_audit</code> tự ghi; backend chỉ đặt biến phiên <code>app.user_id</code>.'],
       ['10.3', 0, 'trình duyệt', 'WEB', 'http://localhost:9090', 'Tài khoản: MINIO_ROOT_USER / MINIO_ROOT_PASSWORD trong docker-compose.yml', 'OK', 'Bucket <code>recordings</code> chứa các file WAV đã chuyển đổi.'],
       ['10.4', 0, 'terminal', 'CLI', 'Chạy unit test', 'dotnet test backend/CodeSwitchLabel.sln', 'OK', '68 test đạt. Cần cài .NET 10 SDK.']
@@ -616,29 +617,29 @@ released_datasets     | 0`, n: 'Số trên API lấy thẳng từ view này, nê
     ]},
     { t: 'Bổ sung B · Các trường hợp nộp âm thanh', g: 'Recordings', time: '3 phút', extra: 1,
       note: 'Chạy bằng tab speaker2, với cặp câu <code>s_121000005</code> chưa ai thu. File nằm trong <code>demo/test-them/</code>.', steps: [
-      ['B.1', 0, 'speaker2', 'POST', '/api/recordings', 'Audio = demo/test-them/audio-giong-2s.webm · ScriptId = s_121000005 · SentenceVariant = CodeSwitching', 201, 'File WebM, đúng định dạng Chrome ghi ra. <code>r_cs_121000005</code>, <code>PendingReview</code>, <code>audioFormat = "wav"</code>, <code>durationSec = 2</code>.', [
-        { k: 'CLI', c: 'ffprobe -v error -show_entries stream=codec_name,sample_rate,channels -of default=nw=1 "DÁN_LINK_TỪ GET /api/recordings/r_cs_121000005/audio-url"', o:
+      ['B.1', 0, 'speaker2', 'POST', '/api/recordings', 'Audio = demo/test-them/audio-giong-2s.webm · ScriptId = s_121000005 · SentenceVariant = CodeSwitching', 201, 'File WebM, đúng định dạng Chrome ghi ra. <code>r_cs_121000005_u7</code>, <code>PendingReview</code>, <code>audioFormat = "wav"</code>, <code>durationSec = 2</code>.', [
+        { k: 'CLI', c: 'ffprobe -v error -show_entries stream=codec_name,sample_rate,channels -of default=nw=1 "DÁN_LINK_TỪ GET /api/recordings/r_cs_121000005_u7/audio-url"', o:
 `codec_name=pcm_s16le
 sample_rate=16000
 channels=1`, n: 'Gửi lên WebM, lưu thành WAV 16 kHz mono.' }
       ]],
-      ['B.2', 0, 'speaker2', 'POST', '/api/recordings', 'Audio = demo/test-them/audio-qua-dai-35s.wav · ScriptId = s_121000005 · SentenceVariant = PureVietnamese', 201, '<code>r_vi_121000005</code>, <code>QcFailed</code>, <code>qcIssues</code> báo <code>too_long</code>: 35 giây, dài hơn mức tối đa 30 giây.'],
+      ['B.2', 0, 'speaker2', 'POST', '/api/recordings', 'Audio = demo/test-them/audio-qua-dai-35s.wav · ScriptId = s_121000005 · SentenceVariant = PureVietnamese', 201, '<code>r_vi_121000005_u7</code>, <code>QcFailed</code>, <code>qcIssues</code> báo <code>too_long</code>: 35 giây, dài hơn mức tối đa 30 giây.'],
       ['B.3', 0, 'speaker2', 'POST', '/api/recordings', 'Audio = demo/test-them/audio-rong.wav · ScriptId = s_121000005 · SentenceVariant = PureVietnamese', 422, '<code>empty_audio</code>: file rỗng.'],
       ['B.4', 0, 'speaker2', 'POST', '/api/recordings', 'Audio = demo/test-them/audio-khong-phai-am-thanh.m4a · ScriptId = s_121000005 · SentenceVariant = PureVietnamese', 422, '<code>invalid_audio</code>: file đặt đuôi .m4a nhưng thật ra là văn bản, ffmpeg không đọc được.', [
         { k: 'SQL', c: "select recording_id, status, duration_sec, audio_format from recording where script_id = 's_121000005' order by recorded_at;", o:
-`  recording_id  |     status     | duration_sec | audio_format
-----------------+----------------+--------------+--------------
- r_cs_121000005 | pending_review |         2.00 | wav
- r_vi_121000005 | qc_failed      |        35.00 | wav
+`  recording_id     |     status     | duration_sec | audio_format
+-------------------+----------------+--------------+--------------
+ r_cs_121000005_u7 | pending_review |         2.00 | wav
+ r_vi_121000005_u7 | qc_failed      |        35.00 | wav
 (2 rows)`, n: 'Chỉ 2 dòng: file rỗng và file giả bị chặn trước khi ghi, không để lại gì trong database hay MinIO.' }
       ]]
     ]},
     { t: 'Bổ sung C · Tắt bật lại, dữ liệu còn không', g: '', time: '2 phút', extra: 1,
       note: 'Chứng minh dữ liệu nằm trong database thật chứ không phải trong bộ nhớ. Chạy ở thư mục project.', steps: [
-      ['C.1', 0, 'psql', 'SQL', 'Đếm dữ liệu trước khi tắt', 'select (select count(*) from script) as cau, (select count(*) from recording) as ban_ghi, (select count(*) from app_user) as tai_khoan;', 'OK', 'Nếu đã chạy hết 9 màn và phần bổ sung A, B: <code>13 | 6 | 8</code>. Ghi lại con số, rồi <code>\\q</code> để thoát psql.'],
+      ['C.1', 0, 'psql', 'SQL', 'Đếm dữ liệu trước khi tắt', 'select (select count(*) from script) as cau, (select count(*) from recording) as ban_ghi, (select count(*) from app_user) as tai_khoan;', 'OK', 'Nếu đã chạy hết 9 màn và phần bổ sung A, B: <code>13 | 7 | 8</code>. Ghi lại con số, rồi <code>\\q</code> để thoát psql.'],
       ['C.2', 0, 'terminal', 'CLI', 'Tắt hẳn cả hệ thống, không có -v', 'docker compose --profile api down', 'OK', 'Ba container bị xoá, nhưng volume chứa dữ liệu vẫn giữ lại.'],
       ['C.3', 0, 'terminal', 'CLI', 'Bật lại', 'docker compose --profile api up -d', 'OK', 'Đợi khoảng 20 giây tới khi mở được <b>http://localhost:5053</b>.'],
-      ['C.4', 0, 'admin', 'GET', '/api/scripts/s_211000007', null, 200, 'Dữ liệu còn nguyên, dùng luôn tab cũ: token vẫn hợp lệ vì khoá ký và mật khẩu không đổi. Mở lại psql chạy câu ở C.1 thì ra đúng con số cũ; link nghe <code>r_cs_111000003</code> vẫn phát được.']
+      ['C.4', 0, 'admin', 'GET', '/api/scripts/s_211000007', null, 200, 'Dữ liệu còn nguyên, dùng luôn tab cũ: token vẫn hợp lệ vì khoá ký và mật khẩu không đổi. Mở lại psql chạy câu ở C.1 thì ra đúng con số cũ; link nghe <code>r_cs_111000003_u6</code> vẫn phát được.']
     ]}
   ];
 

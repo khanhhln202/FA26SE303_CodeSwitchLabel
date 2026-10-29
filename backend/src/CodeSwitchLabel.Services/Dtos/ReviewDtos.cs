@@ -106,7 +106,7 @@ public record RejectAudioRequest
     public long? TaskId { get; init; }
 }
 
-/// <param name="RequeuedForSpeaker">Người sẽ thu lại — luôn là người đọc cũ (luật một cặp câu / một người đọc).</param>
+/// <param name="RequeuedForSpeaker">Người bị từ chối, tự thu lại bản của mình; Speaker khác có bản riêng.</param>
 public record RejectAudioResult(
     string RecordingId,
     string ScriptId,

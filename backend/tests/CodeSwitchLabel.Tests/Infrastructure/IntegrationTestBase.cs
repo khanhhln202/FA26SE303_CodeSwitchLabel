@@ -469,8 +469,10 @@ public abstract class IntegrationTestBase : IAsyncLifetime
     {
         // Mã bản ghi phải đúng định dạng CHECK của lược đồ, và take phải tự tăng —
         // gọi nhiều lần cho cùng cặp câu vẫn ra mã mới (r_cs_..._t2, _t3...).
-        var take = await Recordings.CountTakesAsync(scriptId, variant, TestContext.Current.CancellationToken) + 1;
-        var recordingId = await Recordings.GenerateIdAsync(scriptId, variant, take, TestContext.Current.CancellationToken);
+        var take = await Recordings.CountTakesAsync(
+            scriptId, variant, speakerId, TestContext.Current.CancellationToken) + 1;
+        var recordingId = await Recordings.GenerateIdAsync(
+            scriptId, variant, take, speakerId, TestContext.Current.CancellationToken);
 
         var recording = new Recording
         {

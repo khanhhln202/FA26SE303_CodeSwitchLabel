@@ -128,7 +128,7 @@ public static partial class DatabaseSeeder
         var roles = await db.Roles.ToDictionaryAsync(r => r.RoleName, r => r.RoleId, ct);
 
         // Ba Reviewer vì mỗi bản ghi cần đủ ba lượt duyệt độc lập.
-        // Hai Speaker để thấy luật "một cặp câu một người đọc" có hiệu lực.
+        // Hai Speaker để thấy nhiều người dùng chung một cặp câu.
         (string Email, string Name, RoleName Role, string? Province, decimal? Ielts, string? Major)[] seeds =
         [
             ("admin@codeswitchlabel.local",     "Quản trị hệ thống",     RoleName.Admin,       null, null, null),

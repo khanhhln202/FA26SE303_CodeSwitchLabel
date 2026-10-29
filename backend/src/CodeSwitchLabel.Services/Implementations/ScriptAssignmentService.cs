@@ -16,13 +16,11 @@ public class ScriptAssignmentService(
     ISystemConfigService config) : IScriptAssignmentService
 {
     /// <summary>
-    /// Cặp câu tiếp theo người này nên thu, theo thứ tự FIFO của hàng đợi chung.
+    /// Cặp câu tiếp theo người này nên thu.
     ///
-    /// trước đây hàm này CHỈ ĐỌC — trả câu cho người này nhưng không giữ
-    /// lại, nên hai người có thể cùng nhìn thấy một câu rồi cùng thu. Chống trùng chỉ
-    /// chạy ở lúc UPLOAD (uq_recording_active_variant + trg_recording_single_speaker),
-    /// tức là người đã đọc xong mới biết mình bị trùng (yêu cầu 3.2).
-    /// Giờ câu được giữ ngay khi phát ra, nên không ai cùng nhận được.
+    /// Làm trong task: đọc thẳng các dòng task_script giao cho chính người này (hoặc
+    /// chưa gán ai), nên hai Speaker được nhận cùng một câu. Thu ngoài task: vẫn giữ
+    /// chỗ theo hàng đợi chung để hai người không cùng nhận một câu.
     /// </summary>
     public async Task<NextScriptDto?> GetNextAsync(
         long speakerId, long? taskId, CancellationToken ct = default)
@@ -38,7 +36,9 @@ public class ScriptAssignmentService(
             }
         }
 
-        var script = await ClaimNextRecordableAsync(speakerId, taskId, ct);
+        var script = taskId.HasValue
+            ? await FindAssignedAsync(speakerId, taskId.Value, ct)
+            : await ClaimNextRecordableAsync(speakerId, null, ct);
         if (script is null) return null;
 
         var qc = RecordingQcSettings.From(await config.GetAllAsync(ct));
@@ -59,6 +59,27 @@ public class ScriptAssignmentService(
     }
 
     /// <summary>
+    /// Câu được giao trong task mà người này còn nợ ít nhất một biến thể. Không giữ
+    /// chỗ: nhiều Speaker cùng nhận một câu là hợp lệ, mỗi người thu bản của mình.
+    /// </summary>
+    private async Task<Script?> FindAssignedAsync(long speakerId, long taskId, CancellationToken ct)
+    {
+        var ids = await taskRepository.GetAssignedScriptIdsAsync(
+            speakerId, taskId, MaxClaimAttempts, ct);
+
+        foreach (var id in ids)
+        {
+            var script = await repository.GetAsync(id, ct);
+            if (script is null) continue;
+
+            var mine = await repository.GetRecordingsOfSpeakerAsync(id, speakerId, ct);
+            if (RemainingVariants(script, mine).Count > 0) return script;
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Hàng đợi có thể đứng đầu bằng câu người này đã thu đủ, hoặc câu do người khác
     /// đang giữ. Lấy tối đa vài câu liên tiếp rồi trả câu đầu tiên dùng được.
     /// Số lần thử có chặn trên, không phải vô hạn.
@@ -75,8 +96,8 @@ public class ScriptAssignmentService(
             var script = await repository.GetAsync(claim.ScriptId, ct);
             if (script is null) continue;
 
-            // Câu đang có bản của người khác (chờ duyệt/đạt) đã bị hàm claim lọc sẵn;
-            // ở đây chỉ còn việc bỏ qua câu người này đã thu đủ.
+            // Bản của Speaker khác không chặn (mỗi người thu bản riêng); chỉ bỏ qua
+            // câu người này đã thu đủ.
             var mine = await repository.GetRecordingsOfSpeakerAsync(script.ScriptId, speakerId, ct);
 
             if (RemainingVariants(script, mine).Count == 0)

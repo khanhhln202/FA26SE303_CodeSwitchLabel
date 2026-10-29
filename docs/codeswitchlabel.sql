@@ -133,7 +133,7 @@ CREATE TABLE audit_log (
     changed_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     user_id     BIGINT REFERENCES app_user(user_id) ON DELETE SET NULL,  -- NULL = system action
     entity_type VARCHAR(50) NOT NULL,
-    entity_id   VARCHAR(32) NOT NULL,   -- polymorphic: numeric ID or s_/r_ code
+    entity_id   VARCHAR(64) NOT NULL,   -- polymorphic: numeric ID or s_/r_ code
     action      audit_action NOT NULL,
     old_value   JSONB,
     new_value   JSONB,
@@ -376,15 +376,24 @@ CREATE UNIQUE INDEX uq_task_assignment_active_user
 CREATE INDEX idx_task_assignment_user ON task_assignment (user_id);
 
 CREATE TABLE task_script (
+    task_script_id  BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     task_id         BIGINT NOT NULL REFERENCES task(task_id) ON DELETE CASCADE,
     script_id       VARCHAR(16) NOT NULL REFERENCES script(script_id),
-    assignee_user_id BIGINT REFERENCES app_user(user_id),   -- Speaker được gán để hiển thị/chia quota (advisory); NULL = chưa gán / task duyệt
+    assignee_user_id BIGINT REFERENCES app_user(user_id),   -- Speaker được gán mục này; NULL = chưa gán / task duyệt
     status          task_script_status NOT NULL DEFAULT 'pending',
-    included_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (task_id, script_id)
+    included_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_task_script_script ON task_script (script_id);
 CREATE INDEX idx_task_script_assignee ON task_script (assignee_user_id);
+
+-- NHIỀU SPEAKER ĐƯỢC DÙNG CHUNG MỘT CẶP CÂU: mỗi Speaker một dòng, cùng cặp câu
+-- vẫn có thể xuất hiện cho Speaker khác. Dòng chưa gán ai thì chỉ một dòng mỗi câu.
+CREATE UNIQUE INDEX uq_task_script_assignee
+    ON task_script (task_id, script_id, assignee_user_id)
+    WHERE assignee_user_id IS NOT NULL;
+CREATE UNIQUE INDEX uq_task_script_unassigned
+    ON task_script (task_id, script_id)
+    WHERE assignee_user_id IS NULL;
 
 -- TEAM_010 — HÀNG ĐỢI CHUNG cho mọi câu văn bản (yêu cầu 2.1).
 --
@@ -443,7 +452,7 @@ CREATE UNIQUE INDEX uq_script_queue_open
 -- RECORDING / REVIEW  (the two protagonists)
 -- ------------------------------------------------------------
 CREATE TABLE recording (
-    recording_id     VARCHAR(32) PRIMARY KEY,      -- natural key: r_cs_/r_vi_ + 9 or 12 digits (+ _tN)
+    recording_id     VARCHAR(64) PRIMARY KEY,      -- natural key: r_cs_/r_vi_ + 9 or 12 digits (+ _u<speaker>) (+ _tN)
     sentence_variant sentence_variant NOT NULL,
     script_id        VARCHAR(16) NOT NULL REFERENCES script(script_id),
     speaker_id       BIGINT NOT NULL REFERENCES app_user(user_id),
@@ -466,7 +475,7 @@ CREATE TABLE recording (
 
     recorded_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT ck_recording_id_format CHECK
-        (recording_id ~ '^r_(cs|vi)_([0-9]{9}|[0-9]{12})(_t([2-9]|[1-9][0-9]+))?$'),
+        (recording_id ~ '^r_(cs|vi)_([0-9]{9}|[0-9]{12})(_u[1-9][0-9]*)?(_t([2-9]|[1-9][0-9]+))?$'),
     -- sentence_variant must mirror the prefix
     CONSTRAINT ck_recording_variant_prefix CHECK (
         (sentence_variant = 'code_switching'   AND recording_id ~ '^r_cs_') OR
@@ -474,7 +483,7 @@ CREATE TABLE recording (
     -- the serial inside recording_id must equal the script's serial:
     -- legacy 9 digits or new 12 digits, same as substr(script_id, 3)
     CONSTRAINT ck_recording_script_serial CHECK
-        (regexp_replace(recording_id, '^r_(cs|vi)_([0-9]{9}|[0-9]{12})(_t([2-9]|[1-9][0-9]+))?$', '\2')
+        (regexp_replace(recording_id, '^r_(cs|vi)_([0-9]{9}|[0-9]{12})(_u[1-9][0-9]*)?(_t([2-9]|[1-9][0-9]+))?$', '\2')
          = substr(script_id, 3))
 );
 
@@ -483,17 +492,18 @@ CREATE INDEX idx_recording_speaker ON recording (speaker_id);
 CREATE INDEX idx_recording_task    ON recording (task_id);
 CREATE INDEX idx_recording_status  ON recording (status);
 
--- at most ONE active (pending_review/approved) recording per (script, variant):
--- blocks concurrent retakes racing HasActiveRecording + CountTakes checks.
+-- at most ONE active (pending_review/approved) recording per (script, variant, speaker):
+-- blocks concurrent retakes racing HasActiveRecording + CountTakes checks. Speaker khác
+-- được thu cùng câu; mỗi người có bản riêng.
 CREATE UNIQUE INDEX uq_recording_active_variant
-    ON recording (script_id, sentence_variant) WHERE status IN ('pending_review', 'approved');
+    ON recording (script_id, sentence_variant, speaker_id) WHERE status IN ('pending_review', 'approved');
 
 -- Hàng chờ của task duyệt. [TEAM_018] Không chỉ Task Manager thêm tay/autoFill: khi Speaker nộp
 -- một bản ghi 'pending_review' thuộc task có đợt X, hệ thống tự thêm bản ghi vào MỌI task duyệt
 -- chưa huỷ của đợt X (RecordingService → TaskProgressTracker, cùng transaction với lúc lưu bản ghi).
 CREATE TABLE task_recording (
     task_id      BIGINT NOT NULL REFERENCES task(task_id) ON DELETE CASCADE,
-    recording_id VARCHAR(32) NOT NULL REFERENCES recording(recording_id),
+    recording_id VARCHAR(64) NOT NULL REFERENCES recording(recording_id),
     status       task_recording_status NOT NULL DEFAULT 'queued',
     included_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (task_id, recording_id)
@@ -510,7 +520,7 @@ CREATE TABLE rejection_reason (
 
 CREATE TABLE review (
     review_id    BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    recording_id VARCHAR(32) NOT NULL REFERENCES recording(recording_id),
+    recording_id VARCHAR(64) NOT NULL REFERENCES recording(recording_id),
     reviewer_id  BIGINT NOT NULL REFERENCES app_user(user_id),
     task_id      BIGINT REFERENCES task(task_id) ON DELETE SET NULL,   -- NULL = spot-check
     review_round SMALLINT NOT NULL CHECK (review_round >= 1),
@@ -556,7 +566,7 @@ CREATE INDEX idx_dataset_filter ON dataset USING GIN (filter_criteria);
 
 CREATE TABLE dataset_recording (
     dataset_id   BIGINT NOT NULL REFERENCES dataset(dataset_id) ON DELETE CASCADE,
-    recording_id VARCHAR(32) NOT NULL REFERENCES recording(recording_id),
+    recording_id VARCHAR(64) NOT NULL REFERENCES recording(recording_id),
     included_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (dataset_id, recording_id)
 );
@@ -1278,57 +1288,13 @@ BEGIN
                        JOIN task t ON t.task_id = ts.task_id
                       WHERE ts.script_id = q.script_id
                         AND ts.status = 'pending'
+                        AND (ts.assignee_user_id IS NULL OR ts.assignee_user_id = p_user_id)
                         AND t.task_type = 'recording'
                         AND t.status <> 'cancelled'
                         AND (t.task_id = p_task_id
                              OR (v_campaign IS NOT NULL AND t.campaign_id = v_campaign))
                  )
                END
-           )
-       -- Ghi âm: cặp đang có bản chờ duyệt/đạt của người KHÁC thì không phát. Bản
-       -- rejected/qc_failed không giữ cặp — người mới được thu sau khi Reviewer loại.
-       AND (
-            q.stage <> 'recording'
-            OR NOT EXISTS (SELECT 1 FROM recording r
-                            WHERE r.script_id = q.script_id
-                              AND r.speaker_id <> p_user_id
-                              AND r.status IN ('pending_review','approved'))
-           )
-       -- Ghi âm: người đã bị từ chối trên câu này không nhận lại, CHỪNG NÀO còn một
-       -- Speaker khác trong đợt chưa thử. Tất cả đều đã thử thì mở lại cho người cũ,
-       -- nếu không cặp câu kẹt vĩnh viễn. Ngoại lệ: người đang giữ cặp bằng một bản
-       -- chờ duyệt/đạt được nhận lại — cặp không phát cho ai khác được, chặn họ chỉ
-       -- làm cặp kẹt thiếu biến thể. Claim không kèm task/chiến dịch (thu tự do)
-       -- không có danh sách người để so nên giữ hành vi cũ: người cũ nhận lại.
-       AND (
-            q.stage <> 'recording'
-            OR EXISTS (SELECT 1 FROM recording r
-                        WHERE r.script_id = q.script_id
-                          AND r.speaker_id = p_user_id
-                          AND r.status IN ('pending_review','approved'))
-            OR NOT EXISTS (SELECT 1 FROM recording r
-                            WHERE r.script_id = q.script_id
-                              AND r.speaker_id = p_user_id
-                              AND r.status = 'rejected')
-            OR NOT EXISTS (
-                SELECT 1
-                  FROM task_assignment a
-                  JOIN task t ON t.task_id = a.task_id
-                  JOIN app_user u ON u.user_id = a.user_id
-                 WHERE a.user_id <> p_user_id
-                   AND a.assignment_status IN ('active','completed')
-                   AND u.status = 'active'
-                   AND t.task_type = 'recording'
-                   AND t.status <> 'cancelled'
-                   AND (
-                        (v_campaign IS NOT NULL AND t.campaign_id = v_campaign)
-                        OR (v_campaign IS NULL AND p_task_id IS NOT NULL AND t.task_id = p_task_id)
-                       )
-                   AND NOT EXISTS (SELECT 1 FROM recording x
-                                    WHERE x.script_id = q.script_id
-                                      AND x.speaker_id = a.user_id
-                                      AND x.status = 'rejected')
-               )
            )
       ORDER BY q.enqueued_at, q.queue_id
      FOR UPDATE OF q SKIP LOCKED
@@ -1450,24 +1416,8 @@ CREATE TRIGGER trg_review_no_self BEFORE INSERT OR UPDATE ON review
     FOR EACH ROW EXECUTE FUNCTION fn_review_no_self_review();
 
 -- [ERD] pair rule: one script pair = ONE speaker PER ATTEMPT (same take, same session).
--- qc_failed and rejected takes do not claim ownership: a failed take by another speaker
--- must not permanently block reuse, and a rejected pair must be recordable by a new
--- speaker after the Reviewer invalidates it.
-CREATE OR REPLACE FUNCTION fn_recording_single_speaker() RETURNS trigger AS $$ BEGIN
-    -- Khóa cấp giao dịch theo băm script_id để ngăn race condition
-    PERFORM pg_advisory_xact_lock(hashtext(NEW.script_id));
-
-    IF EXISTS (SELECT 1 FROM recording r
-               WHERE r.script_id = NEW.script_id
-                 AND r.speaker_id <> NEW.speaker_id
-                 AND r.status NOT IN ('qc_failed','rejected')) THEN
-        RAISE EXCEPTION 'script % must be recorded by a single speaker', NEW.script_id;
-    END IF;
-    RETURN NEW;
-END $$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_recording_single_speaker BEFORE INSERT OR UPDATE ON recording
-    FOR EACH ROW EXECUTE FUNCTION fn_recording_single_speaker();
+-- NHIỀU SPEAKER được thu cùng một cặp câu; mỗi người có bản ghi riêng. Ràng buộc
+-- chống trùng nằm ở uq_recording_active_variant (script, variant, speaker).
 
 -- [ERD] only APPROVED recordings may join a dataset
 CREATE OR REPLACE FUNCTION fn_dataset_recording_approved_only() RETURNS trigger AS $$ DECLARE
@@ -1749,12 +1699,14 @@ BEGIN
 END $$ LANGUAGE plpgsql;
 
 -- recording_id from script_id: r_cs_/r_vi_ + same 9 or 12 digits
--- (+ _tN for take N>=2).
+-- (+ _u<speaker_id>) (+ _tN for take N>=2). Bỏ p_speaker_id thì giữ định dạng cũ,
+-- để dữ liệu lịch sử vẫn đọc được.
 CREATE OR REPLACE FUNCTION fn_generate_recording_id(
     p_script_id VARCHAR(16),
     p_variant   sentence_variant,
-    p_take      INT DEFAULT 1
-) RETURNS VARCHAR(32) AS $$ BEGIN
+    p_take      INT DEFAULT 1,
+    p_speaker_id BIGINT DEFAULT NULL
+) RETURNS VARCHAR(64) AS $$ BEGIN
     IF p_script_id !~ '^s_([0-9]{9}|[0-9]{12})$' THEN
         RAISE EXCEPTION 'invalid script_id %', p_script_id;
     END IF;
@@ -1766,6 +1718,7 @@ CREATE OR REPLACE FUNCTION fn_generate_recording_id(
                            WHEN 'pure_vietnamese' THEN 'vi' END)
         || '_'
         || substr(p_script_id, 3)
+        || (CASE WHEN p_speaker_id IS NOT NULL THEN '_u' || p_speaker_id::text ELSE '' END)
         || (CASE WHEN p_take > 1 THEN '_t' || p_take::text ELSE '' END);
 END $$ LANGUAGE plpgsql;
 

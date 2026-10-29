@@ -224,41 +224,59 @@ public class TaskRepositoryTests : IntegrationTestBase
     }
 
     [Fact]
-    public async Task GetAvailableScriptIdsByDomainAsync_ReusesCanceledTaskScriptsOnly()
+    public async Task GetRecordableScriptIdsByDomainAsync_TachTheoTungSpeaker()
     {
-        var canceledScript = await CreateValidatedScriptAsync(
-            "[vi]Câu [en]canceled", "[vi]Câu đã hủy", ScriptDomain.ItTechnology, AdminUserId);
-        var activeScript = await CreateValidatedScriptAsync(
-            "[vi]Câu [en]active", "[vi]Câu đang làm", ScriptDomain.ItTechnology, AdminUserId);
-        var completedScript = await CreateValidatedScriptAsync(
-            "[vi]Câu [en]completed", "[vi]Câu hoàn thành", ScriptDomain.ItTechnology, AdminUserId);
+        // free: chưa ai đụng → nhận được
+        var free = await CreateValidatedScriptAsync(
+            "[vi]Câu [en]free", "[vi]Câu tự do", ScriptDomain.ItTechnology, AdminUserId);
+        // otherBusy: Speaker KHÁC đang có bản chờ duyệt → vẫn nhận được (dùng chung câu)
+        var otherBusy = await CreateValidatedScriptAsync(
+            "[vi]Câu [en]other", "[vi]Câu người khác", ScriptDomain.ItTechnology, AdminUserId);
+        // mineBusy: chính Speaker này đã có bản → không giao lại
+        var mineBusy = await CreateValidatedScriptAsync(
+            "[vi]Câu [en]mine", "[vi]Câu của tôi", ScriptDomain.ItTechnology, AdminUserId);
+        // mineQueued: đang là việc Pending của Speaker trong task còn chạy → không giao trùng
+        var mineQueued = await CreateValidatedScriptAsync(
+            "[vi]Câu [en]queued", "[vi]Câu đang làm", ScriptDomain.ItTechnology, AdminUserId);
+        // mineCancelled: việc cũ đã huỷ → nhận lại được
+        var mineCancelled = await CreateValidatedScriptAsync(
+            "[vi]Câu [en]cancelled", "[vi]Câu đã huỷ", ScriptDomain.ItTechnology, AdminUserId);
 
-        var tasks = new[]
-        {
-            await CreateTaskAsync(CampaignId, TaskType.Recording, 1, ManagerUserId,
-                status: WorkTaskStatus.Cancelled),
-            await CreateTaskAsync(CampaignId, TaskType.Recording, 1, ManagerUserId,
-                status: WorkTaskStatus.InProgress),
-            await CreateTaskAsync(CampaignId, TaskType.Recording, 1, ManagerUserId,
-                status: WorkTaskStatus.Completed)
-        };
-        var scripts = new[] { canceledScript, activeScript, completedScript };
+        await CreateRecordingAsync(otherBusy.ScriptId, ReviewerUserId, SentenceVariant.CodeSwitching);
+        await CreateRecordingAsync(mineBusy.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching);
 
-        Db.TaskScripts.AddRange(tasks.Zip(scripts, (task, script) => new TaskScript
-        {
-            TaskId = task.TaskId,
-            ScriptId = script.ScriptId,
-            Status = TaskScriptStatus.Pending,
-            IncludedAt = DateTimeOffset.UtcNow
-        }));
+        var running = await CreateTaskAsync(
+            CampaignId, TaskType.Recording, 1, ManagerUserId, status: WorkTaskStatus.InProgress);
+        var cancelled = await CreateTaskAsync(
+            CampaignId, TaskType.Recording, 1, ManagerUserId, status: WorkTaskStatus.Cancelled);
+
+        Db.TaskScripts.AddRange(
+            new TaskScript
+            {
+                TaskId = running.TaskId,
+                ScriptId = mineQueued.ScriptId,
+                AssigneeUserId = SpeakerUserId,
+                Status = TaskScriptStatus.Pending,
+                IncludedAt = DateTimeOffset.UtcNow
+            },
+            new TaskScript
+            {
+                TaskId = cancelled.TaskId,
+                ScriptId = mineCancelled.ScriptId,
+                AssigneeUserId = SpeakerUserId,
+                Status = TaskScriptStatus.Pending,
+                IncludedAt = DateTimeOffset.UtcNow
+            });
         await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var available = await Tasks.GetAvailableScriptIdsByDomainAsync(
-            ScriptDomain.ItTechnology, 10, TestContext.Current.CancellationToken);
+        var available = await Tasks.GetRecordableScriptIdsByDomainAsync(
+            ScriptDomain.ItTechnology, SpeakerUserId, 10, TestContext.Current.CancellationToken);
 
-        Assert.Contains(canceledScript.ScriptId, available);
-        Assert.DoesNotContain(activeScript.ScriptId, available);
-        Assert.DoesNotContain(completedScript.ScriptId, available);
+        Assert.Contains(free.ScriptId, available);
+        Assert.Contains(otherBusy.ScriptId, available);
+        Assert.Contains(mineCancelled.ScriptId, available);
+        Assert.DoesNotContain(mineBusy.ScriptId, available);
+        Assert.DoesNotContain(mineQueued.ScriptId, available);
     }
 
     [Fact]

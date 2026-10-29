@@ -23,11 +23,11 @@ public class SpeakerController(
     /// Mỗi cặp câu cần **hai bản ghi**: một bản đọc câu chen tiếng Anh (cs) và một bản đọc câu
     /// thuần Việt (vi). `remainingVariants` cho biết bạn còn nợ bản nào.
     ///
-    /// Một cặp câu chỉ do **một người đọc** thu, để hai bản là cùng một giọng. Vì vậy hệ thống
-    /// không phát lại câu mà người khác đã thu.
+    /// Nhiều Speaker có thể thu cùng một cặp câu, mỗi người một bản riêng; hệ thống chỉ bỏ qua
+    /// câu mà **chính bạn** đã có bản chờ duyệt/đạt.
     ///
-    /// Truyền `taskId` để chỉ lấy câu trong phạm vi một task. Task đó phải là task thu âm
-    /// **đang giao cho chính bạn**, nếu không trả **403**.
+    /// Truyền `taskId` để lấy câu trong phạm vi task/chiến dịch đang giao cho bạn; task không
+    /// thuộc phạm vi đó trả **403**.
     ///
     /// **204 No Content** nghĩa là hết câu phù hợp.
     /// </remarks>

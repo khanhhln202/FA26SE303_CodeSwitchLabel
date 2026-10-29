@@ -28,6 +28,10 @@ màn hình nào gọi API nào theo thứ tự nào, cách xử lý đăng nhậ
 > Cập nhật V17 — `task_assignment.assignment_status` tự chuyển `Completed` khi người đó đạt quota
 > riêng và về `Active` khi quota tụt; `Completed` vẫn là người nhận, không khoá việc. FE chỉ cần
 > hiển thị đúng bốn giá trị trong bảng enum bên dưới.
+>
+> Cập nhật V21 — nhiều Speaker được dùng chung một cặp câu: mỗi người một dòng `task_script`
+> (`taskScriptId`), recording ID có `_u<speakerId>`, bản của người khác không chặn. Bỏ lỗi
+> `recording_not_enough_pairs` và `script_owned_by_other_speaker`; gỡ mục nên gửi `taskScriptId`.
 
 ---
 
@@ -179,11 +183,14 @@ POST /api/auth/login
 - **Enum là chuỗi**: `"PendingValidation"`, `"CodeSwitching"`, `"Approved"`… không phải số. Danh sách đầy đủ ở mục 7.
 - **Mã có nghĩa**, là chuỗi chứ không phải số:
   - `s_211000000001` — mã cặp câu
-  - `r_cs_211000000001`, `r_vi_211000000001` — hai bản ghi của cặp câu đó
-  - `r_cs_211000000001_t2` — thu lại lần hai
+  - `r_cs_211000000001_u6`, `r_vi_211000000001_u6` — hai bản của Speaker 6 cho cặp câu đó;
+    Speaker khác thu cùng cặp có `_u7`, không đụng mã
+  - `r_cs_211000000001_u6_t2` — thu lại lần hai
 
-  Mã mới gồm tiền tố + **12 chữ số** (3 chữ số nghĩa + 9 số thứ tự). Dữ liệu cũ vẫn còn mã
-  **9 chữ số** (`s_211000001`); đừng parse hay cắt theo độ dài, cứ coi mã là chuỗi mờ.
+  Mã câu mới gồm tiền tố + **12 chữ số** (3 chữ số nghĩa + 9 số thứ tự); câu cũ vẫn dùng mã
+  **9 chữ số** (`s_211000001`). Bản ghi mới luôn thêm `_u<speakerId>` sau phần số, nên bản của
+  câu cũ cũng có dạng `r_cs_111000003_u6`. Bản ghi lịch sử không có `_u` vẫn hợp lệ. Đừng parse
+  hay cắt theo độ dài, cứ coi mã là chuỗi mờ.
   `taskId` và `userId` vẫn là số.
 - **Thời gian theo UTC**, định dạng ISO 8601. Hiển thị thì đổi sang giờ Việt Nam. Gửi hạn chót kèm múi giờ cũng được, ví dụ `2026-09-30T17:00:00+07:00`.
 - **Tham số lọc nào không dùng thì bỏ hẳn khỏi URL**, đừng gửi rỗng. Các ô lọc để rỗng thì API bỏ qua được,
@@ -296,8 +303,7 @@ Lỗi hệ thống trả 500 với `code: "internal_error"`. Gặp lỗi này th
 | `already_reviewed` | 409 | Đã duyệt bản này rồi | Tự lấy bản tiếp theo |
 | `recording_not_reviewable` | 409 | Bản ghi đã chốt xong | Tự lấy bản tiếp theo |
 | `no_more_rounds` | 409 | Bản ghi đã đủ số lượt duyệt tối đa | Tự lấy bản tiếp theo |
-| `recording_already_exists` | 409 | Đã có bản chờ duyệt hoặc đã đạt cho đúng biến thể này | Chuyển sang biến thể còn thiếu, hoặc sang câu khác |
-| `script_owned_by_other_speaker` | 409 | Cặp câu đã do người khác thu | Gọi lại `GET /api/speaker/scripts/next` |
+| `recording_already_exists` | 409 | Chính người này đã có bản chờ duyệt hoặc đã đạt cho đúng biến thể | Chuyển sang biến thể còn thiếu, hoặc sang câu khác |
 | `too_many_takes` | 409 | Thu lại quá số lần cho phép | Báo, rồi chuyển sang câu khác |
 | `task_not_recordable` / `task_not_reviewable` | 403 | Task không phải của mình, hoặc đã xong hay bị huỷ | Tải lại danh sách task |
 | `self_review_forbidden` | 403 | Duyệt bản do chính mình thu | Về nguyên tắc không xảy ra vì API không phát bản của mình; gặp thì báo lỗi |
@@ -734,15 +740,15 @@ giao) — các dòng có `canReview: false`, nộp duyệt vẫn trả 403 `task
 | Danh sách chiến dịch | `GET /api/campaigns` — lọc tuỳ chọn `status`, `page`, `pageSize`. Mỗi dòng kèm `allocatedTaskQty` (tổng chỉ tiêu đã chia cho các task), `taskCount`, `completedTaskCount`, `assignedTo` |
 | Chi tiết chiến dịch | `GET /api/campaigns/{id}` |
 | Danh sách task | `GET /api/tasks` — lọc tuỳ chọn: `taskType`, `status`, `assigneeId`, `overdue`, `page`, `pageSize`. Mỗi dòng kèm `campaignId`, `campaignName` |
-| Tạo task | `POST /api/tasks` `{ "campaignId": 2, "taskType": "Recording", "description": "…", "targetQty": 10, "deadline": "2026-09-30T17:00:00+07:00", "assigneeUserIds": [6, 7] }` — `campaignId` để trống/`null` = task độc lập; `assigneeUserIds` tuỳ chọn, bỏ qua hoặc `[]` để tạo chưa phân công. Recording tạo kèm người nhận phải có đủ `targetQty` cặp hợp lệ, nếu thiếu trả 422 và không tạo task |
+| Tạo task | `POST /api/tasks` `{ "campaignId": 2, "taskType": "Recording", "description": "…", "targetQty": 10, "deadline": "2026-09-30T17:00:00+07:00", "assigneeUserIds": [6, 7] }` — `campaignId` để trống/`null` = task độc lập; `assigneeUserIds` tuỳ chọn, bỏ qua hoặc `[]` để tạo chưa phân công. Recording tạo kèm người nhận vẫn tạo được khi kho câu ít hơn `targetQty`; mỗi Speaker nhận tối đa số câu còn thu được, nhiều Speaker có thể nhận cùng cặp |
 | Gắn/chuyển/gỡ chiến dịch | `PATCH /api/tasks/{id}/campaign` `{ "campaignId": 2 }` — `null` = gỡ về độc lập |
 | Xoá task khỏi chiến dịch (vĩnh viễn) | `DELETE /api/campaigns/{id}/tasks/{taskId}` → 204 — task và dữ liệu điều phối bị xoá; bản ghi thu âm/lượt duyệt giữ lại |
 | Xoá task độc lập | `DELETE /api/tasks/{id}` → 204 — task đã gỡ khỏi chiến dịch và chưa có dữ liệu nộp thật (lượt giao, hàng chờ xoá theo) |
-| Chi tiết task | `GET /api/tasks/{id}` — tiến độ, lịch sử giao, danh sách mục (`campaignId`/`campaignName` có thể `null`) |
+| Chi tiết task | `GET /api/tasks/{id}` — tiến độ, lịch sử giao, danh sách mục (`campaignId`/`campaignName` có thể `null`). Task thu âm: `id` vẫn là `scriptId`, thêm `taskScriptId` để phân biệt khi nhiều Speaker cùng nhận một cặp |
 | Sửa task | `PATCH /api/tasks/{id}` — chỉ gửi trường cần đổi (không đổi chiến dịch ở đây) |
 | Thêm mục chọn tay | `POST /api/tasks/{id}/items` `{ "ids": ["s_211000000001", "s_131000000002"] }` |
 | Thêm mục tự động | `POST /api/tasks/{id}/items` `{ "autoFill": { "count": 10, "domain": "ItTechnology" } }` — cố thêm 10 mục hợp lệ (hoặc ít hơn nếu hết ứng viên phù hợp); `domain` phải khớp chủ đề task, nếu không trả 422; task duyệt thì dùng `"speakerId"` thay cho `"domain"` |
-| Gỡ mục | `DELETE /api/tasks/{id}/items/{itemId}` |
+| Gỡ mục | `DELETE /api/tasks/{id}/items/{itemId}` — task thu âm ưu tiên gửi `taskScriptId`; gửi `scriptId` vẫn được nhưng chỉ gỡ dòng đầu tiên của cặp |
 
 ### Giao người nhận khi tạo task (TEAM_021)
 
@@ -750,9 +756,11 @@ giao) — các dòng có `canReview: false`, nộp duyệt vẫn trả 403 `task
 xác nhận tài khoản đang hoạt động và đúng vai trò (`Speaker` cho `Recording`, `Reviewer` cho `Review`),
 rồi chia `targetQty` đều; số dư được cộng cho những người đứng trước trong danh sách.
 
-- Với task `Recording`, backend lấy `targetQty` cặp câu `Validated` chưa thuộc task nào theo `domain`
-  (mặc định `ItTechnology`) và gán từng cặp cho một Speaker theo quota. Thiếu cặp thì trả
-  `422 recording_not_enough_pairs`; task không được tạo.
+- Với task `Recording`, backend lấy các cặp `Validated` theo `domain` (mặc định `ItTechnology`) mà
+  từng Speaker chưa có bản chờ duyệt/đạt, tối đa quota, rồi gán từng cặp. Kho ít hơn `targetQty`
+  thì task vẫn được tạo; mỗi Speaker nhận tối đa số câu còn thu được. Nhiều Speaker có thể nhận
+  cùng một cặp — mỗi người một dòng `task_script` và một bản ghi riêng; một Speaker không nhận
+  trùng cặp trong cùng task.
 - Với task `Review`, các thành viên được phân công và chia quota như trên. Mục bản ghi tiếp tục được
   đưa vào hàng đợi theo luồng task duyệt hiện có.
 - Các lỗi đầu vào khác gồm `422 target_less_than_assignees`, `422 user_inactive`,
@@ -760,15 +768,12 @@ rồi chia `targetQty` đều; số dư được cộng cho những người đ�
 - Không truyền `assigneeUserIds` hoặc truyền mảng rỗng để giữ quy trình tạo task rồi phân công sau.
 
 Ví dụ: `"targetQty": 5, "assigneeUserIds": [6, 7]` chia quota `3` và `2`; với task thu âm,
-Speaker `6` được gán ba cặp câu đầu theo thứ tự ID, Speaker `7` nhận hai cặp tiếp theo.
+mỗi Speaker nhận tối đa quota cặp câu theo thứ tự ID. Nếu kho chỉ có 2 cặp, cả hai Speaker cùng
+nhận 2 cặp đó (4 dòng `task_script`) thay vì báo lỗi.
 
-**Cặp câu nằm trong task khác vẫn còn chạy** thì `POST /api/tasks/{id}/items` **chuyển sang task
-mới** thay vì báo lỗi — miễn là cặp câu đó **chưa có bản ghi nào nộp** và task mới đã giao cho
-đúng người đọc đang giữ nó. Chỉ tiêu của task cũ được hạ xuống cho khớp số mục còn lại.
-
-Cặp câu đã có bản ghi nộp thì vẫn nằm trong `skipped` với lý do
-`Cặp câu đang nằm trong một task khác đang chạy và đã có bản ghi nộp.`
-Task chưa giao cho ai thì không được cướp câu của người khác — lý do kèm theo báo rõ cách xử lý.
+**Cặp câu đã nằm trong task khác** vẫn thêm được vào task này — mỗi task giữ mục riêng và nhiều
+Speaker được thu cùng một cặp. `POST /api/tasks/{id}/items` chỉ bỏ qua câu đã có trong **chính task
+đó** (dù đang giao cho ai), câu chưa duyệt nội dung hoặc sai chủ đề.
 
 | Việc | Cách làm |
 |---|---|
@@ -1034,8 +1039,8 @@ POST /api/recordings/r_cs_211000000001/reject-audio
         "requeuedForSpeaker": 6, "recordingStatus": "Rejected" }
 ```
 
-- **Câu văn bản được giữ lại**, và câu quay về hàng đợi ghi âm cho **chính người đọc cũ**
-  (`requeuedForSpeaker`) — không phải người khác, vì luật một cặp câu chỉ một người đọc.
+- **Câu văn bản được giữ lại**, và bản bị loại mở lại việc cho **chính người đọc cũ**
+  (`requeuedForSpeaker`); Speaker khác vẫn thu được bản riêng trên cùng cặp câu.
 - Chỉ áp dụng khi bản ghi còn `pendingReview`; đã chốt thì dùng `/reviews` như cũ.
 
 ```http
@@ -1059,7 +1064,7 @@ Ai đã code theo bản API trước ngày 22/09/2026 thì cần sửa:
 
 | Trước | Bây giờ |
 |---|---|
-| `scriptId`, `recordingId` là số | Là chuỗi có nghĩa: `s_211000000001`, `r_cs_211000000001`. Mã mới dài 12 chữ số; dữ liệu cũ vẫn có mã 9 chữ số — coi là chuỗi mờ |
+| `scriptId`, `recordingId` là số | Là chuỗi có nghĩa: `s_211000000001`, `r_cs_211000000001_u6`. Mã câu mới dài 12 chữ số; bản ghi mới luôn có `_u<speakerId>` (kể cả câu cũ 9 chữ số). Dữ liệu lịch sử không `_u` vẫn hợp lệ — coi là chuỗi mờ |
 | Một câu (`content`) | Cặp câu `csContent` + `viContent`, có nhãn, có `csPlain` / `viPlain` để hiển thị |
 | Nộp bản ghi: `Audio`, `ScriptId` | Thêm bắt buộc **`SentenceVariant`** — mỗi cặp câu cần hai bản |
 | Có endpoint bỏ qua câu (`/skip`) | **Đã bỏ**. Câu có vấn đề thì dùng duyệt câu để sửa hoặc từ chối |

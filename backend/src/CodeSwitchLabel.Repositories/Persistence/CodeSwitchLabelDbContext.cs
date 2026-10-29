@@ -333,19 +333,29 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         modelBuilder.Entity<TaskScript>(e =>
         {
             e.ToTable("task_script");
-            e.HasKey(x => new { x.TaskId, x.ScriptId });
+            e.HasKey(x => x.TaskScriptId);
             e.Property(x => x.ScriptId).HasMaxLength(16);
 
             e.HasOne(x => x.Task).WithMany(t => t.TaskScripts).HasForeignKey(x => x.TaskId);
             e.HasOne(x => x.Script).WithMany(s => s.TaskScripts).HasForeignKey(x => x.ScriptId);
             e.HasOne(x => x.AssigneeUser).WithMany().HasForeignKey(x => x.AssigneeUserId);
+
+            // Cùng một cặp câu chỉ một lần cho mỗi Speaker trong task; khác Speaker thì được.
+            e.HasIndex(x => new { x.TaskId, x.ScriptId, x.AssigneeUserId })
+                .HasDatabaseName("uq_task_script_assignee")
+                .IsUnique()
+                .HasFilter("assignee_user_id IS NOT NULL");
+            e.HasIndex(x => new { x.TaskId, x.ScriptId })
+                .HasDatabaseName("uq_task_script_unassigned")
+                .IsUnique()
+                .HasFilter("assignee_user_id IS NULL");
         });
 
         modelBuilder.Entity<TaskRecording>(e =>
         {
             e.ToTable("task_recording");
             e.HasKey(x => new { x.TaskId, x.RecordingId });
-            e.Property(x => x.RecordingId).HasMaxLength(32);
+            e.Property(x => x.RecordingId).HasMaxLength(64);
 
             e.HasOne(x => x.Task).WithMany(t => t.TaskRecordings).HasForeignKey(x => x.TaskId);
             e.HasOne(x => x.Recording).WithMany(r => r.TaskRecordings).HasForeignKey(x => x.RecordingId);
@@ -358,7 +368,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         {
             e.ToTable("recording");
             e.HasKey(x => x.RecordingId);
-            e.Property(x => x.RecordingId).HasMaxLength(32).ValueGeneratedNever();
+            e.Property(x => x.RecordingId).HasMaxLength(64).ValueGeneratedNever();
             e.Property(x => x.ScriptId).HasMaxLength(16);
             e.Property(x => x.CloudLink).HasMaxLength(1024);
             e.Property(x => x.AudioFormat).HasMaxLength(10);
@@ -367,8 +377,8 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.HasIndex(x => x.CloudLink).IsUnique();
 
             // Blocks concurrent retakes racing HasActiveRecording + CountTakes.
-            // Mirrors docs/codeswitchlabel.sql uq_recording_active_variant.
-            e.HasIndex(x => new { x.ScriptId, x.SentenceVariant })
+            // Mỗi Speaker có một bản hiệu lực riêng cho từng biến thể; Speaker khác được thu cùng câu.
+            e.HasIndex(x => new { x.ScriptId, x.SentenceVariant, x.SpeakerId })
                 .HasDatabaseName("uq_recording_active_variant")
                 .IsUnique()
                 .HasFilter("status IN ('pending_review', 'approved')");
@@ -390,7 +400,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         {
             e.ToTable("review");
             e.HasKey(x => x.ReviewId);
-            e.Property(x => x.RecordingId).HasMaxLength(32);
+            e.Property(x => x.RecordingId).HasMaxLength(64);
 
             e.HasOne(x => x.Recording).WithMany(r => r.Reviews).HasForeignKey(x => x.RecordingId);
             e.HasOne(x => x.Reviewer).WithMany().HasForeignKey(x => x.ReviewerId);
@@ -427,7 +437,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.ToTable("audit_log");
             e.HasKey(x => new { x.AuditId, x.ChangedAt });
             e.Property(x => x.EntityType).HasMaxLength(50);
-            e.Property(x => x.EntityId).HasMaxLength(32);
+            e.Property(x => x.EntityId).HasMaxLength(64);
             e.Property(x => x.OldValue).HasColumnType("jsonb");
             e.Property(x => x.NewValue).HasColumnType("jsonb");
         });
@@ -447,7 +457,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         {
             e.ToTable("dataset_recording");
             e.HasKey(x => new { x.DatasetId, x.RecordingId });
-            e.Property(x => x.RecordingId).HasMaxLength(32);
+            e.Property(x => x.RecordingId).HasMaxLength(64);
 
             e.HasOne(x => x.Dataset).WithMany(d => d.Recordings).HasForeignKey(x => x.DatasetId);
             e.HasOne(x => x.Recording).WithMany(r => r.DatasetRecordings).HasForeignKey(x => x.RecordingId);

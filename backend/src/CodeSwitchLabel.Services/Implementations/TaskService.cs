@@ -207,21 +207,18 @@ public class TaskService(
 
         var taskDomain = request.Domain ?? (campaign != null ? campaign.Domain : ScriptDomain.ItTechnology);
 
-        // Recording lấy đủ cặp câu hợp lệ theo CHỦ ĐỀ ĐÃ CHỐT (có thể đến từ
-        // chiến dịch) trước khi tạo task. Thiếu cặp thì không tạo gì cả.
-        List<string>? recordingScriptIds = null;
+        // Task thu âm: lấy danh sách câu RIÊNG cho từng Speaker. Hai Speaker được nhận
+        // cùng một câu, nên kho câu ít hơn chỉ tiêu vẫn tạo task — mỗi người chỉ nhận
+        // tối đa số câu mình còn thu được.
+        List<List<string>>? recordingScriptsByUser = null;
         if (assigneeUserIds.Count > 0 && request.TaskType == TaskType.Recording)
         {
-            var availableIds = await tasks.GetAvailableScriptIdsByDomainAsync(taskDomain, targetQty, ct);
-
-            if (availableIds.Count < targetQty)
+            recordingScriptsByUser = [];
+            foreach (var userId in assigneeUserIds)
             {
-                throw new UnprocessableException(
-                    "recording_not_enough_pairs",
-                    $"Kho chỉ còn {availableIds.Count} cặp câu hợp lệ cho chủ đề {taskDomain}, ít hơn chỉ tiêu {targetQty}. Không tạo task.");
+                recordingScriptsByUser.Add(await tasks.GetRecordableScriptIdsByDomainAsync(
+                    taskDomain, userId, targetQty, ct));
             }
-
-            recordingScriptIds = availableIds;
         }
 
         var task = new WorkTask
@@ -246,8 +243,7 @@ public class TaskService(
         // tạo phân công cùng lúc với task
         if (assigneeUserIds.Count > 0)
         {
-            var scriptIndex = 0;
-            var scriptItems = new List<TaskScript>(recordingScriptIds?.Count ?? 0);
+            var scriptItems = new List<TaskScript>();
 
             for (var i = 0; i < assigneeUserIds.Count; i++)
             {
@@ -263,15 +259,17 @@ public class TaskService(
                     TargetQty = assignmentQuotas![i]
                 });
 
-                // Recording: gắn assignee_user_id cho từng mục task_script theo quota
-                if (recordingScriptIds is not null)
+                // Recording: mỗi người nhận các câu CHÍNH HỌ chưa thu, tối đa quota.
+                // Danh sách của hai Speaker có thể trùng nhau — đó là chủ ý.
+                if (recordingScriptsByUser is not null)
                 {
-                    for (var j = 0; j < assignmentQuotas[i] && scriptIndex < recordingScriptIds.Count; j++, scriptIndex++)
+                    var scripts = recordingScriptsByUser[i];
+                    for (var j = 0; j < assignmentQuotas[i] && j < scripts.Count; j++)
                     {
                         scriptItems.Add(new TaskScript
                         {
                             TaskId = task.TaskId,
-                            ScriptId = recordingScriptIds[scriptIndex],
+                            ScriptId = scripts[j],
                             AssigneeUserId = userId,
                             Status = TaskScriptStatus.Pending,
                             IncludedAt = now
@@ -670,7 +668,6 @@ public class TaskService(
 
         var skipped = new List<SkippedItemDto>();
         var now = clock.GetUtcNow();
-        var borrowedFrom = new List<long>();
         List<string> accepted;
 
         if (task.TaskType == TaskType.Recording)
@@ -678,7 +675,7 @@ public class TaskService(
             if (hasIds)
             {
                 accepted = await FilterScriptsAsync(
-                    taskId, task.Domain, [.. request.Ids.Distinct()], assigneeIds, skipped, ct, borrowedFrom);
+                    taskId, task.Domain, [.. request.Ids.Distinct()], skipped, ct);
             }
             else
             {
@@ -701,7 +698,7 @@ public class TaskService(
 
                     excludedIds.UnionWith(ids);
                     accepted.AddRange(await FilterScriptsAsync(
-                        taskId, task.Domain, [.. ids], assigneeIds, skipped, ct, borrowedFrom));
+                        taskId, task.Domain, [.. ids], skipped, ct));
                 }
             }
 
@@ -750,46 +747,10 @@ public class TaskService(
 
         await SaveTasksAsync(ct);
 
-        // Câu mượn từ task khác làm chỉ tiêu task cũ vượt quá số mục còn lại — hạ xuống cho khớp,
-        // rồi tính lại trạng thái. Không hạ thì task cũ treo vĩnh viễn ở chỗ không đủ việc.
-        foreach (var oldTaskId in borrowedFrom.Distinct().Where(id => id != taskId))
-        {
-            await ShrinkTargetToItemsAsync(oldTaskId, ct);
-            await tracker.RefreshStatusAsync(oldTaskId, ct);
-        }
-
         await tracker.RefreshStatusAsync(taskId, ct);
         if (transaction is not null) await transaction.CommitAsync(ct);
 
         return new AddTaskItemsResult(accepted.Count, skipped, await LoadDetailAsync(taskId, ct));
-    }
-
-    /// <summary>Hạ chỉ tiêu của task cho vừa đủ số mục còn lại, không hạ thấp hơn mức đang làm được.</summary>
-    private async Task ShrinkTargetToItemsAsync(long taskId, CancellationToken ct)
-    {
-        var task = await tasks.GetForUpdateAsync(taskId, ct);
-        if (task is null) return;
-
-        // cũng bỏ qua khi task CHƯA CÓ NGƯỜI NHẬN — cùng nghĩa với `Draft`
-        // cũ mà nhánh này dùng để bỏ qua, chỉ là hỏi bằng tín hiệu còn tồn tại thay vì
-        // hỏi bằng trạng thái (trạng thái `Draft` không còn nữa).
-        var active = await tasks.GetOpenAssignmentsAsync(taskId, ct);
-        if (active.Count == 0) return;
-
-        var (workable, _) = await CountWorkableAsync(task, active, null, ct);
-
-        if (workable < task.TargetQty)
-        {
-            task.TargetQty = workable;
-
-            if (active.Count > 0 && workable >= active.Count)
-            {
-                var quotas = SplitQuota(workable, active.Count);
-                for (var i = 0; i < active.Count; i++) active[i].TargetQty = quotas[i];
-            }
-
-            await SaveTasksAsync(ct);
-        }
     }
 
     public async Task<TaskDetailDto> RemoveItemAsync(
@@ -802,23 +763,28 @@ public class TaskService(
 
         if (task.TaskType == TaskType.Recording)
         {
-            var item = await tasks.GetScriptItemAsync(taskId, itemId, ct)
-                       ?? throw ItemNotFound(taskId, itemId);
+            // Mục câu giờ có khoá thay thế: một cặp câu có thể có nhiều dòng cho nhiều
+            // Speaker. Client cũ gửi script_id thì lấy dòng đầu tiên như trước.
+            var item = long.TryParse(itemId, out var taskScriptId)
+                ? await tasks.GetScriptItemByIdAsync(taskId, taskScriptId, ct)
+                : await tasks.GetScriptItemAsync(taskId, itemId, ct);
+            if (item is null) throw ItemNotFound(taskId, itemId);
 
             if (item.Status != TaskScriptStatus.Pending)
             {
-                throw ItemNotRemovable(itemId, item.Status.ToString());
+                throw ItemNotRemovable(item.ScriptId, item.Status.ToString());
             }
 
             // Mục vẫn Pending trong lúc bản ghi của nó chờ duyệt — nhìn trạng thái mục thôi chưa đủ.
-            if (await tasks.HasSubmittedRecordingAsync(itemId, ct))
+            // Chỉ xét bản của đúng Speaker nhận mục này; bản của Speaker khác không giữ mục.
+            if (await tasks.HasSubmittedRecordingAsync(item.ScriptId, item.AssigneeUserId, ct))
             {
                 throw new ConflictException(
                     "task_item_not_removable",
-                    $"Cặp câu {itemId} đã có bản ghi nộp và đang chờ duyệt, không gỡ được — gỡ đi là mất dấu công việc đã làm.");
+                    $"Cặp câu {item.ScriptId} đã có bản ghi nộp và đang chờ duyệt, không gỡ được — gỡ đi là mất dấu công việc đã làm.");
             }
 
-            await EnsureRemovalKeepsTargetAsync(task, itemId, ct);
+            await EnsureRemovalKeepsTargetAsync(task, item.TaskScriptId.ToString(), ct);
             tasks.Remove(item);
         }
         else
@@ -1009,7 +975,7 @@ public class TaskService(
         var byUser = active.ToDictionary(a => a.UserId);
 
         // Người bị gỡ: nhả câu đang giữ trong hàng đợi, KHÔNG đụng bản đã nộp.
-        // Bản đã nộp giữ nguyên người đọc và vẫn chặn người khác cho tới khi được duyệt/loại.
+        // Bản đã nộp giữ nguyên người đọc; bản của người khác không bị chặn.
         if (task.TaskType == TaskType.Recording)
         {
             var removed = active
@@ -1200,12 +1166,12 @@ public class TaskService(
     }
 
     /// <summary>
-    /// chia lại các cặp câu CHƯA bắt đầu của task thu âm theo danh sách người
-    /// nhận và quota mới. Cặp đã có bản ghi, đã xong hoặc đang bị giữ trong hàng đợi
+    /// chia lại các mục câu CHƯA bắt đầu của task thu âm theo danh sách người
+    /// nhận và quota mới. Mục đã có bản ghi, đã xong hoặc đang bị giữ trong hàng đợi
     /// giữ nguyên người nhận — dữ liệu đã làm không đổi chủ.
     ///
-    /// Cặp thừa (task có nhiều mục hơn tổng quota, hoặc người cũ đã làm vượt quota)
-    /// vẫn được chia vòng tròn để không rơi về hàng đợi chung.
+    /// Một Speaker không bao giờ nhận hai mục của cùng một cặp câu; hai Speaker khác
+    /// nhau nhận cùng cặp là hợp lệ.
     /// </summary>
     private async Task RedistributeRecordingScriptsAsync(
         long taskId, IReadOnlyList<(long UserId, int Quota)> assignments, CancellationToken ct)
@@ -1213,40 +1179,111 @@ public class TaskService(
         var items = await tasks.GetScriptItemsTrackedAsync(taskId, ct);
         if (items.Count == 0) return;
 
-        var startedIds = await tasks.GetStartedScriptIdsAsync(taskId, clock.GetUtcNow(), ct);
+        var startedIds = await tasks.GetStartedTaskScriptIdsAsync(taskId, clock.GetUtcNow(), ct);
 
-        // Số cặp đã bắt đầu mà mỗi người đang giữ — phần này tính vào quota của họ.
+        var quotaByUser = assignments.ToDictionary(a => a.UserId, a => a.Quota);
+
+        // Mục đã bắt đầu giữ nguyên người nhận và tính vào quota của họ.
         var startedByUser = new Dictionary<long, int>();
+        var currentScripts = new Dictionary<long, HashSet<string>>();
         foreach (var item in items)
         {
-            if (!item.AssigneeUserId.HasValue || !startedIds.Contains(item.ScriptId)) continue;
+            if (item.AssigneeUserId is not { } userId) continue;
 
-            startedByUser[item.AssigneeUserId.Value] =
-                startedByUser.GetValueOrDefault(item.AssigneeUserId.Value) + 1;
-        }
-
-        var pool = items
-            .Where(i => !startedIds.Contains(i.ScriptId))
-            .OrderBy(i => i.IncludedAt).ThenBy(i => i.ScriptId)
-            .ToList();
-
-        // Cặp chưa bắt đầu không còn thuộc về ai; chia lại từ đầu theo danh sách mới.
-        foreach (var item in pool) item.AssigneeUserId = null;
-
-        var next = 0;
-        foreach (var (userId, quota) in assignments)
-        {
-            var need = Math.Max(0, quota - startedByUser.GetValueOrDefault(userId));
-
-            for (var i = 0; i < need && next < pool.Count; i++)
+            if (!currentScripts.TryGetValue(userId, out var scripts))
             {
-                pool[next++].AssigneeUserId = userId;
+                currentScripts[userId] = scripts = [];
+            }
+
+            scripts.Add(item.ScriptId);
+
+            if (startedIds.Contains(item.TaskScriptId))
+            {
+                startedByUser[userId] = startedByUser.GetValueOrDefault(userId) + 1;
             }
         }
 
-        for (var i = 0; next < pool.Count && assignments.Count > 0; i++)
+        // Giữ các mục chưa bắt đầu của người còn nhận việc, tối đa phần quota còn lại.
+        // Phần dư (và mục của người bị gỡ) trôi vào danh sách tự do.
+        var keptByUser = new Dictionary<long, int>();
+        var free = new List<TaskScript>();
+        foreach (var item in items
+                     .Where(i => !startedIds.Contains(i.TaskScriptId))
+                     .OrderBy(i => i.IncludedAt).ThenBy(i => i.ScriptId).ThenBy(i => i.TaskScriptId))
         {
-            pool[next++].AssigneeUserId = assignments[i % assignments.Count].UserId;
+            if (item.AssigneeUserId is { } userId && quotaByUser.TryGetValue(userId, out var quota))
+            {
+                var budget = Math.Max(0, quota - startedByUser.GetValueOrDefault(userId));
+                if (keptByUser.GetValueOrDefault(userId) < budget)
+                {
+                    keptByUser[userId] = keptByUser.GetValueOrDefault(userId) + 1;
+                    continue;
+                }
+            }
+
+            free.Add(item);
+        }
+
+        // Không đặt mục về null hàng loạt: hai dòng cùng câu sẽ đụng
+        // uq_task_script_unassigned giữa chừng. Chỉ gán thẳng cho người chưa giữ
+        // câu đó — mỗi lần ghi vẫn là một khoá (task, script, speaker) duy nhất.
+        var taken = new HashSet<long>();
+
+        foreach (var (userId, quota) in assignments)
+        {
+            var need = Math.Max(0,
+                quota - startedByUser.GetValueOrDefault(userId) - keptByUser.GetValueOrDefault(userId));
+            if (!currentScripts.TryGetValue(userId, out var scripts))
+            {
+                currentScripts[userId] = scripts = [];
+            }
+
+            foreach (var item in free)
+            {
+                if (need == 0) break;
+                if (taken.Contains(item.TaskScriptId) || scripts.Contains(item.ScriptId)) continue;
+
+                item.AssigneeUserId = userId;
+                scripts.Add(item.ScriptId);
+                taken.Add(item.TaskScriptId);
+                need--;
+            }
+        }
+
+        // Mục thừa (task có nhiều mục hơn tổng quota): chia vòng tròn cho người
+        // chưa có cặp đó; không còn ai hợp lệ thì để trống thay vì giao trùng.
+        var next = 0;
+        foreach (var item in free)
+        {
+            if (taken.Contains(item.TaskScriptId) || assignments.Count == 0) continue;
+
+            for (var k = 0; k < assignments.Count; k++)
+            {
+                var userId = assignments[(next + k) % assignments.Count].UserId;
+                if (currentScripts[userId].Contains(item.ScriptId)) continue;
+
+                item.AssigneeUserId = userId;
+                currentScripts[userId].Add(item.ScriptId);
+                taken.Add(item.TaskScriptId);
+                next = (next + k + 1) % assignments.Count;
+                break;
+            }
+        }
+
+        // Mục còn lại không ai nhận: giữ đúng một dòng trống cho mỗi câu, xoá phần dư
+        // để không đụng uq_task_script_unassigned.
+        foreach (var group in free
+                     .Where(i => !taken.Contains(i.TaskScriptId))
+                     .GroupBy(i => i.ScriptId))
+        {
+            var keep = group.FirstOrDefault(i => i.AssigneeUserId is null) ?? group.First();
+            foreach (var item in group)
+            {
+                if (ReferenceEquals(item, keep))
+                    item.AssigneeUserId = null;
+                else
+                    tasks.Remove(item);
+            }
         }
     }
 
@@ -1451,24 +1488,14 @@ public class TaskService(
 
     // ----------------------------------------------------------------- nội bộ
 
-    /// <returns>Danh sách id được nhận, và các task cũ cần cập nhật lại sau khi mượn câu.</returns>
+    /// <returns>Danh sách id được nhận vào task.</returns>
     private async Task<List<string>> FilterScriptsAsync(
-        long taskId, ScriptDomain taskDomain, string[] ids, long[] assigneeIds, List<SkippedItemDto> skipped,
-        CancellationToken ct, List<long>? borrowedFromTasks = null)
+        long taskId, ScriptDomain taskDomain, string[] ids, List<SkippedItemDto> skipped,
+        CancellationToken ct)
     {
         var existing = (await tasks.GetScriptItemsAsync(taskId, ct)).Select(i => i.ScriptId).ToHashSet();
         var found = (await tasks.GetScriptsAsync(ids, ct)).ToDictionary(s => s.ScriptId);
-        var queuedElsewhere = await tasks.FindScriptsQueuedInOtherActiveTasksAsync(ids, taskId, assigneeIds, ct);
         var accepted = new List<string>();
-
-        // Chỉ mượn được câu của chính những người nhận task này. Task chưa giao cho ai thì
-        // không gắn với ai, nên không được cướp câu đang nằm trong task của người khác.
-        var borrowable = queuedElsewhere
-            .Where(id => !found.TryGetValue(id, out var s)
-                || !s.Recordings.Any(r => r.Status != RecordingStatus.QcFailed && r.Status != RecordingStatus.Rejected))
-            .ToHashSet();
-
-        if (assigneeIds.Length == 0) borrowable.Clear();
 
         foreach (var id in ids)
         {
@@ -1480,49 +1507,10 @@ public class TaskService(
                 skipped.Add(new SkippedItemDto(id, $"Đang ở trạng thái {script.Status}, chỉ nhận câu đã duyệt nội dung."));
             else if (script.Domain != taskDomain)
                 skipped.Add(new SkippedItemDto(id, $"Chủ đề câu ({script.Domain}) không khớp với chủ đề nhiệm vụ ({taskDomain})."));
-            // một cặp câu chỉ một người đọc. Với nhóm n người nhận, câu do
-            // một người NGOÀI nhóm đã thu thì cả nhóm đều không thu được nữa.
-            // Bản trượt QC hoặc bị từ chối đã trả cặp về hàng đợi nên không tính là giữ chỗ.
-            else if (assigneeIds.Length > 0 &&
-                     script.Recordings.Any(r => !assigneeIds.Contains(r.SpeakerId)
-                         && r.Status != RecordingStatus.QcFailed && r.Status != RecordingStatus.Rejected))
-                skipped.Add(new SkippedItemDto(id, "Cặp câu này do người đọc khác thu."));
-            else if (queuedElsewhere.Contains(id) && borrowable.Contains(id))
-            {
-                // Câu còn nằm trong task khác nhưng CHƯA có bản ghi nào: chuyển sang task này cho
-                // mượn, thay vì báo lỗi. Người nhận chỉ nhận nhiệm vụ, chưa bắt tay vào làm.
-                accepted.Add(id);
-            }
-            else if (queuedElsewhere.Contains(id))
-                skipped.Add(new SkippedItemDto(id, assigneeIds.Length > 0
-                    ? "Cặp câu đang nằm trong một task khác đang chạy và đã có bản ghi nộp."
-                    : "Cặp câu đang nằm trong một task khác đang chạy — giao task cho người đọc trước rồi thử lại."));
+            // Không còn chặn vì "người đọc khác đã thu": nhiều Speaker được dùng chung
+            // một cặp câu, mỗi người có bản ghi riêng.
             else
                 accepted.Add(id);
-        }
-
-        // Chỉ mượn câu nào THỰC SỰ được nhận vào task này. Câu bị bỏ vì lý do khác (đã có trong
-        // task, không tồn tại, chưa duyệt nội dung…) phải nằm yên ở task cũ — gỡ đi là mất luôn.
-        borrowable.IntersectWith(accepted);
-
-        if (borrowable.Count > 0)
-        {
-            var stale = await tasks.GetQueuedScriptItemsInOtherActiveTasksAsync(
-                [.. borrowable], taskId, assigneeIds, ct);
-
-            foreach (var item in stale)
-            {
-                // Trùng nhau là bình thường khi một câu nằm ở nhiều task: bỏ hết các bản cũ.
-                if (found.TryGetValue(item.ScriptId, out var s)
-                    && s.Recordings.Any(r => r.Status != RecordingStatus.QcFailed
-                        && r.Status != RecordingStatus.Rejected))
-                {
-                    continue;
-                }
-
-                borrowedFromTasks?.Add(item.TaskId);
-                tasks.Remove(item);
-            }
         }
 
         return accepted;
@@ -1801,7 +1789,9 @@ public class TaskService(
 
         IReadOnlyList<TaskItemDto> items = row.TaskType == TaskType.Recording
             ? [.. (await tasks.GetScriptItemsAsync(taskId, ct)).Select(i =>
-                new TaskItemDto(i.ScriptId, i.Status.ToString(), Preview(i.Script.CsContent), i.IncludedAt, i.AssigneeUserId))]
+                new TaskItemDto(
+                    i.ScriptId, i.Status.ToString(), Preview(i.Script.CsContent),
+                    i.IncludedAt, i.AssigneeUserId, i.TaskScriptId))]
             : [.. (await tasks.GetRecordingItemsAsync(taskId, ct)).Select(i =>
                 new TaskItemDto(
                     i.RecordingId,

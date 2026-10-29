@@ -106,11 +106,14 @@ public class TaskProgressTracker(
                 touched.Add(item.TaskId);
             }
 
-            // Một cặp câu chỉ tính là xong khi CẢ HAI bản cs và vi đều được duyệt đạt.
+            // Một cặp câu chỉ tính là xong cho MỘT Speaker khi cả hai bản cs và vi
+            // của chính người đó đều được duyệt đạt. Speaker khác có bản riêng.
             if (finalStatus == RecordingStatus.Approved &&
-                await tasks.IsScriptFullyApprovedAsync(recording.ScriptId, ct))
+                await tasks.IsScriptFullyApprovedForSpeakerAsync(
+                    recording.ScriptId, recording.SpeakerId, ct))
             {
-                foreach (var item in await tasks.GetPendingScriptItemsAsync(recording.ScriptId, ct))
+                foreach (var item in await tasks.GetPendingScriptItemsForSpeakerAsync(
+                             recording.ScriptId, recording.SpeakerId, ct))
                 {
                     item.Status = TaskScriptStatus.Completed;
                     touched.Add(item.TaskId);
@@ -125,7 +128,8 @@ public class TaskProgressTracker(
             // là phải thu bù.
             if (finalStatus == RecordingStatus.Rejected)
             {
-                foreach (var item in await tasks.GetCompletedScriptItemsAsync(recording.ScriptId, ct))
+                foreach (var item in await tasks.GetCompletedScriptItemsForSpeakerAsync(
+                             recording.ScriptId, recording.SpeakerId, ct))
                 {
                     item.Status = TaskScriptStatus.Pending;
                     touched.Add(item.TaskId);
@@ -174,8 +178,9 @@ public class TaskProgressTracker(
         if (taskId.HasValue) touched.Add(taskId.Value);
 
         // Cặp câu còn dùng được nên mục vẫn giữ trong task — nhưng phải về lại hàng
-        // chờ vì kết quả cũ đã bị gỡ. Không sửa thì task vẫn tính câu này là xong.
-        foreach (var item in await tasks.GetCompletedScriptItemsAsync(recording.ScriptId, ct))
+        // chờ vì kết quả cũ đã bị gỡ. Chỉ mục của chính Speaker này bị ảnh hưởng.
+        foreach (var item in await tasks.GetCompletedScriptItemsForSpeakerAsync(
+                     recording.ScriptId, recording.SpeakerId, ct))
         {
             item.Status = TaskScriptStatus.Pending;
             touched.Add(item.TaskId);

@@ -190,6 +190,27 @@ public sealed class EndToEndFlowTests : ApiTestBase
     }
 
     [Fact]
+    public async Task TwoSpeakers_UploadSameScript_GetDistinctRecordingIds()
+    {
+        var admin = await GetAdminTokenAsync();
+        var reviewer = await GetReviewerTokenAsync();
+        var speaker1 = await GetSpeakerTokenAsync();
+        var speaker2 = await LoginAsync("speaker2@codeswitchlabel.local", "Codeswitch@2026");
+
+        var scriptId = await ImportOneScriptAsync(admin);
+        var reviewScript = await PostAsync($"/api/scripts/{scriptId}/review", new { action = "Accepted" }, reviewer);
+        Assert.Equal(HttpStatusCode.OK, reviewScript.StatusCode);
+
+        // Cùng một cặp câu: Speaker thứ hai không còn bị chặn, nhưng mã bản ghi phải khác.
+        var first = await UploadAsync(speaker1, scriptId, "CodeSwitching");
+        var second = await UploadAsync(speaker2, scriptId, "CodeSwitching");
+
+        Assert.NotEqual(first.RecordingId, second.RecordingId);
+        Assert.Contains("_u", first.RecordingId);
+        Assert.Contains("_u", second.RecordingId);
+    }
+
+    [Fact]
     public async Task TaskItems_AutoFillByDomain_PullsValidatedScripts()
     {
         var admin = await GetAdminTokenAsync();

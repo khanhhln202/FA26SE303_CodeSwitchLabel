@@ -185,12 +185,14 @@ public record TaskAssignmentDto(
 
 /// <param name="Id">script_id với task thu âm, recording_id với task duyệt.</param>
 /// <param name="AssigneeUserId">Speaker được gán cặp câu này; null = chưa gán hoặc task duyệt.</param>
+/// <param name="TaskScriptId">Khoá của dòng task_script; dùng khi một cặp câu có nhiều Speaker.</param>
 public record TaskItemDto(
     string Id,
     string Status,
     string? Preview,
     DateTimeOffset IncludedAt,
-    long? AssigneeUserId = null);
+    long? AssigneeUserId = null,
+    long? TaskScriptId = null);
 
 /// <param name="Assignments">Toàn bộ lịch sử giao việc, kể cả các lượt đã chuyển cho người khác.</param>
 public record TaskDetailDto(

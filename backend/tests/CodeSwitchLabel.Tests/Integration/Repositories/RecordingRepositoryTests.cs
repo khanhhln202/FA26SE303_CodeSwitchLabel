@@ -143,7 +143,9 @@ public class RecordingRepositoryTests : IntegrationTestBase
             AdminUserId);
 
         // Act
-        var hasActive = await Recordings.HasActiveRecordingAsync(script.ScriptId, SentenceVariant.CodeSwitching, TestContext.Current.CancellationToken);
+        var hasActive = await Recordings.HasActiveRecordingAsync(
+            script.ScriptId, SentenceVariant.CodeSwitching, SpeakerUserId,
+            TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(hasActive);
@@ -162,29 +164,33 @@ public class RecordingRepositoryTests : IntegrationTestBase
         await CreateRecordingAsync(script.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching);
 
         // Act
-        var hasActive = await Recordings.HasActiveRecordingAsync(script.ScriptId, SentenceVariant.CodeSwitching, TestContext.Current.CancellationToken);
+        var hasActive = await Recordings.HasActiveRecordingAsync(
+            script.ScriptId, SentenceVariant.CodeSwitching, SpeakerUserId,
+            TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(hasActive);
     }
 
     [Fact]
-    public async Task GetOwnerSpeakerIdAsync_ReturnsSpeaker_WhenRecordingExists()
+    public async Task HasActiveRecordingAsync_OtherSpeaker_DoesNotBlock()
     {
-        // Arrange
+        // Arrange — cùng cặp câu, Speaker khác đã có bản chờ duyệt.
         var script = await CreateScriptAsync(
-            "[vi]Test [en]owner [vi]id",
-            "[vi]Test owner id",
+            "[vi]Test [en]share [vi]cau",
+            "[vi]Test chia sẻ câu",
             ScriptDomain.ItTechnology,
             AdminUserId);
 
         await CreateRecordingAsync(script.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching);
 
         // Act
-        var ownerId = await Recordings.GetOwnerSpeakerIdAsync(script.ScriptId, TestContext.Current.CancellationToken);
+        var hasActive = await Recordings.HasActiveRecordingAsync(
+            script.ScriptId, SentenceVariant.CodeSwitching, ReviewerUserId,
+            TestContext.Current.CancellationToken);
 
-        // Assert
-        Assert.Equal(SpeakerUserId, ownerId);
+        // Assert — mỗi Speaker có bản riêng, bản người khác không chặn.
+        Assert.False(hasActive);
     }
 
     [Fact]
@@ -200,7 +206,9 @@ public class RecordingRepositoryTests : IntegrationTestBase
         await CreateRecordingAsync(script.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching);
 
         // Act
-        var count = await Recordings.CountTakesAsync(script.ScriptId, SentenceVariant.CodeSwitching, TestContext.Current.CancellationToken);
+        var count = await Recordings.CountTakesAsync(
+            script.ScriptId, SentenceVariant.CodeSwitching, SpeakerUserId,
+            TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(1, count);

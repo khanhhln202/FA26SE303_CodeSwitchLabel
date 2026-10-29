@@ -107,16 +107,16 @@ public sealed class IdentifierContractTests : IntegrationTestBase
     }
 
     [Theory]
-    [InlineData("s_111000001", SentenceVariant.CodeSwitching, 1, "r_cs_111000001")]
-    [InlineData("s_211000001", SentenceVariant.CodeSwitching, 1, "r_cs_211000001")]
-    [InlineData("s_211000001", SentenceVariant.PureVietnamese, 1, "r_vi_211000001")]
-    [InlineData("s_111000001", SentenceVariant.CodeSwitching, 2, "r_cs_111000001_t2")]
-    [InlineData("s_211000001", SentenceVariant.PureVietnamese, 12, "r_vi_211000001_t12")]
+    [InlineData("s_111000001", SentenceVariant.CodeSwitching, 1, 42, "r_cs_111000001_u42")]
+    [InlineData("s_211000001", SentenceVariant.CodeSwitching, 1, 42, "r_cs_211000001_u42")]
+    [InlineData("s_211000001", SentenceVariant.PureVietnamese, 1, 42, "r_vi_211000001_u42")]
+    [InlineData("s_111000001", SentenceVariant.CodeSwitching, 2, 42, "r_cs_111000001_u42_t2")]
+    [InlineData("s_211000001", SentenceVariant.PureVietnamese, 12, 7, "r_vi_211000001_u7_t12")]
     public async Task GenerateRecordingId_ChepNguyenMaCau(
-        string scriptId, SentenceVariant variant, int take, string expected)
+        string scriptId, SentenceVariant variant, int take, long speakerId, string expected)
     {
         var id = await Recordings.GenerateIdAsync(
-            scriptId, variant, take, TestContext.Current.CancellationToken);
+            scriptId, variant, take, speakerId, TestContext.Current.CancellationToken);
 
         Assert.Equal(expected, id);
         Assert.Contains(scriptId[2..], id);
@@ -147,8 +147,8 @@ public sealed class IdentifierContractTests : IntegrationTestBase
         Assert.NotNull(await Scripts.GetAsync(legacyId, ct));
 
         var recordingId = await Recordings.GenerateIdAsync(
-            legacyId, SentenceVariant.CodeSwitching, 1, ct);
-        Assert.Equal("r_cs_911999999", recordingId);
+            legacyId, SentenceVariant.CodeSwitching, 1, 7, ct);
+        Assert.Equal("r_cs_911999999_u7", recordingId);
     }
 
     /// <summary>Đọc last_value của 12 counter script_serial_* trên cùng connection test.</summary>
