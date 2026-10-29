@@ -7,9 +7,11 @@ public interface ITaskService
 {
     Task<TaskDetailDto> CreateAsync(CreateTaskRequest request, long createdById, CancellationToken ct = default);
 
-    Task<PagedResult<TaskListItemDto>> SearchAsync(TaskSearchRequest request, CancellationToken ct = default);
+    Task<PagedResult<TaskListItemDto>> SearchAsync(
+        TaskSearchRequest request, long? callerId = null, bool isAdmin = false, CancellationToken ct = default);
 
-    Task<TaskDetailDto> GetAsync(long taskId, CancellationToken ct = default);
+    Task<TaskDetailDto> GetAsync(
+        long taskId, long? callerId = null, bool isAdmin = false, CancellationToken ct = default);
 
     /// <summary>
     /// Lấy (hoặc tạo idempotent) task thu âm duy nhất của chiến dịch, chỉ tiêu bằng cả chiến dịch.

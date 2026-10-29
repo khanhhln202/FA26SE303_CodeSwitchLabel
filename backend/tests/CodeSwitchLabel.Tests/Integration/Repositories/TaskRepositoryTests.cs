@@ -54,7 +54,7 @@ public class TaskRepositoryTests : IntegrationTestBase
         await CreateTaskAsync(CampaignId, TaskType.Review, 30, ManagerUserId);
 
         // Act
-        var (items, total) = await Tasks.SearchAsync(null, null, null, null, null, DateTimeOffset.UtcNow, 1, 10, default, TestContext.Current.CancellationToken);
+        var (items, total) = await Tasks.SearchAsync(null, null, null, null, null, DateTimeOffset.UtcNow, 1, 10, default, null, false, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(total >= 2);
@@ -98,7 +98,7 @@ public class TaskRepositoryTests : IntegrationTestBase
 
         var (items, _) = await Tasks.SearchAsync(
             null, null, null, null, null, DateTimeOffset.UtcNow, 1, 50, default,
-            TestContext.Current.CancellationToken);
+            null, false, TestContext.Current.CancellationToken);
 
         Assert.Equal(
             [mine[0].TaskId, mine[1].TaskId, mine[2].TaskId],
@@ -112,7 +112,8 @@ public class TaskRepositoryTests : IntegrationTestBase
 
         var (items, _) = await Tasks.SearchAsync(
             null, null, null, null, null, DateTimeOffset.UtcNow, 1, 50,
-            SortSpec<TaskSortField>.From("targetQty", "asc"), TestContext.Current.CancellationToken);
+            SortSpec<TaskSortField>.From("targetQty", "asc"),
+            null, false, TestContext.Current.CancellationToken);
 
         // Chỉ tiêu 10, 20, 30 — không phụ thuộc hạn.
         Assert.Equal(
@@ -127,7 +128,8 @@ public class TaskRepositoryTests : IntegrationTestBase
 
         var (items, _) = await Tasks.SearchAsync(
             null, null, null, null, null, DateTimeOffset.UtcNow, 1, 50,
-            SortSpec<TaskSortField>.From("deadline", "desc"), TestContext.Current.CancellationToken);
+            SortSpec<TaskSortField>.From("deadline", "desc"),
+            null, false, TestContext.Current.CancellationToken);
 
         // Postgres mặc định NULLS FIRST khi DESC — task không hạn phải ở cuối, không phải đầu.
         Assert.Equal(

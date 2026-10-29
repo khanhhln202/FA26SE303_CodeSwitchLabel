@@ -105,10 +105,11 @@ public interface ITaskRepository
     Task<WorkTask?> GetRecordingTaskForCampaignAsync(long campaignId, CancellationToken ct = default);
 
     /// <summary><paramref name="sort"/> rỗng (Field = null) là thứ tự mặc định.</summary>
+    /// <param name="ownerId">chỉ trả task do người này tạo hoặc đợt do người này phụ trách (không phải Admin).</param>
     Task<(IReadOnlyList<TaskRow> Items, int Total)> SearchAsync(
         TaskType? type, WorkTaskStatus? status, long? assigneeId, ScriptDomain? domain, bool? overdue,
         DateTimeOffset now, int page, int pageSize, SortSpec<TaskSortField> sort,
-        CancellationToken ct = default);
+        long? ownerId = null, bool isAdmin = false, CancellationToken ct = default);
 
     /// <summary>
     /// Các task còn nhận việc (chưa huỷ) đang giao cho người này. gồm cả task
@@ -326,13 +327,23 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
     public async Task<(IReadOnlyList<TaskRow> Items, int Total)> SearchAsync(
         TaskType? type, WorkTaskStatus? status, long? assigneeId, ScriptDomain? domain, bool? overdue,
         DateTimeOffset now, int page, int pageSize, SortSpec<TaskSortField> sort,
-        CancellationToken ct = default)
+        long? ownerId = null, bool isAdmin = false, CancellationToken ct = default)
     {
         var query = db.WorkTasks.AsNoTracking();
 
         if (type.HasValue) query = query.Where(t => t.TaskType == type.Value);
         if (status.HasValue) query = query.Where(t => t.Status == status.Value);
         if (domain.HasValue) query = query.Where(t => t.Domain == domain.Value);
+
+        // Task Manager (không phải Admin) chỉ thấy task do mình tạo, hoặc task trong đợt
+        // mình phụ trách. Admin thấy hết.
+        if (ownerId.HasValue && !isAdmin)
+        {
+            query = query.Where(t => t.CreatedBy == ownerId.Value ||
+                (t.CampaignId.HasValue && db.Campaigns.Any(c =>
+                    c.CampaignId == t.CampaignId.Value &&
+                    (c.AssignedTo == ownerId.Value || c.CreatedBy == ownerId.Value))));
+        }
 
         if (assigneeId.HasValue)
         {

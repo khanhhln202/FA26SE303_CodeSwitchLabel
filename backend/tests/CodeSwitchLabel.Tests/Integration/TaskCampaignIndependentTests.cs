@@ -383,7 +383,7 @@ public sealed class TaskCampaignIndependentTests : IntegrationTestBase
 
         var listed = await TaskService.SearchAsync(
             new TaskSearchRequest { Page = 1, PageSize = 100 },
-            TestContext.Current.CancellationToken);
+            ct: TestContext.Current.CancellationToken);
         Assert.Contains(listed.Items, i => i.TaskId == created.Summary.TaskId && i.CampaignId == null);
 
         // View SQL trực tiếp: unattached task vẫn xuất hiện (LEFT JOIN).

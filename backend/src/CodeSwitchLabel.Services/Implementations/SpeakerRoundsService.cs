@@ -195,7 +195,7 @@ public class SpeakerRoundsService(
         var banThu = await db.Recordings.AsNoTracking()
             .Include(r => r.Script)
             .Include(r => r.Reviews).ThenInclude(v => v.RejectionReasons).ThenInclude(rr => rr.Reason)
-            .Where(r => maCap.Contains(r.ScriptId))
+            .Where(r => maCap.Contains(r.ScriptId) && r.SpeakerId == speakerId)
             .OrderByDescending(r => r.RecordedAt)
             .ToListAsync(ct);
 

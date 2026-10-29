@@ -86,7 +86,7 @@ public class CampaignsController(ICampaignService campaignService) : ControllerB
     [ProducesResponseType(typeof(CampaignDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<CampaignDto>> Get(long id, CancellationToken ct)
-        => Ok(await campaignService.GetAsync(id, ct));
+        => Ok(await campaignService.GetAsync(id, User.GetUserId(), User.IsInRole("Admin"), ct));
 
     // TaskManager phụ trách đợt và Admin đều sửa được
     /// <summary>Sửa tên, chủ đề, chỉ tiêu hoặc khoảng ngày. Trường nào để trống thì giữ nguyên.</summary>

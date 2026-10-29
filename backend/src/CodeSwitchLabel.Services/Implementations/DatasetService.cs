@@ -268,7 +268,10 @@ public class DatasetService(
             .OrderBy(dr => dr.Recording.ScriptId).ThenBy(dr => dr.Recording.RecordingId)
             .ToListAsync(ct);
 
-        var stream = new MemoryStream();
+        var stream = new FileStream(
+            Path.Combine(Path.GetTempPath(), Path.GetRandomFileName()),
+            FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 64 * 1024,
+            FileOptions.DeleteOnClose);
         using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
         {
             // Manifest: mỗi bản ghi kèm câu đối chiếu, file audio trong ZIP và link nghe tạm.

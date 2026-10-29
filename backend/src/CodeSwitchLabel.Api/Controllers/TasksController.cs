@@ -67,14 +67,14 @@ public class TasksController(ITaskService taskService) : ControllerBase
     [ProducesResponseType(typeof(PagedResult<TaskListItemDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<PagedResult<TaskListItemDto>>> Search(
         [FromQuery] TaskSearchRequest request, CancellationToken ct)
-        => Ok(await taskService.SearchAsync(request, ct));
+        => Ok(await taskService.SearchAsync(request, User.GetUserId(), User.IsInRole("Admin"), ct));
 
     /// <summary>Chi tiết task: tiến độ, toàn bộ lịch sử giao việc, và từng mục.</summary>
     [HttpGet("{id:long}")]
     [ProducesResponseType(typeof(TaskDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<TaskDetailDto>> Get(long id, CancellationToken ct)
-        => Ok(await taskService.GetAsync(id, ct));
+        => Ok(await taskService.GetAsync(id, User.GetUserId(), User.IsInRole("Admin"), ct));
 
     /// <summary>Sửa mô tả, chỉ tiêu, hạn, hoặc đổi trạng thái bằng tay. Trường nào để trống thì giữ nguyên.</summary>
     /// <remarks>

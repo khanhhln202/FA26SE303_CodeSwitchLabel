@@ -47,9 +47,11 @@ public class CampaignService(
         return new PagedResult<CampaignListItemDto>(mapped, request.Page, request.PageSize, total);
     }
 
-    public async Task<CampaignDto> GetAsync(long campaignId, CancellationToken ct = default)
+    public async Task<CampaignDto> GetAsync(
+        long campaignId, long? callerId = null, bool isAdmin = false, CancellationToken ct = default)
     {
         var campaign = await campaigns.GetAsync(campaignId, ct) ?? throw NotFound(campaignId);
+        EnsureCampaignOwner(campaign, callerId, isAdmin);
         return ToDto(campaign);
     }
 

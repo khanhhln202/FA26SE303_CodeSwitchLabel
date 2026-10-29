@@ -167,12 +167,12 @@ public sealed class TaskServiceProgressTests
         _tasks.Setup(t => t.SearchAsync(
                 TaskType.Recording, null, null, null, null, It.IsAny<DateTimeOffset>(),
                 It.IsAny<int>(), It.IsAny<int>(), It.IsAny<SortSpec<TaskSortField>>(),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<long?>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(([Row(done: 0)], 1));
 
         var page = await _service.SearchAsync(
             new TaskSearchRequest { TaskType = TaskType.Recording, Page = 1, PageSize = 20 },
-            TestContext.Current.CancellationToken);
+            ct: TestContext.Current.CancellationToken);
 
         Assert.Equal(0, Assert.Single(page.Items).Progress.Done);
     }

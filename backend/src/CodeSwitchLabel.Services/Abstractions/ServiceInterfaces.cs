@@ -105,7 +105,8 @@ public interface ICampaignService
     Task<PagedResult<CampaignListItemDto>> SearchAsync(
         CampaignSearchRequest request, long? userId, RoleName? userRole, CancellationToken ct = default);
 
-    Task<CampaignDto> GetAsync(long campaignId, CancellationToken ct = default);
+    Task<CampaignDto> GetAsync(
+        long campaignId, long? callerId = null, bool isAdmin = false, CancellationToken ct = default);
 
     Task<CampaignDto> CreateAsync(
         CreateCampaignRequest request, long createdById, bool isAdmin, CancellationToken ct = default);

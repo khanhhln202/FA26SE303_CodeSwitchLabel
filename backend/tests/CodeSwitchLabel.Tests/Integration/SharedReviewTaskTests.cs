@@ -305,6 +305,7 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
         });
 
         var scriptIds = new List<string>();
+        var nguoiCuaBanGhi = new Dictionary<string, long>();
 
         foreach (var i in new[] { 1, 2 })
         {
@@ -318,6 +319,7 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
             foreach (var variant in new[] { SentenceVariant.CodeSwitching, SentenceVariant.PureVietnamese })
             {
                 var recording = await CreateRecordingAsync(script.ScriptId, speaker.UserId, variant);
+                nguoiCuaBanGhi[recording.RecordingId] = speaker.UserId;
 
                 Db.TaskRecordings.Add(new TaskRecording
                 {
@@ -328,24 +330,46 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
             }
         }
 
+        // Người thứ hai đọc CÙNG câu 1: đó là một cặp nữa, không phải bản phụ của cặp đầu.
+        var speaker2 = await CreateUserAsync($"sp-gom2-{dau}@test.local", RoleName.Speaker);
+        Recording? cs2 = null;
+
+        foreach (var variant in new[] { SentenceVariant.CodeSwitching, SentenceVariant.PureVietnamese })
+        {
+            var recording = await CreateRecordingAsync(scriptIds[0], speaker2.UserId, variant);
+            nguoiCuaBanGhi[recording.RecordingId] = speaker2.UserId;
+            if (variant == SentenceVariant.CodeSwitching) cs2 = recording;
+
+            Db.TaskRecordings.Add(new TaskRecording
+            {
+                TaskId = task.TaskId,
+                RecordingId = recording.RecordingId,
+                Status = TaskRecordingStatus.Queued
+            });
+        }
+
         await Db.SaveChangesAsync(ct);
 
-        // groupBy=recording: hai cặp ra BỐN dòng — hình dạng cũ, giờ phải hỏi đích danh.
+        // groupBy=recording: ba cặp ra SÁU dòng — hình dạng cũ, giờ phải hỏi đích danh.
         var theoBanGhi = await ReviewService.GetTaskRecordingsAsync(
             task.TaskId, reviewer.UserId,
             new TaskReviewQuery { PageSize = 50, GroupBy = TaskReviewGrouping.Recording }, ct);
 
-        Assert.Equal(4, theoBanGhi.Total);
-        Assert.Equal(4, theoBanGhi.Items.Count);
+        Assert.Equal(6, theoBanGhi.Total);
+        Assert.Equal(6, theoBanGhi.Items.Count);
         Assert.Equal(2, theoBanGhi.Items.Select(i => i.ScriptId).Distinct().Count());
+        Assert.Equal(2, theoBanGhi.Items.Select(i => i.SpeakerId).Distinct().Count());
 
-        // MẶC ĐỊNH gom theo cặp: hai cặp ra HAI dòng, và tổng cũng đếm theo cặp.
+        // MẶC ĐỊNH gom theo cặp: ba cặp ra BA dòng, và tổng cũng đếm theo cặp.
         var theoCap = await ReviewService.GetTaskRecordingsAsync(
             task.TaskId, reviewer.UserId, new TaskReviewQuery { PageSize = 50 }, ct);
 
-        Assert.Equal(2, theoCap.Total);
-        Assert.Equal(2, theoCap.Items.Count);
-        Assert.Equal([.. scriptIds.OrderBy(x => x)], [.. theoCap.Items.Select(i => i.ScriptId).OrderBy(x => x)]);
+        Assert.Equal(3, theoCap.Total);
+        Assert.Equal(3, theoCap.Items.Count);
+        Assert.Equal(2, theoCap.Items.Select(i => i.ScriptId).Distinct().Count());
+        Assert.Equal(
+            new HashSet<long> { speaker.UserId, speaker2.UserId },
+            theoCap.Items.Select(i => i.SpeakerId).ToHashSet());
 
         foreach (var dong in theoCap.Items)
         {
@@ -358,7 +382,19 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
             Assert.NotEqual(dong.RecordingId, kia.RecordingId);
             Assert.False(kia.MyReviewDone);
             Assert.True(kia.CanReview);
+
+            // Cả hai ô phải là bản của CÙNG người đọc — đây là chỗ hai người chung câu bị trộn.
+            Assert.Equal(dong.SpeakerId, nguoiCuaBanGhi[dong.RecordingId]);
+            Assert.Equal(dong.SpeakerId, nguoiCuaBanGhi[kia.RecordingId]);
         }
+
+        // Mở thẳng một bản cũng phải ghép đúng cặp của người đó, không lấy bản mới nhất của người khác.
+        var mo = await ReviewService.GetForReviewAsync(cs2!.RecordingId, reviewer.UserId, ct);
+
+        Assert.Equal(speaker2.UserId, mo.SpeakerId);
+        Assert.All(
+            mo.Pair.Where(v => v.RecordingId.Length > 0),
+            v => Assert.Equal(speaker2.UserId, nguoiCuaBanGhi[v.RecordingId]));
     }
 
     /// <summary>
@@ -528,9 +564,20 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
 
         Db.ChangeTracker.Clear();
 
+        // Người thứ hai cũng bị từ chối đúng câu đó, bản mới hơn. Danh sách của người thứ nhất
+        // không được lấy bản của người thứ hai chỉ vì nó mới hơn.
+        var other = await CreateUserAsync($"sp-cho2-{dau}@test.local", RoleName.Speaker);
+        var csKhac = await CreateRecordingAsync(script.ScriptId, other.UserId, SentenceVariant.CodeSwitching);
+        var viKhac = await CreateRecordingAsync(script.ScriptId, other.UserId, SentenceVariant.PureVietnamese);
+        csKhac.Status = RecordingStatus.Rejected;
+        viKhac.Status = RecordingStatus.Rejected;
+        csKhac.RecordedAt = DateTimeOffset.UtcNow.AddMinutes(1);
+        viKhac.RecordedAt = DateTimeOffset.UtcNow.AddMinutes(1);
+        await Db.SaveChangesAsync(ct);
+
         var cho = await Rounds.GetRejectedAsync(speaker.UserId, 20, ct);
 
-        // MỘT dòng cho cả cặp, không phải hai.
+        // MỘT dòng cho cả cặp, không phải hai — và là cặp của chính người hỏi.
         var dong = Assert.Single(cho, x => x.ScriptId == script.ScriptId);
 
         Assert.Contains("Excel", dong.CsText, StringComparison.Ordinal);

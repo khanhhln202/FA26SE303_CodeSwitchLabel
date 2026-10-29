@@ -76,7 +76,7 @@ public class ReviewService(
 
         List<TaskReviewRow> rows;
         int total;
-        List<string>? thuTuCap = null;
+        List<TaskReviewPairKey>? thuTuCap = null;
 
         if (query.GroupBy == TaskReviewGrouping.Pair)
         {
@@ -98,7 +98,7 @@ public class ReviewService(
         // danh sách trả 500.
         var pairs = (await reviews.GetSummariesByScriptsAsync(
                 [.. rows.Select(r => r.ScriptId).Distinct()], reviewerId, ct))
-            .GroupBy(r => r.ScriptId)
+            .GroupBy(r => (r.SpeakerId, r.ScriptId))
             .ToDictionary(
                 g => g.Key,
                 g => g.OrderByDescending(r => r.RecordedAt)
@@ -110,11 +110,13 @@ public class ReviewService(
         // vẽ mỗi dòng thành một thẻ cặp là cặp nào cũng hiện hai lần, nội dung y hệt.
         if (thuTuCap is not null)
         {
-            var theoCap = rows.GroupBy(r => r.ScriptId).ToDictionary(g => g.Key, g => g.ToList());
+            var theoCap = rows.GroupBy(r => (r.SpeakerId, r.ScriptId))
+                .ToDictionary(g => g.Key, g => g.ToList());
 
             rows = [.. thuTuCap
-                .Where(theoCap.ContainsKey)
-                .Select(scriptId => ChonBanDaiDien(theoCap[scriptId], reviewerId, roundsRequired))];
+                .Where(cap => theoCap.ContainsKey((cap.SpeakerId, cap.ScriptId)))
+                .Select(cap => ChonBanDaiDien(
+                    theoCap[(cap.SpeakerId, cap.ScriptId)], reviewerId, roundsRequired))];
         }
 
         var items = rows
@@ -138,7 +140,8 @@ public class ReviewService(
                     x.MyReviewDone,
                     ReviewRules.BlockerFor(
                         x.SpeakerId == reviewerId, x.MyReviewDone, x.Status, x.ReviewsDone, roundsRequired),
-                    pairs.TryGetValue(x.ScriptId, out var pair) && pair.TryGetValue(other, out var sibling)
+                    pairs.TryGetValue((x.SpeakerId, x.ScriptId), out var pair)
+                        && pair.TryGetValue(other, out var sibling)
                         ? new ReviewSiblingDto(
                             sibling.RecordingId, sibling.SentenceVariant,
                             CodeSwitchText.Strip(sibling.ScriptTagged),
@@ -600,7 +603,7 @@ public class ReviewService(
         string currentUrl, DateTimeOffset currentExpiresAt,
         CancellationToken ct)
     {
-        var siblings = await reviews.GetByScriptAsync(recording.ScriptId, ct);
+        var siblings = await reviews.GetByScriptAsync(recording.ScriptId, recording.SpeakerId, ct);
 
         var variants = new List<ReviewVariantDto>(2);
 

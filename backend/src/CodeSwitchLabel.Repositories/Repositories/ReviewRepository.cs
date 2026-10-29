@@ -14,6 +14,8 @@ public record ReviewTaskProgress(
 /// Một hàng trong danh sách bản ghi của task duyệt. Chỉ mang con số lượt đã có và cờ
 /// "người đang xem đã duyệt chưa" — KHÔNG mang quyết định của ai, vì mọi lượt đều duyệt mù.
 /// </summary>
+public record TaskReviewPairKey(long SpeakerId, string ScriptId);
+
 public record TaskReviewRow(
     string RecordingId,
     long SpeakerId,
@@ -34,6 +36,7 @@ public record TaskReviewRow(
 /// </summary>
 public record RecordingSummaryRow(
     string RecordingId,
+    long SpeakerId,
     string ScriptId,
     SentenceVariant SentenceVariant,
     string ScriptTagged,
@@ -109,11 +112,12 @@ public interface IReviewRepository
     /// cắt trang, nếu không hai bản của một cặp có thể rơi về hai trang và cặp đó hiện hai lần.
     /// Trả kèm thứ tự cặp của trang, vì các dòng lấy về không giữ thứ tự đó.
     /// </summary>
-    Task<(List<TaskReviewRow> Rows, int Total, List<string> ScriptOrder)> GetTaskReviewPairsAsync(
+    Task<(List<TaskReviewRow> Rows, int Total, List<TaskReviewPairKey> PairOrder)> GetTaskReviewPairsAsync(
         long taskId, long reviewerId, bool onlyReviewable, int roundsRequired,
         int page, int pageSize, SortSpec<TaskReviewSortField> sort, CancellationToken ct = default);
 
-    Task<List<Recording>> GetByScriptAsync(string scriptId, CancellationToken ct = default);
+    Task<List<Recording>> GetByScriptAsync(
+        string scriptId, long speakerId, CancellationToken ct = default);
 
     /// <summary>
     /// Rút gọn nhiều cặp câu cùng lúc, để dựng danh sách hai bản mà không gọi N lần.
@@ -313,19 +317,24 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
             tr.Recording.Reviews.Count,
             tr.Recording.Reviews.Any(v => v.ReviewerId == reviewerId)));
 
-    public async Task<(List<TaskReviewRow> Rows, int Total, List<string> ScriptOrder)> GetTaskReviewPairsAsync(
+    public async Task<(List<TaskReviewRow> Rows, int Total, List<TaskReviewPairKey> PairOrder)> GetTaskReviewPairsAsync(
         long taskId, long reviewerId, bool onlyReviewable, int roundsRequired,
         int page, int pageSize, SortSpec<TaskReviewSortField> sort, CancellationToken ct = default)
     {
         var query = TaskReviewQueryable(taskId, reviewerId, onlyReviewable, roundsRequired);
 
-        var total = await query.Select(tr => tr.Recording.ScriptId).Distinct().CountAsync(ct);
+        // Một cặp là hai biến thể của CÙNG một người đọc. Hai người cùng đọc một câu là hai cặp.
+        var total = await query
+            .Select(tr => new { tr.Recording.SpeakerId, tr.Recording.ScriptId })
+            .Distinct()
+            .CountAsync(ct);
 
         var pairs = query
-            .GroupBy(tr => tr.Recording.ScriptId)
+            .GroupBy(tr => new { tr.Recording.SpeakerId, tr.Recording.ScriptId })
             .Select(g => new
             {
-                ScriptId = g.Key,
+                g.Key.SpeakerId,
+                g.Key.ScriptId,
                 MaxReviews = g.Max(tr => tr.Recording.Reviews.Count),
                 LastRecordedAt = g.Max(tr => tr.Recording.RecordedAt)
             });
@@ -346,30 +355,34 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
             _ => pairs.OrderByDescending(x => x.MaxReviews)
         };
 
-        var scriptOrder = await ordered
+        var pairOrder = await ordered
             .ThenBy(x => x.ScriptId)
+            .ThenBy(x => x.SpeakerId)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(x => x.ScriptId)
+            .Select(x => new TaskReviewPairKey(x.SpeakerId, x.ScriptId))
             .ToListAsync(ct);
 
+        var scriptIds = pairOrder.Select(x => x.ScriptId).Distinct().ToList();
+
         // Mới nhất trước: người gọi lấy lần thu mới nhất của mỗi biến thể bằng cách lấy dòng đầu.
+        // Lọc theo script là đủ: người gọi bỏ qua cặp của người đọc không nằm trong PairOrder.
         var rows = await TaskReviewRows(
-                query.Where(tr => scriptOrder.Contains(tr.Recording.ScriptId))
+                query.Where(tr => scriptIds.Contains(tr.Recording.ScriptId))
                     .OrderByDescending(tr => tr.Recording.RecordedAt)
                     .ThenByDescending(tr => tr.RecordingId),
                 reviewerId)
             .ToListAsync(ct);
 
-        return (rows, total, scriptOrder);
+        return (rows, total, pairOrder);
     }
 
     public async Task<List<Recording>> GetByScriptAsync(
-        string scriptId, CancellationToken ct = default) =>
+        string scriptId, long speakerId, CancellationToken ct = default) =>
         await db.Recordings
             .AsNoTracking()
             .Include(r => r.Script)
-            .Where(r => r.ScriptId == scriptId)
+            .Where(r => r.ScriptId == scriptId && r.SpeakerId == speakerId)
             .OrderBy(r => r.SentenceVariant)
             .ToListAsync(ct);
 
@@ -384,6 +397,7 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
             .OrderBy(r => r.ScriptId).ThenBy(r => r.SentenceVariant)
             .Select(r => new RecordingSummaryRow(
                 r.RecordingId,
+                r.SpeakerId,
                 r.ScriptId,
                 r.SentenceVariant,
                 r.SentenceVariant == SentenceVariant.CodeSwitching
