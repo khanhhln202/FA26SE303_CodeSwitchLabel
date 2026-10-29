@@ -26,7 +26,7 @@ public class SpeakerController(
     /// Nhiều Speaker có thể thu cùng một cặp câu, mỗi người một bản riêng; hệ thống chỉ bỏ qua
     /// câu mà **chính bạn** đã có bản chờ duyệt/đạt.
     ///
-    /// Truyền `taskId` để lấy câu trong phạm vi task/chiến dịch đang giao cho bạn; task không
+    /// Truyền `taskId` để lấy câu trong phạm vi task/đợt đang giao cho bạn; task không
     /// thuộc phạm vi đó trả **403**.
     ///
     /// **204 No Content** nghĩa là hết câu phù hợp.
@@ -89,7 +89,7 @@ public class SpeakerController(
     /// <remarks>
     /// Tổng số bản đã nộp, số bản được duyệt đạt, và từng task thu âm đang giao. Mỗi task có
     /// `taskTitle` (tên nhiệm vụ, cùng nghĩa với `taskTitle` ở `GET /api/speaker/recordings/history`)
-    /// cùng `description` và `waveName` — tên nhiệm vụ không phụ thuộc vào việc task có thuộc chiến dịch hay không.
+    /// cùng `description` và `waveName` — tên nhiệm vụ không phụ thuộc vào việc task có thuộc đợt hay không.
     /// Chỉ tiêu task thu âm đếm theo **cặp câu**: một cặp chỉ tính là xong khi **cả hai** bản
     /// cs và vi đều được duyệt đạt.
     /// </remarks>
@@ -99,9 +99,9 @@ public class SpeakerController(
         => Ok(await taskService.GetSpeakerProgressAsync(User.GetUserId(), ct));
 
     /// <summary>
-    /// Đợt đang tham gia (chiến dịch của task thu âm đang giao). 204 = chưa tham gia đợt nào.
+    /// Đợt đang tham gia. 204 = chưa tham gia đợt nào.
     /// <c>target</c> là chỉ tiêu RIÊNG của người gọi — tổng quota trên các lượt giao task thu âm
-    /// trong đợt, không phải chỉ tiêu cả chiến dịch. <c>submitted</c> là số bản đã nộp thật và
+    /// trong đợt, không phải chỉ tiêu cả đợt. <c>submitted</c> là số bản đã nộp thật và
     /// có thể vượt <c>target</c>.
     /// </summary>
     [HttpGet("rounds/current")]

@@ -1,3 +1,4 @@
+using System.Net;
 using System.Reflection;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -10,6 +11,7 @@ using CodeSwitchLabel.Services.Options;
 using CodeSwitchLabel.Services.Seeding;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
 using Microsoft.Extensions.Options;
@@ -156,6 +158,14 @@ builder.Services.AddCors(options =>
         .AllowAnyMethod());
 });
 
+// Caddy runs in the same Docker bridge network and appends the real client IP to
+// X-Forwarded-For. Trust only Docker's private IPv4 pool, never arbitrary callers.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor;
+    options.KnownIPNetworks.Add(new System.Net.IPNetwork(IPAddress.Parse("172.16.0.0"), 12));
+});
+
 // Giới hạn tốc độ đăng nhập / đăng ký: 10 lần mỗi phút trên mỗi IP, ngăn brute-force
 // và dò email trên endpoint công khai.
 builder.Services.AddRateLimiter(options =>
@@ -175,6 +185,7 @@ builder.Services.AddRateLimiter(options =>
 
 var app = builder.Build();
 
+app.UseForwardedHeaders();
 app.UseRateLimiter();
 
 // Lược đồ database rỗng nhận docs/codeswitchlabel.sql; database đang chạy nhận
@@ -245,8 +256,17 @@ app.UseMiddleware<AuditUserMiddleware>();
 
 app.MapControllers();
 
-app.MapGet("/health", () => Results.Ok(new { status = "ok", utc = DateTimeOffset.UtcNow }))
+app.MapGet("/health", async (CodeSwitchLabelDbContext db, CancellationToken ct) =>
+{
+    IResult result = Results.Ok(new { status = "ok", utc = DateTimeOffset.UtcNow });
+    if (!await db.Database.CanConnectAsync(ct))
+    {
+        result = Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+    }
+
+    return result;
+})
    .WithTags(ApiTags.Health)
-   .WithSummary("Kiểm tra API còn sống");
+   .WithSummary("Kiểm tra API và database đã sẵn sàng");
 
 app.Run();

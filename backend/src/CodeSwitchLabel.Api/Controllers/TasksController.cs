@@ -35,7 +35,7 @@ public class TasksController(ITaskService taskService) : ControllerBase
 {
     /// <summary>Tạo task mới — ở trạng thái InProgress. waveId để trống = task độc lập, gắn sau.</summary>
     /// <remarks>
-    /// Task gắn chiến dịch thì hạn hoàn thành phải nằm trong khoảng ngày của chiến dịch;
+    /// Task gắn đợt thì hạn hoàn thành phải nằm trong khoảng ngày của đợt;
     /// task độc lập bỏ qua kiểm tra này. Hạn gửi kèm múi giờ nào cũng được, ví dụ
     /// <c>2026-09-30T17:00:00+07:00</c>; backend đổi sang UTC trước khi lưu.
     /// Task thu âm tạo kèm người nhận phải giữ đủ <c>targetQty</c> cặp câu hợp lệ;
@@ -189,10 +189,10 @@ public class TasksController(ITaskService taskService) : ControllerBase
     public async Task<ActionResult<TaskDetailDto>> Unassign(long id, long userId, CancellationToken ct)
         => Ok(await taskService.UnassignAsync(id, userId, ct, User.GetUserId(), User.IsInRole("Admin")));
 
-    /// <summary>Gắn task vào chiến dịch (attach), chuyển giữa các chiến dịch (move), hoặc gỡ ra (detach khi waveId null).</summary>
+    /// <summary>Gắn task vào đợt (attach), chuyển giữa các đợt (move), hoặc gỡ ra (detach khi waveId null).</summary>
     /// <remarks>
     /// Task độc lập chỉ người tạo hoặc Admin được gắn; task đang gắn thì phải là Task Manager
-    /// sở hữu chiến dịch cũ (hoặc Admin). Gắn vào chiến dịch kiểm tra quota + khung hạn như lúc tạo.
+    /// sở hữu đợt cũ (hoặc Admin). Gắn vào đợt kiểm tra quota + khung hạn như lúc tạo.
     /// </remarks>
     [HttpPatch("{id:long}/wave")]
     [ProducesResponseType(typeof(TaskDetailDto), StatusCodes.Status200OK)]
@@ -254,7 +254,7 @@ public class TasksController(ITaskService taskService) : ControllerBase
     public async Task<ActionResult<IReadOnlyList<AssigneeSummaryDto>>> ByAssignee(CancellationToken ct)
         => Ok(await taskService.GetAssigneeSummaryAsync(ct));
 
-    /// <summary>Tổng quan trang chủ Task Manager: chiến dịch phụ trách, tải từng người, task còn chạy.</summary>
+    /// <summary>Tổng quan trang chủ Task Manager: đợt phụ trách, tải từng người, task còn chạy.</summary>
     [HttpGet("/api/task-manager/overview")]
     [ProducesResponseType(typeof(TaskManagerOverviewDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<TaskManagerOverviewDto>> Overview(CancellationToken ct)

@@ -68,7 +68,7 @@ public class GlobalExceptionHandler(
                 return BusinessProblem(
                     StatusCodes.Status422UnprocessableEntity,
                     "task_target_exceeds_wave",
-                    "Chỉ tiêu task vượt phần còn lại của chiến dịch.");
+                    "Chỉ tiêu task vượt phần còn lại của đợt.");
             }
 
             if (message.Contains("must be within wave", StringComparison.OrdinalIgnoreCase))
@@ -76,7 +76,7 @@ public class GlobalExceptionHandler(
                 return BusinessProblem(
                     StatusCodes.Status422UnprocessableEntity,
                     "task_deadline_outside_wave",
-                    "Hạn của task nằm ngoài khoảng ngày của chiến dịch.");
+                    "Hạn của task nằm ngoài khoảng ngày của đợt.");
             }
 
             if (message.Contains("no assigned task manager", StringComparison.OrdinalIgnoreCase)
@@ -85,7 +85,7 @@ public class GlobalExceptionHandler(
                 return BusinessProblem(
                     StatusCodes.Status422UnprocessableEntity,
                     "wave_not_assigned_to_manager",
-                    "Chiến dịch chưa được giao cho bạn nên chưa nhận task.");
+                    "Đợt chưa được giao cho bạn nên chưa nhận task.");
             }
 
             if (message.Contains("cannot be validated", StringComparison.OrdinalIgnoreCase))
