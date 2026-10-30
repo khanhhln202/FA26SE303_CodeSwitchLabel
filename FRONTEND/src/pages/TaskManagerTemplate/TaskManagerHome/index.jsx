@@ -4,7 +4,6 @@ import {
   Layers, 
   Clock, 
   CheckCircle2, 
-  FolderKanban,
   ArrowRight,
   Loader2
 } from "lucide-react";
@@ -26,7 +25,6 @@ export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
   const [loading, setLoading] = useState(true);
   const [waves, setWaves] = useState([]);
   const [assignTasks, setAssignTasks] = useState([]);
-  const [batchMapping, setBatchMapping] = useState({});
   const [adminTargets, setAdminTargets] = useState({
     speaker: { target: 0, completed: 0 },
     reviewer: { target: 0, completed: 0 }
@@ -37,8 +35,8 @@ export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
       setLoading(true);
       const [overviewData, waveData, taskData] = await Promise.all([
         taskService.getOverview().catch(() => null),
-        taskService.getWaves().catch(() => ({ items: [] })),
-        taskService.getTasks().catch(() => ({ items: [] }))
+        taskService.getWaves({ pageSize: 1000 }).catch(() => ({ items: [] })),
+        taskService.getTasks({ pageSize: 1000 }).catch(() => ({ items: [] }))
       ]);
 
       if (overviewData) {
@@ -60,39 +58,44 @@ export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
       const waveList = rawWaves
         .map((c) => ({
           ...c,
-          id: Number(c.waveId || c.id)
+          id: Number(c.waveId || c.id),
+          waveName: c.waveName || c.title || c.name || `Đợt ${c.waveId || c.id}`,
+          status: c.status || "Draft"
         }))
         .sort((a, b) => a.id - b.id);
 
       const rawTasks = taskData?.items || taskData?.data || [];
 
-      const mappedTasks = rawTasks.map((t) => {
-        const rawStatus = String(t.status || t.taskStatus || t.state || "").toLowerCase();
-        let calculatedStatus = "Đang thực hiện";
-        if (rawStatus === "completed" || rawStatus === "hoàn thành" || rawStatus === "done" || rawStatus === "1") {
-          calculatedStatus = "Hoàn thành";
-        } else if (rawStatus === "cancelled" || rawStatus === "canceled" || rawStatus === "đã hủy" || rawStatus === "3") {
-          calculatedStatus = "Đã hủy";
-        }
+      // Lấy chi tiết từng Task giống hệt TaskManagerManagement để trạng thái đạt độ chính xác 100%
+      const parsedTasks = await Promise.all(
+        rawTasks.map(async (t) => {
+          let currentTaskData = t;
+          const taskId = Number(t.taskId || t.id);
 
-        return {
-          id: t.taskId || t.id,
-          waveId: Number(t.waveId),
-          status: calculatedStatus
-        };
-      });
+          try {
+            const detail = await taskService.getTaskById(taskId);
+            if (detail) {
+              currentTaskData = detail;
+            }
+          } catch (err) {
+            console.warn(`Lỗi lấy chi tiết Task ${taskId}:`, err);
+          }
 
-      const mapping = {};
-      mappedTasks.forEach((t) => {
-        if (t.waveId) {
-          if (!mapping[t.waveId]) mapping[t.waveId] = [];
-          mapping[t.waveId].push(t.id);
-        }
-      });
+          const rawStatus = String(currentTaskData.status || currentTaskData.summary?.status || "").toLowerCase();
+          let calculatedStatus = "Đang thực hiện";
+          if (rawStatus === "completed" || rawStatus === "hoàn thành" || rawStatus === "done") calculatedStatus = "Hoàn thành";
+          else if (rawStatus === "cancelled" || rawStatus === "canceled" || rawStatus === "đã hủy") calculatedStatus = "Đã hủy";
+
+          return {
+            id: taskId,
+            waveId: Number(currentTaskData.waveId || currentTaskData.summary?.waveId),
+            status: calculatedStatus
+          };
+        })
+      );
 
       setWaves(waveList);
-      setAssignTasks(mappedTasks);
-      setBatchMapping(mapping);
+      setAssignTasks(parsedTasks);
     } catch (error) {
       console.error("Lỗi tải trang Overview/Home:", error);
     } finally {
@@ -248,9 +251,8 @@ export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
                 </tr>
               ) : (
                 waves.map((item, index) => {
-                  const waveId = item.waveId || item.id;
-                  const mappedIds = batchMapping[waveId] || [];
-                  const batchTasks = assignTasks.filter((t) => t.waveId === waveId || mappedIds.includes(t.id));
+                  const waveId = Number(item.waveId || item.id);
+                  const batchTasks = assignTasks.filter((t) => Number(t.waveId) === waveId);
 
                   const isCompleted = batchTasks.length > 0 && batchTasks.every((t) => t.status === "Hoàn thành");
                   const isOpenStatus = batchTasks.length === 0 || item.status === "Open";
