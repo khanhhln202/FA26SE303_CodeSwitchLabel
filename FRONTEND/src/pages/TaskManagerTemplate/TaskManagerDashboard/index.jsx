@@ -9,14 +9,19 @@ import {
 import { SPEAKER_ACCENT, REVIEWER_ACCENT } from "../../../constants/theme";
 import { taskService } from "../../../services/taskService";
 
+// Helper chuyển đổi Domain/Topic từ BE sang tiếng Việt giống TaskManagerManagement
+const mapDomainToTopicVN = (domain) => {
+  if (domain === "ItTechnology" || domain === "IT" || domain === "Công nghệ thông tin") return "Công nghệ thông tin";
+  if (domain === "Education" || domain === "Giáo dục") return "Giáo dục";
+  if (domain === "DailyLife" || domain === "Hội thoại hàng ngày") return "Hội thoại hàng ngày";
+  return domain || "Công nghệ thông tin";
+};
+
 // Bộ màu chủ đề
 const CATEGORY_COLORS = {
   'Hội thoại hàng ngày': { bg: '#E6F0FE', text: '#1E40AF', border: '#C9DEFB' },
   'Công nghệ thông tin': { bg: '#FBF0DA', text: '#92600A', border: '#F3E0B5' },
-  'Giáo dục': { bg: '#FCE7F0', text: '#9D2662', border: '#F8CFE0' },
-  'ItTechnology': { bg: '#FBF0DA', text: '#92600A', border: '#F3E0B5' },
-  'Education': { bg: '#FCE7F0', text: '#9D2662', border: '#F8CFE0' },
-  'DailyLife': { bg: '#E6F0FE', text: '#1E40AF', border: '#C9DEFB' }
+  'Giáo dục': { bg: '#FCE7F0', text: '#9D2662', border: '#F8CFE0' }
 };
 
 const getCatStyle = (cat) => CATEGORY_COLORS[cat] || { bg: '#F7F5EF', text: '#6E7078', border: '#E5E2D8' };
@@ -36,85 +41,95 @@ export default function TaskManagerDashboard() {
   const loadDataFromApi = async () => {
     try {
       setLoading(true);
-      // Gọi API lấy toàn bộ danh sách Task & Waves với pageSize lớn để tránh bị mất dữ liệu phân trang
+      // Gọi API lấy danh sách Tasks và Waves tương tự TaskManagerManagement
       const [allTasksRes, wavesRes] = await Promise.all([
         taskService.getTasks({ pageSize: 1000 }).catch(() => ({ items: [] })),
         taskService.getWaves({ pageSize: 1000 }).catch(() => ({ items: [] }))
       ]);
 
       const rawTasks = allTasksRes?.items || allTasksRes?.data || (Array.isArray(allTasksRes) ? allTasksRes : []);
-      const waves = wavesRes?.items || wavesRes?.data || (Array.isArray(wavesRes) ? wavesRes : []);
+      const rawWaves = wavesRes?.items || wavesRes?.data || (Array.isArray(wavesRes) ? wavesRes : []);
 
-      // Map danh sách topic/domain từ Wave làm fallback cho Task
-      const waveTopicMap = {};
-      waves.forEach(c => {
-        const cId = c.waveId || c.id;
-        if (cId) {
-          waveTopicMap[cId] = c.domain || c.topic || c.waveName;
+      // Bảng tra cứu thông tin Wave theo waveId
+      const waveMap = {};
+      const validWaveIds = new Set();
+
+      rawWaves.forEach(w => {
+        const wId = Number(w.waveId || w.id);
+        if (wId) {
+          waveMap[wId] = {
+            ...w,
+            topic: mapDomainToTopicVN(w.domain || w.topic)
+          };
+          validWaveIds.add(wId);
         }
       });
 
-      // Kiểm tra xem task đã được phân công VÀ đã được gán vào đợt (ở trang TaskManagerManagement) hay chưa
-      const isTaskAssignedInWave = (t) => {
-        const hasWave = Boolean(t.waveId);
-        if (!hasWave) return false;
+      // Lấy chi tiết từng Task
+      const parsedTasks = await Promise.all(
+        rawTasks.map(async (t) => {
+          let currentTaskData = t;
+          const taskId = Number(t.taskId || t.id);
 
-        if (t.assignedToUserId || t.assigneeName || t.assigneeId) return true;
-        if (Array.isArray(t.assignedUsers) && t.assignedUsers.length > 0) return true;
-        if (Array.isArray(t.assignees) && t.assignees.length > 0) return true;
-        if (Array.isArray(t.assignments) && t.assignments.length > 0) return true;
-        return false;
-      };
+          try {
+            const detail = await taskService.getTaskById(taskId);
+            if (detail) {
+              currentTaskData = detail;
+            }
+          } catch (err) {
+            console.warn(`Lỗi lấy chi tiết Task ${taskId}:`, err);
+          }
 
-      // Phân loại task thành Speaker (Recording) và Reviewer (Review/Editing)
-      const speakerItems = rawTasks.filter(t => {
-        const rawType = String(t.taskType || t.type || t.role || "").toLowerCase();
-        return rawType === "recording" || rawType === "speaker" || rawType === "0" || rawType.includes("record");
-      });
+          const waveId = Number(currentTaskData.waveId || currentTaskData.summary?.waveId);
+          const parentWave = waveMap[waveId];
 
-      const reviewerItems = rawTasks.filter(t => {
-        const rawType = String(t.taskType || t.type || t.role || "").toLowerCase();
-        return rawType === "review" || rawType === "reviewer" || rawType === "editing" || rawType === "1" || rawType.includes("review");
-      });
+          const rawType = String(currentTaskData.taskType || currentTaskData.summary?.taskType || "").toLowerCase();
+          const isSpeaker = rawType === "recording" || rawType === "speaker" || rawType === "0";
 
-      // Đếm số lượng nhiệm vụ đã phân công (Chỉ đếm các nhiệm vụ thuộc Wave/Đợt VÀ có người thực hiện)
-      const assignedSpeakers = speakerItems.filter(isTaskAssignedInWave).length;
-      const assignedReviewers = reviewerItems.filter(isTaskAssignedInWave).length;
+          let rawAssignees =
+            currentTaskData.assignees ||
+            currentTaskData.summary?.assignees ||
+            currentTaskData.assignments ||
+            currentTaskData.assignedUsers ||
+            currentTaskData.assignedUserIds ||
+            [];
 
-      // Đếm số lượng nhiệm vụ theo Chủ đề chính xác
+          const hasAssignees = Array.isArray(rawAssignees) && rawAssignees.length > 0;
+
+          // Ưu tiên lấy chủ đề chuẩn theo Đợt giống bên TaskManagerManagement
+          const topicVN = parentWave?.topic || mapDomainToTopicVN(currentTaskData.domain || currentTaskData.summary?.domain);
+
+          return {
+            id: taskId,
+            waveId: waveId,
+            role: isSpeaker ? "Speaker" : "Reviewer",
+            hasAssignees: hasAssignees,
+            topic: topicVN
+          };
+        })
+      );
+
+      // CHỈ LỌC CÁC TASK CÓ WAVEID HỢP LỆ VÀ ĐANG THUỘC ĐỢT TRONG TASKMANAGERMANAGEMENT
+      const validTasks = parsedTasks.filter(t => t.waveId && validWaveIds.has(t.waveId));
+
+      // 1. Thống kê nhiệm vụ Speakers và Reviewers trong các Đợt
+      const speakerItems = validTasks.filter(t => t.role === "Speaker");
+      const reviewerItems = validTasks.filter(t => t.role === "Reviewer");
+
+      // 2. Thống kê nhiệm vụ đã phân công (có người thực hiện)
+      const assignedSpeakers = speakerItems.filter(t => t.hasAssignees).length;
+      const assignedReviewers = reviewerItems.filter(t => t.hasAssignees).length;
+
+      // 3. Thống kê phân bố theo chủ đề của các đợt
       let tech = 0;
       let edu = 0;
       let life = 0;
 
-      rawTasks.forEach(t => {
-        const waveTopic = waveTopicMap[t.waveId] || "";
-        const domainStr = String(t.domain || t.topic || t.categoryName || waveTopic || "").toLowerCase();
-
-        if (
-          domainStr.includes("ittechnology") || 
-          domainStr.includes("công nghệ") || 
-          domainStr.includes("thông tin") || 
-          domainStr.includes("tech") ||
-          domainStr.includes("it")
-        ) {
-          tech++;
-        } else if (
-          domainStr.includes("education") || 
-          domainStr.includes("giáo dục") || 
-          domainStr.includes("edu")
-        ) {
-          edu++;
-        } else if (
-          domainStr.includes("dailylife") || 
-          domainStr.includes("hội thoại") || 
-          domainStr.includes("hàng ngày") || 
-          domainStr.includes("life")
-        ) {
-          life++;
-        } else {
-          // Mặc định tính vào Công nghệ thông tin nếu không xác định được
-          tech++;
-        }
+      validTasks.forEach(t => {
+        if (t.topic === "Công nghệ thông tin") tech++;
+        else if (t.topic === "Giáo dục") edu++;
+        else if (t.topic === "Hội thoại hàng ngày") life++;
+        else tech++;
       });
 
       setStats({
