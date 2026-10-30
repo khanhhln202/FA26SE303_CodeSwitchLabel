@@ -168,7 +168,7 @@ public class TaskStateMachineTests
 /// đợt hiện sai chữ ngay, nên từng nhánh có một test.
 /// </summary>
 [Trait("Category", "Unit")]
-public class CampaignStateMachineTests
+public class WaveStateMachineTests
 {
     [Theory]
     [InlineData(0, 0)]
@@ -176,10 +176,10 @@ public class CampaignStateMachineTests
     public void DoTKhongCoNhiemVu_ThiDangMo(int taskCount, int completedTaskCount)
     {
         // Arrange + Act
-        var status = CampaignStateMachine.Evaluate(taskCount, completedTaskCount);
+        var status = WaveStateMachine.Evaluate(taskCount, completedTaskCount);
 
         // Assert
-        Assert.Equal(CampaignStatus.Open, status);
+        Assert.Equal(WaveStatus.Open, status);
     }
 
     [Theory]
@@ -190,10 +190,10 @@ public class CampaignStateMachineTests
     public void CoNhiemVu_ChuaXongHet_ThiDangThucHien(int taskCount, int completedTaskCount)
     {
         // Arrange + Act
-        var status = CampaignStateMachine.Evaluate(taskCount, completedTaskCount);
+        var status = WaveStateMachine.Evaluate(taskCount, completedTaskCount);
 
         // Assert
-        Assert.Equal(CampaignStatus.InProgress, status);
+        Assert.Equal(WaveStatus.InProgress, status);
     }
 
     [Theory]
@@ -203,10 +203,10 @@ public class CampaignStateMachineTests
     public void MoiNhiemVuDeuXong_ThiHoanThanh(int taskCount, int completedTaskCount)
     {
         // Arrange + Act
-        var status = CampaignStateMachine.Evaluate(taskCount, completedTaskCount);
+        var status = WaveStateMachine.Evaluate(taskCount, completedTaskCount);
 
         // Assert
-        Assert.Equal(CampaignStatus.Completed, status);
+        Assert.Equal(WaveStatus.Completed, status);
     }
 
     /// <summary>
@@ -222,10 +222,10 @@ public class CampaignStateMachineTests
         var completedTaskCount = 1;
 
         // Act
-        var status = CampaignStateMachine.Evaluate(taskCount, completedTaskCount);
+        var status = WaveStateMachine.Evaluate(taskCount, completedTaskCount);
 
         // Assert
-        Assert.Equal(CampaignStatus.InProgress, status);
+        Assert.Equal(WaveStatus.InProgress, status);
     }
 
     /// <summary>completedTaskCount lớn hơn taskCount là dữ liệu hỏng, không phải lỗi của hàm.</summary>
@@ -233,9 +233,9 @@ public class CampaignStateMachineTests
     public void DemNhieuHonTongSoTask_ThiVanDangThucHien()
     {
         // Arrange + Act
-        var status = CampaignStateMachine.Evaluate(taskCount: 2, completedTaskCount: 5);
+        var status = WaveStateMachine.Evaluate(taskCount: 2, completedTaskCount: 5);
 
         // Assert
-        Assert.Equal(CampaignStatus.InProgress, status);
+        Assert.Equal(WaveStatus.InProgress, status);
     }
 }

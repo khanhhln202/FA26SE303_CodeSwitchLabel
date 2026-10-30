@@ -59,7 +59,7 @@ public sealed class SpeakerExportTests : IntegrationTestBase
     [Fact]
     public async Task BangSpeaker_LocChienDich_ChiDemCapDuHaiBanTrongDot()
     {
-        var task = await CreateTaskAsync(CampaignId, TaskType.Recording, 10, ManagerUserId);
+        var task = await CreateTaskAsync(WaveId, TaskType.Recording, 10, ManagerUserId);
 
         var duCap = await CreateScriptWithWordAsync(
             "[vi]Em nên [en]scan [vi]tài liệu này.",
@@ -86,7 +86,7 @@ public sealed class SpeakerExportTests : IntegrationTestBase
         await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var page = await UserService.SearchSpeakersAsync(
-            new SpeakerSearchRequest { CampaignId = CampaignId, PageSize = 100 },
+            new SpeakerSearchRequest { WaveId = WaveId, PageSize = 100 },
             TestContext.Current.CancellationToken);
 
         var row = Assert.Single(page.Items, x => x.UserId == SpeakerUserId);
@@ -106,7 +106,7 @@ public sealed class SpeakerExportTests : IntegrationTestBase
         var script = await CreateScriptWithWordAsync(
             "[vi]Em nên [en]scan [vi]tài liệu này.",
             "[vi]Em nên quét tài liệu này.");
-        var task = await CreateTaskAsync(CampaignId, TaskType.Recording, 10, ManagerUserId);
+        var task = await CreateTaskAsync(WaveId, TaskType.Recording, 10, ManagerUserId);
 
         await CreateApprovedRecordingAsync(script.ScriptId, SentenceVariant.CodeSwitching, task.TaskId);
         await CreateApprovedRecordingAsync(script.ScriptId, SentenceVariant.PureVietnamese, task.TaskId);

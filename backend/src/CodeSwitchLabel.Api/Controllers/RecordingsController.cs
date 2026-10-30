@@ -19,12 +19,14 @@ public class RecordingsController(IRecordingService recordingService, IReviewSer
     /// <remarks>
     /// `sentenceVariant` chọn bạn đang đọc bản nào:
     /// **CodeSwitching** là câu chen tiếng Anh, **PureVietnamese** là câu thuần Việt.
-    /// Mỗi cặp câu cần đủ cả hai, và phải do cùng một người đọc.
+    /// Mỗi cặp câu cần đủ cả hai bản cho mỗi người đọc. Nhiều Speaker được thu cùng cặp;
+    /// mỗi người có bản riêng.
     ///
     /// Gửi nguyên file trình duyệt ghi ra (WebM, OGG, MP4, WAV đều được) — **không chuyển định dạng
     /// ở frontend**. Backend tự chuyển sang WAV 16 kHz mono, đo thời lượng, kiểm tra tự động rồi lưu.
     ///
-    /// Mã bản ghi sinh theo mã câu: `r_cs_...` hoặc `r_vi_...`, thu lại lần hai trở đi thêm hậu tố `_t2`.
+    /// Mã bản ghi sinh theo mã câu: `r_cs_..._u&lt;speakerId&gt;` hoặc `r_vi_..._u&lt;speakerId&gt;`,
+    /// thu lại lần hai trở đi thêm hậu tố `_t2`.
     ///
     /// **201 kèm qcPassed = false** nghĩa là bản ghi đã lưu nhưng trượt kiểm tra tự động, và
     /// sẽ không vào hàng đợi của Reviewer.
@@ -91,9 +93,8 @@ public class RecordingsController(IRecordingService recordingService, IReviewSer
     /// <summary>TEAM_010 (yêu cầu 2.4) — nút CHỈ XÓA AUDIO.</summary>
     /// <remarks>
     /// Bản ghi bị loại nhưng **câu văn bản được giữ lại** và quay về hàng đợi ghi âm để
-    /// thu lại. Câu quay về cho **chính người đọc cũ**, không phải người khác: luật của
-    /// lược đồ là một cặp câu chỉ một người đọc (`trg_recording_single_speaker`), nên
-    /// giao cho người khác là việc không làm được.
+    /// thu lại. Người đọc cũ tự thu lại bản của mình; Speaker khác vẫn thu được bản
+    /// riêng trên cùng cặp câu.
     ///
     /// Bắt buộc chọn ít nhất một lý do. Lý do lưu vào `recording.discard_note`, CỐ Ý
     /// không ghi thành lượt duyệt — đây là quyết định dứt điểm, không phải phiếu bầu.

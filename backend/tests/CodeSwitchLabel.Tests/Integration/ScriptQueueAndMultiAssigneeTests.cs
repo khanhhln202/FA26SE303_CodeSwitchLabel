@@ -235,14 +235,14 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
         var manager = await CreateUserAsync($"tm-{nhan}-{Guid.NewGuid():N}@test.local", RoleName.TaskManager);
         var speaker = await CreateUserAsync($"sp-{nhan}-{Guid.NewGuid():N}@test.local", RoleName.Speaker);
 
-        var campaign = await CreateCampaignAsync($"Đợt {nhan}", 2000,
+        var wave = await CreateWaveAsync($"Đợt {nhan}", 2000,
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
-            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), manager.UserId, CampaignStatus.Open);
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), manager.UserId, WaveStatus.Open);
 
-        campaign.AssignedTo = manager.UserId;
+        wave.AssignedTo = manager.UserId;
         await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var task = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, soMuc,
+        var task = await CreateTaskAsync(wave.WaveId, TaskType.Recording, soMuc,
             manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
 
         foreach (var word in new[] { "alpha", "bravo", "charlie" }.Take(soMuc))
@@ -272,14 +272,14 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
     {
         var manager = await CreateUserAsync($"tm-{nhan}-{Guid.NewGuid():N}@test.local", RoleName.TaskManager);
 
-        var campaign = await CreateCampaignAsync($"Đợt {nhan}", 2000,
+        var wave = await CreateWaveAsync($"Đợt {nhan}", 2000,
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
-            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), manager.UserId, CampaignStatus.Open);
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), manager.UserId, WaveStatus.Open);
 
-        campaign.AssignedTo = manager.UserId;
+        wave.AssignedTo = manager.UserId;
         await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        return await CreateTaskAsync(campaign.CampaignId, TaskType.Review, chiTieu,
+        return await CreateTaskAsync(wave.WaveId, TaskType.Review, chiTieu,
             manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
     }
 
@@ -338,7 +338,7 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
         // Arrange
         var standalone = await TaskService.CreateAsync(new CreateTaskRequest
         {
-            CampaignId = null,
+            WaveId = null,
             TaskType = TaskType.Review,
             Description = "Duyệt độc lập, hàng chờ trống",
             TargetQty = 3,
@@ -429,21 +429,21 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
     // ------------------------------ hàng đợi ghi âm theo chiến dịch
 
     [Fact]
-    public async Task HangDoiGhiAm_PhamViCaChienDich()
+    public async Task GetNext_TrongTask_PhamViCaChienDich()
     {
         var ct = TestContext.Current.CancellationToken;
         var speakers = await TaoBaSpeakerAsync();
         var (a, b, c) = (speakers[0], speakers[1], speakers[2]);
 
-        var campaign = await CreateCampaignAsync(
+        var wave = await CreateWaveAsync(
             $"Đợt queue-{Guid.NewGuid():N}", 2000,
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
-            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), ManagerUserId, CampaignStatus.Open);
-        campaign.AssignedTo = ManagerUserId;
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), ManagerUserId, WaveStatus.Open);
+        wave.AssignedTo = ManagerUserId;
         await Db.SaveChangesAsync(ct);
 
-        var t1 = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 2, ManagerUserId);
-        var t2 = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 2, ManagerUserId);
+        var t1 = await CreateTaskAsync(wave.WaveId, TaskType.Recording, 2, ManagerUserId);
+        var t2 = await CreateTaskAsync(wave.WaveId, TaskType.Recording, 2, ManagerUserId);
 
         // Câu của task 2 vào hàng trước, câu của task 1 sau.
         var s2 = await CreateValidatedScriptAsync(
@@ -467,18 +467,70 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
             });
         await Db.SaveChangesAsync(ct);
 
-        // A chỉ nhận task 1 nhưng nhận câu CŨ HƠN nằm trong task 2 — hàng của cả đợt.
+        // Đợt phát câu chung: A nhận task 1 vẫn thấy câu cũ hơn nằm trong task 2.
         var first = await ScriptAssignmentService.GetNextAsync(a.UserId, t1.TaskId, ct);
         Assert.Equal(s2.ScriptId, first?.ScriptId);
 
-        // B chỉ nhận task 2 nhưng tới lượt thì lấy câu của task 1.
+        // Không còn giữ chỗ nên B cũng nhận đúng câu đó — mỗi người một bản riêng.
         var second = await ScriptAssignmentService.GetNextAsync(b.UserId, t2.TaskId, ct);
-        Assert.Equal(s1.ScriptId, second?.ScriptId);
+        Assert.Equal(s2.ScriptId, second?.ScriptId);
 
         // Người ngoài đợt không mượn task để lấy câu.
         var error = await Assert.ThrowsAsync<ForbiddenException>(
             () => ScriptAssignmentService.GetNextAsync(c.UserId, t1.TaskId, ct));
         Assert.Equal("task_not_recordable", error.Code);
+    }
+
+    /// <summary>
+    /// Câu đã đủ hai bản chờ duyệt/đạt không được chiếm hết hạn mức lấy câu kế tiếp.
+    /// Trước khi lọc trong SQL, hơn 10 mục đầu đã thu đủ làm lần gọi trả rỗng oan.
+    /// </summary>
+    [Fact]
+    public async Task GetNext_BoQuaCauDaDuHaiBienThe()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var speaker = (await TaoBaSpeakerAsync())[0];
+
+        var wave = await CreateWaveAsync(
+            $"Đợt full-{Guid.NewGuid():N}", 2000,
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), ManagerUserId, WaveStatus.Open);
+        wave.AssignedTo = ManagerUserId;
+        await Db.SaveChangesAsync(ct);
+
+        var task = await CreateTaskAsync(wave.WaveId, TaskType.Recording, 11, ManagerUserId);
+        Db.TaskAssignments.Add(new TaskAssignment
+        {
+            TaskId = task.TaskId, UserId = speaker.UserId,
+            AssignmentStatus = AssignmentStatus.Active, AssignedAt = DateTimeOffset.UtcNow
+        });
+
+        var scripts = new List<Script>();
+        for (var i = 0; i < 11; i++)
+        {
+            var script = await CreateValidatedScriptAsync(
+                $"[vi]Đủ [en]full{i} [vi]câu", $"[vi]Đủ full{i} câu",
+                ScriptDomain.ItTechnology, speaker.UserId);
+            scripts.Add(script);
+
+            Db.TaskScripts.Add(new TaskScript
+            {
+                TaskId = task.TaskId, ScriptId = script.ScriptId,
+                AssigneeUserId = speaker.UserId, Status = TaskScriptStatus.Pending
+            });
+
+            if (i < 10)
+            {
+                await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
+                await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.PureVietnamese);
+            }
+        }
+
+        await Db.SaveChangesAsync(ct);
+
+        var next = await ScriptAssignmentService.GetNextAsync(speaker.UserId, task.TaskId, ct);
+
+        Assert.Equal(scripts[10].ScriptId, next?.ScriptId);
     }
 
     // ------------------------------ bản ghi bị từ chối thì ai được thu lại
@@ -505,7 +557,8 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
 
         // Bản rejected không giữ cặp câu.
         Assert.False(await Scripts.IsRecordedByOtherAsync(script.ScriptId, b.UserId, ct));
-        Assert.Null(await Recordings.GetOwnerSpeakerIdAsync(script.ScriptId, ct));
+        Assert.False(await Recordings.HasActiveRecordingAsync(
+            script.ScriptId, SentenceVariant.CodeSwitching, a.UserId, ct));
 
         // Người cũ vẫn còn việc (thiếu biến thể vi) và bản ghi vẫn còn trong lịch sử.
         Assert.False(await Scripts.IsRecordedByOtherAsync(script.ScriptId, a.UserId, ct));
@@ -513,23 +566,23 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
     }
 
     /// <summary>
-    /// Người từng bị loại không nhận lại câu khi còn Speaker khác trong đợt chưa thử.
-    /// Khi tất cả đều đã thử thì mở lại cho người cũ — nếu không cặp câu kẹt vĩnh viễn.
+    /// Mỗi Speaker tự nhận lại câu sau khi bản của mình bị loại — không phải chờ
+    /// người khác thử trước, vì mỗi người có bản ghi riêng trên cùng cặp câu.
     /// </summary>
     [Fact]
-    public async Task BanGhiBiTuChoi_NguoiCuChiNhanLaiKhiNguoiKhacDaThu()
+    public async Task BanGhiBiTuChoi_MoiNguoiNhanLaiDocLap()
     {
         var ct = TestContext.Current.CancellationToken;
         var speakers = await TaoBaSpeakerAsync();
         var (a, b) = (speakers[0], speakers[1]);
 
-        var campaign = await CreateCampaignAsync(
+        var wave = await CreateWaveAsync(
             $"Đợt retry-{Guid.NewGuid():N}", 2000,
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
-            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), ManagerUserId, CampaignStatus.Open);
-        campaign.AssignedTo = ManagerUserId;
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), ManagerUserId, WaveStatus.Open);
+        wave.AssignedTo = ManagerUserId;
         await Db.SaveChangesAsync(ct);
-        var task = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 1, ManagerUserId);
+        var task = await CreateTaskAsync(wave.WaveId, TaskType.Recording, 1, ManagerUserId);
 
         var script = await CreateValidatedScriptAsync(
             "[vi]Thu [en]deadend [vi]nhe", "[vi]Thu deadend nhe",
@@ -556,42 +609,43 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
         rejected.Status = RecordingStatus.Rejected;
         await Db.SaveChangesAsync(ct);
 
-        // A chưa được nhận lại khi B chưa thử.
-        Assert.Null(await Queue.ClaimNextAsync(a.UserId, QueueStage.Recording, task.TaskId, ct));
+        // A nhận lại được ngay, không phải chờ B.
+        var aClaim = await Queue.ClaimNextAsync(a.UserId, QueueStage.Recording, task.TaskId, ct);
+        Assert.Equal(script.ScriptId, aClaim?.ScriptId);
+        await Queue.ReleaseAsync(script.ScriptId, QueueStage.Recording, ct: ct);
 
-        // B lấy được câu.
+        // B cũng nhận được cùng câu — mỗi người một bản riêng.
         var bClaim = await Queue.ClaimNextAsync(b.UserId, QueueStage.Recording, task.TaskId, ct);
         Assert.Equal(script.ScriptId, bClaim?.ScriptId);
 
-        // B cũng bị loại: trả câu về hàng, giờ A được nhận lại.
+        // B cũng bị loại: trả câu về hàng, A vẫn nhận lại được.
         var bRejected = await CreateRecordingAsync(script.ScriptId, b.UserId, SentenceVariant.PureVietnamese);
         bRejected.Status = RecordingStatus.Rejected;
         await Db.SaveChangesAsync(ct);
         await Queue.ReleaseAsync(script.ScriptId, QueueStage.Recording, ct: ct);
 
-        var aClaim = await Queue.ClaimNextAsync(a.UserId, QueueStage.Recording, task.TaskId, ct);
-        Assert.Equal(script.ScriptId, aClaim?.ScriptId);
+        var again = await Queue.ClaimNextAsync(a.UserId, QueueStage.Recording, task.TaskId, ct);
+        Assert.Equal(script.ScriptId, again?.ScriptId);
     }
 
     /// <summary>
     /// Người đang giữ cặp bằng một bản chờ duyệt vẫn nhận được biến thể còn lại dù từng
-    /// bị loại trên câu này — nếu không cặp kẹt: người khác bị bản đang chờ chặn, còn
-    /// người cũ bị luật "người từng bị loại" chặn.
+    /// bị loại trên câu này. Bản của người này không chặn Speaker khác thu cùng câu.
     /// </summary>
     [Fact]
-    public async Task NguoiDangGiuMotBienThe_DuocNhanLaiBienTheConLai()
+    public async Task NguoiDangGiuMotBienThe_KhongChanNguoiKhac()
     {
         var ct = TestContext.Current.CancellationToken;
         var speakers = await TaoBaSpeakerAsync();
         var (a, b) = (speakers[0], speakers[1]);
 
-        var campaign = await CreateCampaignAsync(
+        var wave = await CreateWaveAsync(
             $"Đợt rerecord-{Guid.NewGuid():N}", 2000,
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
-            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), ManagerUserId, CampaignStatus.Open);
-        campaign.AssignedTo = ManagerUserId;
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), ManagerUserId, WaveStatus.Open);
+        wave.AssignedTo = ManagerUserId;
         await Db.SaveChangesAsync(ct);
-        var task = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 1, ManagerUserId);
+        var task = await CreateTaskAsync(wave.WaveId, TaskType.Recording, 1, ManagerUserId);
 
         var script = await CreateValidatedScriptAsync(
             "[vi]Thu [en]variant [vi]nhe", "[vi]Thu variant nhe",
@@ -622,12 +676,13 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
 
         await CreateRecordingAsync(script.ScriptId, a.UserId, SentenceVariant.PureVietnamese);
 
-        // A nhận biến thể còn lại; B vẫn không chen vào được.
+        // A nhận biến thể còn lại; bản đang chờ của A không chặn B.
         var aClaim = await Queue.ClaimNextAsync(a.UserId, QueueStage.Recording, task.TaskId, ct);
         Assert.Equal(script.ScriptId, aClaim?.ScriptId);
 
         await Queue.ReleaseAsync(script.ScriptId, QueueStage.Recording, ct: ct);
-        Assert.Null(await Queue.ClaimNextAsync(b.UserId, QueueStage.Recording, task.TaskId, ct));
+        var bClaim = await Queue.ClaimNextAsync(b.UserId, QueueStage.Recording, task.TaskId, ct);
+        Assert.Equal(script.ScriptId, bClaim?.ScriptId);
     }
 
     // ------------------------------ gỡ người khỏi task

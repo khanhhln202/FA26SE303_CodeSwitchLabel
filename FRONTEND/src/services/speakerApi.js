@@ -29,7 +29,7 @@ export const updateSpeakerProfileApi = async (values) => {
 };
 
 // Tiến độ của chính mình: GET /api/speaker/progress
-// Trả về { totalSubmitted, totalApproved, activeTasks: [{ taskId, taskTitle, description, campaignName, taskType, status, deadline,
+// Trả về { totalSubmitted, totalApproved, activeTasks: [{ taskId, taskTitle, description, waveName, taskType, status, deadline,
 //   myProgress: { targetQty, done, percent, ... } (của mình), teamProgress: {...} (cả nhóm), assignees: [{ userId, fullName }] }] }
 export const getSpeakerProgressApi = async () => {
   try {
@@ -91,7 +91,7 @@ export const getSpeakerStatsApi = async () => {
 };
 
 // Đợt đang tham gia (chiến dịch của task thu âm đang giao): GET /api/speaker/rounds/current
-// Trả về { campaignId, name, topic, status, startDate, endDate, endsIn, participants, target, submitted, approved, pending, isRegistered }
+// Trả về { waveId, name, topic, status, startDate, endDate, endsIn, participants, target, submitted, approved, pending, isRegistered }
 // 204 = chưa tham gia đợt nào -> trả null
 export const getSpeakerCurrentRoundApi = async () => {
   try {
@@ -105,12 +105,12 @@ export const getSpeakerCurrentRoundApi = async () => {
   }
 };
 
-// Bảng xếp hạng của một đợt: GET /api/speaker/rounds/{campaignId}/leaderboard?top=
-// Trả về { campaignTargetQty, allocatedTargetQty, items: [{ rank, userId, name, submitted, submittedCapped, targetQty, isMe }] }
+// Bảng xếp hạng của một đợt: GET /api/speaker/rounds/{waveId}/leaderboard?top=
+// Trả về { waveTargetQty, allocatedTargetQty, items: [{ rank, userId, name, submitted, submittedCapped, targetQty, isMe }] }
 // items xếp theo số bản đã nộp (không tính bản trượt QC)
-export const getRoundLeaderboardApi = async ({ campaignId, top = 5 }) => {
+export const getRoundLeaderboardApi = async ({ waveId, top = 5 }) => {
   try {
-    const response = await httpClient.get(`/api/speaker/rounds/${campaignId}/leaderboard`, { params: { top } });
+    const response = await httpClient.get(`/api/speaker/rounds/${waveId}/leaderboard`, { params: { top } });
     return response.data;
   } catch (error) {
     const message =

@@ -3,8 +3,9 @@ using CodeSwitchLabel.Repositories.Enums;
 namespace CodeSwitchLabel.Repositories.Entities;
 
 /// <summary>
-/// Một lần thu. Khoá chính là chuỗi r_cs_ hoặc r_vi_ + 9/12 chữ số của script, thu lại thì thêm _tN.
-/// Lược đồ chặn: mỗi cặp câu chỉ một người đọc, và mỗi (câu, biến thể) chỉ một bản được duyệt đạt.
+/// Một lần thu. Khoá chính là chuỗi r_cs_ hoặc r_vi_ + 9/12 chữ số của script, thêm
+/// _u&lt;speakerId&gt; để nhiều Speaker thu cùng câu, và _tN khi thu lại.
+/// Lược đồ chặn: mỗi (câu, biến thể, Speaker) chỉ một bản chờ duyệt/đạt.
 /// </summary>
 public class Recording
 {

@@ -16,13 +16,20 @@ public class AuthService(
     IAccessTokenIssuer tokens,
     TimeProvider clock) : IAuthService
 {
+    private static string? _dummyHash;
+    // shortcut: the first unknown-email login hashes once; prewarm if cold-start timing matters.
+
     public async Task<LoginResponse> LoginAsync(LoginRequest request, CancellationToken ct = default)
     {
         var user = await users.GetByEmailAsync(request.Email.Trim(), ct);
 
-        // Cố ý trả CÙNG một thông báo cho cả hai ca sai email và sai mật khẩu:
-        // nói rõ "email không tồn tại" là tiết lộ tài khoản nào có thật trong hệ thống.
-        if (user is null || !hasher.Verify(request.Password, user.PasswordHash))
+        // Luôn chạy đúng một lần Verify, dù email có tồn tại hay không,
+        // để thời gian phản hồi không lộ email nào có thật.
+        var hash = user?.PasswordHash ?? (_dummyHash ??= hasher.Hash(Guid.NewGuid().ToString("N")));
+        var passwordOk = hasher.Verify(request.Password, hash);
+
+        // Cố ý trả CÙNG một thông báo cho cả hai ca sai email và sai mật khẩu.
+        if (user is null || !passwordOk)
         {
             throw new BadRequestException("invalid_credentials", "Email hoặc mật khẩu không đúng.");
         }
@@ -171,7 +178,7 @@ public class ReasonService(IReasonRepository repository) : IReasonService
 /// Số liệu quản trị. Mọi con số đọc thẳng từ view của lược đồ, không tính lại trong C# —
 /// dashboard và báo cáo SQL vì thế không bao giờ lệch nhau.
 /// </summary>
-public class StatisticsService(IStatisticsRepository repository, ICampaignRepository campaigns)
+public class StatisticsService(IStatisticsRepository repository, IWaveRepository waves)
     : IStatisticsService
 {
     public async Task<DashboardDto> GetDashboardAsync(CancellationToken ct = default)
@@ -179,7 +186,7 @@ public class StatisticsService(IStatisticsRepository repository, ICampaignReposi
         var s = await repository.GetDashboardAsync(ct);
 
         return new DashboardDto(
-            s.TotalCampaigns, s.OpenCampaigns, s.ActiveCampaigns,
+            s.TotalWaves, s.OpenWaves, s.ActiveWaves,
             s.TotalScripts, s.ValidatedScripts, s.PendingScripts,
             s.TotalRecordings, s.ApprovedRecordings, s.RejectedRecordings,
             s.ApprovedDurationSec,
@@ -199,10 +206,10 @@ public class StatisticsService(IStatisticsRepository repository, ICampaignReposi
         [.. (await repository.GetRejectionStatsAsync(ct)).Select(r => new RejectionStatDto(
             r.ReasonCode, r.Category.ToString(), r.TimesUsed))];
 
-    public async Task<IReadOnlyList<CampaignProgressDto>> GetCampaignProgressAsync(
+    public async Task<IReadOnlyList<WaveProgressDto>> GetWaveProgressAsync(
         CancellationToken ct = default) =>
-        [.. (await campaigns.GetProgressAsync(null, ct)).Select(p => new CampaignProgressDto(
-            p.CampaignId, p.CampaignName, p.Domain, p.CampaignTargetQty, p.StartDate, p.EndDate,
-            p.CampaignStatus, p.AssignedTo, p.AllocatedTaskQty, p.RemainingTaskQty,
+        [.. (await waves.GetProgressAsync(null, ct)).Select(p => new WaveProgressDto(
+            p.WaveId, p.WaveName, p.Domain, p.WaveTargetQty, p.StartDate, p.EndDate,
+            p.WaveStatus, p.AssignedTo, p.AllocatedTaskQty, p.RemainingTaskQty,
             p.TaskCount, p.CompletedTaskCount))];
 }

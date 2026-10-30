@@ -19,34 +19,30 @@ public interface IRecordingRepository
     Task<Recording?> GetAsync(string recordingId, CancellationToken ct = default);
 
     /// <summary>
-    /// Lần thu đang hiệu lực của một biến thể — bản chờ duyệt hoặc đã đạt. Null nghĩa là
-    /// biến thể đó đang trống (chưa thu, hoặc bản cũ đã bị loại / trượt QC).
+    /// Lần thu đang hiệu lực của một biến thể cho MỘT Speaker — bản chờ duyệt hoặc đã đạt.
+    /// Null nghĩa là biến thể đó đang trống với Speaker này. Speaker khác có bản riêng.
     /// Trả về thực thể CÓ theo dõi thay đổi: người gọi sửa trạng thái rồi lưu.
     /// </summary>
     Task<Recording?> GetActiveTakeAsync(
-        string scriptId, SentenceVariant variant, CancellationToken ct = default);
+        string scriptId, SentenceVariant variant, long speakerId, CancellationToken ct = default);
 
     /// <summary><paramref name="sort"/> rỗng (Field = null) là thứ tự mặc định.</summary>
     Task<(IReadOnlyList<Recording> Items, int Total)> SearchAsync(
         long? speakerId, string? scriptId, RecordingStatus? status,
         int page, int pageSize, SortSpec<RecordingSortField> sort, CancellationToken ct = default);
 
-    /// <summary>
-    /// Người đang giữ cặp câu này (có bản chờ duyệt/đạt). Bản rejected/qc_failed không
-    /// giữ quyền — sau khi Reviewer loại, cặp câu được thu lại bởi người khác.
-    /// </summary>
-    Task<long?> GetOwnerSpeakerIdAsync(string scriptId, CancellationToken ct = default);
-
-    /// <summary>Đã có bản đang chờ duyệt hoặc đã đạt cho đúng biến thể này chưa.</summary>
+    /// <summary>Đã có bản đang chờ duyệt hoặc đã đạt của CHÍNH Speaker này cho biến thể chưa.</summary>
     Task<bool> HasActiveRecordingAsync(
-        string scriptId, SentenceVariant variant, CancellationToken ct = default);
+        string scriptId, SentenceVariant variant, long speakerId, CancellationToken ct = default);
 
-    /// <summary>Số lần đã thu cho (cặp câu, biến thể) này — lần thu mới là số này cộng một.</summary>
-    Task<int> CountTakesAsync(string scriptId, SentenceVariant variant, CancellationToken ct = default);
+    /// <summary>Số lần Speaker này đã thu cho (cặp câu, biến thể) — lần thu mới là số này cộng một.</summary>
+    Task<int> CountTakesAsync(
+        string scriptId, SentenceVariant variant, long speakerId, CancellationToken ct = default);
 
     /// <summary>Gọi hàm fn_generate_recording_id của database.</summary>
     Task<string> GenerateIdAsync(
-        string scriptId, SentenceVariant variant, int take, CancellationToken ct = default);
+        string scriptId, SentenceVariant variant, int take, long speakerId,
+        CancellationToken ct = default);
 
     /// <summary>
     /// Task thu âm chứa cặp câu, trong phạm vi chiến dịch của task được hỏi, mà người này
@@ -83,10 +79,11 @@ public class RecordingRepository(CodeSwitchLabelDbContext db) : IRecordingReposi
         db.Database.BeginTransactionAsync(ct);
 
     public Task<Recording?> GetActiveTakeAsync(
-        string scriptId, SentenceVariant variant, CancellationToken ct = default) =>
+        string scriptId, SentenceVariant variant, long speakerId, CancellationToken ct = default) =>
         db.Recordings.FirstOrDefaultAsync(
             r => r.ScriptId == scriptId &&
                  r.SentenceVariant == variant &&
+                 r.SpeakerId == speakerId &&
                  (r.Status == RecordingStatus.PendingReview || r.Status == RecordingStatus.Approved),
             ct);
 
@@ -135,34 +132,30 @@ public class RecordingRepository(CodeSwitchLabelDbContext db) : IRecordingReposi
         return (items, total);
     }
 
-    public Task<long?> GetOwnerSpeakerIdAsync(string scriptId, CancellationToken ct = default) =>
-        db.Recordings.AsNoTracking()
-            .Where(r => r.ScriptId == scriptId &&
-                        r.Status != RecordingStatus.QcFailed &&
-                        r.Status != RecordingStatus.Rejected)
-            .Select(r => (long?)r.SpeakerId)
-            .FirstOrDefaultAsync(ct);
-
     public Task<bool> HasActiveRecordingAsync(
-        string scriptId, SentenceVariant variant, CancellationToken ct = default) =>
+        string scriptId, SentenceVariant variant, long speakerId, CancellationToken ct = default) =>
         db.Recordings.AsNoTracking().AnyAsync(r =>
             r.ScriptId == scriptId &&
             r.SentenceVariant == variant &&
+            r.SpeakerId == speakerId &&
             (r.Status == RecordingStatus.PendingReview || r.Status == RecordingStatus.Approved), ct);
 
     public Task<int> CountTakesAsync(
-        string scriptId, SentenceVariant variant, CancellationToken ct = default) =>
+        string scriptId, SentenceVariant variant, long speakerId, CancellationToken ct = default) =>
         db.Recordings.AsNoTracking()
-            .CountAsync(r => r.ScriptId == scriptId && r.SentenceVariant == variant, ct);
+            .CountAsync(r => r.ScriptId == scriptId &&
+                             r.SentenceVariant == variant &&
+                             r.SpeakerId == speakerId, ct);
 
     public async Task<string> GenerateIdAsync(
-        string scriptId, SentenceVariant variant, int take, CancellationToken ct = default)
+        string scriptId, SentenceVariant variant, int take, long speakerId,
+        CancellationToken ct = default)
     {
         var variantName = SnakeCaseNaming.ToSnakeCase(variant.ToString());
 
         return await db.Database
             .SqlQuery<string>(
-                $"""SELECT fn_generate_recording_id({scriptId}, CAST({variantName} AS sentence_variant), {take}) AS "Value" """)
+                $"""SELECT fn_generate_recording_id({scriptId}, CAST({variantName} AS sentence_variant), {take}, {speakerId}) AS "Value" """)
             .SingleAsync(ct);
     }
 
@@ -171,7 +164,7 @@ public class RecordingRepository(CodeSwitchLabelDbContext db) : IRecordingReposi
     {
         var scope = await db.WorkTasks.AsNoTracking()
             .Where(t => t.TaskId == requestedTaskId)
-            .Select(t => new { t.TaskId, t.TaskType, t.Status, t.CampaignId })
+            .Select(t => new { t.TaskId, t.TaskType, t.Status, t.WaveId })
             .FirstOrDefaultAsync(ct);
 
         if (scope is null ||
@@ -188,8 +181,8 @@ public class RecordingRepository(CodeSwitchLabelDbContext db) : IRecordingReposi
             a.AssignmentStatus != AssignmentStatus.Reassigned &&
             a.AssignmentStatus != AssignmentStatus.Cancelled &&
             (a.TaskId == scope.TaskId ||
-             (scope.CampaignId != null &&
-              a.Task.CampaignId == scope.CampaignId &&
+             (scope.WaveId != null &&
+              a.Task.WaveId == scope.WaveId &&
               a.Task.TaskType == TaskType.Recording &&
               a.Task.Status != WorkTaskStatus.Cancelled)), ct);
 
@@ -197,10 +190,11 @@ public class RecordingRepository(CodeSwitchLabelDbContext db) : IRecordingReposi
 
         return await db.TaskScripts.AsNoTracking()
             .Where(ts => ts.ScriptId == scriptId && ts.Status == TaskScriptStatus.Pending)
+            .Where(ts => ts.AssigneeUserId == null || ts.AssigneeUserId == speakerId)
             .Where(ts => ts.Task.TaskType == TaskType.Recording &&
                          ts.Task.Status != WorkTaskStatus.Cancelled)
             .Where(ts => ts.TaskId == scope.TaskId ||
-                         (scope.CampaignId != null && ts.Task.CampaignId == scope.CampaignId))
+                         (scope.WaveId != null && ts.Task.WaveId == scope.WaveId))
             // Ưu tiên task được hỏi để bản ghi vào đúng chỗ người dùng đang làm.
             .OrderByDescending(ts => ts.TaskId == scope.TaskId)
             .Select(ts => (long?)ts.TaskId)
@@ -214,7 +208,10 @@ public class RecordingRepository(CodeSwitchLabelDbContext db) : IRecordingReposi
             .Where(t => t.TaskType == TaskType.Recording)
             .Where(t => t.Status != WorkTaskStatus.Cancelled)
             .Where(t => t.Assignments.Any(a => a.UserId == speakerId && a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled))
-            .Where(t => t.TaskScripts.Any(ts => ts.ScriptId == scriptId && ts.Status == TaskScriptStatus.Pending))
+            .Where(t => t.TaskScripts.Any(ts =>
+                ts.ScriptId == scriptId &&
+                ts.Status == TaskScriptStatus.Pending &&
+                (ts.AssigneeUserId == null || ts.AssigneeUserId == speakerId)))
             .OrderBy(t => t.Deadline ?? DateTimeOffset.MaxValue)
             .Select(t => (long?)t.TaskId)
             .FirstOrDefaultAsync(ct);

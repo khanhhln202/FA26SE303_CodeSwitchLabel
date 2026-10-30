@@ -495,7 +495,7 @@ public sealed class ScriptProposalTests : IntegrationTestBase
             ScriptDomain.ItTechnology, SpeakerUserId);
 
         // Câu đang nằm trong một task thu âm: xoá câu phải đóng luôn mục task.
-        var task = await CreateTaskAsync(CampaignId, TaskType.Recording, 10, ManagerUserId);
+        var task = await CreateTaskAsync(WaveId, TaskType.Recording, 10, ManagerUserId);
         Db.TaskScripts.Add(new TaskScript
         {
             TaskId = task.TaskId, ScriptId = script.ScriptId, Status = TaskScriptStatus.Pending

@@ -3,7 +3,7 @@
 Nền tảng web thu thập và kiểm soát chất lượng dữ liệu tiếng nói Việt–Anh code-switching.
 Đồ án tốt nghiệp **FA26SE303**.
 
-> Web platform for collecting and quality-controlling Vietnamese–English code-switching speech data: Speakers record script pairs (`cs` + `vi`), Reviewers blind-review each recording 3 times by majority vote, Task Managers assign work via Campaigns/Tasks, Admins manage texts, users, datasets and stats.
+> Web platform for collecting and quality-controlling Vietnamese–English code-switching speech data: Speakers record script pairs (`cs` + `vi`), Reviewers blind-review each recording 3 times by majority vote, Task Managers assign work via Waves/Tasks, Admins manage texts, users, datasets and stats.
 
 ## Tính năng theo vai (Features by role)
 
@@ -74,7 +74,7 @@ FA26SE303_CodeSwitchLabel/
 │   ├── Requirement.txt           # yêu cầu 4 actor + mẫu input_text.json
 │   ├── diagrams/                 # sơ đồ kiến trúc, ERD, trạng thái, luồng nghiệp vụ (Mermaid)
 │   └── demo-test-api.html
-├── migrations/                   # V2..V17 (task độc lập, hàng đợi văn bản, đề xuất câu, quota, phân câu theo người nhận, hàng đợi ghi âm có người nhận, lượt giao tự Completed khi đạt quota)
+├── migrations/                   # V2..V22 (task độc lập, hàng đợi văn bản, đề xuất câu, quota, phân câu theo người nhận, hàng đợi ghi âm có người nhận, lượt giao tự Completed khi đạt quota, nhiều Speaker dùng chung cặp câu, đổi tên campaign thành wave)
 ├── deploy/                       # prod: docker-compose.prod.yml, Caddyfile, deploy.sh, .env.example, README.md
 ├── demo/                         # input_text_demo.json + wav/m4a mẫu + test-them/; demo-live-import.json (7 câu, 3 câu lỗi cố ý) do kịch bản demo tự sinh, .gitignore loại ra
 └── .github/workflows/            # backend.yml (CI build + test), deploy.yml (tự động lên máy chủ)
@@ -186,20 +186,20 @@ Luồng chính (7 bước):
 
 - **Một `script` là một CẶP CÂU**: `cs_content` (giữ nhãn `[vi]/[en]`) + `vi_content` + `alignment` JSON (`scan → quét`).
 - **HÀNG ĐỢI CHUNG (`script_queue`)** — mọi câu văn bản đi qua hai chặng: `text_review` → `recording`. Hàng do **trigger** sinh chứ không phải service, nên không đường ghi nào (kể cả SQL thẳng) tạo được câu lọt qua việc duyệt. Thứ tự lấy là FIFO theo `enqueued_at`.
-  - **Giữ chỗ bằng `fn_queue_claim_next`** — đọc hàng và ghi chủ nằm trong cùng một transaction, dùng `FOR UPDATE SKIP LOCKED`. Đây là chốt chặn "hai người không được cùng nhận một câu": nếu làm bằng EF thì khoảng giữa SELECT và UPDATE là lúc trống để người khác chen vào.
+  - **Giữ chỗ bằng `fn_queue_claim_next`** — đọc hàng và ghi chủ nằm trong cùng một transaction, dùng `FOR UPDATE SKIP LOCKED` để hai người không cùng giữ một hàng. Task thu âm giao thẳng qua `task_script` nên nhiều Speaker vẫn nhận cùng câu, mỗi người một dòng.
   - Claim có hạn (`queue.claim_ttl_minutes`, mặc định 30). Người mở câu rồi đóng tab không giữ câu vĩnh viễn.
 - **Duyệt văn bản chỉ MỘT lượt mỗi vòng.** Câu đã chia lô (`text_review.batch_size`, mặc định 100 câu/người) thì chỉ người nhận lô đó được duyệt; câu còn trong hàng đợi chung thì Reviewer đủ chủ đề nào cũng duyệt được. Câu bị đa số từ chối bản ghi vì lý do nội dung quay về chờ duyệt là một **vòng mới**: lượt duyệt cũ không còn tính và câu duyệt lại được.
 - **Mã câu có nghĩa** do DB sinh (`fn_generate_script_id`): `s_211000000001` = 3 chữ số nghĩa (số từ EN + domain + quan hệ Anh–Việt) + 9 chữ số thứ tự. CHECK constraint chặn mã sai ý nghĩa. ID cũ 9 chữ số (`s_211000001`) vẫn hợp lệ; frontend coi ID là chuỗi mờ, đừng cắt theo độ dài.
-- **Mỗi cặp cần 2 bản ghi âm**: `r_cs_…` + `r_vi_…` (`_t2` khi thu lại). Trigger `trg_recording_single_speaker` bắt 1 cặp chỉ 1 người đọc (cùng giọng/buổi) — **kể cả sau khi bản ghi bị loại**, nên câu quay lại hàng đợi thu lại với chính người đọc cũ.
+- **Mỗi cặp cần 2 bản ghi âm cho mỗi Speaker**: `r_cs_…_u<speakerId>` + `r_vi_…_u<speakerId>` (`_tN` khi thu lại). Nhiều Speaker được đọc cùng một cặp; mỗi người chỉ có tối đa một bản `pending_review`/`approved` cho mỗi cặp + biến thể (`uq_recording_active_variant`), bản của người khác không chặn.
 - **Duyệt mù tối đa 3 lượt của 3 người khác nhau, chốt ngay khi một bên đủ 2 phiếu** bởi trigger `trg_review_majority`. Lượt thứ ba chỉ cần khi hai phiếu đầu lệch nhau; hoà ở số vòng chẵn thì tính là trượt. Từ chối bắt buộc ≥1 lý do; lý do nhóm `content` kéo cặp câu về `pending_validation`. **Trạng thái do DATABASE chốt, code chỉ ghi lượt rồi đọc lại.** Trong vòng duyệt **không có kiểm tra tự động nào** — auto-QC chỉ chạy lúc nộp bản ghi.
 - **Đề xuất câu (yêu cầu 2.5)**: Speaker báo lỗi (kèm lý do lỗi) hoặc gửi bản sửa cho một câu đã duyệt nội dung nhưng **chưa có bản ghi âm** — đề xuất vào thẳng hàng chờ Reviewer. Trong lúc chờ, câu **bị rút khỏi hàng đợi ghi âm** (`dropped`) nên không ai thu nhầm nội dung cũ; Reviewer chốt xong (duyệt kèm bản chốt, hoặc từ chối kèm lý do) câu **tự quay lại hàng đợi ghi âm**. Mỗi câu tối đa một đề xuất chờ; duyệt đề xuất sửa ghi thêm một lượt `Edited` vào lịch sử câu. Ba bất biến này do trigger database giữ (`fn_script_proposal_guard` / `_sync` / `_close_on_script`), không chỉ ở service.
 - **Task**: `InProgress → Completed (+Cancelled)`, tự tính lại từ số liệu thật. Task thu âm đếm theo cặp (cả cs+vi đạt mới tính), task duyệt đếm theo bản ghi. Bản ghi **chờ duyệt** của một đợt **tự vào hàng chờ mọi task duyệt chưa huỷ của đợt** ngay lúc Speaker nộp (kể cả task đã đủ chỉ tiêu) — Reviewer được giao việc từ lúc tạo đợt vẫn có việc ngay, Task Manager không phải "Thêm mục" lần nữa.
 - **Một task giao cho NHIỀU người.** `task.target_qty` là chỉ tiêu của **cả nhóm**, không nhân theo số người; mỗi lượt giao giữ **quota riêng** trong `task_assignment.target_qty`, tổng quota bằng đúng chỉ tiêu task. Giao không kèm quota thì backend chia phần nguyên + dư (100 cho 3 người = 34/33/33); sửa cả bảng phân công bằng `PUT /api/tasks/{id}/assignments`. Mỗi người thấy **tiến độ của chính mình** (`myProgress`, tính trên quota của mình) lẫn của cả nhóm (`teamProgress`). Ràng buộc còn lại: cùng một người không được nhận trùng một task.
 - **Lượt giao tự chuyển `Completed` khi đạt quota riêng** (V17): `done >= task_assignment.target_qty` → `Completed`, tụt xuống dưới (bản ghi bị từ chối, nâng chỉ tiêu) → `Active`. `Completed` **vẫn là người nhận** — không khoá việc, mọi truy vấn "còn trong task" tính cả `Active` lẫn `Completed`; chỉ `Reassigned`/`Cancelled` mới rời task.
-- **Có thể giao người nhận ngay khi tạo task** bằng `assigneeUserIds` trong `POST /api/tasks`. Với task thu âm, backend chia các cặp câu hợp lệ theo chủ đề cho từng Speaker theo quota; task duyệt chỉ tạo phân công Reviewer. Cần đủ cặp câu chưa gán cho task thu âm, nếu không API trả `422 recording_not_enough_pairs`.
-- **Chỉ tiêu trên trang chủ Speaker là của riêng người đọc.** `target` của `GET /api/speaker/rounds/current` và `targetQty` trong bảng xếp hạng là tổng quota các lượt giao trong đợt, **không phải** `campaign.target_qty`; số đã nộp vẫn là số thật và có thể vượt mốc.
+- **Có thể giao người nhận ngay khi tạo task** bằng `assigneeUserIds` trong `POST /api/tasks`. Với task thu âm, backend lấy các cặp câu `Validated` theo chủ đề mà từng Speaker chưa có bản chờ duyệt/đạt, tối đa quota; kho ít hơn chỉ tiêu thì vẫn tạo task, mỗi người nhận tối đa số câu còn thu được. Nhiều Speaker có thể nhận cùng một cặp (mỗi người một dòng `task_script` và một bản ghi riêng); một Speaker không nhận trùng cặp trong cùng task. Task duyệt chỉ tạo phân công Reviewer.
+- **Chỉ tiêu trên trang chủ Speaker là của riêng người đọc.** `target` của `GET /api/speaker/rounds/current` và `targetQty` trong bảng xếp hạng là tổng quota các lượt giao trong đợt, **không phải** `wave.target_qty`; số đã nộp vẫn là số thật và có thể vượt mốc.
 - **Chỉ tiêu tụt thì task tự mở lại.** Bản ghi bị từ chối → mục câu lùi `Completed → Pending`, mục duyệt `Reviewed → Skipped`; `TaskStateMachine` tính lại và kéo task rời `Completed`. Trước đây chỉ tiêu không bao giờ tụt nên task treo ở "Hoàn thành" dù người nhận chưa làm đủ.
-- **Không dùng EF migration** — sửa lược đồ thì sửa `docs/codeswitchlabel.sql` trước, rồi sửa `DbContext` cho khớp. Migration triển khai mới nhất là V17, chấm lại `task_assignment.assignment_status` theo quota riêng (backfill dữ liệu cũ), mở unique index cho cả `active`/`completed`, và cho view `v_task_progress` + `fn_queue_claim_next` coi `completed` là còn hiệu lực. Database cũ vẫn cần V14 (`task_script.assignee_user_id`) và V15 (`fn_queue_claim_next` tôn trọng người nhận) trước V17.
+- **Không dùng EF migration** — sửa lược đồ thì sửa `docs/codeswitchlabel.sql` trước, rồi sửa `DbContext` cho khớp. Migration triển khai mới nhất là V22 (đổi tên campaign thành wave trong bảng, cột, enum, view, hàm, trigger, constraint, index và sequence). V21 cho phép nhiều Speaker dùng chung cặp câu: khoá `task_script_id`, recording ID 64 ký tự có `_u<speakerId>`, bỏ trigger một người đọc, hàng đợi phát theo từng Speaker. Database cũ vẫn cần V14/V15 trước V17, rồi V21 và V22 theo thứ tự.
 
 ## Cấu hình (Configuration)
 
@@ -232,7 +232,7 @@ docker exec csl-postgres psql -U csl -d codeswitchlabel -c "select changed_at, u
 
 - Swagger là nguồn sự thật khi backend chạy: `http://localhost:5053` (dev) / `https://api.<domain>` (prod). Export: `curl -o swagger.json http://localhost:5053/swagger/v1/swagger.json`
 - `docs/FE-INTEGRATION.md`: auth, format lỗi (`401/403` rỗng, `400` validation `errors`, nghiệp vụ `code+title+traceId`), recording/review/tasks/enum
-- 13 controller: `Auth, Scripts, Recordings, Reviews, ScriptQueue, Speaker, Tasks, Campaigns, Datasets, Users, Admin, Config, Proposals` — xem chi tiết trong [`backend/README.md`](backend/README.md). Thêm controller thì đếm lại: `ls backend/src/CodeSwitchLabel.Api/Controllers/*.cs | wc -l`
+- 13 controller: `Auth, Scripts, Recordings, Reviews, ScriptQueue, Speaker, Tasks, Waves, Datasets, Users, Admin, Config, Proposals` — xem chi tiết trong [`backend/README.md`](backend/README.md). Thêm controller thì đếm lại: `ls backend/src/CodeSwitchLabel.Api/Controllers/*.cs | wc -l`
 
 ## Deploy
 
@@ -251,7 +251,7 @@ docker compose -f deploy/docker-compose.prod.yml logs -f api
 - **Ngưỡng thời lượng 1–30s là đề xuất của nhóm backend**, chưa được duyệt chính thức; hệ thống chưa đo khoảng lặng đầu/cuối.
 - **Chưa có hệ thống nhắc nhở tự động** (ghi là "yêu cầu 3.3" nhưng `docs/Requirement.txt` không có mục này) — không có bảng `notification`, không có background service. Mọi số liệu để nhắc (`deadline`, `hoursRemaining`, `isOverdue`, `overdueTasks`) backend đã trả sẵn, nên khi nào thật sự cần thì làm bằng một endpoint + một con badge là đủ, không cần bảng riêng.
 - **Trạng thái task: máy tính, người chốt.** Trạng thái tự tính lại từ số liệu thật sau mỗi việc xảy ra (đạt chỉ tiêu → `Completed`, chưa đạt → `InProgress`), chỉ còn ba giá trị (`InProgress`/`Completed`/`Cancelled`). Task Manager đổi tay được qua `PATCH /api/tasks/{id}` với `status` — `InProgress` mở lại task đã xong, `Completed` chốt sớm, `Cancelled` dừng hẳn (y hệt nút Huỷ) — và giá trị bấm tay được giữ tới khi có việc thật (đổi chỉ tiêu, nộp bản ghi, duyệt). Trạng thái đợt thì **không bấm tay**: nó là hàm của task (`Open`/`InProgress`/`Completed`). Ghi là "yêu cầu 4.1" ở `README.md` cũ nhưng `Requirement.txt` cũng không có.
-- **Xoá task** qua `DELETE /api/tasks/{id}` (xoá cứng được task đã gỡ khỏi chiến dịch và chưa có dữ liệu nộp thật — lượt giao và hàng chờ xoá theo task; trả 409 `task_in_campaign` / `task_has_work` nếu còn trong đợt hoặc đã có bản ghi nộp/lượt duyệt).
+- **Xoá task** qua `DELETE /api/tasks/{id}` (xoá cứng được task đã gỡ khỏi đợt và chưa có dữ liệu nộp thật — lượt giao và hàng chờ xoá theo task; trả 409 `task_in_wave` / `task_has_work` nếu còn trong đợt hoặc đã có bản ghi nộp/lượt duyệt).
 - **Không xoá tài khoản** (chỉ khoá), không xoá cứng `rejection_reason` (chỉ tắt `is_active`), không tự đặt `recording.status` / trạng thái task ngoài `TaskStateMachine`. Câu **chờ duyệt** xoá cứng được qua `DELETE /api/scripts/{id}` (chặn nếu đã có bản ghi âm). Cặp câu đã thu dùng **xoá mềm** (`script.status = 'deactivated'`) — dữ liệu vẫn còn để truy vết.
 
 ### Việc chưa làm ở frontend

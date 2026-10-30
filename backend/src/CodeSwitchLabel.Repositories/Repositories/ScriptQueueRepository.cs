@@ -136,9 +136,9 @@ public class ScriptQueueRepository(CodeSwitchLabelDbContext db) : IScriptQueueRe
     public async Task<int> ReleaseClaimsAsync(
         long userId, long taskId, CancellationToken ct = default)
     {
-        var campaignId = await db.WorkTasks.AsNoTracking()
+        var waveId = await db.WorkTasks.AsNoTracking()
             .Where(t => t.TaskId == taskId)
-            .Select(t => t.CampaignId)
+            .Select(t => t.WaveId)
             .FirstOrDefaultAsync(ct);
 
         var now = DateTimeOffset.UtcNow;
@@ -149,7 +149,7 @@ public class ScriptQueueRepository(CodeSwitchLabelDbContext db) : IScriptQueueRe
                         q.ClaimedBy == userId)
             .Where(q => db.TaskScripts.Any(ts => ts.ScriptId == q.ScriptId &&
                 (ts.TaskId == taskId ||
-                 (campaignId != null && ts.Task.CampaignId == campaignId))))
+                 (waveId != null && ts.Task.WaveId == waveId))))
             .ExecuteUpdateAsync(s => s
                 .SetProperty(q => q.State, QueueState.Queued)
                 .SetProperty(q => q.ClaimedBy, (long?)null)

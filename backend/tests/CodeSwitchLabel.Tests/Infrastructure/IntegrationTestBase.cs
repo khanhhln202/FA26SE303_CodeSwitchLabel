@@ -42,7 +42,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
     protected readonly IRecordingRepository Recordings;
     protected readonly IReviewRepository Reviews;
     protected readonly ITaskRepository Tasks;
-    protected readonly ICampaignRepository Campaigns;
+    protected readonly IWaveRepository Waves;
     protected readonly IUserDomainRepository UserDomains;
     protected readonly ISystemConfigRepository SystemConfigs;
     protected readonly IReasonRepository Reasons;
@@ -60,7 +60,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
     protected readonly IRecordingService RecordingService;
     protected readonly IReviewService ReviewService;
     protected readonly ITaskService TaskService;
-    protected readonly ICampaignService CampaignService;
+    protected readonly IWaveService WaveService;
     protected readonly ISystemConfigService SystemConfigService;
     protected readonly IReasonService ReasonService;
     protected readonly IStatisticsService StatisticsService;
@@ -70,7 +70,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
     public long ManagerUserId { get; private set; }
     public long ReviewerUserId { get; private set; }
     public long SpeakerUserId { get; private set; }
-    public long CampaignId { get; private set; }
+    public long WaveId { get; private set; }
 
     protected IntegrationTestBase(DatabaseFixture fixture)
     {
@@ -84,7 +84,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         Recordings = Services.GetRequiredService<IRecordingRepository>();
         Reviews = Services.GetRequiredService<IReviewRepository>();
         Tasks = Services.GetRequiredService<ITaskRepository>();
-        Campaigns = Services.GetRequiredService<ICampaignRepository>();
+        Waves = Services.GetRequiredService<IWaveRepository>();
         UserDomains = Services.GetRequiredService<IUserDomainRepository>();
         SystemConfigs = Services.GetRequiredService<ISystemConfigRepository>();
         Reasons = Services.GetRequiredService<IReasonRepository>();
@@ -98,7 +98,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         RecordingService = Services.GetRequiredService<IRecordingService>();
         ReviewService = Services.GetRequiredService<IReviewService>();
         TaskService = Services.GetRequiredService<ITaskService>();
-        CampaignService = Services.GetRequiredService<ICampaignService>();
+        WaveService = Services.GetRequiredService<IWaveService>();
         SystemConfigService = Services.GetRequiredService<ISystemConfigService>();
         ReasonService = Services.GetRequiredService<IReasonService>();
         StatisticsService = Services.GetRequiredService<IStatisticsService>();
@@ -228,27 +228,27 @@ public abstract class IntegrationTestBase : IAsyncLifetime
             }
         }
 
-        var campaign = await Db.Campaigns.FirstOrDefaultAsync(c => c.CampaignName == "Test Campaign", TestContext.Current.CancellationToken);
-        if (campaign == null)
+        var wave = await Db.Waves.FirstOrDefaultAsync(c => c.WaveName == "Test Wave", TestContext.Current.CancellationToken);
+        if (wave == null)
         {
-            campaign = new Campaign
+            wave = new Wave
             {
-                CampaignName = "Test Campaign",
+                WaveName = "Test Wave",
                 TargetQty = 2000,
                 StartDate = DateOnly.FromDateTime(DateTime.Today),
                 EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(30)),
-                Status = CampaignStatus.Open,
+                Status = WaveStatus.Open,
                 CreatedBy = admin.UserId,
                 AssignedTo = manager.UserId,
                 CreatedAt = DateTimeOffset.UtcNow
             };
-            Db.Campaigns.Add(campaign);
+            Db.Waves.Add(wave);
         }
-        else if (campaign.AssignedTo is null)
+        else if (wave.AssignedTo is null)
         {
             // Trigger trg_task_creator_assigned đòi task thuộc chiến dịch ĐÃ GIAO cho người tạo;
             // mọi task trong test đều do manager tạo nên giao chiến dịch test cho manager.
-            campaign.AssignedTo = manager.UserId;
+            wave.AssignedTo = manager.UserId;
         }
 
         await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -257,7 +257,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         ManagerUserId = manager.UserId;
         ReviewerUserId = reviewer.UserId;
         SpeakerUserId = speaker.UserId;
-        CampaignId = campaign.CampaignId;
+        WaveId = wave.WaveId;
     }
 
     private static ServiceProvider BuildServiceProvider(string connectionString)
@@ -354,17 +354,17 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         return user;
     }
 
-    protected async Task<Campaign> CreateCampaignAsync(
+    protected async Task<Wave> CreateWaveAsync(
         string name,
         int targetQty,
         DateOnly startDate,
         DateOnly endDate,
         long createdBy,
-        CampaignStatus status = CampaignStatus.Open)
+        WaveStatus status = WaveStatus.Open)
     {
-        var campaign = new Campaign
+        var wave = new Wave
         {
-            CampaignName = name,
+            WaveName = name,
             TargetQty = targetQty,
             StartDate = startDate,
             EndDate = endDate,
@@ -373,13 +373,13 @@ public abstract class IntegrationTestBase : IAsyncLifetime
             CreatedAt = DateTimeOffset.UtcNow
         };
 
-        Db.Campaigns.Add(campaign);
+        Db.Waves.Add(wave);
         await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
-        return campaign;
+        return wave;
     }
 
     protected async Task<WorkTask> CreateTaskAsync(
-        long campaignId,
+        long waveId,
         TaskType type,
         int targetQty,
         long createdBy,
@@ -388,7 +388,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
     {
         var task = new WorkTask
         {
-            CampaignId = campaignId,
+            WaveId = waveId,
             TaskType = type,
             TargetQty = targetQty,
             Deadline = deadline,
@@ -469,8 +469,10 @@ public abstract class IntegrationTestBase : IAsyncLifetime
     {
         // Mã bản ghi phải đúng định dạng CHECK của lược đồ, và take phải tự tăng —
         // gọi nhiều lần cho cùng cặp câu vẫn ra mã mới (r_cs_..._t2, _t3...).
-        var take = await Recordings.CountTakesAsync(scriptId, variant, TestContext.Current.CancellationToken) + 1;
-        var recordingId = await Recordings.GenerateIdAsync(scriptId, variant, take, TestContext.Current.CancellationToken);
+        var take = await Recordings.CountTakesAsync(
+            scriptId, variant, speakerId, TestContext.Current.CancellationToken) + 1;
+        var recordingId = await Recordings.GenerateIdAsync(
+            scriptId, variant, take, speakerId, TestContext.Current.CancellationToken);
 
         var recording = new Recording
         {

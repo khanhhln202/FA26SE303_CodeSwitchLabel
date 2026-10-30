@@ -86,28 +86,28 @@ public static class TestDataBuilders
         };
     }
 
-    // ---- CampaignBuilder ----
+    // ---- WaveBuilder ----
 
-    public sealed class CampaignBuilder
+    public sealed class WaveBuilder
     {
-        private string _name = $"Campaign {Guid.NewGuid():N}";
+        private string _name = $"Wave {Guid.NewGuid():N}";
         private ScriptDomain _domain = ScriptDomain.ItTechnology; // TEAM_003
         private int _targetQty = 100;
         private DateOnly _startDate = DateOnly.FromDateTime(DateTime.Today);
         private DateOnly _endDate = DateOnly.FromDateTime(DateTime.Today.AddDays(30));
-        private CampaignStatus _status = CampaignStatus.Open;
+        private WaveStatus _status = WaveStatus.Open;
         private long _createdBy = 1;
 
-        public CampaignBuilder WithName(string name) { _name = name; return this; }
-        public CampaignBuilder WithDomain(ScriptDomain domain) { _domain = domain; return this; }
-        public CampaignBuilder WithTargetQty(int qty) { _targetQty = qty; return this; }
-        public CampaignBuilder WithDates(DateOnly start, DateOnly end) { _startDate = start; _endDate = end; return this; }
-        public CampaignBuilder WithStatus(CampaignStatus status) { _status = status; return this; }
-        public CampaignBuilder WithCreatedBy(long userId) { _createdBy = userId; return this; }
+        public WaveBuilder WithName(string name) { _name = name; return this; }
+        public WaveBuilder WithDomain(ScriptDomain domain) { _domain = domain; return this; }
+        public WaveBuilder WithTargetQty(int qty) { _targetQty = qty; return this; }
+        public WaveBuilder WithDates(DateOnly start, DateOnly end) { _startDate = start; _endDate = end; return this; }
+        public WaveBuilder WithStatus(WaveStatus status) { _status = status; return this; }
+        public WaveBuilder WithCreatedBy(long userId) { _createdBy = userId; return this; }
 
-        public Campaign Build() => new()
+        public Wave Build() => new()
         {
-            CampaignName = _name,
+            WaveName = _name,
             Domain = _domain,
             TargetQty = _targetQty,
             StartDate = _startDate,
@@ -122,14 +122,14 @@ public static class TestDataBuilders
 
     public sealed class TaskBuilder
     {
-        private long _campaignId = 1;
+        private long _waveId = 1;
         private TaskType _type = TaskType.Recording;
         private ScriptDomain _domain = ScriptDomain.ItTechnology; // TEAM_003
         private int _targetQty = 50;
         private DateTimeOffset? _deadline = DateTimeOffset.UtcNow.AddDays(7);
         private WorkTaskStatus _status = WorkTaskStatus.InProgress;
 
-        public TaskBuilder WithCampaignId(long id) { _campaignId = id; return this; }
+        public TaskBuilder WithWaveId(long id) { _waveId = id; return this; }
         public TaskBuilder WithType(TaskType type) { _type = type; return this; }
         public TaskBuilder WithDomain(ScriptDomain domain) { _domain = domain; return this; }
         public TaskBuilder WithTargetQty(int qty) { _targetQty = qty; return this; }
@@ -138,7 +138,7 @@ public static class TestDataBuilders
 
         public WorkTask Build() => new()
         {
-            CampaignId = _campaignId,
+            WaveId = _waveId,
             TaskType = _type,
             Domain = _domain,
             TargetQty = _targetQty,
@@ -229,9 +229,11 @@ public static class TestDataBuilders
 
         public Recording Build()
         {
-            // Mã phải đúng định dạng ck_recording_id_format: r_cs_/r_vi_ + 9 hoặc 12 chữ số của script.
+            // Mã phải đúng định dạng ck_recording_id_format: r_cs_/r_vi_ + 9 hoặc 12 chữ số
+            // của script, kèm _u<speaker> để hai Speaker thu cùng câu không đụng mã.
             var recordingId = _recordingId
-                ?? (_variant == SentenceVariant.CodeSwitching ? "r_cs_" : "r_vi_") + _scriptId[2..];
+                ?? (_variant == SentenceVariant.CodeSwitching ? "r_cs_" : "r_vi_")
+                    + _scriptId[2..] + $"_u{_speakerId}";
 
             return new Recording
             {

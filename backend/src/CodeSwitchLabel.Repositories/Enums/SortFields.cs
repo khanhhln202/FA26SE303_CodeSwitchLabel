@@ -61,8 +61,8 @@ public enum TaskSortField { TaskId, Deadline, Status, TaskType, CreatedAt, Targe
 /// <summary>Tài khoản: GET /api/users.</summary>
 public enum UserSortField { UserId, FullName, Email, Status, Role, CreatedAt }
 
-/// <summary>Chiến dịch: GET /api/campaigns.</summary>
-public enum CampaignSortField { CampaignId, StartDate, EndDate, Status, CreatedAt }
+/// <summary>Chiến dịch: GET /api/waves.</summary>
+public enum WaveSortField { WaveId, StartDate, EndDate, Status, CreatedAt }
 
 /// <summary>Bộ dữ liệu: GET /api/datasets.</summary>
 public enum DatasetSortField { DatasetId, CreatedAt, Status, DatasetName, RecordingCount }

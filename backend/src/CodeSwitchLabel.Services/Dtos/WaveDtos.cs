@@ -3,39 +3,39 @@ using CodeSwitchLabel.Repositories.Enums;
 
 namespace CodeSwitchLabel.Services.Dtos;
 
-public record CampaignDto(
-    long CampaignId,
-    string CampaignName,
+public record WaveDto(
+    long WaveId,
+    string WaveName,
     ScriptDomain Domain,
     int TargetQty,
     DateOnly StartDate,
     DateOnly EndDate,
-    CampaignStatus Status,
+    WaveStatus Status,
     long CreatedBy,
     long? AssignedTo,
     DateTimeOffset CreatedAt);
 
 /// <param name="AllocatedTaskQty">Tổng chỉ tiêu đã chia cho các task trong chiến dịch.</param>
 /// <param name="TaskCount">Số task đang gắn; xoá chiến dịch sẽ gỡ đúng số này về task độc lập.</param>
-public record CampaignListItemDto(
-    long CampaignId,
-    string CampaignName,
+public record WaveListItemDto(
+    long WaveId,
+    string WaveName,
     ScriptDomain Domain,
     int TargetQty,
     DateOnly StartDate,
     DateOnly EndDate,
-    CampaignStatus Status,
+    WaveStatus Status,
     DateTimeOffset CreatedAt,
     long AllocatedTaskQty,
     int TaskCount,
     int CompletedTaskCount,
     long? AssignedTo);
 
-public record CreateCampaignRequest
+public record CreateWaveRequest
 {
     [Required(ErrorMessage = "Phải nhập tên chiến dịch.")]
     [StringLength(255, MinimumLength = 1)]
-    public string CampaignName { get; init; } = string.Empty;
+    public string WaveName { get; init; } = string.Empty;
 
     /// <summary>Chủ đề của cả đợt; chỉ nhiệm vụ cùng chủ đề mới gắn vào được.</summary>
     [Required(ErrorMessage = "Phải chọn chủ đề (domain).")]
@@ -54,10 +54,10 @@ public record CreateCampaignRequest
 }
 
 /// <summary>Trường nào để trống thì giữ nguyên.</summary>
-public record UpdateCampaignRequest
+public record UpdateWaveRequest
 {
     [StringLength(255, MinimumLength = 1)]
-    public string? CampaignName { get; init; }
+    public string? WaveName { get; init; }
 
     /// <summary>
     /// Đổi chủ đề chỉ được khi đợt chưa có task khác chủ đề — database chặn,
@@ -78,7 +78,7 @@ public record UpdateCampaignRequest
     /// </summary>
 }
 
-public record CampaignSearchRequest : PageRequest
+public record WaveSearchRequest : PageRequest
 {
-    public CampaignStatus? Status { get; init; }
+    public WaveStatus? Status { get; init; }
 }

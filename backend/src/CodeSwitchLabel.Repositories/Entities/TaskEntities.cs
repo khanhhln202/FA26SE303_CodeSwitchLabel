@@ -4,18 +4,18 @@ namespace CodeSwitchLabel.Repositories.Entities;
 
 /// <summary>
 /// Chiến dịch thu thập — đơn vị kế hoạch của Task Manager cho một đợt (thường 1-2 tuần).
-/// Task có thể độc lập (campaign_id NULL) rồi gắn vào chiến dịch sau, hoặc gỡ ra mà không bị xoá.
+/// Task có thể độc lập (wave_id NULL) rồi gắn vào chiến dịch sau, hoặc gỡ ra mà không bị xoá.
 /// Chỉ tiêu và thời gian chỉ ràng buộc khi task đang gắn với chiến dịch: tổng chỉ tiêu task
 /// không được vượt chỉ tiêu chiến dịch, và hạn task phải nằm trong khoảng ngày của chiến dịch.
 /// </summary>
-public class Campaign
+public class Wave
 {
-    public long CampaignId { get; set; }
-    public string CampaignName { get; set; } = string.Empty;
+    public long WaveId { get; set; }
+    public string WaveName { get; set; } = string.Empty;
 
     /// <summary>
     /// Chủ đề của cả đợt. Một đợt chỉ đi trên một chủ đề — trigger
-    /// trg_task_campaign_domain chặn gắn nhiệm vụ khác chủ đề vào đợt này.
+    /// trg_task_wave_domain chặn gắn nhiệm vụ khác chủ đề vào đợt này.
     /// </summary>
     public ScriptDomain Domain { get; set; }
 
@@ -24,7 +24,7 @@ public class Campaign
 
     public DateOnly StartDate { get; set; }
     public DateOnly EndDate { get; set; }
-    public CampaignStatus Status { get; set; }
+    public WaveStatus Status { get; set; }
 
     /// <summary>
     /// Người tạo phải mang vai admin hoặc task_manager, do trigger của database chặn.
@@ -47,14 +47,14 @@ public class WorkTask
     public long TaskId { get; set; }
 
     /// <summary>NULL = task độc lập, chưa gắn chiến dịch nào; gắn sau hoặc gỡ ra đều được.</summary>
-    public long? CampaignId { get; set; }
+    public long? WaveId { get; set; }
 
     public long CreatedBy { get; set; }
     public TaskType TaskType { get; set; }
 
     /// <summary>
     /// Chủ đề của nhiệm vụ. Task độc lập thì tự do; task gắn vào đợt thì phải
-    /// trùng <see cref="Campaign.Domain"/> — database chặn, không chỉ service.
+    /// trùng <see cref="Wave.Domain"/> — database chặn, không chỉ service.
     /// </summary>
     public ScriptDomain Domain { get; set; }
 
@@ -67,7 +67,7 @@ public class WorkTask
     public WorkTaskStatus Status { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 
-    public Campaign? Campaign { get; set; }
+    public Wave? Wave { get; set; }
     public AppUser Creator { get; set; } = null!;
     public ICollection<TaskAssignment> Assignments { get; set; } = [];
     public ICollection<TaskScript> TaskScripts { get; set; } = [];
@@ -98,12 +98,15 @@ public class TaskAssignment
 
 public class TaskScript
 {
+    /// <summary>Khoá thay thế: cùng một cặp câu có thể xuất hiện một lần cho mỗi Speaker.</summary>
+    public long TaskScriptId { get; set; }
+
     public long TaskId { get; set; }
     public string ScriptId { get; set; } = string.Empty;
 
     /// <summary>
-    /// Speaker được gán cặp câu này để hiển thị/chia quota; hàng đợi ghi âm phát theo
-    /// chiến dịch nên cột này không chặn người khác nhận câu. NULL = chưa gán / task duyệt.
+    /// Speaker được gán cặp câu này để hiển thị/chia quota. Nhiều Speaker có thể nhận
+    /// cùng một cặp câu; mỗi người chỉ một dòng. NULL = chưa gán / task duyệt.
     /// </summary>
     public long? AssigneeUserId { get; set; }
 
@@ -127,12 +130,12 @@ public class TaskRecording
 }
 
 /// <summary>Speaker đăng ký tham gia một chiến dịch ("Đợt" ở FE) — không giới hạn số người.</summary>
-public class CampaignRegistration
+public class WaveRegistration
 {
-    public long CampaignId { get; set; }
+    public long WaveId { get; set; }
     public long SpeakerId { get; set; }
     public DateTimeOffset RegisteredAt { get; set; }
 
-    public Campaign Campaign { get; set; } = null!;
+    public Wave Wave { get; set; } = null!;
     public AppUser Speaker { get; set; } = null!;
 }

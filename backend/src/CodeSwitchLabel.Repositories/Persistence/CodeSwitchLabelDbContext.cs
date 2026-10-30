@@ -40,8 +40,8 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
     // trigger fn_script_queue_sync sinh và hàm fn_queue_claim_next xử lý giữ chỗ.
     public DbSet<ScriptQueue> ScriptQueue => Set<ScriptQueue>();
 
-    public DbSet<Campaign> Campaigns => Set<Campaign>();
-    public DbSet<CampaignRegistration> CampaignRegistrations => Set<CampaignRegistration>();
+    public DbSet<Wave> Waves => Set<Wave>();
+    public DbSet<WaveRegistration> WaveRegistrations => Set<WaveRegistration>();
     public DbSet<WorkTask> WorkTasks => Set<WorkTask>();
     public DbSet<TaskAssignment> TaskAssignments => Set<TaskAssignment>();
     public DbSet<TaskScript> TaskScripts => Set<TaskScript>();
@@ -59,7 +59,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
     public DbSet<SpeakerPerformance> SpeakerPerformance => Set<SpeakerPerformance>();
     public DbSet<ReviewerPerformance> ReviewerPerformance => Set<ReviewerPerformance>();
     public DbSet<RejectionReasonStat> RejectionReasonStats => Set<RejectionReasonStat>();
-    public DbSet<CampaignProgress> CampaignProgress => Set<CampaignProgress>();
+    public DbSet<WaveProgress> WaveProgress => Set<WaveProgress>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -116,7 +116,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         modelBuilder.HasPostgresEnum<ScriptWordRelation>();
         modelBuilder.HasPostgresEnum<TaskType>();
         modelBuilder.HasPostgresEnum<WorkTaskStatus>(name: "task_status");
-        modelBuilder.HasPostgresEnum<CampaignStatus>();
+        modelBuilder.HasPostgresEnum<WaveStatus>();
         modelBuilder.HasPostgresEnum<AssignmentStatus>();
         modelBuilder.HasPostgresEnum<TaskScriptStatus>();
         modelBuilder.HasPostgresEnum<SentenceVariant>();
@@ -282,11 +282,11 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
 
     private static void MapTasks(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<Campaign>(e =>
+        modelBuilder.Entity<Wave>(e =>
         {
-            e.ToTable("campaign");
-            e.HasKey(x => x.CampaignId);
-            e.Property(x => x.CampaignName).HasMaxLength(255);
+            e.ToTable("wave");
+            e.HasKey(x => x.WaveId);
+            e.Property(x => x.WaveName).HasMaxLength(255);
             e.Property(x => x.StartDate).HasColumnType("date");
             e.Property(x => x.EndDate).HasColumnType("date");
 
@@ -294,12 +294,12 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.HasOne(x => x.AssignedToUser).WithMany().HasForeignKey(x => x.AssignedTo);
         });
 
-        modelBuilder.Entity<CampaignRegistration>(e =>
+        modelBuilder.Entity<WaveRegistration>(e =>
         {
-            e.ToTable("campaign_registration");
-            e.HasKey(x => new { x.CampaignId, x.SpeakerId });
+            e.ToTable("wave_registration");
+            e.HasKey(x => new { x.WaveId, x.SpeakerId });
 
-            e.HasOne(x => x.Campaign).WithMany().HasForeignKey(x => x.CampaignId);
+            e.HasOne(x => x.Wave).WithMany().HasForeignKey(x => x.WaveId);
             e.HasOne(x => x.Speaker).WithMany().HasForeignKey(x => x.SpeakerId);
         });
 
@@ -308,8 +308,8 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.ToTable("task");
             e.HasKey(x => x.TaskId);
             e.HasOne(x => x.Creator).WithMany().HasForeignKey(x => x.CreatedBy);
-            // C1/C2: task độc lập (campaign_id NULL); xoá campaign giữ lại task (SET NULL).
-            e.HasOne(x => x.Campaign).WithMany(c => c.Tasks).HasForeignKey(x => x.CampaignId)
+            // C1/C2: task độc lập (wave_id NULL); xoá wave giữ lại task (SET NULL).
+            e.HasOne(x => x.Wave).WithMany(c => c.Tasks).HasForeignKey(x => x.WaveId)
                 .IsRequired(false)
                 .OnDelete(DeleteBehavior.SetNull);
         });
@@ -333,19 +333,29 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         modelBuilder.Entity<TaskScript>(e =>
         {
             e.ToTable("task_script");
-            e.HasKey(x => new { x.TaskId, x.ScriptId });
+            e.HasKey(x => x.TaskScriptId);
             e.Property(x => x.ScriptId).HasMaxLength(16);
 
             e.HasOne(x => x.Task).WithMany(t => t.TaskScripts).HasForeignKey(x => x.TaskId);
             e.HasOne(x => x.Script).WithMany(s => s.TaskScripts).HasForeignKey(x => x.ScriptId);
             e.HasOne(x => x.AssigneeUser).WithMany().HasForeignKey(x => x.AssigneeUserId);
+
+            // Cùng một cặp câu chỉ một lần cho mỗi Speaker trong task; khác Speaker thì được.
+            e.HasIndex(x => new { x.TaskId, x.ScriptId, x.AssigneeUserId })
+                .HasDatabaseName("uq_task_script_assignee")
+                .IsUnique()
+                .HasFilter("assignee_user_id IS NOT NULL");
+            e.HasIndex(x => new { x.TaskId, x.ScriptId })
+                .HasDatabaseName("uq_task_script_unassigned")
+                .IsUnique()
+                .HasFilter("assignee_user_id IS NULL");
         });
 
         modelBuilder.Entity<TaskRecording>(e =>
         {
             e.ToTable("task_recording");
             e.HasKey(x => new { x.TaskId, x.RecordingId });
-            e.Property(x => x.RecordingId).HasMaxLength(32);
+            e.Property(x => x.RecordingId).HasMaxLength(64);
 
             e.HasOne(x => x.Task).WithMany(t => t.TaskRecordings).HasForeignKey(x => x.TaskId);
             e.HasOne(x => x.Recording).WithMany(r => r.TaskRecordings).HasForeignKey(x => x.RecordingId);
@@ -358,7 +368,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         {
             e.ToTable("recording");
             e.HasKey(x => x.RecordingId);
-            e.Property(x => x.RecordingId).HasMaxLength(32).ValueGeneratedNever();
+            e.Property(x => x.RecordingId).HasMaxLength(64).ValueGeneratedNever();
             e.Property(x => x.ScriptId).HasMaxLength(16);
             e.Property(x => x.CloudLink).HasMaxLength(1024);
             e.Property(x => x.AudioFormat).HasMaxLength(10);
@@ -367,8 +377,8 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.HasIndex(x => x.CloudLink).IsUnique();
 
             // Blocks concurrent retakes racing HasActiveRecording + CountTakes.
-            // Mirrors docs/codeswitchlabel.sql uq_recording_active_variant.
-            e.HasIndex(x => new { x.ScriptId, x.SentenceVariant })
+            // Mỗi Speaker có một bản hiệu lực riêng cho từng biến thể; Speaker khác được thu cùng câu.
+            e.HasIndex(x => new { x.ScriptId, x.SentenceVariant, x.SpeakerId })
                 .HasDatabaseName("uq_recording_active_variant")
                 .IsUnique()
                 .HasFilter("status IN ('pending_review', 'approved')");
@@ -390,7 +400,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         {
             e.ToTable("review");
             e.HasKey(x => x.ReviewId);
-            e.Property(x => x.RecordingId).HasMaxLength(32);
+            e.Property(x => x.RecordingId).HasMaxLength(64);
 
             e.HasOne(x => x.Recording).WithMany(r => r.Reviews).HasForeignKey(x => x.RecordingId);
             e.HasOne(x => x.Reviewer).WithMany().HasForeignKey(x => x.ReviewerId);
@@ -427,7 +437,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.ToTable("audit_log");
             e.HasKey(x => new { x.AuditId, x.ChangedAt });
             e.Property(x => x.EntityType).HasMaxLength(50);
-            e.Property(x => x.EntityId).HasMaxLength(32);
+            e.Property(x => x.EntityId).HasMaxLength(64);
             e.Property(x => x.OldValue).HasColumnType("jsonb");
             e.Property(x => x.NewValue).HasColumnType("jsonb");
         });
@@ -447,7 +457,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         {
             e.ToTable("dataset_recording");
             e.HasKey(x => new { x.DatasetId, x.RecordingId });
-            e.Property(x => x.RecordingId).HasMaxLength(32);
+            e.Property(x => x.RecordingId).HasMaxLength(64);
 
             e.HasOne(x => x.Dataset).WithMany(d => d.Recordings).HasForeignKey(x => x.DatasetId);
             e.HasOne(x => x.Recording).WithMany(r => r.DatasetRecordings).HasForeignKey(x => x.RecordingId);
@@ -461,7 +471,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         modelBuilder.Entity<SpeakerPerformance>().HasNoKey().ToView("v_speaker_performance");
         modelBuilder.Entity<ReviewerPerformance>().HasNoKey().ToView("v_reviewer_performance");
         modelBuilder.Entity<RejectionReasonStat>().HasNoKey().ToView("v_rejection_reason_stats");
-        modelBuilder.Entity<CampaignProgress>().HasNoKey().ToView("v_campaign_progress");
+        modelBuilder.Entity<WaveProgress>().HasNoKey().ToView("v_wave_progress");
     }
 
     private static RoleName ParseRole(string value) =>

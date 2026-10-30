@@ -25,28 +25,28 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
     }
 
     [Fact]
-    public async Task CampaignRecordingTask_GoiLai_KhongTaoTaskThuHai()
+    public async Task WaveRecordingTask_GoiLai_KhongTaoTaskThuHai()
     {
         var ct = TestContext.Current.CancellationToken;
 
-        var first = await CampaignService.GetOrCreateRecordingTaskAsync(
-            CampaignId, autoFill: false, ManagerUserId, isAdmin: false, ct);
-        var second = await CampaignService.GetOrCreateRecordingTaskAsync(
-            CampaignId, autoFill: false, ManagerUserId, isAdmin: false, ct);
+        var first = await WaveService.GetOrCreateRecordingTaskAsync(
+            WaveId, autoFill: false, ManagerUserId, isAdmin: false, ct);
+        var second = await WaveService.GetOrCreateRecordingTaskAsync(
+            WaveId, autoFill: false, ManagerUserId, isAdmin: false, ct);
 
         Assert.Equal(first.Summary.TaskId, second.Summary.TaskId);
         Assert.Equal(TaskType.Recording, second.Summary.TaskType);
-        Assert.Equal(CampaignId, second.Summary.CampaignId);
+        Assert.Equal(WaveId, second.Summary.WaveId);
         Assert.Equal(2000, second.Summary.Progress.TargetQty);
-        Assert.Equal("Test Campaign", second.Summary.Description);
+        Assert.Equal("Test Wave", second.Summary.Description);
 
         var count = await Db.WorkTasks.CountAsync(
-            t => t.CampaignId == CampaignId && t.TaskType == TaskType.Recording, ct);
+            t => t.WaveId == WaveId && t.TaskType == TaskType.Recording, ct);
         Assert.Equal(1, count);
     }
 
     [Fact]
-    public async Task AutoFillContinuesAfterCandidateIsQueuedInAnotherUnassignedTask()
+    public async Task AutoFill_ReusesScriptAlreadyInAnotherTask()
     {
         var ct = TestContext.Current.CancellationToken;
         await CreateValidatedScriptAsync("[vi]Em nhớ [en]upload alpha nhé.", "[vi]Em nhớ tải lên alpha nhé.",
@@ -54,8 +54,8 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
         await CreateValidatedScriptAsync("[vi]Em nhớ [en]upload beta nhé.", "[vi]Em nhớ tải lên beta nhé.",
             ScriptDomain.ItTechnology, AdminUserId);
 
-        var source = await CreateTaskAsync(CampaignId, TaskType.Recording, 1, ManagerUserId);
-        var target = await CreateTaskAsync(CampaignId, TaskType.Recording, 1, ManagerUserId);
+        var source = await CreateTaskAsync(WaveId, TaskType.Recording, 1, ManagerUserId);
+        var target = await CreateTaskAsync(WaveId, TaskType.Recording, 1, ManagerUserId);
         var candidates = await Tasks.FindScriptCandidatesAsync(
             source.TaskId, [], ScriptDomain.ItTechnology, 2, [], ct);
         Assert.Equal(2, candidates.Count);
@@ -67,9 +67,10 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
             new AddTaskItemsRequest { AutoFill = new AutoFillCriteria { Count = 1 } },
             ct, ManagerUserId);
 
+        // Câu đã nằm trong task khác vẫn dùng lại được — không còn "mượn" độc quyền.
         Assert.Equal(1, result.Added);
-        Assert.Contains(result.Skipped, item => item.Id == candidates[0]);
-        Assert.Contains(result.Task.Items, item => item.Id == candidates[1]);
+        Assert.Empty(result.Skipped);
+        Assert.Contains(result.Task.Items, item => item.Id == candidates[0]);
     }
 
     /// <summary>
@@ -89,7 +90,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
 
         var rejected = await CreateRecordingAsync(script.ScriptId, owner.UserId, SentenceVariant.CodeSwitching);
         rejected.Status = RecordingStatus.Rejected;
-        var task = await CreateTaskAsync(CampaignId, TaskType.Recording, 1, ManagerUserId);
+        var task = await CreateTaskAsync(WaveId, TaskType.Recording, 1, ManagerUserId);
         Db.TaskAssignments.Add(new TaskAssignment
         {
             TaskId = task.TaskId, UserId = assignee.UserId,
@@ -108,7 +109,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
     public async Task SetAssignments_ThayDanhSach_ChiaQuotaVaGiuLichSu()
     {
         var ct = TestContext.Current.CancellationToken;
-        var task = await CreateTaskAsync(CampaignId, TaskType.Review, 10, ManagerUserId);
+        var task = await CreateTaskAsync(WaveId, TaskType.Review, 10, ManagerUserId);
         var reviewers = new[]
         {
             await CreateUserWithBuilderAsync(RoleName.Reviewer, fullName: "Reviewer A"),
@@ -163,7 +164,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
     public async Task Assign_ThemNguoi_ChiaLaiQuotaCaNhom()
     {
         var ct = TestContext.Current.CancellationToken;
-        var task = await CreateTaskAsync(CampaignId, TaskType.Review, 10, ManagerUserId);
+        var task = await CreateTaskAsync(WaveId, TaskType.Review, 10, ManagerUserId);
         var reviewers = new[]
         {
             await CreateUserWithBuilderAsync(RoleName.Reviewer, fullName: "Reviewer D"),
@@ -196,7 +197,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
     public async Task SetAssignments_DatDuQuotaNhungTongKhacChiTieu_BaoLoi()
     {
         var ct = TestContext.Current.CancellationToken;
-        var task = await CreateTaskAsync(CampaignId, TaskType.Review, 10, ManagerUserId);
+        var task = await CreateTaskAsync(WaveId, TaskType.Review, 10, ManagerUserId);
         var reviewers = new[]
         {
             await CreateUserWithBuilderAsync(RoleName.Reviewer, fullName: "Reviewer G"),
@@ -254,7 +255,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
 
         var created = await TaskService.CreateAsync(new CreateTaskRequest
         {
-            CampaignId = CampaignId,
+            WaveId = WaveId,
             TaskType = TaskType.Recording,
             Description = "Quota riêng cho Speaker",
             TargetQty = 4,
@@ -300,7 +301,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
 
         var detail = await TaskService.CreateAsync(new CreateTaskRequest
         {
-            CampaignId = CampaignId,
+            WaveId = WaveId,
             TaskType = TaskType.Recording,
             Description = "Ghi âm 10 cặp 3 người",
             TargetQty = 10,
@@ -335,7 +336,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
         };
         var detail = await TaskService.CreateAsync(new CreateTaskRequest
         {
-            CampaignId = CampaignId,
+            WaveId = WaveId,
             TaskType = TaskType.Review,
             Description = "Duyệt 10 bản ghi 3 người",
             TargetQty = 10,
@@ -350,7 +351,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
     }
 
     [Fact]
-    public async Task CreateRecording_InsufficientPairs_ThrowsNotEnoughPairs()
+    public async Task CreateRecording_SupplyBelowTarget_VanTaoTaskVaChiGiaoCauCoSan()
     {
         var ct = TestContext.Current.CancellationToken;
         for (var i = 0; i < 2; i++)
@@ -359,17 +360,69 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
                 $"[vi]Em [en]p{i} [vi]t.", $"[vi]Em t {i}.", ScriptDomain.ItTechnology, AdminUserId);
         }
         var speaker = await CreateUserWithBuilderAsync(RoleName.Speaker, fullName: "Sp Only");
+        var availableCount = await Db.Scripts.CountAsync(
+            s => s.Status == ScriptStatus.Validated && s.Domain == ScriptDomain.ItTechnology, ct);
 
-        var ex = await Assert.ThrowsAsync<UnprocessableException>(() =>
-            TaskService.CreateAsync(new CreateTaskRequest
-            {
-                CampaignId = CampaignId,
-                TaskType = TaskType.Recording,
-                TargetQty = 10,
-                Deadline = DateTimeOffset.UtcNow.AddDays(7),
-                AssigneeUserIds = [speaker.UserId]
-            }, ManagerUserId, ct));
-        Assert.Equal("recording_not_enough_pairs", ex.Code);
+        // Kho câu ít hơn chỉ tiêu: vẫn tạo task, mỗi Speaker nhận tối đa số câu còn thu được.
+        var detail = await TaskService.CreateAsync(new CreateTaskRequest
+        {
+            WaveId = WaveId,
+            TaskType = TaskType.Recording,
+            TargetQty = 10,
+            Deadline = DateTimeOffset.UtcNow.AddDays(7),
+            AssigneeUserIds = [speaker.UserId]
+        }, ManagerUserId, ct);
+
+        var items = await Db.TaskScripts
+            .Where(ts => ts.TaskId == detail.Summary.TaskId)
+            .ToListAsync(ct);
+
+        Assert.True(availableCount < 10);
+        Assert.Equal(availableCount, items.Count);
+        Assert.All(items, i => Assert.Equal(speaker.UserId, i.AssigneeUserId));
+    }
+
+    [Fact]
+    public async Task CreateRecording_HaiSpeakerDungChungCau_MoiNguoiKhongTrungCau()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        for (var i = 0; i < 2; i++)
+        {
+            await CreateValidatedScriptAsync(
+                $"[vi]Chung [en]c{i} [vi]câu.", $"[vi]Chung câu {i}.", ScriptDomain.ItTechnology, AdminUserId);
+        }
+
+        var speakers = new[]
+        {
+            await CreateUserWithBuilderAsync(RoleName.Speaker, fullName: "Sp Share A"),
+            await CreateUserWithBuilderAsync(RoleName.Speaker, fullName: "Sp Share B")
+        };
+
+        var detail = await TaskService.CreateAsync(new CreateTaskRequest
+        {
+            WaveId = WaveId,
+            TaskType = TaskType.Recording,
+            TargetQty = 6,
+            Deadline = DateTimeOffset.UtcNow.AddDays(7),
+            AssigneeUserIds = [speakers[0].UserId, speakers[1].UserId]
+        }, ManagerUserId, ct);
+
+        var items = await Db.TaskScripts
+            .Where(ts => ts.TaskId == detail.Summary.TaskId)
+            .ToListAsync(ct);
+
+        Assert.Equal(6, items.Count);
+        var sets = new List<HashSet<string>>();
+        foreach (var speaker in speakers)
+        {
+            var mine = items.Where(i => i.AssigneeUserId == speaker.UserId).Select(i => i.ScriptId).ToList();
+            Assert.Equal(3, mine.Count);
+            Assert.Equal(mine.Count, mine.Distinct().Count());
+            sets.Add([.. mine]);
+        }
+
+        // Hai người nhận cùng danh sách câu — dùng chung câu là chủ ý.
+        Assert.Equal(sets[0], sets[1]);
     }
 
     [Fact]
@@ -382,7 +435,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
         var ex = await Assert.ThrowsAsync<UnprocessableException>(() =>
             TaskService.CreateAsync(new CreateTaskRequest
             {
-                CampaignId = CampaignId,
+                WaveId = WaveId,
                 TaskType = TaskType.Recording,
                 TargetQty = 1,
                 Deadline = DateTimeOffset.UtcNow.AddDays(7),
@@ -399,7 +452,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
         var ex = await Assert.ThrowsAsync<UnprocessableException>(() =>
             TaskService.CreateAsync(new CreateTaskRequest
             {
-                CampaignId = CampaignId,
+                WaveId = WaveId,
                 TaskType = TaskType.Recording,
                 TargetQty = 5,
                 Deadline = DateTimeOffset.UtcNow.AddDays(7),
@@ -427,7 +480,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
 
         var task = await TaskService.CreateAsync(new CreateTaskRequest
         {
-            CampaignId = CampaignId,
+            WaveId = WaveId,
             TaskType = TaskType.Recording,
             TargetQty = 4,
             Deadline = DateTimeOffset.UtcNow.AddDays(7),
@@ -470,7 +523,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
         var ct = TestContext.Current.CancellationToken;
         var result = await TaskService.CreateAsync(new CreateTaskRequest
         {
-            CampaignId = CampaignId,
+            WaveId = WaveId,
             TaskType = TaskType.Review,
             Description = "Legacy no assignee",
             TargetQty = 5,

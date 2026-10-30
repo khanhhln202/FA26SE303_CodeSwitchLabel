@@ -23,11 +23,11 @@ public class SpeakerController(
     /// Mỗi cặp câu cần **hai bản ghi**: một bản đọc câu chen tiếng Anh (cs) và một bản đọc câu
     /// thuần Việt (vi). `remainingVariants` cho biết bạn còn nợ bản nào.
     ///
-    /// Một cặp câu chỉ do **một người đọc** thu, để hai bản là cùng một giọng. Vì vậy hệ thống
-    /// không phát lại câu mà người khác đã thu.
+    /// Nhiều Speaker có thể thu cùng một cặp câu, mỗi người một bản riêng; hệ thống chỉ bỏ qua
+    /// câu mà **chính bạn** đã có bản chờ duyệt/đạt.
     ///
-    /// Truyền `taskId` để chỉ lấy câu trong phạm vi một task. Task đó phải là task thu âm
-    /// **đang giao cho chính bạn**, nếu không trả **403**.
+    /// Truyền `taskId` để lấy câu trong phạm vi task/đợt đang giao cho bạn; task không
+    /// thuộc phạm vi đó trả **403**.
     ///
     /// **204 No Content** nghĩa là hết câu phù hợp.
     /// </remarks>
@@ -89,7 +89,7 @@ public class SpeakerController(
     /// <remarks>
     /// Tổng số bản đã nộp, số bản được duyệt đạt, và từng task thu âm đang giao. Mỗi task có
     /// `taskTitle` (tên nhiệm vụ, cùng nghĩa với `taskTitle` ở `GET /api/speaker/recordings/history`)
-    /// cùng `description` và `campaignName` — tên nhiệm vụ không phụ thuộc vào việc task có thuộc chiến dịch hay không.
+    /// cùng `description` và `waveName` — tên nhiệm vụ không phụ thuộc vào việc task có thuộc đợt hay không.
     /// Chỉ tiêu task thu âm đếm theo **cặp câu**: một cặp chỉ tính là xong khi **cả hai** bản
     /// cs và vi đều được duyệt đạt.
     /// </remarks>
@@ -99,9 +99,9 @@ public class SpeakerController(
         => Ok(await taskService.GetSpeakerProgressAsync(User.GetUserId(), ct));
 
     /// <summary>
-    /// Đợt đang tham gia (chiến dịch của task thu âm đang giao). 204 = chưa tham gia đợt nào.
+    /// Đợt đang tham gia. 204 = chưa tham gia đợt nào.
     /// <c>target</c> là chỉ tiêu RIÊNG của người gọi — tổng quota trên các lượt giao task thu âm
-    /// trong đợt, không phải chỉ tiêu cả chiến dịch. <c>submitted</c> là số bản đã nộp thật và
+    /// trong đợt, không phải chỉ tiêu cả đợt. <c>submitted</c> là số bản đã nộp thật và
     /// có thể vượt <c>target</c>.
     /// </summary>
     [HttpGet("rounds/current")]
@@ -124,29 +124,29 @@ public class SpeakerController(
     /// Mỗi dòng kèm <c>targetQty</c> — quota riêng của người đó trên các lượt giao trong đợt,
     /// 0 nếu không còn nhiệm vụ — và <c>submittedCapped</c> để vẽ tiến độ.
     /// </summary>
-    [HttpGet("rounds/{campaignId:long}/leaderboard")]
+    [HttpGet("rounds/{waveId:long}/leaderboard")]
     [ProducesResponseType(typeof(LeaderboardDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<LeaderboardDto>> Leaderboard(
-        long campaignId, [FromQuery] int top = 5, CancellationToken ct = default)
-        => Ok(await roundsService.GetLeaderboardAsync(campaignId, User.GetUserId(), top, ct));
+        long waveId, [FromQuery] int top = 5, CancellationToken ct = default)
+        => Ok(await roundsService.GetLeaderboardAsync(waveId, User.GetUserId(), top, ct));
 
     /// <summary>Đăng ký tham gia một đợt.</summary>
-    [HttpPost("rounds/{campaignId:long}/register")]
+    [HttpPost("rounds/{waveId:long}/register")]
     [ProducesResponseType(typeof(SpeakerRoundDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
-    public async Task<ActionResult<SpeakerRoundDto>> Register(long campaignId, CancellationToken ct)
-        => Ok(await roundsService.RegisterAsync(campaignId, User.GetUserId(), ct));
+    public async Task<ActionResult<SpeakerRoundDto>> Register(long waveId, CancellationToken ct)
+        => Ok(await roundsService.RegisterAsync(waveId, User.GetUserId(), ct));
 
     /// <summary>Huỷ đăng ký một đợt.</summary>
-    [HttpDelete("rounds/{campaignId:long}/registration")]
+    [HttpDelete("rounds/{waveId:long}/registration")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Unregister(long campaignId, CancellationToken ct)
+    public async Task<IActionResult> Unregister(long waveId, CancellationToken ct)
     {
-        await roundsService.UnregisterAsync(campaignId, User.GetUserId(), ct);
+        await roundsService.UnregisterAsync(waveId, User.GetUserId(), ct);
         return NoContent();
     }
 

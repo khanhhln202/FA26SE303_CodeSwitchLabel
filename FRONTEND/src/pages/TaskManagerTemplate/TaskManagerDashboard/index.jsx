@@ -36,28 +36,28 @@ export default function TaskManagerDashboard() {
   const loadDataFromApi = async () => {
     try {
       setLoading(true);
-      // Gọi API lấy toàn bộ danh sách Task & Campaigns với pageSize lớn để tránh bị mất dữ liệu phân trang
-      const [allTasksRes, campaignsRes] = await Promise.all([
+      // Gọi API lấy toàn bộ danh sách Task & Waves với pageSize lớn để tránh bị mất dữ liệu phân trang
+      const [allTasksRes, wavesRes] = await Promise.all([
         taskService.getTasks({ pageSize: 1000 }).catch(() => ({ items: [] })),
-        taskService.getCampaigns({ pageSize: 1000 }).catch(() => ({ items: [] }))
+        taskService.getWaves({ pageSize: 1000 }).catch(() => ({ items: [] }))
       ]);
 
       const rawTasks = allTasksRes?.items || allTasksRes?.data || (Array.isArray(allTasksRes) ? allTasksRes : []);
-      const campaigns = campaignsRes?.items || campaignsRes?.data || (Array.isArray(campaignsRes) ? campaignsRes : []);
+      const waves = wavesRes?.items || wavesRes?.data || (Array.isArray(wavesRes) ? wavesRes : []);
 
-      // Map danh sách topic/domain từ Campaign làm fallback cho Task
-      const campaignTopicMap = {};
-      campaigns.forEach(c => {
-        const cId = c.campaignId || c.id;
+      // Map danh sách topic/domain từ Wave làm fallback cho Task
+      const waveTopicMap = {};
+      waves.forEach(c => {
+        const cId = c.waveId || c.id;
         if (cId) {
-          campaignTopicMap[cId] = c.domain || c.topic || c.campaignName;
+          waveTopicMap[cId] = c.domain || c.topic || c.waveName;
         }
       });
 
       // Kiểm tra xem task đã được phân công VÀ đã được gán vào đợt (ở trang TaskManagerManagement) hay chưa
-      const isTaskAssignedInCampaign = (t) => {
-        const hasCampaign = Boolean(t.campaignId);
-        if (!hasCampaign) return false;
+      const isTaskAssignedInWave = (t) => {
+        const hasWave = Boolean(t.waveId);
+        if (!hasWave) return false;
 
         if (t.assignedToUserId || t.assigneeName || t.assigneeId) return true;
         if (Array.isArray(t.assignedUsers) && t.assignedUsers.length > 0) return true;
@@ -77,9 +77,9 @@ export default function TaskManagerDashboard() {
         return rawType === "review" || rawType === "reviewer" || rawType === "editing" || rawType === "1" || rawType.includes("review");
       });
 
-      // Đếm số lượng nhiệm vụ đã phân công (Chỉ đếm các nhiệm vụ thuộc Campaign/Đợt VÀ có người thực hiện)
-      const assignedSpeakers = speakerItems.filter(isTaskAssignedInCampaign).length;
-      const assignedReviewers = reviewerItems.filter(isTaskAssignedInCampaign).length;
+      // Đếm số lượng nhiệm vụ đã phân công (Chỉ đếm các nhiệm vụ thuộc Wave/Đợt VÀ có người thực hiện)
+      const assignedSpeakers = speakerItems.filter(isTaskAssignedInWave).length;
+      const assignedReviewers = reviewerItems.filter(isTaskAssignedInWave).length;
 
       // Đếm số lượng nhiệm vụ theo Chủ đề chính xác
       let tech = 0;
@@ -87,8 +87,8 @@ export default function TaskManagerDashboard() {
       let life = 0;
 
       rawTasks.forEach(t => {
-        const campaignTopic = campaignTopicMap[t.campaignId] || "";
-        const domainStr = String(t.domain || t.topic || t.categoryName || campaignTopic || "").toLowerCase();
+        const waveTopic = waveTopicMap[t.waveId] || "";
+        const domainStr = String(t.domain || t.topic || t.categoryName || waveTopic || "").toLowerCase();
 
         if (
           domainStr.includes("ittechnology") || 

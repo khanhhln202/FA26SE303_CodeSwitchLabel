@@ -1,3 +1,4 @@
+using System.Net;
 using System.Reflection;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -9,6 +10,10 @@ using CodeSwitchLabel.Services.Audio;
 using CodeSwitchLabel.Services.Options;
 using CodeSwitchLabel.Services.Seeding;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
@@ -21,9 +26,9 @@ var connectionString = builder.Configuration.GetConnectionString("Postgres")
     ?? throw new InvalidOperationException(
         "Thiếu ConnectionStrings:Postgres. Xem appsettings.Development.json.");
 
-// Mọi mục cấu hình đều kiểm ngay lúc khởi động thay vì đợi request đầu tiên mới nổ:
-// thiếu khoá ký hay thiếu địa chỉ kho lưu trữ thì phải chết lúc chạy `dotnet run`,
-// không phải lúc có người đăng nhập hay nộp bản ghi.
+// Mọi mục cấu hình đều kiểm tra ngay lúc khởi động thay vì đợi request đầu tiên mới phát hiện
+// thiếu khóa ký hay địa chỉ kho lưu trữ thì phải dừng `dotnet run`,
+// không phải đợi có người đăng nhập hay nộp bản ghi.
 builder.Services
     .AddOptions<JwtOptions>()
     .Bind(builder.Configuration.GetSection(JwtOptions.SectionName))
@@ -50,9 +55,9 @@ builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer();
 
-// Khoá ký lấy từ IOptions<JwtOptions>, KHÔNG chụp cấu hình ngay tại đây. Chụp sớm thì cấu hình ghi đè
-// sau đó — biến môi trường lúc deploy, hay WebApplicationFactory trong test — chỉ áp cho bên cấp token
-// mà không áp cho bên kiểm token, và lỗi hiện ra là 401 "signature key was not found" rất khó lần.
+// Khóa ký lấy từ IOptions<JwtOptions>, KHÔNG chụp cấu hình ngay tại đây. Chụp sớm thì cấu hình ghi đè
+// sau đó (biến môi trường lúc deploy hoặc WebApplicationFactory trong test) chỉ áp dụng cho bên cấp token
+// mà không áp dụng cho bên kiểm token, khiến lỗi 401 "signature key was not found" rất khó lần.
 builder.Services
     .AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
     .Configure<IOptions<JwtOptions>>((options, jwtOptions) =>
@@ -77,7 +82,7 @@ builder.Services
             ClockSkew = TimeSpan.Zero
         };
 
-        // Đối chiếu token với database ở mỗi request: khoá tài khoản hay đổi vai có hiệu lực NGAY,
+        // Đối chiếu token với database ở mỗi request: khóa tài khoản hay đổi vai có hiệu lực NGAY,
         // không phải đợi token hết hạn.
         options.Events = new JwtBearerEvents { OnTokenValidated = AccountStateValidator.ValidateAsync };
     });
@@ -153,12 +158,38 @@ builder.Services.AddCors(options =>
         .AllowAnyMethod());
 });
 
+// Caddy runs in the same Docker bridge network and appends the real client IP to
+// X-Forwarded-For. Trust only Docker's private IPv4 pool, never arbitrary callers.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor;
+    options.KnownIPNetworks.Add(new System.Net.IPNetwork(IPAddress.Parse("172.16.0.0"), 12));
+});
+
+// Giới hạn tốc độ đăng nhập / đăng ký: 10 lần mỗi phút trên mỗi IP, ngăn brute-force
+// và dò email trên endpoint công khai.
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddPolicy("auth", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = builder.Environment.IsDevelopment() ? 100000 : 10,
+                Window = TimeSpan.FromMinutes(1)
+            }));
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+});
+
 // ---------------------------------------------------------------- pipeline
 
 var app = builder.Build();
 
-// Lược đồ: database rỗng nhận docs/codeswitchlabel.sql; database đang chạy nhận
-// migrations/V*.sql qua deploy/deploy.sh. API chỉ kiểm lược đồ, không tự sửa.
+app.UseForwardedHeaders();
+app.UseRateLimiter();
+
+// Lược đồ database rỗng nhận docs/codeswitchlabel.sql; database đang chạy nhận
+// migrations/V*.sql qua deploy/deploy.sh. API chỉ kiểm tra lược đồ, không tự sửa.
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<CodeSwitchLabelDbContext>();
@@ -185,13 +216,20 @@ if (builder.Configuration.GetValue("Swagger:Enabled", app.Environment.IsDevelopm
     });
 }
 
-// Có khoá Seed:DefaultPassword thì tạo tài khoản và câu mẫu, bất kể môi trường nào.
-// Bản chạy thật bỏ trống khoá này là không seed gì cả.
+// Có khóa Seed:DefaultPassword thì tạo tài khoản và câu mẫu, bất kể môi trường nào.
+// Bản chạy thật bỏ trống khóa này là không seed gì cả.
 var seedPassword = builder.Configuration["Seed:DefaultPassword"];
 
 if (!string.IsNullOrWhiteSpace(seedPassword))
 {
-    await DatabaseSeeder.SeedAsync(app.Services, seedPassword);
+    try
+    {
+        await DatabaseSeeder.SeedAsync(app.Services, seedPassword);
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogWarning(ex, "Demo seed thất bại, API vẫn chạy.");
+    }
 }
 
 CodeSwitchLabel.Services.Implementations.RecordingService.CleanupStaleTempFiles(app.Logger);
@@ -218,8 +256,17 @@ app.UseMiddleware<AuditUserMiddleware>();
 
 app.MapControllers();
 
-app.MapGet("/health", () => Results.Ok(new { status = "ok", utc = DateTimeOffset.UtcNow }))
+app.MapGet("/health", async (CodeSwitchLabelDbContext db, CancellationToken ct) =>
+{
+    IResult result = Results.Ok(new { status = "ok", utc = DateTimeOffset.UtcNow });
+    if (!await db.Database.CanConnectAsync(ct))
+    {
+        result = Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+    }
+
+    return result;
+})
    .WithTags(ApiTags.Health)
-   .WithSummary("Kiểm tra API còn sống");
+   .WithSummary("Kiểm tra API và database đã sẵn sàng");
 
 app.Run();

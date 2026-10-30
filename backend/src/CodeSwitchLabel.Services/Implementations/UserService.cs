@@ -59,7 +59,7 @@ public class UserService(
         SpeakerSearchRequest request, CancellationToken ct = default)
     {
         var (items, total) = await users.SearchSpeakersAsync(
-            request.CampaignId, request.Keyword, request.Page, request.PageSize, ct);
+            request.WaveId, request.Keyword, request.Page, request.PageSize, ct);
 
         return new PagedResult<SpeakerListItemDto>(
             [.. items.Select(r => r.ToSpeakerListItem())], request.Page, request.PageSize, total);

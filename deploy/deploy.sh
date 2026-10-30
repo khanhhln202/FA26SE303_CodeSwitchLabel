@@ -61,6 +61,9 @@ print_rollback() {
      ls -lh $BACKUP_DIR
      gunzip -c <file>.sql.gz | docker exec -i csl-postgres psql -U $PG_USER -d $PG_DB -v ON_ERROR_STOP=1
 
+4. Neu MinIO dang dung (sau backup that bai):
+     docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env start minio
+
 ROLLBACK
 }
 
@@ -154,9 +157,14 @@ gzip -t "$BACKUP_DIR/backup-$STAMP.sql.gz" \
 # Dung chay thay the se ghi rac -> dung MinIO trong luc tar.
 say "Sao luu volume MinIO -> $BACKUP_DIR/minio-$STAMP.tgz"
 "${COMPOSE[@]}" stop minio >/dev/null
-docker run --rm -v "$MINIO_VOLUME":/data -v "$BACKUP_DIR":/backup \
-  alpine tar czf "/backup/minio-$STAMP.tgz" -C /data . >/dev/null
+minio_backup_ok=0
+if docker run --rm -v "$MINIO_VOLUME":/data -v "$BACKUP_DIR":/backup \
+  alpine tar czf "/backup/minio-$STAMP.tgz" -C /data . >/dev/null; then
+    minio_backup_ok=1
+fi
 "${COMPOSE[@]}" start minio >/dev/null
+[ "$minio_backup_ok" -eq 1 ] || die "Sao luu volume MinIO that bai. KHONG deploy tiep."
+[ -s "$BACKUP_DIR/minio-$STAMP.tgz" ] || die "Ban sao luu MinIO rong. KHONG deploy tiep."
 
 say "Giu $KEEP_BACKUPS ban sao luu gan nhat"
 ls -1t "$BACKUP_DIR"/*.sql.gz 2>/dev/null | tail -n +$((KEEP_BACKUPS + 1)) | while read -r old; do rm -f "$old"; done
@@ -266,8 +274,8 @@ else
   [ -n "$token" ] || die "Dang nhap that bai (HTTP ${code:-?}). 401/400: kiem tra SEED_PASSWORD; 5xx: loi API/DB, xem 'logs api'."
   # Token cung truyen qua STDIN (curl -K -) de khong lo ra truong doi so lenh.
   printf 'header = "Authorization: Bearer %s"\n' "$token" \
-    | curl -fsS --max-time 10 -K - "$BASE_URL/api/campaigns" >/dev/null \
-    || die "GET /api/campaigns that bai."
+    | curl -fsS --max-time 10 -K - "$BASE_URL/api/waves" >/dev/null \
+    || die "GET /api/waves that bai."
 fi
 
 git rev-parse HEAD > deploy/.deployed-sha

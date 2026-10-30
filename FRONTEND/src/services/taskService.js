@@ -24,34 +24,34 @@ export const taskService = {
     return res.data;
   },
 
-  // Campaigns
-  getCampaigns: async (params) => {
-    const res = await apiClient.get('/api/campaigns', { params });
+  // Waves
+  getWaves: async (params) => {
+    const res = await apiClient.get('/api/waves', { params });
     return res.data;
   },
 
-  getCampaignById: async (id) => {
-    const res = await apiClient.get(`/api/campaigns/${id}`);
+  getWaveById: async (id) => {
+    const res = await apiClient.get(`/api/waves/${id}`);
     return res.data;
   },
 
-  createCampaign: async (data) => {
-    const res = await apiClient.post('/api/campaigns', data);
+  createWave: async (data) => {
+    const res = await apiClient.post('/api/waves', data);
     return res.data;
   },
 
-  updateCampaign: async (id, data) => {
-    const res = await apiClient.patch(`/api/campaigns/${id}`, data);
-    return res.data;
-  },
-  
-  deleteCampaign: async (id) => {
-    const res = await apiClient.delete(`/api/campaigns/${id}`);
+  updateWave: async (id, data) => {
+    const res = await apiClient.patch(`/api/waves/${id}`, data);
     return res.data;
   },
 
-  detachTaskFromCampaign: async (campaignId, taskId) => {
-    const res = await apiClient.delete(`/api/campaigns/${campaignId}/tasks/${taskId}`);
+  deleteWave: async (id) => {
+    const res = await apiClient.delete(`/api/waves/${id}`);
+    return res.data;
+  },
+
+  detachTaskFromWave: async (waveId, taskId) => {
+    const res = await apiClient.delete(`/api/waves/${waveId}/tasks/${taskId}`);
     return res.data;
   },
 
@@ -134,9 +134,9 @@ export const taskService = {
     return res.data;
   },
 
-  attachTaskToCampaign: async (taskId, campaignId) => {
-    const res = await apiClient.patch(`/api/tasks/${Number(taskId)}/campaign`, { 
-      campaignId: Number(campaignId) 
+  attachTaskToWave: async (taskId, waveId) => {
+    const res = await apiClient.patch(`/api/tasks/${Number(taskId)}/wave`, {
+      waveId: Number(waveId)
     });
     return res.data;
   },

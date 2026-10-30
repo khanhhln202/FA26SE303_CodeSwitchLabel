@@ -141,13 +141,15 @@ Ràng buộc CHECK dưới database bắt hai chữ số đầu phải khớp `e
 **Mỗi cặp câu cần hai bản ghi âm**, mã suy ra từ mã câu:
 
 ```
-r_cs_211000000001      đọc câu chen tiếng Anh
-r_vi_211000000001      đọc câu thuần Việt
-r_cs_211000000001_t2   thu lại lần hai
+r_cs_211000000001_u6      Speaker 6 đọc câu chen tiếng Anh
+r_vi_211000000001_u6      Speaker 6 đọc câu thuần Việt
+r_cs_211000000001_u6_t2   Speaker 6 thu lại lần hai
 ```
 
-**Một cặp câu chỉ một người đọc.** Trigger `trg_recording_single_speaker` chặn người thứ hai,
-để hai bản cs và vi là cùng một giọng, cùng một buổi thu.
+**Nhiều Speaker có thể đọc cùng một cặp câu.** Mã bản ghi mang `_u<speakerId>` để không đụng
+nhau; mỗi Speaker chỉ có tối đa một bản `pending_review`/`approved` cho mỗi cặp + biến thể
+(`uq_recording_active_variant`). Bản của người khác không chặn. ID lịch sử không có `_u`
+vẫn hợp lệ và không bị đổi.
 
 ## Vòng đời dữ liệu
 
@@ -268,10 +270,13 @@ Task mới tạo ra đã là `InProgress` — không còn `Draft`/`Open` (TEAM_0
 - **Có thể giao người nhận ngay khi tạo task** (TEAM_021): thêm `assigneeUserIds` vào `POST /api/tasks`.
   Danh sách được loại trùng; người nhận phải đang hoạt động và đúng vai trò (Speaker cho thu âm,
   Reviewer cho duyệt). Quota được chia đều, phần dư ưu tiên người đứng trước. Với task thu âm,
-  backend lấy đủ số cặp `Validated` chưa nằm trong task nào theo chủ đề rồi gán từng cặp cho từng
-  Speaker (`task_script.assignee_user_id`); không đủ cặp thì trả `422 recording_not_enough_pairs`
-  và không tạo task. Bỏ trường hoặc gửi mảng rỗng để tạo task chưa có người nhận như trước.
-  Lược đồ gốc đã có cột `assignee_user_id` qua V14; database triển khai cũ cần áp `migrations/V14__task_script_assignee.sql` và `migrations/V15__recording_queue_assignee.sql` cho hàm hàng đợi mới.
+  backend lấy các cặp `Validated` theo chủ đề mà từng Speaker chưa có bản chờ duyệt/đạt, tối đa
+  quota, rồi gán từng cặp cho từng Speaker (`task_script.assignee_user_id`); kho ít hơn chỉ tiêu
+  thì vẫn tạo task và mỗi người nhận tối đa số câu còn thu được. Nhiều Speaker có thể nhận cùng
+  một cặp — mỗi người một dòng `task_script` (khoá `task_script_id`) và một bản ghi riêng; một
+  Speaker không nhận trùng cặp trong cùng task. Bỏ trường hoặc gửi mảng rỗng để tạo task chưa có
+  người nhận như trước. Database triển khai cũ cần V14/V15 trước V17 và
+  `migrations/V21__multi_speaker_scripts.sql`.
 - **Trạng thái task tự tính lại** từ số liệu thật sau mỗi việc xảy ra (đạt chỉ tiêu →
   `Completed`, chưa đạt → `InProgress`); chỉ còn ba giá trị (`InProgress`/`Completed`/`Cancelled`).
   **TEAM_016**: `Completed` KHÔNG khoá công việc — người nhận còn lượt giao `Active` hoặc

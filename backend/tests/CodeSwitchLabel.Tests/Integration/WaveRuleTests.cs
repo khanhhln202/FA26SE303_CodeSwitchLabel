@@ -12,7 +12,7 @@ namespace CodeSwitchLabel.Tests.Integration;
 /// </summary>
 [Collection("Database")]
 [Trait("Category", "Integration")]
-public sealed class CampaignRuleTests(DatabaseFixture fixture) : ApiTestBase(fixture)
+public sealed class WaveRuleTests(DatabaseFixture fixture) : ApiTestBase(fixture)
 {
     /// <summary>
     /// đợt mới tạo chưa có nhiệm vụ nào thì là Open, và nhận task bình thường.
@@ -23,9 +23,9 @@ public sealed class CampaignRuleTests(DatabaseFixture fixture) : ApiTestBase(fix
     {
         var admin = await GetAdminTokenAsync();
         var manager = await GetManagerTokenAsync();
-        var campaignId = await TaoChienDichDaGiaoAsync(admin, await LayUserIdAsync(manager));
+        var waveId = await TaoChienDichDaGiaoAsync(admin, await LayUserIdAsync(manager));
 
-        var taoTask = await PostAsync("/api/tasks", TaskMoi(campaignId), manager);
+        var taoTask = await PostAsync("/api/tasks", TaskMoi(waveId), manager);
 
         Assert.Equal(HttpStatusCode.Created, taoTask.StatusCode);
     }
@@ -40,9 +40,9 @@ public sealed class CampaignRuleTests(DatabaseFixture fixture) : ApiTestBase(fix
     {
         var admin = await GetAdminTokenAsync();
         var manager = await GetManagerTokenAsync();
-        var campaignId = await TaoChienDichDaGiaoAsync(admin, await LayUserIdAsync(manager));
+        var waveId = await TaoChienDichDaGiaoAsync(admin, await LayUserIdAsync(manager));
 
-        var taoTask = await PostAsync("/api/tasks", TaskMoi(campaignId), manager);
+        var taoTask = await PostAsync("/api/tasks", TaskMoi(waveId), manager);
         Assert.Equal(HttpStatusCode.Created, taoTask.StatusCode);
 
         // Chốt nhiệm vụ vừa tạo → đợt không còn việc nào chưa xong nên thành Completed.
@@ -51,14 +51,14 @@ public sealed class CampaignRuleTests(DatabaseFixture fixture) : ApiTestBase(fix
         Assert.Equal(HttpStatusCode.OK, chotXong.StatusCode);
         Assert.Equal("Completed", (await DocJsonAsync(chotXong)).GetProperty("summary").GetProperty("status").GetString());
 
-        Assert.Equal("Completed", (await DocJsonAsync(await GetAsync($"/api/campaigns/{campaignId}", admin)))
+        Assert.Equal("Completed", (await DocJsonAsync(await GetAsync($"/api/waves/{waveId}", admin)))
             .GetProperty("status").GetString());
 
         // Gắn nhiệm vụ thứ hai → đợt mở lại.
-        var taoTask2 = await PostAsync("/api/tasks", TaskMoi(campaignId), manager);
+        var taoTask2 = await PostAsync("/api/tasks", TaskMoi(waveId), manager);
         Assert.Equal(HttpStatusCode.Created, taoTask2.StatusCode);
 
-        Assert.Equal("InProgress", (await DocJsonAsync(await GetAsync($"/api/campaigns/{campaignId}", admin)))
+        Assert.Equal("InProgress", (await DocJsonAsync(await GetAsync($"/api/waves/{waveId}", admin)))
             .GetProperty("status").GetString());
     }
 
@@ -67,16 +67,16 @@ public sealed class CampaignRuleTests(DatabaseFixture fixture) : ApiTestBase(fix
     public async Task SuaChienDichKhongConTruongStatus()
     {
         var admin = await GetAdminTokenAsync();
-        var campaignId = await TaoChienDichAsync(admin);
-        var hienTai = await DocJsonAsync(await GetAsync($"/api/campaigns/{campaignId}", admin));
+        var waveId = await TaoChienDichAsync(admin);
+        var hienTai = await DocJsonAsync(await GetAsync($"/api/waves/{waveId}", admin));
 
-        var sua = await PatchAsync($"/api/campaigns/{campaignId}",
-            new { status = "Completed", campaignName = "Đợt đã đổi tên" }, admin);
+        var sua = await PatchAsync($"/api/waves/{waveId}",
+            new { status = "Completed", waveName = "Đợt đã đổi tên" }, admin);
 
         Assert.Equal(HttpStatusCode.OK, sua.StatusCode);
 
         var sau = await DocJsonAsync(sua);
-        Assert.Equal("Đợt đã đổi tên", sau.GetProperty("campaignName").GetString());
+        Assert.Equal("Đợt đã đổi tên", sau.GetProperty("waveName").GetString());
         Assert.Equal(hienTai.GetProperty("status").GetString(), sau.GetProperty("status").GetString());
     }
 
@@ -86,9 +86,9 @@ public sealed class CampaignRuleTests(DatabaseFixture fixture) : ApiTestBase(fix
     {
         var admin = await GetAdminTokenAsync();
         var speaker = await GetSpeakerTokenAsync();
-        var campaignId = await TaoChienDichAsync(admin);
+        var waveId = await TaoChienDichAsync(admin);
 
-        var giao = await PostAsync($"/api/campaigns/{campaignId}/assign",
+        var giao = await PostAsync($"/api/waves/{waveId}/assign",
             new { assignedToUserId = await LayUserIdAsync(speaker) }, admin);
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, giao.StatusCode);
@@ -100,9 +100,9 @@ public sealed class CampaignRuleTests(DatabaseFixture fixture) : ApiTestBase(fix
 
     // ----------------------------------------------------------------- dựng dữ liệu
 
-    private static object TaskMoi(long campaignId) => new
+    private static object TaskMoi(long waveId) => new
     {
-        campaignId,
+        waveId,
         taskType = "Recording",
         description = "Task kiểm thử luật chiến dịch",
         targetQty = 1,
@@ -111,9 +111,9 @@ public sealed class CampaignRuleTests(DatabaseFixture fixture) : ApiTestBase(fix
 
     private async Task<long> TaoChienDichAsync(string adminToken)
     {
-        var response = await PostAsync("/api/campaigns", new
+        var response = await PostAsync("/api/waves", new
         {
-            campaignName = $"Luật chiến dịch {Guid.NewGuid():N}",
+            waveName = $"Luật chiến dịch {Guid.NewGuid():N}",
             domain = "ItTechnology",
             targetQty = 2000,
             startDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
@@ -123,18 +123,18 @@ public sealed class CampaignRuleTests(DatabaseFixture fixture) : ApiTestBase(fix
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
-        return doc.RootElement.GetProperty("campaignId").GetInt64();
+        return doc.RootElement.GetProperty("waveId").GetInt64();
     }
 
     private async Task<long> TaoChienDichDaGiaoAsync(string adminToken, long managerId)
     {
-        var campaignId = await TaoChienDichAsync(adminToken);
+        var waveId = await TaoChienDichAsync(adminToken);
 
-        var giao = await PostAsync($"/api/campaigns/{campaignId}/assign",
+        var giao = await PostAsync($"/api/waves/{waveId}/assign",
             new { assignedToUserId = managerId }, adminToken);
 
         Assert.Equal(HttpStatusCode.OK, giao.StatusCode);
-        return campaignId;
+        return waveId;
     }
 
     private async Task<long> LayUserIdAsync(string accessToken)

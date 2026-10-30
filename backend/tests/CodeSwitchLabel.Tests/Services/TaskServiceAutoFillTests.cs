@@ -23,7 +23,7 @@ public sealed class TaskServiceAutoFillTests
             .ReturnsAsync(3);
         var service = new TaskService(
             tasks.Object,
-            Mock.Of<ICampaignRepository>(),
+            Mock.Of<IWaveRepository>(),
             Mock.Of<IScriptQueueRepository>(),
             tracker.Object,
             config.Object,

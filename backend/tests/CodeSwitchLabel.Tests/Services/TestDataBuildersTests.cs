@@ -42,14 +42,14 @@ public sealed class TestDataBuildersTests
     }
 
     [Fact]
-    public void CampaignBuilder_MacDinh_NgayHopLe()
+    public void WaveBuilder_MacDinh_NgayHopLe()
     {
         // Arrange + Act
-        var campaign = new CampaignBuilder().Build();
+        var wave = new WaveBuilder().Build();
 
         // Assert
-        Assert.True(campaign.TargetQty > 0);
-        Assert.True(campaign.EndDate >= campaign.StartDate);
+        Assert.True(wave.TargetQty > 0);
+        Assert.True(wave.EndDate >= wave.StartDate);
     }
 
     [Fact]

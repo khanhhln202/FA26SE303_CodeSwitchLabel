@@ -3,6 +3,7 @@ using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Dtos;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace CodeSwitchLabel.Api.Controllers;
 
@@ -25,6 +26,7 @@ public class AuthController(IAuthService authService) : ControllerBase
     /// </remarks>
     [HttpPost("login")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<LoginResponse>> Login(
@@ -38,6 +40,7 @@ public class AuthController(IAuthService authService) : ControllerBase
     /// </remarks>
     [HttpPost("register-speaker")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]

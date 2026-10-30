@@ -8,14 +8,14 @@ public record CreateTaskRequest
 {
     /// <summary>Để trống (null) = tạo task độc lập, gắn vào chiến dịch sau. Có giá trị thì kiểm tra quota/hạn như cũ.</summary>
     [Range(1, long.MaxValue, ErrorMessage = "Chiến dịch không hợp lệ.")]
-    public long? CampaignId { get; init; }
+    public long? WaveId { get; init; }
 
     [Required(ErrorMessage = "Phải chọn loại task: Recording hoặc Review.")]
     public TaskType? TaskType { get; init; }
 
     /// <summary>
     /// Chủ đề của nhiệm vụ. Khi gắn vào chiến dịch, phải trùng chủ đề của chiến dịch —
-    /// nếu không thì 422 task_domain_mismatch_campaign.
+    /// nếu không thì 422 task_domain_mismatch_wave.
     /// </summary>
     public ScriptDomain? Domain { get; init; }
 
@@ -147,11 +147,11 @@ public record TaskProgressDto(
     public int SubmittedCapped => Math.Min(Submitted, TargetQty);
 }
 
-/// <summary>Gắn task vào chiến dịch (attach/move), hoặc gỡ ra (detach) khi CampaignId = null.</summary>
+/// <summary>Gắn task vào chiến dịch (attach/move), hoặc gỡ ra (detach) khi WaveId = null.</summary>
 public record AttachTaskRequest
 {
     [Range(1, long.MaxValue, ErrorMessage = "Chiến dịch không hợp lệ.")]
-    public long? CampaignId { get; init; }
+    public long? WaveId { get; init; }
 }
 
 /// <summary>một người đang nhận task. Trước đây chỉ có một assigneeId/assigneeName.</summary>
@@ -162,8 +162,8 @@ public record TaskAssigneeDto(long UserId, string FullName, int? TargetQty);
 /// <param name="DeleteBlockedReason">Vì sao không xoá được — tiếng Việt để frontend hiện thẳng cho người dùng.</param>
 public record TaskListItemDto(
     long TaskId,
-    long? CampaignId,
-    string? CampaignName,
+    long? WaveId,
+    string? WaveName,
     TaskType TaskType,
     ScriptDomain Domain,
     string? Description,
@@ -185,12 +185,14 @@ public record TaskAssignmentDto(
 
 /// <param name="Id">script_id với task thu âm, recording_id với task duyệt.</param>
 /// <param name="AssigneeUserId">Speaker được gán cặp câu này; null = chưa gán hoặc task duyệt.</param>
+/// <param name="TaskScriptId">Khoá của dòng task_script; dùng khi một cặp câu có nhiều Speaker.</param>
 public record TaskItemDto(
     string Id,
     string Status,
     string? Preview,
     DateTimeOffset IncludedAt,
-    long? AssigneeUserId = null);
+    long? AssigneeUserId = null,
+    long? TaskScriptId = null);
 
 /// <param name="Assignments">Toàn bộ lịch sử giao việc, kể cả các lượt đã chuyển cho người khác.</param>
 public record TaskDetailDto(
@@ -233,7 +235,7 @@ public record SpeakerActiveTaskDto(
     long TaskId,
     string? TaskTitle,
     string? Description,
-    string? CampaignName,
+    string? WaveName,
     TaskType TaskType,
     WorkTaskStatus Status,
     DateTimeOffset? Deadline,
@@ -250,7 +252,7 @@ public record SpeakerProgressDto(
 /// <param name="ActiveRecordingTasks">đổi tên từ `OpenRecordingTasks` — trạng thái
 /// `Open` của task đã bị bỏ, "đang chạy" giờ chỉ có một giá trị là `InProgress`.</param>
 public record TaskManagerOverviewDto(
-    IReadOnlyList<CampaignProgressDto> MyCampaigns,
+    IReadOnlyList<WaveProgressDto> MyWaves,
     IReadOnlyList<AssigneeSummaryDto> ByAssignee,
     int ActiveRecordingTasks,
     int ActiveReviewTasks,

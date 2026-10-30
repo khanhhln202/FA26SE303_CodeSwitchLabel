@@ -104,16 +104,16 @@ public static partial class DatabaseSeeder
         if (await db.WorkTasks.AnyAsync(t => t.Description == RecordingTaskName, ct)) return;
 
         // Chỉ dùng chiến dịch mà CHÍNH manager demo được giao. Trigger
-        // trg_task_creator_assigned đòi created_by = campaign.assigned_to, nên lấy "chiến
-        // dịch nhỏ campaign_id nhất" là lấy nhầm khi máy đã có chiến dịch của người khác:
-        // database của test đúng là tình huống đó (Test Campaign giao cho
+        // trg_task_creator_assigned đòi created_by = wave.assigned_to, nên lấy "chiến
+        // dịch nhỏ wave_id nhất" là lấy nhầm khi máy đã có chiến dịch của người khác:
+        // database của test đúng là tình huống đó (Test Wave giao cho
         // manager@test.local, còn task thì do manager@codeswitchlabel.local tạo).
-        var campaign = await db.Campaigns.AsNoTracking()
+        var wave = await db.Waves.AsNoTracking()
             .Where(c => c.AssignedTo == ids.Manager)
-            .OrderBy(c => c.CampaignId)
+            .OrderBy(c => c.WaveId)
             .FirstOrDefaultAsync(ct);
 
-        if (campaign is null)
+        if (wave is null)
         {
             logger?.LogWarning(
                 "Bỏ qua task mẫu: chưa có chiến dịch nào được giao cho manager demo (user {ManagerId}). " +
@@ -124,15 +124,15 @@ public static partial class DatabaseSeeder
 
         var now = DateTimeOffset.UtcNow;
 
-        // Hạn nằm trong khoảng ngày của chiến dịch — trigger trg_task_campaign_window chặn nếu lệch.
-        var deadline = EndOfCampaignDay(campaign.EndDate);
+        // Hạn nằm trong khoảng ngày của chiến dịch — trigger trg_task_wave_window chặn nếu lệch.
+        var deadline = EndOfWaveDay(wave.EndDate);
 
         var recordingTask = new WorkTask
         {
-            CampaignId = campaign.CampaignId,
+            WaveId = wave.WaveId,
             CreatedBy = ids.Manager,
             TaskType = TaskType.Recording,
-            Domain = campaign.Domain, // TEAM_003
+            Domain = wave.Domain, // TEAM_003
             Description = RecordingTaskName,
             TargetQty = 8,
             Deadline = deadline,
@@ -142,10 +142,10 @@ public static partial class DatabaseSeeder
 
         var reviewTask = new WorkTask
         {
-            CampaignId = campaign.CampaignId,
+            WaveId = wave.WaveId,
             CreatedBy = ids.Manager,
             TaskType = TaskType.Review,
-            Domain = campaign.Domain, // TEAM_003
+            Domain = wave.Domain, // TEAM_003
             Description = ReviewTaskName,
             TargetQty = 4,
             Deadline = deadline,
@@ -215,18 +215,18 @@ public static partial class DatabaseSeeder
     private const string ReviewTaskName = "Duyệt bản ghi đợt mẫu";
 
     /// <summary>Múi giờ của ngày trong chiến dịch — phải khớp 'Asia/Ho_Chi_Minh' trong lược đề.</summary>
-    internal static readonly TimeSpan CampaignTimeZone = TimeSpan.FromHours(7);
+    internal static readonly TimeSpan WaveTimeZone = TimeSpan.FromHours(7);
 
     /// <summary>
     /// 23:59:59 giờ Việt Nam của một ngày trong chiến dịch, đổi sang UTC.
     ///
-    /// Ngày của chiến dịch là ngày LỊCH ở Việt Nam: trigger trg_task_campaign_window quy
+    /// Ngày của chiến dịch là ngày LỊCH ở Việt Nam: trigger trg_task_wave_window quy
     /// đổi sang giờ địa phương (+07) rồi mới so, nên "23:59:59 UTC" là 7 giờ vượt sang
     /// ngày hôm sau và bị trigger chặn — seeder vỡ, API không lên được với database mới.
     ///
     /// Phải trả về DateTimeOffset có offset 0: Npgsql từ chối ghi DateTimeOffset lệch UTC
     /// vào cột timestamptz.
     /// </summary>
-    internal static DateTimeOffset EndOfCampaignDay(DateOnly day) =>
-        new DateTimeOffset(day.ToDateTime(new TimeOnly(23, 59, 59)), CampaignTimeZone).ToUniversalTime();
+    internal static DateTimeOffset EndOfWaveDay(DateOnly day) =>
+        new DateTimeOffset(day.ToDateTime(new TimeOnly(23, 59, 59)), WaveTimeZone).ToUniversalTime();
 }

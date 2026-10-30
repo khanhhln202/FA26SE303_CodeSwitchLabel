@@ -83,14 +83,14 @@ public sealed class TaskManualStatusTests(DatabaseFixture fixture) : Integration
         var manager = await CreateUserAsync($"tm-cancel-{Guid.NewGuid():N}@test.local", RoleName.TaskManager);
         var speaker = await CreateUserAsync($"sp-cancel-{Guid.NewGuid():N}@test.local", RoleName.Speaker);
 
-        var campaign = await CreateCampaignAsync($"Đợt huỷ tay {Guid.NewGuid():N}", 2000,
+        var wave = await CreateWaveAsync($"Đợt huỷ tay {Guid.NewGuid():N}", 2000,
             DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
-            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), manager.UserId, CampaignStatus.Open);
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), manager.UserId, WaveStatus.Open);
 
-        campaign.AssignedTo = manager.UserId;
+        wave.AssignedTo = manager.UserId;
         await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var task = await CreateTaskAsync(campaign.CampaignId, TaskType.Recording, 1,
+        var task = await CreateTaskAsync(wave.WaveId, TaskType.Recording, 1,
             manager.UserId, DateTimeOffset.UtcNow.AddDays(10));
 
         Db.TaskAssignments.Add(new TaskAssignment

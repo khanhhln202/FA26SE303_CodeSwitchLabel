@@ -110,12 +110,12 @@ console.log('\n== Đổi vai bị chặn khi đang nhận task ==');
 // Task nao cung phai thuoc mot chien dich, va chien dich phai duoc Admin giao cho chinh Task Manager do.
 const iso = (days) => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
 const managerId = (await call(T.manager, 'GET', '/api/auth/me')).body.userId;
-r = await call(T.admin, 'POST', '/api/campaigns',
-  { campaignName: 'Chien dich kiem thu nguoi dung', targetQty: 2000, domain: 'ItTechnology', startDate: iso(0), endDate: iso(60) });
-const campaignId = r.body?.campaignId;
-await call(T.admin, 'POST', `/api/campaigns/${campaignId}/assign`, { assignedToUserId: managerId });
+r = await call(T.admin, 'POST', '/api/waves',
+  { waveName: 'Chien dich kiem thu nguoi dung', targetQty: 2000, domain: 'ItTechnology', startDate: iso(0), endDate: iso(60) });
+const waveId = r.body?.waveId;
+await call(T.admin, 'POST', `/api/waves/${waveId}/assign`, { assignedToUserId: managerId });
 
-r = await call(T.manager, 'POST', '/api/tasks', { campaignId, taskType: 'Recording', description: 'Task của speaker3', targetQty: 1, deadline: deadline() });
+r = await call(T.manager, 'POST', '/api/tasks', { waveId, taskType: 'Recording', description: 'Task của speaker3', targetQty: 1, deadline: deadline() });
 const taskId = r.body.summary.taskId;
 await call(T.manager, 'POST', `/api/tasks/${taskId}/items`, { autoFill: { count: 2 } });
 record('6.1', 'Giao task cho speaker3', await call(T.manager, 'POST', `/api/tasks/${taskId}/assign`, { userIds: [s3] }),

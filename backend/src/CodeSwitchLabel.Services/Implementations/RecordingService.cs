@@ -75,9 +75,10 @@ public class RecordingService(
 
             var take = await NextTakeAsync(command, ct);
 
-            // Mã bản ghi do database sinh: r_cs_/r_vi_ + 9 hoặc 12 chữ số của cặp câu, thu lại thì thêm _tN.
+            // Mã bản ghi do database sinh: r_cs_/r_vi_ + 9 hoặc 12 chữ số của cặp câu,
+            // kèm _u<speaker> để hai người thu cùng câu không đụng mã, thu lại thì thêm _tN.
             var recordingId = await recordings.GenerateIdAsync(
-                command.ScriptId, command.SentenceVariant, take, ct);
+                command.ScriptId, command.SentenceVariant, take, command.SpeakerId, ct);
 
             // Thêm hậu tố fileId để hai lượt thu đua nhau cùng take không ghi đè S3 của nhau:
             // key cũ xác định theo recordingId nên lượt thua 409 xoá nhầm file của lượt thắng.
@@ -119,12 +120,6 @@ public class RecordingService(
                     throw new ConflictException(
                         "recording_already_exists",
                         $"Bạn đã có bản {command.SentenceVariant} đang chờ duyệt hoặc đã được duyệt cho cặp câu {command.ScriptId}.");
-                }
-                catch (DbUpdateException ex) when (IsSingleSpeakerViolation(ex))
-                {
-                    throw new ConflictException(
-                        "script_owned_by_other_speaker",
-                        $"Cặp câu {command.ScriptId} đã do người đọc khác thu. Mỗi cặp câu chỉ một người đọc.");
                 }
 
                 // vừa lưu bản ghi là tính lại task thu âm VÀ tự đẩy bản chờ duyệt
@@ -222,18 +217,10 @@ public class RecordingService(
                 $"Cặp câu {script.ScriptId} đang có đề xuất chờ Reviewer xử lý nên tạm chưa thu âm được.");
         }
 
-        // Luật cốt lõi của lược đồ: một cặp câu chỉ một người đọc, để hai bản cs và vi
-        // là cùng một giọng, cùng một buổi thu. Database cũng có trigger chặn.
-        var owner = await recordings.GetOwnerSpeakerIdAsync(command.ScriptId, ct);
-
-        if (owner.HasValue && owner.Value != command.SpeakerId)
-        {
-            throw new ConflictException(
-                "script_owned_by_other_speaker",
-                $"Cặp câu {command.ScriptId} đã do người đọc khác thu. Mỗi cặp câu chỉ một người đọc.");
-        }
-
-        if (await recordings.HasActiveRecordingAsync(command.ScriptId, command.SentenceVariant, ct))
+        // Mỗi Speaker được thu độc lập: bản đang chờ duyệt/đạt của người khác
+        // không chặn người này, chỉ bản của chính người này mới chặn.
+        if (await recordings.HasActiveRecordingAsync(
+                command.ScriptId, command.SentenceVariant, command.SpeakerId, ct))
         {
             throw new ConflictException(
                 "recording_already_exists",
@@ -257,7 +244,8 @@ public class RecordingService(
 
     private async Task<int> NextTakeAsync(UploadRecordingCommand command, CancellationToken ct)
     {
-        var take = await recordings.CountTakesAsync(command.ScriptId, command.SentenceVariant, ct) + 1;
+        var take = await recordings.CountTakesAsync(
+            command.ScriptId, command.SentenceVariant, command.SpeakerId, ct) + 1;
         var maxTake = await config.GetIntAsync(ConfigKeys.RecordingMaxTake, 99, ct);
 
         if (take > maxTake)
@@ -403,14 +391,6 @@ public class RecordingService(
     private static bool IsUniqueViolation(DbUpdateException ex)
     {
         return ex.InnerException is PostgresException pg && pg.SqlState == PostgresErrorCodes.UniqueViolation;
-    }
-
-    private static bool IsSingleSpeakerViolation(DbUpdateException ex)
-    {
-        return ex.InnerException is PostgresException pg &&
-            pg.SqlState == PostgresErrorCodes.RaiseException &&
-            (pg.MessageText?.Contains("single speaker", StringComparison.OrdinalIgnoreCase) == true ||
-             ex.InnerException?.Message.Contains("single speaker", StringComparison.OrdinalIgnoreCase) == true);
     }
 
     /// <summary>
