@@ -55,6 +55,8 @@ print_rollback() {
      git checkout ${OLD_SHA:-<sha cu>}
      docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build
      git checkout main && git reset --hard origin/main
+   Chi an toan khi migration da ap tuong thich nguoc. V22 doi campaign->wave:
+   code truoc V22 KHONG chay duoc voi schema hien tai.
 
 3. CHỈ khi migration đã chạy và dữ liệu hỏng, mới phục hồi database
    (LÀM MẤT DỮ LIỆU GHI SAU THỜI ĐIỂM SAO LƯU):
@@ -273,9 +275,11 @@ else
   token="$(printf '%s' "$body" | grep -o '"accessToken":"[^"]*"' | cut -d'"' -f4 || true)"
   [ -n "$token" ] || die "Dang nhap that bai (HTTP ${code:-?}). 401/400: kiem tra SEED_PASSWORD; 5xx: loi API/DB, xem 'logs api'."
   # Token cung truyen qua STDIN (curl -K -) de khong lo ra truong doi so lenh.
+  # /api/auth/me chu khong phai /api/waves: route nay khong doi ten theo domain,
+  # nen script dang chay (ban cu, nap truoc khi git pull) khong bao sai khi ten doi.
   printf 'header = "Authorization: Bearer %s"\n' "$token" \
-    | curl -fsS --max-time 10 -K - "$BASE_URL/api/waves" >/dev/null \
-    || die "GET /api/waves that bai."
+    | curl -fsS --max-time 10 -K - "$BASE_URL/api/auth/me" >/dev/null \
+    || die "GET /api/auth/me that bai."
 fi
 
 git rev-parse HEAD > deploy/.deployed-sha
