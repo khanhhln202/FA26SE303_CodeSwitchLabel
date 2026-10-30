@@ -262,7 +262,7 @@ Một lệnh duy nhất, chạy từ thư mục gốc của repo trên máy ch�
 | 4. Kéo code | `git pull --ff-only` | git lỗi |
 | 5. Migration | Chạy file `migrations/V*.sql` **chưa có** trong bảng `schema_migration` | migration lỗi (file tự rollback) |
 | 6. Dựng lại | `docker compose up -d --build` | — |
-| 7. Kiểm tra | `/health`, đăng nhập `admin@`, `GET /api/waves`; ghi commit vào `deploy/.deployed-sha` | API không lên, sai mật khẩu |
+| 7. Kiểm tra | `/health`, đăng nhập `admin@`, `GET /api/auth/me`; ghi commit vào `deploy/.deployed-sha` | API không lên, sai mật khẩu |
 
 V22 renames the legacy tables, columns, enum, views, functions, and triggers to Wave in place. It preserves the existing rows; clients must use the `/api/waves` routes and Wave JSON fields.
 
@@ -290,6 +290,9 @@ ghi trong khoảng đó.
 **Lần đầu dùng script**: script nằm trong repo nên máy chủ phải có nó trước. Kéo code bằng tay một
 lần (`git pull`), hoặc `scp deploy/deploy.sh <user>@<máy-chủ>:~/deploy/` — từ lần sau script tự kéo
 chính nó.
+
+> Lần đang chạy vẫn dùng bản script đã nạp lúc bắt đầu; bản mới chỉ có hiệu lực từ lần sau. Vì vậy
+> bước kiểm tra cuối gọi `GET /api/auth/me`, route không đổi tên theo domain (bài học từ V22).
 
 > **Migration phải tương thích ngược** với code đang chạy (kiểu expand/contract: thêm cột/bảng mới,
 > chưa xoá cái cũ). Vì vậy mới áp migration *trước* khi dựng lại container — code cũ vẫn chạy được

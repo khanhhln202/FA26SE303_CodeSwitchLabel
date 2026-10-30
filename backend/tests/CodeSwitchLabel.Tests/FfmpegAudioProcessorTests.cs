@@ -89,7 +89,7 @@ public sealed class FfmpegAudioProcessorTests : IDisposable
         await _processor.ConvertToWavAsync(webm, wav, TestContext.Current.CancellationToken);
         var probe = await _processor.ProbeAsync(wav, TestContext.Current.CancellationToken);
 
-        // Assert  Effmpeg mã hoá không chính xác tới mili-giây nên dùng khoảng thay vì bằng tuyệt đối.
+        // Assert — ffmpeg mã hoá không chính xác tới mili-giây nên dùng khoảng thay vì bằng tuyệt đối.
         Assert.InRange(probe.DurationSec, 2.9m, 3.1m);
         Assert.Equal(16000, probe.SampleRate);
         Assert.Equal(1, probe.Channels);
@@ -104,7 +104,7 @@ public sealed class FfmpegAudioProcessorTests : IDisposable
         var fake = Path.Combine(_workDir, "fake.webm");
         await File.WriteAllTextAsync(fake, "đây chỉ là chữ, không phải âm thanh", TestContext.Current.CancellationToken);
 
-        // Act  Ephải là AudioProcessingException chứ không phải lỗi chung chung,
+        // Act — phải là AudioProcessingException chứ không phải lỗi chung chung,
         // vì tầng Service dựa vào đúng loại này để trả 422 thay vì 500.
         var act = () => _processor.ConvertToWavAsync(fake, Path.Combine(_workDir, "fake.wav"), TestContext.Current.CancellationToken);
 
@@ -138,7 +138,7 @@ public sealed class FfmpegAudioProcessorTests : IDisposable
         // Act
         var act = () => _processor.ConvertToWavAsync(webm, Path.Combine(_workDir, "cancelled.wav"), cts.Token);
 
-        // Assert  Eprocessor phải tôn trọng token huỷ thay vì chạy hết file.
+        // Assert — processor phải tôn trọng token huỷ thay vì chạy hết file.
         await Assert.ThrowsAnyAsync<OperationCanceledException>(act);
     }
 
@@ -206,7 +206,7 @@ public sealed class FfmpegAudioProcessorTests : IDisposable
     // ------------------------------------------------------------------ helpers
 
     /// <summary>
-    /// Sinh file WebM/Opus bằng cách ghi ra pipe  Effmpeg không tua lại được đầu file,
+    /// Sinh file WebM/Opus bằng cách ghi ra pipe — ffmpeg không tua lại được đầu file,
     /// y hệt cách MediaRecorder của trình duyệt ghi âm.
     /// </summary>
     private async Task<string> GenerateBrowserLikeWebmAsync(int seconds, string? directory = null)
