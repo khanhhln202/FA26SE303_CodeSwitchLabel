@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { toast } from "sonner";
-import { Search, Download, CheckCircle2, XCircle, Filter, Clock, X, AlertCircle, Plus, Send, Trash2, Eye } from "lucide-react";
+import { Search, Download, CheckCircle2, XCircle, Filter, Clock, X, AlertCircle, Loader2 } from "lucide-react";
 import Pagination from "../../../components/Pagination/Pagination";
 import WaveformInline from "../../../components/AudioPlayer/WaveformInline";
 import {
@@ -19,6 +19,7 @@ import {
 import { adminService } from "../../../services/adminService";
 import { getScriptDetailApi } from "../../../services/scriptApi";
 import { parseCodeSwitch } from "../../../utils/codeSwitch";
+import { httpClient } from "../../../utils/setting";
 
 // Style trạng thái đồng bộ 100% với giao diện Reviewer RecordingHistory
 const STATUS_STYLE = {
@@ -86,35 +87,50 @@ export default function AdminRecordings() {
   const pageSize = 10;
 
   const [selectedReviewersList, setSelectedReviewersList] = useState(null);
-  const [sentenceItem, setSentenceItem] = useState(null);
   const [userMapState, setUserMapState] = useState({});
 
-  // STATE DÀNH CHO 3 MODAL DATASET
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [isReleaseModalOpen, setIsReleaseModalOpen] = useState(false);
-  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
+  // STATE PHỤC VỤ CHỨC NĂNG CHỌN TẢI DATASET (CHECKBOX MODE)
+  const [isSelectMode, setIsSelectMode] = useState(false);
+  const [selectedPairIds, setSelectedPairIds] = useState([]);
+  const [isExporting, setIsExporting] = useState(false);
 
-  const [datasetForm, setDatasetForm] = useState({
-    datasetName: "",
-    version: "v1",
-    description: ""
-  });
-
-  const [selectedRecordingIds, setSelectedRecordingIds] = useState([]);
-  const [allDatasets, setAllDatasets] = useState([]);
-  const [loadingDatasets, setLoadingDatasets] = useState(false);
-  const [downloadedDatasetIds, setDownloadedDatasetIds] = useState([]);
-
-  // TẢI VÀ GỘP CẶP DỮ LIỆU ĐỒNG BỘ NGUYÊN BẢN THEO LƯỢT THU MỚI NHẤT
+  // TẢI VÀ GỘP CẶP DỮ LIỆU ĐỒNG BỘ CHUẨN XÁC THEO LUỒNG ADMIN
   const fetchRecordings = async () => {
     try {
-      // 1. Tải danh sách User
-      const usersRes = await adminService.getUsers({ page: 1, pageSize: 500 }).catch(() => ({ items: [] }));
+      // 1. Tải danh sách User & Speaker để lấy thông tin Email
+      const [usersRes, speakersRes] = await Promise.all([
+        adminService.getUsers({ page: 1, pageSize: 500 }).catch(() => ({ items: [] })),
+        httpClient.get("/api/users/speakers", { params: { page: 1, pageSize: 500 } }).then(r => r.data).catch(() => ({ items: [] }))
+      ]);
+
       const userItems = usersRes.items || usersRes || [];
+      const speakerItems = speakersRes.items || speakersRes || [];
+
       const userMap = {};
+      const userDetailMap = {};
+
+      // Map dữ liệu từ danh sách User tổng
       userItems.forEach((u) => {
-        userMap[u.userId || u.id] = u.fullName || u.name;
+        const uId = u.userId || u.id;
+        userMap[uId] = u.fullName || u.name;
+        userDetailMap[uId] = {
+          name: u.fullName || u.name || `User #${uId}`,
+          email: u.email || "Chưa có email"
+        };
       });
+
+      // Map đè thông tin chi tiết từ API Speaker
+      speakerItems.forEach((s) => {
+        const sId = s.userId || s.id || s.speakerId;
+        if (sId) {
+          if (s.fullName || s.name) userMap[sId] = s.fullName || s.name;
+          userDetailMap[sId] = {
+            name: s.fullName || s.name || userDetailMap[sId]?.name || `User #${sId}`,
+            email: s.email || userDetailMap[sId]?.email || "Chưa có email"
+          };
+        }
+      });
+
       setUserMapState(userMap);
 
       // 2. Tải tất cả bản ghi âm từ Admin API
@@ -182,11 +198,14 @@ export default function AdminRecordings() {
           const isCs = variantStr.includes("codeswitching") || variantStr === "1" || variantStr.includes("cs") || variantStr.includes("vi-en");
           const isVi = variantStr.includes("purevietnamese") || variantStr === "2" || (variantStr.includes("vi") && !variantStr.includes("vi-en"));
 
+          const spkInfo = userDetailMap[r.speakerId] || {};
+
           return {
             recId,
             scriptId: sId || "N/A",
             speakerId: r.speakerId,
-            speaker: userMap[r.speakerId] || (r.speakerId ? `User #${r.speakerId}` : "Chưa xác định"),
+            speaker: spkInfo.name || (r.speakerId ? `User #${r.speakerId}` : "Chưa xác định"),
+            speakerEmail: spkInfo.email || r.speakerEmail || r.email || "N/A",
             csText: scriptInfo.csContent || r.csContent || r.scriptText || r.content || "",
             viText: scriptInfo.viContent || r.viContent || r.contentVietnamese || "",
             topic: r.domain || r.topic || "Công nghệ thông tin",
@@ -202,11 +221,8 @@ export default function AdminRecordings() {
         })
       );
 
-      // 5. GỘP CẶP VÀ ƯU TIÊN LẤY FILE AUDIO MỚI NHẤT TRONG TASK ĐÓ
+      // 5. GỘP CẶP CHUẨN XÁC THEO SCRIPT + SPEAKER + TASK
       const groupedMap = new Map();
-
-      // Sắp xếp tăng dần theo thời gian để bản thu mới hơn ghi đè bản thu cũ
-      rawRecordings.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
 
       rawRecordings.forEach((rec) => {
         const groupKey = `${rec.scriptId}_${rec.speakerId}_${rec.taskId}`;
@@ -220,6 +236,8 @@ export default function AdminRecordings() {
             viText: rec.viText,
             topic: rec.topic,
             speaker: rec.speaker,
+            speakerId: rec.speakerId,
+            speakerEmail: rec.speakerEmail,
             csAudioUrl: "",
             viAudioUrl: "",
             durationSec: rec.durationSec,
@@ -236,12 +254,8 @@ export default function AdminRecordings() {
           group.rawIds.push(rec.recId);
         }
 
-        // Bốc audio mới nhất theo biến thể VI-EN hoặc VI
         if (rec.isCs) {
-          if (rec.audioUrl) {
-            group.csAudioUrl = rec.audioUrl;
-            group.durationSec = rec.durationSec;
-          }
+          if (rec.audioUrl) group.csAudioUrl = rec.audioUrl;
           group.csRecordingId = rec.recId;
         } else if (rec.isVi) {
           if (rec.audioUrl) group.viAudioUrl = rec.audioUrl;
@@ -254,10 +268,9 @@ export default function AdminRecordings() {
         if (Array.isArray(rec.reviews) && rec.reviews.length > 0) {
           rec.reviews.forEach(rv => group.reviews.push({ ...rv, recId: rec.recId }));
         }
-        group.createdAt = rec.createdAt;
       });
 
-      // 6. TÍNH KẾT QUẢ TRẠNG THÁI CUỐI CÙNG
+      // 6. XỬ LÝ TRẠNG THÁI KẾT QUẢ KHI DUYỆT
       const pairedRecordings = Array.from(groupedMap.values()).map((pair) => {
         let finalStatus = "Pending";
         const reviewsList = pair.reviews;
@@ -285,13 +298,15 @@ export default function AdminRecordings() {
 
         return {
           id: pair.id,
-          rawId: pair.rawIds[pair.rawIds.length - 1] || pair.id,
+          rawId: pair.rawIds[0] || pair.id,
           rawIds: pair.rawIds,
           scriptId: pair.scriptId,
           csText: pair.csText,
           viText: pair.viText,
           topic: pair.topic,
           speaker: pair.speaker,
+          speakerId: pair.speakerId,
+          speakerEmail: pair.speakerEmail,
           csAudioUrl: pair.csAudioUrl,
           viAudioUrl: pair.viAudioUrl,
           durationSec: pair.durationSec,
@@ -303,7 +318,7 @@ export default function AdminRecordings() {
         };
       });
 
-      // Sắp xếp danh sách giảm dần theo thời gian tạo mới nhất
+      // Sắp xếp giảm dần theo thời gian tạo
       pairedRecordings.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
       setRecordings(pairedRecordings);
@@ -316,15 +331,6 @@ export default function AdminRecordings() {
   useEffect(() => {
     fetchRecordings();
   }, []);
-
-  const approvedRecordings = useMemo(() => {
-    return recordings.filter((r) => r.status === "Approved");
-  }, [recordings]);
-
-  const handleOpenCreateModal = () => {
-    setSelectedRecordingIds([]);
-    setIsCreateModalOpen(true);
-  };
 
   const handleOpenReviewersModal = async (recording) => {
     setSelectedReviewersList({
@@ -398,6 +404,7 @@ export default function AdminRecordings() {
         r.csText,
         r.viText,
         r.speaker,
+        r.speakerEmail,
         r.topic,
         reviewersText
       ].filter(Boolean).join(" ").toLowerCase();
@@ -416,152 +423,57 @@ export default function AdminRecordings() {
     return Math.max(0, pageSize - paginatedRecordings.length);
   }, [paginatedRecordings.length, pageSize]);
 
-  const fetchDatasetsList = async () => {
-    setLoadingDatasets(true);
-    try {
-      const res = await adminService.getDatasets({ page: 1, pageSize: 100 });
-      const items = res.items || res || [];
-
-      const itemsWithDetails = await Promise.all(
-        items.map(async (ds) => {
-          const dsId = ds.datasetId || ds.id;
-          try {
-            const detail = await adminService.getDatasetDetail(dsId);
-            const countFromDetail = detail?.summary?.recordingCount ?? detail?.summary?.totalRecordings;
-            
-            return {
-              ...ds,
-              realRecordingsCount: countFromDetail !== undefined ? countFromDetail : (ds.recordingCount || 0)
-            };
-          } catch (e) {
-            return { ...ds, realRecordingsCount: ds.recordingCount || 0 };
-          }
-        })
-      );
-
-      setAllDatasets(itemsWithDetails);
-    } catch (err) {
-      console.error("Lỗi lấy danh sách dataset:", err);
-      toast.error("Không thể lấy danh sách bộ dữ liệu Dataset!");
-    } finally {
-      setLoadingDatasets(false);
+  // XỬ LÝ CHỌN TICK CHECKBOX VÀ TẢI DATASET THEO API BE
+  const handleTogglePairCheckbox = (pairId) => {
+    if (selectedPairIds.includes(pairId)) {
+      setSelectedPairIds(selectedPairIds.filter((id) => id !== pairId));
+    } else {
+      setSelectedPairIds([...selectedPairIds, pairId]);
     }
   };
 
-  const handleCreateDatasetSubmit = async (e) => {
-    e.preventDefault();
-    if (!datasetForm.datasetName.trim()) {
-      toast.error("Vui lòng nhập tên Dataset!");
+  const handleCancelSelectMode = () => {
+    setIsSelectMode(false);
+    setSelectedPairIds([]);
+  };
+
+  const handleExecuteDownloadDataset = async () => {
+    if (selectedPairIds.length === 0) {
+      toast.error("Vui lòng tick chọn ít nhất 1 cặp câu đã duyệt để tải về!");
       return;
     }
 
-    if (selectedRecordingIds.length === 0) {
-      toast.error("Vui lòng chọn ít nhất 1 bản ghi âm đã duyệt để đưa vào Dataset!");
-      return;
-    }
-
+    setIsExporting(true);
     try {
-      const formattedIds = selectedRecordingIds.map((id) => String(id));
+      const selectedPairs = recordings.filter((r) => selectedPairIds.includes(r.id));
+      const speakerIds = [...new Set(selectedPairs.map((r) => r.speakerId).filter(Boolean))];
 
-      await adminService.createDataset({
-        datasetName: datasetForm.datasetName.trim(),
-        version: datasetForm.version || "v1",
-        description: datasetForm.description || "",
-        recordingIds: formattedIds
+      const blob = await adminService.exportDatasetBySpeakers({
+        speakerIds: speakerIds.length > 0 ? speakerIds : undefined
       });
 
-      toast.success(`Tạo Dataset nháp "${datasetForm.datasetName}" thành công!`);
-      setIsCreateModalOpen(false);
-      setDatasetForm({ datasetName: "", version: "v1", description: "" });
-    } catch (err) {
-      console.error("Lỗi tạo dataset:", err?.response?.data || err);
-      const apiMsg = err?.response?.data?.message || err?.response?.data?.title || "Tạo Dataset nháp thất bại!";
-      toast.error(apiMsg);
-    }
-  };
-
-  const handleOpenReleaseModal = () => {
-    setIsReleaseModalOpen(true);
-    fetchDatasetsList();
-  };
-
-  const handleExecuteRelease = async (datasetId) => {
-    try {
-      await adminService.releaseDataset(datasetId);
-      toast.success("Phát hành Dataset thành công!");
-      
-      setAllDatasets((prev) =>
-        prev.filter((item) => String(item.datasetId || item.id) !== String(datasetId))
-      );
-    } catch (err) {
-      console.error("Lỗi phát hành dataset:", err?.response?.data || err);
-      const apiMsg = err?.response?.data?.detail || err?.response?.data?.title || err?.response?.data?.message || "Phát hành thất bại! Có thể bộ dữ liệu còn thiếu các biến thể câu.";
-      toast.error(apiMsg);
-    }
-  };
-
-  const handleDeleteDraftDataset = async (datasetId) => {
-    try {
-      await adminService.deleteDataset(datasetId);
-      toast.success("Đã xóa bản nháp Dataset thành công!");
-      
-      setAllDatasets((prev) =>
-        prev.filter((item) => String(item.datasetId || item.id) !== String(datasetId))
-      );
-    } catch (err) {
-      console.error("Lỗi xóa dataset nháp:", err);
-      toast.error("Không thể xóa bản nháp Dataset!");
-    }
-  };
-
-  const handleOpenDownloadModal = () => {
-    setIsDownloadModalOpen(true);
-    fetchDatasetsList();
-  };
-
-  const handleDownloadZipFile = async (datasetId, dsObject = null) => {
-    try {
-      const blob = await adminService.exportDatasetZip(datasetId);
       const url = window.URL.createObjectURL(new Blob([blob]));
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", `Dataset_Codeswitching_${new Date().toISOString().slice(0,10)}.zip`);
+      link.setAttribute("download", `Dataset_Codeswitching_${new Date().toISOString().slice(0, 10)}.zip`);
       document.body.appendChild(link);
       link.click();
       link.parentNode.removeChild(link);
       window.URL.revokeObjectURL(url);
-      
-      const idToHide = [String(datasetId)];
-      if (dsObject?.id) idToHide.push(String(dsObject.id));
-      if (dsObject?.datasetId) idToHide.push(String(dsObject.datasetId));
 
-      setDownloadedDatasetIds((prev) => [...prev, ...idToHide]);
-      toast.success("Đã bắt đầu tải xuống file .ZIP đầy đủ bản thu âm!");
+      toast.success("Đã bắt đầu tải xuống bộ dữ liệu .ZIP thành công!");
+      handleCancelSelectMode();
     } catch (err) {
-      console.error("Lỗi tải dataset:", err);
-      toast.error("Không thể tải file .ZIP! Vui lòng đảm bảo Dataset đã được phát hành.");
+      console.error("Lỗi xuất dataset:", err);
+      toast.error("Không thể tải file .ZIP từ hệ thống!");
+    } finally {
+      setIsExporting(false);
     }
   };
 
-  const releasedDatasetsToDownload = useMemo(() => {
-    return allDatasets.filter((ds) => {
-      const isReleased = ds.status === "Released" || ds.status === 1;
-      const dsIdStr = String(ds.datasetId || "");
-      const idStr = String(ds.id || "");
-      const rawIdStr = String(ds.datasetId || ds.id || "");
-
-      const isDownloaded = 
-        downloadedDatasetIds.includes(rawIdStr) || 
-        (dsIdStr && downloadedDatasetIds.includes(dsIdStr)) ||
-        (idStr && downloadedDatasetIds.includes(idStr));
-
-      return isReleased && !isDownloaded;
-    });
-  }, [allDatasets, downloadedDatasetIds]);
-
   return (
     <div className="w-full h-full flex flex-col justify-between text-left font-sans p-1 overflow-hidden transition-colors relative">
-      {/* Filter Bar + 3 Nút Thao Tác Dataset */}
+      {/* Filter Bar + Nút Tải Dataset */}
       <div className="shrink-0 space-y-2">
         <div className="bg-white dark:bg-[#1C1D22] rounded-2xl border border-[#E5E2D8] dark:border-gray-800 p-2.5 shadow-[0_1px_3px_rgba(16,17,20,0.04)] flex flex-col md:flex-row gap-2.5 justify-between items-center transition-colors">
           <div className="w-full md:w-auto flex-1 max-w-xl">
@@ -579,7 +491,7 @@ export default function AdminRecordings() {
               <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9A9CA3] pointer-events-none z-10" />
               <input
                 type="text"
-                placeholder="Tìm kiếm bản thu âm, nội dung, speaker..."
+                placeholder="Tìm kiếm bản thu âm, nội dung, speaker, email..."
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -589,7 +501,7 @@ export default function AdminRecordings() {
                 type="button"
                 onClick={handleSearch}
                 style={{ backgroundColor: ADMIN_ACCENT }}
-                className="absolute right-1 top-1/2 -translate-y-1/2 px-4 py-1.5 text-white rounded-lg type-button hover:opacity-90 transition-all cursor-pointer z-10"
+                className="absolute right-1 top-1/2 -translate-y-1/2 px-4 py-1.5 text-white rounded-lg type-button hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer z-10"
               >
                 Tìm kiếm
               </button>
@@ -622,32 +534,41 @@ export default function AdminRecordings() {
               </select>
             </div>
 
-            <button
-              onClick={handleOpenCreateModal}
-              style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 10px 24px ${ADMIN_ACCENT}40` }}
-              className="px-3.5 py-2 text-white rounded-xl type-button flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer whitespace-nowrap"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Tạo Dataset</span>
-            </button>
-
-            <button
-              onClick={handleOpenReleaseModal}
-              style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 10px 24px ${ADMIN_ACCENT}40` }}
-              className="px-3.5 py-2 text-white rounded-xl type-button flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer whitespace-nowrap"
-            >
-              <Send className="w-4 h-4" />
-              <span>Phát hành Dataset</span>
-            </button>
-
-            <button
-              onClick={handleOpenDownloadModal}
-              style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 10px 24px ${ADMIN_ACCENT}40` }}
-              className="px-3.5 py-2 text-white rounded-xl type-button flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer whitespace-nowrap"
-            >
-              <Download className="w-4 h-4" />
-              <span>Tải Dataset chuẩn (.ZIP)</span>
-            </button>
+            {/* CỤM NÚT TẢI DATASET VỚI HIỆU ỨNG CHUYỂN ĐỔI MƯỢT MÀ */}
+            <div className="relative flex items-center gap-2 transition-all duration-300 ease-in-out">
+              {!isSelectMode ? (
+                <button
+                  onClick={() => setIsSelectMode(true)}
+                  style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 8px 20px ${ADMIN_ACCENT}33` }}
+                  className="px-4 py-2 text-white rounded-xl type-button flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.97] transition-all duration-200 cursor-pointer whitespace-nowrap font-bold"
+                >
+                  <Download className="w-4 h-4 transition-transform duration-200 group-hover:translate-y-0.5" />
+                  <span>Tải dataset</span>
+                </button>
+              ) : (
+                <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-4 duration-300">
+                  <button
+                    onClick={handleExecuteDownloadDataset}
+                    disabled={isExporting}
+                    style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 8px 20px ${ADMIN_ACCENT}33` }}
+                    className="px-4 py-2 text-white rounded-xl type-button flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.97] transition-all duration-200 cursor-pointer whitespace-nowrap font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isExporting ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4" />
+                    )}
+                    <span>{isExporting ? "Đang tải..." : `Tải (${selectedPairIds.length})`}</span>
+                  </button>
+                  <button
+                    onClick={handleCancelSelectMode}
+                    className="px-3.5 py-2 bg-[#F0EEE6] dark:bg-[#25272E] text-[#6E7078] dark:text-gray-300 rounded-xl type-button hover:bg-[#E5E2D8] dark:hover:bg-gray-700 active:scale-[0.97] transition-all duration-200 cursor-pointer whitespace-nowrap font-medium border border-[#E5E2D8] dark:border-gray-700"
+                  >
+                    Hủy
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -655,14 +576,20 @@ export default function AdminRecordings() {
       {/* BẢNG TRANG ADMIN */}
       <div className="bg-white dark:bg-[#1C1D22] rounded-2xl border border-[#E5E2D8] dark:border-gray-800 shadow-[0_1px_3px_rgba(16,17,20,0.04)] overflow-hidden transition-colors flex-1 flex flex-col justify-between my-1 min-h-0">
         <div className="flex-1 min-h-0 overflow-auto">
-          <table className="w-full h-full text-left border-collapse table-fixed min-w-[980px]">
+          <table className="w-full h-full text-left border-collapse table-fixed min-w-[1100px]">
             <thead>
               <tr className="bg-[#F7F5EF] dark:bg-[#25272E] type-label text-[#9A9CA3] dark:text-gray-400 border-b border-[#E5E2D8] dark:border-gray-800 h-8">
                 <th className="w-[60px] px-2 text-center font-label">STT</th>
+                <th className="w-[160px] px-2 font-label">Speaker</th>
+                <th className="w-[240px] px-2 font-label">Email</th>
                 <th className="px-4 text-left font-label">Nội dung</th>
-                <th className="w-[180px] px-2 font-label">Speaker</th>
                 <th className="w-[250px] px-2 font-label">Đoạn ghi âm</th>
                 <th className="w-[140px] px-2 text-center whitespace-nowrap font-label">Kết quả</th>
+                {isSelectMode && (
+                  <th className="w-[60px] px-2 text-center font-label transition-all duration-300 ease-in-out animate-in fade-in">
+                    Chọn
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0EEE6] dark:divide-gray-800 type-ui">
@@ -671,47 +598,49 @@ export default function AdminRecordings() {
                   {paginatedRecordings.map((r, index) => {
                     const stt = (currentPage - 1) * pageSize + index + 1;
                     const status = r.status;
+                    const isApproved = status === "Approved";
+                    const isChecked = selectedPairIds.includes(r.id);
                     
                     const stStyle = styleOf(status);
                     const StatusIcon = stStyle.icon;
 
                     return (
-                      <tr key={r.id} className="hover:bg-[#F7F5EF]/70 dark:hover:bg-[#25272E]/50 transition-colors h-14">
+                      <tr key={r.id} className="hover:bg-[#F7F5EF]/70 dark:hover:bg-[#25272E]/50 transition-colors duration-150 h-14">
+                        {/* 1. STT */}
                         <td className="px-2 text-center font-bold text-[#16171C] dark:text-gray-100 align-middle">
                           {stt}
                         </td>
 
-                        <td className="px-4 align-middle min-w-0">
-                          <div className="flex items-center gap-2">
-                            <div className="min-w-0 flex-1 space-y-0.5 my-0.5">
-                              <div className="flex items-center gap-2">
-                                <InlineLabel variant="cs" />
-                                <p className="truncate type-ui text-[#16171C] dark:text-gray-100">
-                                  <TaggedText text={r.csText} />
-                                </p>
-                              </div>
-
-                              <div className="flex items-center gap-2">
-                                <InlineLabel variant="vi" />
-                                <p className="truncate type-ui text-[#16171C] dark:text-gray-300">
-                                  <TaggedText text={r.viText} />
-                                </p>
-                              </div>
-                            </div>
-                            <button
-                              onClick={() => setSentenceItem(r)}
-                              title="Xem đầy đủ hai câu"
-                              className="shrink-0 w-6 h-6 rounded-md flex items-center justify-center text-[#9A9CA3] hover:text-[#16171C] hover:bg-[#F0EEE6] dark:hover:bg-gray-700 transition-colors cursor-pointer"
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-
-                        <td className="px-2 font-bold text-[#16171C] dark:text-gray-100 align-middle whitespace-nowrap">
+                        {/* 2. SPEAKER (NẰM CẠNH STT) */}
+                        <td className="px-2 font-bold text-[#16171C] dark:text-gray-100 align-middle whitespace-nowrap truncate" title={r.speaker}>
                           {r.speaker}
                         </td>
 
+                        {/* 3. EMAIL HIỂN THỊ ĐẦY ĐỦ (NẰM CẠNH SPEAKER) */}
+                        <td className="px-2 type-ui text-[#6E7078] dark:text-gray-300 align-middle whitespace-nowrap" title={r.speakerEmail}>
+                          {r.speakerEmail}
+                        </td>
+
+                        {/* 4. NỘI DUNG (NẰM CẠNH EMAIL) */}
+                        <td className="px-4 align-middle min-w-0">
+                          <div className="min-w-0 flex-1 space-y-0.5 my-0.5">
+                            <div className="flex items-center gap-2">
+                              <InlineLabel variant="cs" />
+                              <p className="truncate type-ui text-[#16171C] dark:text-gray-100">
+                                <TaggedText text={r.csText} />
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <InlineLabel variant="vi" />
+                              <p className="truncate type-ui text-[#16171C] dark:text-gray-300">
+                                <TaggedText text={r.viText} />
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* 5. ĐOẠN GHI ÂM */}
                         <td className="px-2 align-middle">
                           <div className="flex flex-col gap-1 my-1">
                             <PairAudio
@@ -727,12 +656,13 @@ export default function AdminRecordings() {
                           </div>
                         </td>
 
+                        {/* 6. KẾT QUẢ */}
                         <td className="px-2 text-center align-middle whitespace-nowrap">
                           <button
                             type="button"
                             onClick={() => handleOpenReviewersModal(r)}
                             title="Bấm để xem chi tiết các lượt kiểm duyệt"
-                            className="w-[110px] h-6 inline-flex items-center justify-center gap-1 rounded-full border type-caption transition-all cursor-pointer whitespace-nowrap hover:opacity-80 mx-auto"
+                            className="w-[110px] h-6 inline-flex items-center justify-center gap-1 rounded-full border type-caption transition-all duration-200 cursor-pointer whitespace-nowrap hover:opacity-80 active:scale-[0.97] mx-auto"
                             style={{
                               background: stStyle.bg,
                               borderColor: stStyle.border,
@@ -743,19 +673,42 @@ export default function AdminRecordings() {
                             <span>{stStyle.label}</span>
                           </button>
                         </td>
+
+                        {/* 7. CỘT CHECKBOX NẰM CẠNH CỘT KẾT QUẢ KHI Ở CHẾ ĐỘ CHỌN TẢI DATASET */}
+                        {isSelectMode && (
+                          <td className="px-2 text-center align-middle transition-all duration-300 ease-in-out animate-in fade-in zoom-in-95">
+                            <input
+                              type="checkbox"
+                              disabled={!isApproved}
+                              checked={isChecked}
+                              onChange={() => handleTogglePairCheckbox(r.id)}
+                              style={isApproved ? { accentColor: ADMIN_ACCENT } : {}}
+                              className={`w-4 h-4 rounded transition-all duration-150 shrink-0 ${
+                                isApproved 
+                                  ? "cursor-pointer hover:scale-110 active:scale-95" 
+                                  : "cursor-not-allowed opacity-40 bg-gray-200 dark:bg-gray-700"
+                              }`}
+                              title={
+                                isApproved 
+                                  ? "Tick chọn cặp câu này để tải về" 
+                                  : "Chỉ cho phép chọn những cặp câu có trạng thái Đã duyệt"
+                              }
+                            />
+                          </td>
+                        )}
                       </tr>
                     );
                   })}
 
                   {Array.from({ length: emptyRowsCount }).map((_, idx) => (
                     <tr key={`empty-${idx}`} className="border-b border-transparent">
-                      <td colSpan="5" className="py-0.5">&nbsp;</td>
+                      <td colSpan={isSelectMode ? 7 : 6} className="py-0.5">&nbsp;</td>
                     </tr>
                   ))}
                 </>
               ) : (
                 <tr>
-                  <td colSpan="5" className="py-16 text-center text-[#9A9CA3] dark:text-gray-500 type-ui">
+                  <td colSpan={isSelectMode ? 7 : 6} className="py-16 text-center text-[#9A9CA3] dark:text-gray-500 type-ui">
                     Chưa có bản ghi âm nào phù hợp.
                   </td>
                 </tr>
@@ -776,62 +729,6 @@ export default function AdminRecordings() {
         </div>
       </div>
 
-      {/* POPUP CÂU VĂN GIỐNG 100% TRANG REVIEWER */}
-      {sentenceItem && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{
-            background: "rgba(22,23,28,0.55)",
-            backdropFilter: "blur(2px)",
-            WebkitBackdropFilter: "blur(2px)",
-          }}
-          onClick={() => setSentenceItem(null)}
-        >
-          <div
-            className="bg-white dark:bg-[#1C1D22] rounded-[24px] w-full max-w-md shadow-[0_20px_50px_rgba(16,17,20,0.25)] relative z-10 overflow-hidden max-h-[85vh] flex flex-col text-left"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div
-              className="h-1.5 w-full shrink-0"
-              style={{ background: ADMIN_ACCENT }}
-            />
-            <div className="p-6 overflow-y-auto">
-              <div className="flex items-center justify-between mb-4">
-                <span className="type-section text-[#16171C] dark:text-white">
-                  {sentenceItem.speaker}
-                </span>
-                <button
-                  onClick={() => setSentenceItem(null)}
-                  aria-label="Đóng"
-                  className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#F0EEE6] dark:hover:bg-gray-800 transition-colors flex-shrink-0 cursor-pointer"
-                >
-                  <X className="w-[18px] h-[18px] text-[#6E7078]" />
-                </button>
-              </div>
-              <div className="bg-[#F7F5EF] dark:bg-[#25272E] p-3.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 mb-2.5 flex items-center gap-2.5">
-                <InlineLabel variant="cs" />
-                <p className="type-body text-[#16171C] dark:text-gray-100 break-words min-w-0">
-                  <TaggedText text={sentenceItem.csText} />
-                </p>
-              </div>
-              <div className="bg-[#F7F5EF] dark:bg-[#25272E] p-3.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 flex items-center gap-2.5">
-                <InlineLabel variant="vi" />
-                <p className="type-body text-[#16171C] dark:text-gray-100 break-words min-w-0">
-                  <TaggedText text={sentenceItem.viText} />
-                </p>
-              </div>
-              <button
-                onClick={() => setSentenceItem(null)}
-                className="w-full mt-5 py-3 text-white rounded-xl text-body font-label transition-all hover:opacity-90 active:scale-[0.98] cursor-pointer"
-                style={{ background: ADMIN_ACCENT }}
-              >
-                Đóng
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* POPUP PHẢN HỒI KIỂM DUYỆT GIỐNG 100% TRANG REVIEWER */}
       {selectedReviewersList && (() => {
         const revList = Array.isArray(selectedReviewersList.reviews) ? selectedReviewersList.reviews : [];
@@ -843,7 +740,7 @@ export default function AdminRecordings() {
 
         return (
           <div 
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 transition-all duration-300 animate-in fade-in"
             style={{
               background: "rgba(22,23,28,0.55)",
               backdropFilter: "blur(2px)",
@@ -852,7 +749,7 @@ export default function AdminRecordings() {
             onClick={() => setSelectedReviewersList(null)}
           >
             <div 
-              className="bg-white dark:bg-[#1C1D22] rounded-[24px] w-full max-w-md shadow-[0_20px_50px_rgba(16,17,20,0.25)] relative z-10 overflow-hidden max-h-[85vh] flex flex-col text-left"
+              className="bg-white dark:bg-[#1C1D22] rounded-[24px] w-full max-w-md shadow-[0_20px_50px_rgba(16,17,20,0.25)] relative z-10 overflow-hidden max-h-[85vh] flex flex-col text-left transition-all duration-300 animate-in zoom-in-95"
               onClick={(e) => e.stopPropagation()}
             >
               <div 
@@ -988,352 +885,6 @@ export default function AdminRecordings() {
           </div>
         );
       })()}
-
-      {/* MODAL 1: TẠO DATASET NHÁP */}
-      {isCreateModalOpen && (
-        <div className="fixed inset-0 z-50 bg-[#16171C]/55 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#1C1D22] rounded-[24px] border border-[#E5E2D8] dark:border-gray-800 shadow-[0_20px_50px_rgba(16,17,20,0.25)] max-w-xl w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200 text-left flex flex-col max-h-[90vh]">
-            <div style={{ backgroundColor: ADMIN_ACCENT }} className="h-1.5 w-full shrink-0" />
-            
-            <form onSubmit={handleCreateDatasetSubmit} className="p-6 space-y-4 flex-1 overflow-y-auto">
-              <div className="flex items-center justify-between border-b border-[#E5E2D8] dark:border-gray-800 pb-3">
-                <h3 className="type-section text-[#16171C] dark:text-gray-100">
-                  Tạo Dataset nháp mới
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setIsCreateModalOpen(false)}
-                  className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#F0EEE6] dark:hover:bg-gray-800 transition-colors cursor-pointer"
-                >
-                  <X className="w-4 h-4 text-[#6E7078]" />
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
-                    Tên Dataset <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ví dụ: CodeSwitching_Dataset_2026"
-                    value={datasetForm.datasetName}
-                    onChange={(e) => setDatasetForm({ ...datasetForm, datasetName: e.target.value })}
-                    className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none transition-all font-sans placeholder:text-[#9A9CA3]"
-                    onFocus={(e) => {
-                      e.target.style.borderColor = ADMIN_ACCENT;
-                      e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = '';
-                      e.target.style.boxShadow = 'none';
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
-                    Phiên bản <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="v1, v2..."
-                    value={datasetForm.version}
-                    onChange={(e) => setDatasetForm({ ...datasetForm, version: e.target.value })}
-                    className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none transition-all font-sans placeholder:text-[#9A9CA3]"
-                    onFocus={(e) => {
-                      e.target.style.borderColor = ADMIN_ACCENT;
-                      e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = '';
-                      e.target.style.boxShadow = 'none';
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
-                  Mô tả bộ dữ liệu
-                </label>
-                <textarea
-                  rows="2"
-                  placeholder="Nhập ghi chú hoặc mô tả ngắn..."
-                  value={datasetForm.description}
-                  onChange={(e) => setDatasetForm({ ...datasetForm, description: e.target.value })}
-                  className="w-full px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none transition-all font-sans placeholder:text-[#9A9CA3] resize-none"
-                  onFocus={(e) => {
-                    e.target.style.borderColor = ADMIN_ACCENT;
-                    e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = '';
-                    e.target.style.boxShadow = 'none';
-                  }}
-                />
-              </div>
-
-              <div className="space-y-2.5 pt-2 border-t border-[#E5E2D8] dark:border-gray-800">
-                <div className="flex items-center justify-between">
-                  <label className="block type-label text-[#2B2C31] dark:text-gray-200">
-                    Bản ghi âm đã duyệt ({selectedRecordingIds.length}/{approvedRecordings.length})
-                  </label>
-                </div>
-
-                <div className="max-h-56 overflow-y-auto border border-[#E5E2D8] dark:border-gray-700 bg-[#F7F5EF] dark:bg-[#25272E] rounded-xl p-2.5 space-y-2">
-                  {approvedRecordings.length > 0 ? (
-                    approvedRecordings.map((rec) => {
-                      const recIdStr = String(rec.rawId || rec.id);
-                      const isChecked = selectedRecordingIds.includes(recIdStr);
-
-                      return (
-                        <label
-                          key={rec.id}
-                          style={isChecked ? { borderColor: ADMIN_ACCENT } : {}}
-                          className={`flex items-start justify-between p-2.5 rounded-xl type-ui transition-all border cursor-pointer ${
-                            isChecked
-                              ? "bg-white dark:bg-[#1C1D22] shadow-xs text-[#16171C] dark:text-white"
-                              : "bg-white/70 dark:bg-[#1C1D22]/50 border-[#E5E2D8] dark:border-gray-700 hover:bg-white text-[#16171C] dark:text-gray-200"
-                          }`}
-                        >
-                          <div className="flex items-start gap-2.5 min-w-0 flex-1">
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedRecordingIds([...selectedRecordingIds, recIdStr]);
-                                } else {
-                                  setSelectedRecordingIds(selectedRecordingIds.filter((id) => id !== recIdStr));
-                                }
-                              }}
-                              style={{ accentColor: ADMIN_ACCENT }}
-                              className="rounded focus:ring-0 cursor-pointer shrink-0 mt-1"
-                            />
-                            <div className="flex flex-col min-w-0 pr-2 space-y-0.5 w-full">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <InlineLabel variant="cs" />
-                                <p className="truncate type-ui text-[#16171C] dark:text-gray-100">
-                                  <TaggedText text={rec.csText} />
-                                </p>
-                              </div>
-
-                              <div className="flex items-center gap-2 min-w-0">
-                                <InlineLabel variant="vi" />
-                                <p className="truncate type-ui text-[#16171C] dark:text-gray-300">
-                                  <TaggedText text={rec.viText} />
-                                </p>
-                              </div>
-
-                              <span className="type-caption text-[#6E7078] dark:text-gray-400 truncate pt-0.5 block">
-                                Speaker: <strong className="text-[#16171C] dark:text-gray-200">{rec.speaker}</strong>
-                              </span>
-                            </div>
-                          </div>
-                        </label>
-                      );
-                    })
-                  ) : (
-                    <div className="p-4 text-center type-ui text-[#6E7078] dark:text-gray-400">
-                      Chưa có bản ghi âm "Đã duyệt" nào.
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateModalOpen(false)}
-                  className="flex-1 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 type-button text-[#6E7078] dark:text-gray-300 hover:bg-[#F7F5EF] dark:hover:bg-[#25272E] cursor-pointer transition-colors"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 10px 24px ${ADMIN_ACCENT}40` }}
-                  className="flex-1 py-2.5 text-white rounded-xl type-button hover:opacity-90 active:scale-[0.99] cursor-pointer transition-all font-bold"
-                >
-                  Tạo nháp ({selectedRecordingIds.length})
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 2: PHÁT HÀNH DATASET */}
-      {isReleaseModalOpen && (
-        <div className="fixed inset-0 z-50 bg-[#16171C]/55 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#1C1D22] rounded-[24px] border border-[#E5E2D8] dark:border-gray-800 shadow-[0_20px_50px_rgba(16,17,20,0.25)] max-w-2xl w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200 text-left flex flex-col max-h-[85vh]">
-            <div style={{ backgroundColor: ADMIN_ACCENT }} className="h-1.5 w-full shrink-0" />
-            
-            <div className="p-6 space-y-4 flex-1 overflow-y-auto">
-              <div className="flex items-center justify-between border-b border-[#E5E2D8] dark:border-gray-800 pb-3">
-                <h3 className="type-section text-[#16171C] dark:text-gray-100">
-                  Phát hành Dataset
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setIsReleaseModalOpen(false)}
-                  className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#F0EEE6] dark:hover:bg-gray-800 transition-colors cursor-pointer"
-                >
-                  <X className="w-4 h-4 text-[#6E7078]" />
-                </button>
-              </div>
-
-              {loadingDatasets ? (
-                <div className="py-8 text-center text-[#9A9CA3]">Đang tải danh sách Dataset...</div>
-              ) : (
-                <div className="space-y-3">
-                  {allDatasets.filter(ds => ds.status !== "Released" && ds.status !== 1).length > 0 ? (
-                    allDatasets.filter(ds => ds.status !== "Released" && ds.status !== 1).map((ds) => {
-                      const id = ds.datasetId || ds.id;
-                      const recCount = ds.realRecordingsCount !== undefined ? ds.realRecordingsCount : (ds.recordingCount || 0);
-
-                      return (
-                        <div
-                          key={id}
-                          className="p-4 border border-[#E5E2D8] dark:border-gray-700 rounded-2xl bg-[#F7F5EF] dark:bg-[#25272E] flex items-center justify-between"
-                        >
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-[#16171C] dark:text-gray-100">
-                                {ds.datasetName} ({ds.version})
-                              </span>
-                              <span
-                                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full type-caption font-label border whitespace-nowrap"
-                                style={{
-                                  backgroundColor: CHIP_WARNING_BG,
-                                  borderColor: CHIP_WARNING_BORDER,
-                                  color: CHIP_WARNING_TEXT
-                                }}
-                              >
-                                <Clock className="w-3 h-3 shrink-0" style={{ color: CHIP_WARNING_TEXT }} /> Bản nháp
-                              </span>
-                            </div>
-
-                            <div className="type-caption text-[#6E7078] dark:text-gray-400 font-medium">
-                              Số lượng bản ghi âm: <strong className="text-[#16171C] dark:text-gray-200">{recCount}</strong> bản
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2 shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => handleExecuteRelease(id)}
-                              style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 10px 24px ${ADMIN_ACCENT}40` }}
-                              className="px-4 py-2 text-white font-bold rounded-xl hover:opacity-90 transition-all cursor-pointer shadow-sm flex items-center gap-1.5"
-                            >
-                              <Send className="w-4 h-4" />
-                              <span>Phát hành ngay</span>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteDraftDataset(id)}
-                              title="Xóa bản nháp này"
-                              className="w-9 h-9 rounded-lg flex items-center justify-center text-[#6E7078] dark:text-gray-400 hover:text-[#C63B3B] dark:hover:text-[#E55353] hover:bg-[#FDEAEA] dark:hover:bg-[#C63B3B]/20 transition-colors cursor-pointer"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div className="py-8 text-center text-[#9A9CA3]">
-                      Không có Dataset nháp nào cần phát hành.
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 3: TẢI DATASET ĐÃ PHÁT HÀNH (.ZIP) */}
-      {isDownloadModalOpen && (
-        <div className="fixed inset-0 z-50 bg-[#16171C]/55 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#1C1D22] rounded-[24px] border border-[#E5E2D8] dark:border-gray-800 shadow-[0_20px_50px_rgba(16,17,20,0.25)] max-w-2xl w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200 text-left flex flex-col max-h-[85vh]">
-            <div style={{ backgroundColor: ADMIN_ACCENT }} className="h-1.5 w-full shrink-0" />
-            
-            <div className="p-6 space-y-4 flex-1 overflow-y-auto">
-              <div className="flex items-center justify-between border-b border-[#E5E2D8] dark:border-gray-800 pb-3">
-                <h3 className="type-section text-[#16171C] dark:text-gray-100">
-                  Danh sách Dataset đã phát hành & Tải file .ZIP
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setIsDownloadModalOpen(false)}
-                  className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#F0EEE6] dark:hover:bg-gray-800 transition-colors cursor-pointer"
-                >
-                  <X className="w-4 h-4 text-[#6E7078]" />
-                </button>
-              </div>
-
-              {loadingDatasets ? (
-                <div className="py-8 text-center text-[#9A9CA3]">Đang tải danh sách Dataset...</div>
-              ) : (
-                <div className="space-y-3">
-                  {releasedDatasetsToDownload.length > 0 ? (
-                    releasedDatasetsToDownload.map((ds) => {
-                      const id = ds.datasetId || ds.id;
-                      const recCount = ds.realRecordingsCount !== undefined ? ds.realRecordingsCount : (ds.recordingCount || 0);
-
-                      return (
-                        <div
-                          key={id}
-                          className="p-4 border border-[#E5E2D8] dark:border-gray-700 rounded-2xl bg-[#F7F5EF] dark:bg-[#25272E] flex items-center justify-between"
-                        >
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-[#16171C] dark:text-gray-100">
-                                {ds.datasetName} ({ds.version})
-                              </span>
-                              <span
-                                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full type-caption font-label border whitespace-nowrap"
-                                style={{
-                                  backgroundColor: CHIP_SUCCESS_BG,
-                                  borderColor: CHIP_SUCCESS_BORDER,
-                                  color: CHIP_SUCCESS_TEXT
-                                }}
-                              >
-                                <CheckCircle2 className="w-3 h-3 shrink-0" style={{ color: CHIP_SUCCESS_TEXT }} /> Đã phát hành
-                              </span>
-                            </div>
-                            <div className="type-caption text-[#6E7078] dark:text-gray-400 font-medium">
-                              Số lượng bản thu: <strong className="text-[#16171C] dark:text-gray-200">{recCount}</strong> bản ghi
-                            </div>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => handleDownloadZipFile(id, ds)}
-                            style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 10px 24px ${ADMIN_ACCENT}40` }}
-                            className="px-4 py-2 text-white font-bold rounded-xl hover:opacity-90 transition-all cursor-pointer shadow-sm flex items-center gap-1.5 shrink-0"
-                          >
-                            <Download className="w-4 h-4" />
-                            <span>Tải file .ZIP</span>
-                          </button>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div className="py-8 text-center text-[#9A9CA3]">
-                      Chưa có Dataset nào được phát hành (hoặc tất cả đã được tải về).
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

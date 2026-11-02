@@ -1625,7 +1625,7 @@ export default function TaskManagerManagement() {
                         <span className="font-bold">{userName}</span>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2.5">
                         <span
                           style={{ backgroundColor: viewingAssignedTask.role === "Speaker" ? SPEAKER_ACCENT : REVIEWER_ACCENT }}
                           className="type-caption text-white px-2.5 py-1 rounded-md font-bold"
@@ -1633,15 +1633,16 @@ export default function TaskManagerManagement() {
                           {viewingAssignedTask.role || "Thực hiện"}
                         </span>
 
-                        <div className="flex items-center gap-1 bg-white dark:bg-[#1C1D22] border border-[#E5E2D8] dark:border-gray-700 rounded-lg px-2 py-0.5">
+                        {/* Ô CHỈNH SỬA SỐ CÂU / BẢN VỚI MŨI TÊN TĂNG GIẢM ĐƯỢC PHÓNG TO NỔI BẬT */}
+                        <div className="flex items-center gap-1.5 bg-white dark:bg-[#1C1D22] border border-[#E5E2D8] dark:border-gray-700 rounded-xl px-2.5 py-1 shadow-xs">
                           <input
                             type="number"
                             min="0"
                             value={userTargets[userName] ?? 0}
                             onChange={(e) => handleUserTargetChange(userName, e.target.value)}
-                            className="w-16 h-6 text-center font-bold type-caption text-[#16171C] dark:text-white bg-transparent outline-none font-sans"
+                            className="w-24 h-7 text-center font-bold type-body text-[#16171C] dark:text-white bg-transparent outline-none font-sans [&::-webkit-inner-spin-button]:scale-125 [&::-webkit-inner-spin-button]:opacity-100 [&::-webkit-outer-spin-button]:scale-125 [&::-webkit-outer-spin-button]:opacity-100 cursor-pointer"
                           />
-                          <span className="type-caption text-[#6E7078] dark:text-gray-400 font-medium">
+                          <span className="type-caption text-[#6E7078] dark:text-gray-400 font-medium whitespace-nowrap">
                             {viewingAssignedTask.role === "Reviewer" ? "bản" : "câu"}
                           </span>
                         </div>

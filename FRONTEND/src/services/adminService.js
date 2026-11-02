@@ -119,6 +119,13 @@ export const adminService = {
     const res = await httpClient.delete(`/api/datasets/${id}`);
     return res.data;
   },
+  exportDatasetBySpeakers: async (data = {}) => {
+    // Gọi POST /api/datasets/export để xuất dữ liệu ZIP theo Speaker/Wave
+    const res = await httpClient.post("/api/datasets/export", data, {
+      responseType: "blob"
+    });
+    return res.data;
+  },
   exportDatasetZip: async (datasetId) => {
     let targetId = datasetId;
 
