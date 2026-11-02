@@ -17,16 +17,26 @@ import {
 } from "../../../constants/theme";
 import { adminService } from "../../../services/adminService";
 
+// Helper parse trạng thái backend
+const parseBeRecordingStatus = (statusFromBe) => {
+  if (statusFromBe !== undefined && statusFromBe !== null && statusFromBe !== "") {
+    const str = String(statusFromBe).trim().toLowerCase();
+    if (["approved", "accepted", "1"].includes(str)) return "Approved";
+    if (["rejected", "discarded", "2"].includes(str)) return "Rejected";
+    if (["pending", "pendingreview", "qcfailed", "0", "3"].includes(str)) return "Pending";
+  }
+  return "Pending";
+};
+
 export default function AdminDashboard() {
   const [users, setUsers] = useState([]);
-  const [recordingsDataset, setRecordingsDataset] = useState([]);
+  const [pairedRecordingsDataset, setPairedRecordingsDataset] = useState([]);
   const [rejectionReasonsApiMap, setRejectionReasonsApiMap] = useState({});
 
   const fetchDashboardData = async () => {
     try {
-      const [usersRes, recordingsRes, rejectionStatsRes] = await Promise.allSettled([
+      const [usersRes, rejectionStatsRes] = await Promise.allSettled([
         adminService.getUsers({ pageSize: 1000 }),
-        adminService.getRecordings({ pageSize: 1000 }),
         adminService.getRejectionStats()
       ]);
 
@@ -56,46 +66,116 @@ export default function AdminDashboard() {
         setRejectionReasonsApiMap(map);
       }
 
-      if (recordingsRes.status === "fulfilled" && recordingsRes.value) {
-        const rawList = recordingsRes.value.items || recordingsRes.value || [];
-        
-        // Đọc trực tiếp thuộc tính status từ Backend RecordingDto
-        const fullRecordings = await Promise.all(
-          rawList.map(async (r) => {
-            const recId = r.recordingId || r.id;
-            let reviews = [];
-            try {
-              const reviewsData = await adminService.getRecordingReviews(recId);
-              reviews = (Array.isArray(reviewsData) ? reviewsData : []).map((rev) => ({
-                status: rev.decision || rev.status || "Pending",
-                reason: rev.reason || rev.comment || rev.errorReasonCode || ""
-              }));
-            } catch (e) {
-              reviews = Array.isArray(r.reviewers) ? r.reviewers : [];
+      // TẢI TẤT CẢ BẢN THU ÂM VÀ THỰC HIỆN GỘP CẶP ĐỒNG BỘ 100% VỚI ADMINRECORDINGS
+      let allItems = [];
+      let page = 1;
+      let totalPages = 1;
+      do {
+        const recRes = await adminService.getRecordings({ page, pageSize: 100 });
+        const items = recRes.items || recRes || [];
+        allItems = [...allItems, ...items];
+        totalPages = recRes.totalPages || 1;
+        page++;
+      } while (page <= totalPages);
+
+      const rawRecordings = await Promise.all(
+        allItems.map(async (r) => {
+          const recId = r.recordingId || r.id;
+          const sId = r.scriptId || r.textId;
+
+          let reviews = [];
+          try {
+            const revsRes = await adminService.getRecordingReviews(recId);
+            if (Array.isArray(revsRes)) {
+              reviews = revsRes;
             }
+          } catch (e) {
+            console.warn("Lỗi tải reviews:", recId, e);
+          }
 
-            // Lấy trực tiếp status chuẩn từ BE DTO
-            const rawStatus = String(r.status || r.state || "").trim();
-            let mappedStatus = "Pending";
+          const variantRaw = r.sentenceVariant !== undefined ? r.sentenceVariant : r.variant;
+          const variantStr = String(variantRaw || r.language || r.type || "").toLowerCase();
 
-            if (["Approved", "Accepted", "1"].includes(rawStatus)) {
-              mappedStatus = "Approved";
-            } else if (["Rejected", "Discarded", "QcFailed", "2", "3"].includes(rawStatus)) {
-              mappedStatus = "Rejected";
-            } else {
-              mappedStatus = "Pending";
-            }
+          const isCs = variantStr.includes("codeswitching") || variantStr === "1" || variantStr.includes("cs") || variantStr.includes("vi-en");
+          const isVi = variantStr.includes("purevietnamese") || variantStr === "2" || (variantStr.includes("vi") && !variantStr.includes("vi-en"));
 
-            return {
-              ...r,
-              status: mappedStatus,
-              reviewers: reviews
-            };
-          })
-        );
+          return {
+            recId,
+            scriptId: sId || "N/A",
+            speakerId: r.speakerId,
+            taskId: r.taskId || r.taskTitle || "Thu âm 20",
+            isCs,
+            isVi,
+            durationSec: r.durationSec || 0,
+            status: parseBeRecordingStatus(r.recordingStatus || r.status),
+            reviews
+          };
+        })
+      );
 
-        setRecordingsDataset(fullRecordings);
-      }
+      // GỘP CẶP CHUẨN THEO SCRIPT + SPEAKER + TASK
+      const groupedMap = new Map();
+
+      rawRecordings.forEach((rec) => {
+        const groupKey = `${rec.scriptId}_${rec.speakerId}_${rec.taskId}`;
+
+        if (!groupedMap.has(groupKey)) {
+          groupedMap.set(groupKey, {
+            id: groupKey,
+            rawIds: [],
+            durationSec: 0,
+            rawStatuses: [],
+            reviews: []
+          });
+        }
+
+        const group = groupedMap.get(groupKey);
+        if (!group.rawIds.includes(rec.recId)) {
+          group.rawIds.push(rec.recId);
+        }
+
+        group.durationSec += rec.durationSec || 0;
+        group.rawStatuses.push(rec.status);
+        if (Array.isArray(rec.reviews) && rec.reviews.length > 0) {
+          rec.reviews.forEach(rv => group.reviews.push({ ...rv, recId: rec.recId }));
+        }
+      });
+
+      // TÍNH KẾT QUẢ CUỐI CÙNG CHO TỪNG CẶP BẢN THU
+      const pairedRecordings = Array.from(groupedMap.values()).map((pair) => {
+        let finalStatus = "Pending";
+        const reviewsList = pair.reviews;
+
+        if (reviewsList.length > 0) {
+          const approveVotes = reviewsList.filter(r => r.decision === "Approved" || String(r.status).toLowerCase().includes("approved")).length;
+          const rejectVotes = reviewsList.filter(r => r.decision === "Rejected" || String(r.status).toLowerCase().includes("rejected")).length;
+
+          if (approveVotes >= 2) {
+            finalStatus = "Approved";
+          } else if (rejectVotes >= 2) {
+            finalStatus = "Rejected";
+          } else if (pair.rawStatuses.includes("Approved")) {
+            finalStatus = "Approved";
+          } else if (pair.rawStatuses.includes("Rejected")) {
+            finalStatus = "Rejected";
+          }
+        } else {
+          if (pair.rawStatuses.every(s => s === "Approved")) {
+            finalStatus = "Approved";
+          } else if (pair.rawStatuses.some(s => s === "Rejected")) {
+            finalStatus = "Rejected";
+          }
+        }
+
+        return {
+          id: pair.id,
+          durationSec: pair.durationSec,
+          status: finalStatus,
+          reviews: pair.reviews
+        };
+      });
+
+      setPairedRecordingsDataset(pairedRecordings);
     } catch (err) {
       console.error("Lỗi khi tải dữ liệu dashboard:", err);
     }
@@ -122,7 +202,7 @@ export default function AdminDashboard() {
     let pendingCount = 0;
     const reasonMap = { ...rejectionReasonsApiMap };
 
-    recordingsDataset.forEach((rec) => {
+    pairedRecordingsDataset.forEach((rec) => {
       totalDuration += rec.durationSec || 0;
       
       const status = rec.status || "Pending";
@@ -130,14 +210,19 @@ export default function AdminDashboard() {
       else if (status === "Rejected") rejectedCount++;
       else pendingCount++;
 
-      (rec.reviewers || []).forEach((rev) => {
-        if ((rev.status === "Rejected" || rev.status === "Discarded") && rev.reason) {
-          reasonMap[rev.reason] = (reasonMap[rev.reason] || 0) + 1;
+      (rec.reviews || []).forEach((rev) => {
+        const isReject = rev.decision === "Rejected" || String(rev.status).toLowerCase().includes("rejected");
+        const reasonText = (rev.reasons && rev.reasons.length > 0 
+          ? rev.reasons.map(rs => rs.description || rs.code).join(" • ") 
+          : rev.reason) || rev.comment || "";
+
+        if (isReject && reasonText) {
+          reasonMap[reasonText] = (reasonMap[reasonText] || 0) + 1;
         }
       });
     });
 
-    const totalRecs = recordingsDataset.length;
+    const totalRecs = pairedRecordingsDataset.length;
     const approvalRate = totalRecs > 0 ? Math.round((approvedCount / totalRecs) * 100) : 0;
 
     const roundedDuration = Math.round(totalDuration);
@@ -154,7 +239,7 @@ export default function AdminDashboard() {
       approvalRate,
       reasonMap,
     };
-  }, [recordingsDataset, rejectionReasonsApiMap]);
+  }, [pairedRecordingsDataset, rejectionReasonsApiMap]);
 
   const reviewR = 20;
   const reviewCIRC = 2 * Math.PI * reviewR;
@@ -249,7 +334,7 @@ export default function AdminDashboard() {
           <div className="min-w-0">
             <p className="type-label text-[#6E7078] dark:text-gray-400 truncate">Tỉ lệ duyệt / từ chối / chờ duyệt</p>
             <h3 className="type-card-title text-[#16171C] dark:text-gray-100 font-sans mt-0.5">
-              {qualityStats.totalRecs.toLocaleString('vi-VN')} <span className="type-label font-normal text-[#6E7078] dark:text-gray-400">bản thu</span>
+              {qualityStats.totalRecs.toLocaleString('vi-VN')} <span className="type-label font-normal text-[#6E7078] dark:text-gray-400">cặp bản thu</span>
             </h3>
             <p className="type-caption mt-0.5 whitespace-nowrap">
               <span style={{ color: SUCCESS }}>●</span> <span className="font-bold text-[#16171C] dark:text-gray-100">{qualityStats.approvedCount}</span> <span className="text-[#6E7078] dark:text-gray-400">đã duyệt</span>{' '}
@@ -275,7 +360,7 @@ export default function AdminDashboard() {
                   <div className="flex justify-between items-center type-ui">
                     <span className="text-[#16171C] dark:text-gray-200 truncate pr-2 font-medium">{reason}</span>
                     <span className="font-bold font-sans shrink-0 type-label" style={{ color: DANGER }}>
-                      {count} bản thu
+                      {count} lần
                     </span>
                   </div>
                 </div>
