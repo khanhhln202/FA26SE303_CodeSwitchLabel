@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { toast } from "sonner";
-import { Search, Download, CheckCircle2, XCircle, Play, Pause, Headphones, Filter, Clock, X, AlertCircle, Plus, Send, Trash2 } from "lucide-react";
+import { Search, Download, CheckCircle2, XCircle, Filter, Clock, X, AlertCircle, Plus, Send, Trash2, Eye } from "lucide-react";
 import Pagination from "../../../components/Pagination/Pagination";
 import WaveformInline from "../../../components/AudioPlayer/WaveformInline";
 import {
@@ -8,20 +8,19 @@ import {
   BORDER_LIGHT,
   CHIP_SUCCESS_BG,
   CHIP_SUCCESS_BORDER,
-  CHIP_SUCCESS_TEXT,
+  CHIP_DANGER_BG,
+  CHIP_DANGER_BORDER,
   CHIP_WARNING_BG,
   CHIP_WARNING_BORDER,
   CHIP_WARNING_TEXT,
-  CHIP_DANGER_BG,
-  CHIP_DANGER_BORDER,
-  CHIP_DANGER_TEXT,
+  CHIP_SUCCESS_TEXT,
   AUDIO_PRIMARY
 } from "../../../constants/theme";
 import { adminService } from "../../../services/adminService";
 import { getScriptDetailApi } from "../../../services/scriptApi";
-import { getReviewerRecordingHistoryApi } from "../../../services/reviewerApi";
+import { parseCodeSwitch } from "../../../utils/codeSwitch";
 
-// Cấu hình Style nút Kết quả đồng bộ 100% với giao diện Reviewer RecordingHistory
+// Style trạng thái đồng bộ 100% với giao diện Reviewer RecordingHistory
 const STATUS_STYLE = {
   Approved: { bg: "#EAF7EF", border: "rgba(63,166,107,0.25)", text: "#1F5C3F", accent: "#3FA66B", icon: CheckCircle2, label: "Đã duyệt" },
   Rejected: { bg: "#FDEAEA", border: "#F3C9C9", text: "#C63B3B", accent: "#C63B3B", icon: XCircle, label: "Từ chối" },
@@ -31,7 +30,7 @@ const STATUS_STYLE = {
 };
 const styleOf = (status) => STATUS_STYLE[status] ?? STATUS_STYLE.Pending;
 
-// Hàm map chuẩn giá trị RecordingStatus Enum từ C# Backend
+// Parse trạng thái từ C# Backend
 const parseBeRecordingStatus = (statusFromBe) => {
   if (statusFromBe !== undefined && statusFromBe !== null && statusFromBe !== "") {
     const str = String(statusFromBe).trim().toLowerCase();
@@ -42,109 +41,13 @@ const parseBeRecordingStatus = (statusFromBe) => {
   return "Pending";
 };
 
-// Format ReviewDto trả về từ API Backend C#
-const formatReviewDtoFromBe = (rev, index, userMap = {}) => {
-  const round = rev.round || rev.reviewRound || index + 1;
-  const reviewerId = rev.reviewerId || rev.userId;
-  
-  const reviewerName = userMap[reviewerId] || (reviewerId ? `User #${reviewerId}` : `Người kiểm duyệt ${index + 1}`);
-  
-  const rawDecision = String(rev.decision || rev.status || "").toLowerCase();
-  let status = "Pending";
-  if (["approved", "accepted", "1"].includes(rawDecision)) status = "Approved";
-  else if (["rejected", "discarded", "2"].includes(rawDecision)) status = "Rejected";
-
-  let reasonDetails = [];
-  if (Array.isArray(rev.reasons) && rev.reasons.length > 0) {
-    rev.reasons.forEach(r => {
-      const desc = r.description || r.code || r.category;
-      if (desc) reasonDetails.push(desc);
-    });
-  }
-
-  if (rev.comment && rev.comment.trim()) {
-    reasonDetails.push(`Ghi chú: ${rev.comment.trim()}`);
-  }
-
-  if (reasonDetails.length === 0 && rev.reason) {
-    reasonDetails.push(rev.reason);
-  }
-
-  return {
-    round,
-    reviewerId,
-    name: reviewerName,
-    status,
-    reason: reasonDetails.length > 0 ? reasonDetails.join(" • ") : "Không có lý do chi tiết"
-  };
-};
-
-const cleanLanguageTags = (str) => {
-  if (!str) return "";
-  return str
-    .replace(/\[vi\]/gi, " ")
-    .replace(/\[en\]/gi, " ")
-    .replace(/\[\/vi\]/gi, " ")
-    .replace(/\[\/en\]/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-};
-
-const normalizeTextForMatch = (str) => {
-  if (!str) return "";
-  return cleanLanguageTags(str)
-    .toLowerCase()
-    .replace(/[.,!?;:]+/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-};
-
-function HighlightCsText({ rawText }) {
-  if (!rawText) return null;
-
-  if (rawText.includes("[en]") || rawText.includes("[vi]")) {
-    const parts = rawText.split(/([en].*?\[\/en\]|[vi].*?\[\/vi\])/gi);
-    
-    return (
-      <>
-        {parts.map((part, index) => {
-          if (!part) return null;
-          const lowerPart = part.toLowerCase();
-
-          if (lowerPart.startsWith("[en]")) {
-            const cleanEn = cleanLanguageTags(part);
-            return (
-              <span key={index} className="font-semibold text-[#1E40AF]">
-                {cleanEn}{" "}
-              </span>
-            );
-          }
-          return cleanLanguageTags(part) + " ";
-        })}
-      </>
-    );
-  }
-
-  const cleanStr = cleanLanguageTags(rawText);
-  const words = cleanStr.split(" ");
-
-  return (
-    <>
-      {words.map((word, i) => {
-        const cleanWord = word.replace(/^[.,!?;:]+|[.,!?;:]+$/g, "").toLowerCase();
-
-        const isEnglishWord = /^[a-z]+$/i.test(cleanWord) && 
-          !/^(la|cho|co|hay|ho|ma|voi|nay|ngay|hai|tu|khac|loi|truy|goc|gop|truoc|sau|duong|dan|hop|giao|dien|dung|dang|phien|ban|chua|cai|dat|phan|mem|chia|se|man|hinh|nen)$/i.test(cleanWord) &&
-          cleanWord.length > 1;
-
-        return (
-          <span key={i} className={isEnglishWord ? "font-semibold text-[#1E40AF]" : ""}>
-            {word}{" "}
-          </span>
-        );
-      })}
-    </>
-  );
+// Tô màu thẻ câu tiếng Anh [en] / [vi] giống hệt màn Reviewer
+function TaggedText({ text }) {
+  return parseCodeSwitch(text ?? "").map((segment, i) => (
+    <span key={i} style={segment.lang === "en" ? { color: AUDIO_PRIMARY } : undefined}>
+      {segment.text}
+    </span>
+  ));
 }
 
 function InlineLabel({ variant }) {
@@ -183,6 +86,7 @@ export default function AdminRecordings() {
   const pageSize = 10;
 
   const [selectedReviewersList, setSelectedReviewersList] = useState(null);
+  const [sentenceItem, setSentenceItem] = useState(null);
   const [userMapState, setUserMapState] = useState({});
 
   // STATE DÀNH CHO 3 MODAL DATASET
@@ -201,6 +105,7 @@ export default function AdminRecordings() {
   const [loadingDatasets, setLoadingDatasets] = useState(false);
   const [downloadedDatasetIds, setDownloadedDatasetIds] = useState([]);
 
+  // TẢI VÀ GỘP CẶP DỮ LIỆU ĐỒNG BỘ NGUYÊN BẢN THEO LƯỢT THU MỚI NHẤT
   const fetchRecordings = async () => {
     try {
       // 1. Tải danh sách User
@@ -212,47 +117,7 @@ export default function AdminRecordings() {
       });
       setUserMapState(userMap);
 
-      // 2. LẤY TOÀN BỘ TẤT CẢ TRANG LỊCH SỬ TỪ REVIEWER API ĐỂ LẤY CHUẨN TRẠNG THÁI CẶP
-      let reviewerHistoryItems = [];
-      try {
-        let page = 1;
-        let totalPages = 1;
-        do {
-          const revRes = await getReviewerRecordingHistoryApi({ page, pageSize: 100 });
-          const items = revRes?.items || [];
-          reviewerHistoryItems = [...reviewerHistoryItems, ...items];
-          totalPages = revRes?.totalPages || 1;
-          page++;
-        } while (page <= totalPages);
-      } catch (e) {
-        console.warn("Không thể tải toàn bộ trang Reviewer History:", e);
-      }
-
-      // Map chuẩn kết quả của Reviewer với TẤT CẢ biến thể Text & ScriptId
-      const reviewerStatusMap = new Map();
-      reviewerHistoryItems.forEach((item) => {
-        const st = item.recordingStatus;
-        if (!st) return;
-
-        if (item.scriptId) {
-          reviewerStatusMap.set(String(item.scriptId), st);
-        }
-        if (item.csText) {
-          const rawCs = String(item.csText).trim();
-          const cleanCs = cleanLanguageTags(rawCs);
-          const normCs = normalizeTextForMatch(rawCs);
-
-          reviewerStatusMap.set(rawCs, st);
-          if (cleanCs) reviewerStatusMap.set(cleanCs, st);
-          if (normCs) reviewerStatusMap.set(normCs, st);
-        }
-        if (item.viText) {
-          const normVi = normalizeTextForMatch(item.viText);
-          if (normVi) reviewerStatusMap.set(normVi, st);
-        }
-      });
-
-      // 3. Tải tất cả bản ghi từ Admin API
+      // 2. Tải tất cả bản ghi âm từ Admin API
       let allItems = [];
       let page = 1;
       let totalPages = 1;
@@ -264,7 +129,7 @@ export default function AdminRecordings() {
         page++;
       } while (page <= totalPages);
 
-      // 4. Lấy chi tiết Script Text theo lô
+      // 3. Lấy chi tiết Script Text (CS & VI Content) theo danh sách scriptId
       const scriptIds = [...new Set(allItems.map(r => r.scriptId || r.textId).filter(Boolean))];
       const scriptMap = {};
 
@@ -284,7 +149,7 @@ export default function AdminRecordings() {
         })
       );
 
-      // 5. Tải Audio URL song song tối ưu tốc độ
+      // 4. Tải Audio URL & Lượt Reviewer của từng bản thu
       const rawRecordings = await Promise.all(
         allItems.map(async (r) => {
           const recId = r.recordingId || r.id;
@@ -301,57 +166,68 @@ export default function AdminRecordings() {
             }
           }
 
+          let reviews = [];
+          try {
+            const revsRes = await adminService.getRecordingReviews(recId);
+            if (Array.isArray(revsRes)) {
+              reviews = revsRes;
+            }
+          } catch (e) {
+            console.warn("Lỗi tải reviews:", recId, e);
+          }
+
           const variantRaw = r.sentenceVariant !== undefined ? r.sentenceVariant : r.variant;
           const variantStr = String(variantRaw || r.language || r.type || "").toLowerCase();
 
           const isCs = variantStr.includes("codeswitching") || variantStr === "1" || variantStr.includes("cs") || variantStr.includes("vi-en");
           const isVi = variantStr.includes("purevietnamese") || variantStr === "2" || (variantStr.includes("vi") && !variantStr.includes("vi-en"));
 
-          const rawStatus = r.recordingStatus !== undefined ? r.recordingStatus : (r.status !== undefined ? r.status : r.state);
-
-          const reviews = (Array.isArray(r.reviewers) ? r.reviewers : []).map((rev, index) =>
-            formatReviewDtoFromBe(rev, index, userMap)
-          );
-
           return {
             recId,
             scriptId: sId || "N/A",
             speakerId: r.speakerId,
             speaker: userMap[r.speakerId] || (r.speakerId ? `User #${r.speakerId}` : "Chưa xác định"),
-            content: r.csContent || r.scriptText || scriptInfo.csContent || r.content || "",
-            contentVietnamese: r.viContent || r.contentVietnamese || scriptInfo.viContent || "",
+            csText: scriptInfo.csContent || r.csContent || r.scriptText || r.content || "",
+            viText: scriptInfo.viContent || r.viContent || r.contentVietnamese || "",
             topic: r.domain || r.topic || "Công nghệ thông tin",
+            taskId: r.taskId || r.taskTitle || "Thu âm 20",
             isCs,
             isVi,
             audioUrl,
             durationSec: r.durationSec || 0,
-            status: rawStatus,
+            status: parseBeRecordingStatus(r.recordingStatus || r.status),
             reviews,
-            recordedAt: r.recordedAt
+            createdAt: r.createdAt || r.recordedAt || ""
           };
         })
       );
 
-      // 6. GỘP CẶP CHUẨN ĐỒNG BỘ MÀN REVIEWER
+      // 5. GỘP CẶP VÀ ƯU TIÊN LẤY FILE AUDIO MỚI NHẤT TRONG TASK ĐÓ
       const groupedMap = new Map();
 
+      // Sắp xếp tăng dần theo thời gian để bản thu mới hơn ghi đè bản thu cũ
+      rawRecordings.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+
       rawRecordings.forEach((rec) => {
-        const groupKey = `${rec.scriptId}_${rec.speakerId}`;
+        const groupKey = `${rec.scriptId}_${rec.speakerId}_${rec.taskId}`;
 
         if (!groupedMap.has(groupKey)) {
           groupedMap.set(groupKey, {
             id: groupKey,
             rawIds: [],
             scriptId: rec.scriptId,
-            content: rec.content,
-            contentVietnamese: rec.contentVietnamese,
+            csText: rec.csText,
+            viText: rec.viText,
             topic: rec.topic,
             speaker: rec.speaker,
             csAudioUrl: "",
             viAudioUrl: "",
             durationSec: rec.durationSec,
-            reviewers: [],
-            statuses: []
+            rawStatuses: [],
+            reviews: [],
+            viRecordingId: null,
+            csRecordingId: null,
+            createdAt: rec.createdAt
           });
         }
 
@@ -360,67 +236,75 @@ export default function AdminRecordings() {
           group.rawIds.push(rec.recId);
         }
 
-        if (rec.isCs && rec.audioUrl) {
-          group.csAudioUrl = rec.audioUrl;
-        } else if (rec.isVi && rec.audioUrl) {
-          group.viAudioUrl = rec.audioUrl;
+        // Bốc audio mới nhất theo biến thể VI-EN hoặc VI
+        if (rec.isCs) {
+          if (rec.audioUrl) {
+            group.csAudioUrl = rec.audioUrl;
+            group.durationSec = rec.durationSec;
+          }
+          group.csRecordingId = rec.recId;
+        } else if (rec.isVi) {
+          if (rec.audioUrl) group.viAudioUrl = rec.audioUrl;
+          group.viRecordingId = rec.recId;
         } else if (!group.csAudioUrl && rec.audioUrl) {
           group.csAudioUrl = rec.audioUrl;
         }
 
-        if (Array.isArray(rec.reviews)) {
-          rec.reviews.forEach(rev => group.reviewers.push(rev));
+        group.rawStatuses.push(rec.status);
+        if (Array.isArray(rec.reviews) && rec.reviews.length > 0) {
+          rec.reviews.forEach(rv => group.reviews.push({ ...rv, recId: rec.recId }));
         }
-        if (rec.status !== undefined && rec.status !== null) {
-          group.statuses.push(rec.status);
-        }
+        group.createdAt = rec.createdAt;
       });
 
+      // 6. TÍNH KẾT QUẢ TRẠNG THÁI CUỐI CÙNG
       const pairedRecordings = Array.from(groupedMap.values()).map((pair) => {
-        let computedStatus = "Pending";
-        
-        const rawContentKey = String(pair.content).trim();
-        const cleanContentKey = cleanLanguageTags(pair.content);
-        const normContentKey = normalizeTextForMatch(pair.content);
-        const normViKey = normalizeTextForMatch(pair.contentVietnamese);
+        let finalStatus = "Pending";
+        const reviewsList = pair.reviews;
 
-        // ƯU TIÊN LẤY TRỰC TIẾP TRẠNG THÁI TRONG REVIEWER MAP ĐỂ TRÙNG KHỚP 100%
-        const directReviewerStatus = 
-          reviewerStatusMap.get(String(pair.scriptId)) || 
-          reviewerStatusMap.get(rawContentKey) ||
-          reviewerStatusMap.get(cleanContentKey) ||
-          reviewerStatusMap.get(normContentKey) ||
-          reviewerStatusMap.get(normViKey);
+        if (reviewsList.length > 0) {
+          const approveVotes = reviewsList.filter(r => r.decision === "Approved" || String(r.status).toLowerCase().includes("approved")).length;
+          const rejectVotes = reviewsList.filter(r => r.decision === "Rejected" || String(r.status).toLowerCase().includes("rejected")).length;
 
-        if (directReviewerStatus) {
-          computedStatus = parseBeRecordingStatus(directReviewerStatus);
+          if (approveVotes >= 2) {
+            finalStatus = "Approved";
+          } else if (rejectVotes >= 2) {
+            finalStatus = "Rejected";
+          } else if (pair.rawStatuses.includes("Approved")) {
+            finalStatus = "Approved";
+          } else if (pair.rawStatuses.includes("Rejected")) {
+            finalStatus = "Rejected";
+          }
         } else {
-          const parsedStatuses = pair.statuses.map(s => parseBeRecordingStatus(s));
-          if (parsedStatuses.length > 0 && parsedStatuses.every(s => s === "Approved")) {
-            computedStatus = "Approved";
-          } else if (parsedStatuses.length > 0 && parsedStatuses.some(s => s === "Rejected")) {
-            computedStatus = "Rejected";
-          } else {
-            computedStatus = "Pending";
+          if (pair.rawStatuses.every(s => s === "Approved")) {
+            finalStatus = "Approved";
+          } else if (pair.rawStatuses.some(s => s === "Rejected")) {
+            finalStatus = "Rejected";
           }
         }
 
         return {
           id: pair.id,
-          rawId: pair.rawIds[0] || pair.id,
+          rawId: pair.rawIds[pair.rawIds.length - 1] || pair.id,
           rawIds: pair.rawIds,
-          textId: pair.scriptId,
-          content: pair.content,
-          contentVietnamese: pair.contentVietnamese,
+          scriptId: pair.scriptId,
+          csText: pair.csText,
+          viText: pair.viText,
           topic: pair.topic,
           speaker: pair.speaker,
           csAudioUrl: pair.csAudioUrl,
           viAudioUrl: pair.viAudioUrl,
           durationSec: pair.durationSec,
-          reviewers: pair.reviewers,
-          status: computedStatus
+          status: finalStatus,
+          reviews: pair.reviews,
+          csRecordingId: pair.csRecordingId,
+          viRecordingId: pair.viRecordingId,
+          createdAt: pair.createdAt
         };
       });
+
+      // Sắp xếp danh sách giảm dần theo thời gian tạo mới nhất
+      pairedRecordings.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
       setRecordings(pairedRecordings);
     } catch (err) {
@@ -442,12 +326,12 @@ export default function AdminRecordings() {
     setIsCreateModalOpen(true);
   };
 
-  // MỞ MODAL XEM CHI TIẾT TẤT CẢ REVIEWER
   const handleOpenReviewersModal = async (recording) => {
     setSelectedReviewersList({
       ...recording,
-      content: recording.content || "Đang tải nội dung câu...",
-      reviewers: recording.reviewers || []
+      csText: recording.csText || "Đang tải nội dung câu...",
+      viText: recording.viText || "",
+      reviews: recording.reviews || []
     });
 
     try {
@@ -455,32 +339,33 @@ export default function AdminRecordings() {
         ? recording.rawIds 
         : [recording.rawId];
 
-      const [scriptDetail, ...allReviewsResponses] = await Promise.all([
-        recording.textId && recording.textId !== "N/A" 
-          ? getScriptDetailApi(recording.textId).catch(() => null) 
-          : null,
-        ...rawIdsToFetch.map(rId => adminService.getRecordingReviews(rId).catch(() => []))
-      ]);
+      const allReviewsResponses = await Promise.all(
+        rawIdsToFetch.map(rId => adminService.getRecordingReviews(rId).catch(() => []))
+      );
 
       let combinedRawReviews = [];
-      allReviewsResponses.forEach(res => {
+      allReviewsResponses.forEach((res, index) => {
         if (Array.isArray(res)) {
-          combinedRawReviews = [...combinedRawReviews, ...res];
+          const matchedRecId = rawIdsToFetch[index];
+          res.forEach(r => combinedRawReviews.push({ ...r, recordingId: r.recordingId || matchedRecId }));
         }
       });
 
-      const formattedReviewers = combinedRawReviews.map((rev, index) =>
-        formatReviewDtoFromBe(rev, index, userMapState)
-      );
+      if (combinedRawReviews.length > 0) {
+        const formattedReviews = combinedRawReviews.map((r, i) => ({
+          round: r.round || r.reviewRound || (i + 1),
+          decision: r.decision || (String(r.status).toLowerCase().includes("approved") ? "Approved" : "Rejected"),
+          reason: (r.reasons && r.reasons.length > 0 ? r.reasons.map(rs => rs.description || rs.code).join(" • ") : r.reason) || r.comment || "",
+          recordingId: r.recordingId,
+          reviewerId: r.reviewerId,
+          reviewerName: userMapState[r.reviewerId] || `Reviewer #${r.reviewerId}`
+        }));
 
-      const finalReviews = formattedReviewers.length > 0 ? formattedReviewers : recording.reviewers;
-
-      setSelectedReviewersList({
-        ...recording,
-        status: recording.status,
-        content: scriptDetail?.csContent || recording.content || "Không có nội dung",
-        reviewers: finalReviews
-      });
+        setSelectedReviewersList(prev => ({
+          ...prev,
+          reviews: formattedReviews
+        }));
+      }
     } catch (err) {
       console.error("Lỗi lấy thông tin kiểm duyệt:", err);
     }
@@ -506,12 +391,12 @@ export default function AdminRecordings() {
 
       if (keywords.length === 0) return true;
 
-      const reviewersText = (r.reviewers || []).map((rev) => rev?.name || "").join(" ");
+      const reviewersText = (r.reviews || []).map((rev) => rev?.reviewerName || rev?.reason || "").join(" ");
       const combinedSearchableText = [
         r.id,
-        r.textId,
-        r.content,
-        r.contentVietnamese,
+        r.scriptId,
+        r.csText,
+        r.viText,
         r.speaker,
         r.topic,
         reviewersText
@@ -773,11 +658,11 @@ export default function AdminRecordings() {
           <table className="w-full h-full text-left border-collapse table-fixed min-w-[980px]">
             <thead>
               <tr className="bg-[#F7F5EF] dark:bg-[#25272E] type-label text-[#9A9CA3] dark:text-gray-400 border-b border-[#E5E2D8] dark:border-gray-800 h-8">
-                <th className="w-[60px] px-2 text-center">STT</th>
-                <th className="px-4 text-left">Nội dung</th>
-                <th className="w-[180px] px-2">Speaker</th>
-                <th className="w-[250px] px-2">Đoạn ghi âm</th>
-                <th className="w-[140px] px-2 text-center whitespace-nowrap">Kết quả</th>
+                <th className="w-[60px] px-2 text-center font-label">STT</th>
+                <th className="px-4 text-left font-label">Nội dung</th>
+                <th className="w-[180px] px-2 font-label">Speaker</th>
+                <th className="w-[250px] px-2 font-label">Đoạn ghi âm</th>
+                <th className="w-[140px] px-2 text-center whitespace-nowrap font-label">Kết quả</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0EEE6] dark:divide-gray-800 type-ui">
@@ -797,20 +682,29 @@ export default function AdminRecordings() {
                         </td>
 
                         <td className="px-4 align-middle min-w-0">
-                          <div className="space-y-0.5 my-0.5 pr-4">
-                            <div className="flex items-center gap-2">
-                              <InlineLabel variant="cs" />
-                              <p className="truncate type-ui text-[#16171C] dark:text-gray-100">
-                                <HighlightCsText rawText={r.content} />
-                              </p>
-                            </div>
+                          <div className="flex items-center gap-2">
+                            <div className="min-w-0 flex-1 space-y-0.5 my-0.5">
+                              <div className="flex items-center gap-2">
+                                <InlineLabel variant="cs" />
+                                <p className="truncate type-ui text-[#16171C] dark:text-gray-100">
+                                  <TaggedText text={r.csText} />
+                                </p>
+                              </div>
 
-                            <div className="flex items-center gap-2">
-                              <InlineLabel variant="vi" />
-                              <p className="truncate type-ui text-[#16171C] dark:text-gray-300">
-                                {cleanLanguageTags(r.contentVietnamese || r.content)}
-                              </p>
+                              <div className="flex items-center gap-2">
+                                <InlineLabel variant="vi" />
+                                <p className="truncate type-ui text-[#16171C] dark:text-gray-300">
+                                  <TaggedText text={r.viText} />
+                                </p>
+                              </div>
                             </div>
+                            <button
+                              onClick={() => setSentenceItem(r)}
+                              title="Xem đầy đủ hai câu"
+                              className="shrink-0 w-6 h-6 rounded-md flex items-center justify-center text-[#9A9CA3] hover:text-[#16171C] hover:bg-[#F0EEE6] dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         </td>
 
@@ -882,126 +776,212 @@ export default function AdminRecordings() {
         </div>
       </div>
 
-      {/* MODAL PHẢN HỒI KIỂM DUYỆT */}
+      {/* POPUP CÂU VĂN GIỐNG 100% TRANG REVIEWER */}
+      {sentenceItem && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{
+            background: "rgba(22,23,28,0.55)",
+            backdropFilter: "blur(2px)",
+            WebkitBackdropFilter: "blur(2px)",
+          }}
+          onClick={() => setSentenceItem(null)}
+        >
+          <div
+            className="bg-white dark:bg-[#1C1D22] rounded-[24px] w-full max-w-md shadow-[0_20px_50px_rgba(16,17,20,0.25)] relative z-10 overflow-hidden max-h-[85vh] flex flex-col text-left"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              className="h-1.5 w-full shrink-0"
+              style={{ background: ADMIN_ACCENT }}
+            />
+            <div className="p-6 overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <span className="type-section text-[#16171C] dark:text-white">
+                  {sentenceItem.speaker}
+                </span>
+                <button
+                  onClick={() => setSentenceItem(null)}
+                  aria-label="Đóng"
+                  className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#F0EEE6] dark:hover:bg-gray-800 transition-colors flex-shrink-0 cursor-pointer"
+                >
+                  <X className="w-[18px] h-[18px] text-[#6E7078]" />
+                </button>
+              </div>
+              <div className="bg-[#F7F5EF] dark:bg-[#25272E] p-3.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 mb-2.5 flex items-center gap-2.5">
+                <InlineLabel variant="cs" />
+                <p className="type-body text-[#16171C] dark:text-gray-100 break-words min-w-0">
+                  <TaggedText text={sentenceItem.csText} />
+                </p>
+              </div>
+              <div className="bg-[#F7F5EF] dark:bg-[#25272E] p-3.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 flex items-center gap-2.5">
+                <InlineLabel variant="vi" />
+                <p className="type-body text-[#16171C] dark:text-gray-100 break-words min-w-0">
+                  <TaggedText text={sentenceItem.viText} />
+                </p>
+              </div>
+              <button
+                onClick={() => setSentenceItem(null)}
+                className="w-full mt-5 py-3 text-white rounded-xl text-body font-label transition-all hover:opacity-90 active:scale-[0.98] cursor-pointer"
+                style={{ background: ADMIN_ACCENT }}
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* POPUP PHẢN HỒI KIỂM DUYỆT GIỐNG 100% TRANG REVIEWER */}
       {selectedReviewersList && (() => {
-        const revList = Array.isArray(selectedReviewersList.reviewers) ? selectedReviewersList.reviewers : [];
+        const revList = Array.isArray(selectedReviewersList.reviews) ? selectedReviewersList.reviews : [];
         let finalStatus = selectedReviewersList.status;
 
         const stStyle = styleOf(finalStatus);
         const ResultIcon = stStyle.icon;
         const topBorderBg = stStyle.accent;
-        const iconBg = `${stStyle.accent}1A`;
 
         return (
-          <div className="fixed inset-0 z-50 bg-[#16171C]/55 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-[#1C1D22] rounded-[24px] border border-[#E5E2D8] dark:border-gray-800 shadow-[0_20px_50px_rgba(16,17,20,0.25)] max-w-md w-full overflow-hidden animate-in fade-in zoom-in-95 duration-200 text-left">
+          <div 
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{
+              background: "rgba(22,23,28,0.55)",
+              backdropFilter: "blur(2px)",
+              WebkitBackdropFilter: "blur(2px)",
+            }}
+            onClick={() => setSelectedReviewersList(null)}
+          >
+            <div 
+              className="bg-white dark:bg-[#1C1D22] rounded-[24px] w-full max-w-md shadow-[0_20px_50px_rgba(16,17,20,0.25)] relative z-10 overflow-hidden max-h-[85vh] flex flex-col text-left"
+              onClick={(e) => e.stopPropagation()}
+            >
               <div 
                 style={{ backgroundColor: topBorderBg }} 
                 className="h-1.5 w-full shrink-0" 
               />
 
-              <div className="p-5 space-y-3.5">
-                <div 
-                  style={{ borderBottomColor: BORDER_LIGHT }} 
-                  className="flex items-center justify-between border-b pb-2.5"
-                >
+              <div className="p-6 overflow-y-auto">
+                <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2.5">
-                    <div 
-                      style={{ backgroundColor: iconBg }}
-                      className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-colors"
+                    <div
+                      className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+                      style={{ background: `${topBorderBg}1A` }}
                     >
-                      <ResultIcon className="w-4 h-4" style={{ color: topBorderBg }} />
+                      <ResultIcon
+                        className="w-[18px] h-[18px]"
+                        style={{ color: topBorderBg }}
+                      />
                     </div>
-                    <h3 className="type-section text-[#16171C] dark:text-gray-100">
+                    <span className="type-section text-[#16171C] dark:text-white">
                       Kết quả kiểm duyệt
-                    </h3>
+                    </span>
                   </div>
                   <button
                     type="button"
                     onClick={() => setSelectedReviewersList(null)}
-                    className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#F0EEE6] dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                    aria-label="Đóng"
+                    className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#F0EEE6] dark:hover:bg-gray-800 transition-colors flex-shrink-0 cursor-pointer"
                   >
-                    <X className="w-4 h-4 text-[#6E7078]" />
+                    <X className="w-[18px] h-[18px] text-[#6E7078]" />
                   </button>
                 </div>
 
-                <div className="p-3 bg-[#F7F5EF] dark:bg-[#25272E] rounded-2xl space-y-1.5 border border-[#E5E2D8] dark:border-gray-700">
-                  <span className="type-label text-[#9A9CA3] dark:text-gray-400 block text-[11px] font-semibold">
-                    NỘI DUNG CÂU
+                <div className="flex flex-wrap items-center gap-2 mb-3">
+                  <span className="px-2.5 py-1 rounded-md text-caption font-label border border-[#E5E2D8] dark:border-gray-700 bg-[#F0EEE6] dark:bg-[#25272E] text-[#6E7078] dark:text-gray-300">
+                    {selectedReviewersList.topic || "Công nghệ thông tin"}
                   </span>
-                  <div className="flex items-start gap-2">
-                    <InlineLabel variant="cs" />
-                    <p className="type-body font-label text-[#16171C] dark:text-gray-100 leading-snug">
-                      <HighlightCsText rawText={selectedReviewersList.content} />
-                    </p>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <InlineLabel variant="vi" />
-                    <p className="type-body font-label text-[#16171C] dark:text-gray-200 leading-snug">
-                      {cleanLanguageTags(selectedReviewersList.contentVietnamese || selectedReviewersList.content)}
-                    </p>
-                  </div>
+                  <span className="font-label text-meta text-[#16171C] dark:text-white">
+                    {selectedReviewersList.speaker}
+                  </span>
                 </div>
 
-                <div className="space-y-2">
-                  {revList.length > 0 ? (
-                    revList.map((rev, idx) => {
-                      const isApp = rev?.status === "Approved";
-                      const isRej = rev?.status === "Rejected";
+                <div className="bg-[#F7F5EF] dark:bg-[#25272E] p-3.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 mb-2.5 flex items-center gap-2.5">
+                  <InlineLabel variant="cs" />
+                  <p className="type-body text-[#16171C] dark:text-gray-100 break-words min-w-0">
+                    <TaggedText text={selectedReviewersList.csText} />
+                  </p>
+                </div>
 
-                      const itemBg = isApp ? CHIP_SUCCESS_BG : CHIP_DANGER_BG;
-                      const itemBorder = isApp ? CHIP_SUCCESS_BORDER : CHIP_DANGER_BORDER;
-                      const circleBg = isApp ? "#3FA66B" : "#C63B3B";
-                      const textColor = isApp ? "#3FA66B" : "#C63B3B";
+                <div className="bg-[#F7F5EF] dark:bg-[#25272E] p-3.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 mb-4 flex items-center gap-2.5">
+                  <InlineLabel variant="vi" />
+                  <p className="type-body text-[#16171C] dark:text-gray-100 break-words min-w-0">
+                    <TaggedText text={selectedReviewersList.viText} />
+                  </p>
+                </div>
 
-                      return (
-                        <div
-                          key={idx}
-                          style={{
-                            backgroundColor: itemBg,
-                            borderColor: itemBorder
-                          }}
-                          className="px-3.5 py-2.5 rounded-2xl border transition-colors flex items-center justify-between"
+                {revList.length === 0 && (
+                  <p className="type-meta text-[#6E7078] dark:text-gray-400">Chưa có lượt duyệt nào cho cặp bản ghi này.</p>
+                )}
+
+                <div className="flex flex-col gap-2">
+                  {revList.map((r, i) => {
+                    const isReject = r.decision === "Rejected";
+                    const isApprove = r.decision === "Approved";
+                    const c = isReject
+                      ? "#C63B3B"
+                      : isApprove
+                        ? "#3FA66B"
+                        : "#A85E12";
+                    const rowBg = isReject
+                      ? "#FDEAEA"
+                      : isApprove
+                        ? "#EAF7EF"
+                        : "#FFF1DE";
+                    const rowBorder = isReject
+                      ? "#F3C9C9"
+                      : isApprove
+                        ? "rgba(63,166,107,0.2)"
+                        : "#F5DFC0";
+                    return (
+                      <div
+                        key={i}
+                        className="flex gap-2.5 px-3 py-2.5 rounded-xl border"
+                        style={{ background: rowBg, borderColor: rowBorder }}
+                      >
+                        <span
+                          className="w-6 h-6 rounded-full text-white text-caption font-label flex items-center justify-center flex-shrink-0"
+                          style={{ background: c }}
                         >
-                          <div className="flex items-center gap-2.5">
-                            <div
-                              style={{ backgroundColor: circleBg }}
-                              className="w-6 h-6 rounded-full flex items-center justify-center type-caption font-bold text-white shrink-0"
-                            >
-                              R{idx + 1}
-                            </div>
-
-                            <span className="type-ui font-bold text-[#16171C] dark:text-gray-100">
-                              {rev?.name || `Người kiểm duyệt ${idx + 1}`}
+                          R{r.round}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="px-1.5 py-0.5 rounded text-caption font-label border border-[#E5E2D8] bg-white text-[#6E7078]">
+                              {r.recordingId === selectedReviewersList.viRecordingId ? "VI" : "VI-EN"}
                             </span>
+                            <p
+                              className="text-meta font-label"
+                              style={{ color: isApprove ? "#1F5C3F" : c }}
+                            >
+                              {isReject
+                                ? "Từ chối"
+                                : isApprove
+                                  ? "Đã duyệt"
+                                  : "Chưa đánh giá"}
+                            </p>
+                            {r.reviewerName && (
+                              <span className="type-caption text-[#6E7078]">({r.reviewerName})</span>
+                            )}
                           </div>
-
-                          <span
-                            style={{ color: textColor }}
-                            className="type-ui font-bold shrink-0"
-                          >
-                            {isApp ? "Đã duyệt" : "Từ chối"}
-                          </span>
+                          {r.reason && (
+                            <p className="text-meta text-[#6E7078] mt-0.5">
+                              {r.reason}
+                            </p>
+                          )}
                         </div>
-                      );
-                    })
-                  ) : (
-                    <div className="text-center py-4 type-ui text-[#6E7078]">
-                      Bản ghi âm này chưa có lượt kiểm duyệt nào.
-                    </div>
-                  )}
+                      </div>
+                    );
+                  })}
                 </div>
 
-                <div className="pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedReviewersList(null)}
-                    className="w-full py-2.5 text-white rounded-xl type-button hover:opacity-90 transition-all cursor-pointer shadow-sm text-center font-label"
-                    style={{ background: ADMIN_ACCENT }}
-                  >
-                    Đóng
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedReviewersList(null)}
+                  className="w-full mt-5 py-3 text-white rounded-xl text-body font-label transition-all hover:opacity-90 active:scale-[0.98] cursor-pointer"
+                  style={{ background: ADMIN_ACCENT }}
+                >
+                  Đóng
+                </button>
               </div>
 
             </div>
@@ -1106,7 +1086,7 @@ export default function AdminRecordings() {
                 <div className="max-h-56 overflow-y-auto border border-[#E5E2D8] dark:border-gray-700 bg-[#F7F5EF] dark:bg-[#25272E] rounded-xl p-2.5 space-y-2">
                   {approvedRecordings.length > 0 ? (
                     approvedRecordings.map((rec) => {
-                      const recIdStr = String(rec.rawId);
+                      const recIdStr = String(rec.rawId || rec.id);
                       const isChecked = selectedRecordingIds.includes(recIdStr);
 
                       return (
@@ -1137,14 +1117,14 @@ export default function AdminRecordings() {
                               <div className="flex items-center gap-2 min-w-0">
                                 <InlineLabel variant="cs" />
                                 <p className="truncate type-ui text-[#16171C] dark:text-gray-100">
-                                  <HighlightCsText rawText={rec.content} />
+                                  <TaggedText text={rec.csText} />
                                 </p>
                               </div>
 
                               <div className="flex items-center gap-2 min-w-0">
                                 <InlineLabel variant="vi" />
                                 <p className="truncate type-ui text-[#16171C] dark:text-gray-300">
-                                  {cleanLanguageTags(rec.contentVietnamese || rec.content)}
+                                  <TaggedText text={rec.viText} />
                                 </p>
                               </div>
 
