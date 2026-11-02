@@ -202,7 +202,7 @@ public class ReviewsController(IReviewService reviewService, IReviewerStatsServi
     /// không sắp xếp được vì phải tính sau khi cắt trang.
     /// </remarks>
     [HttpGet("api/reviewer/history/recordings")]
-    [Authorize(Roles = "Reviewer")]
+    [Authorize(Roles = "Admin,Reviewer")]
     [ProducesResponseType(typeof(PagedResult<ReviewerHistoryItemDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<PagedResult<ReviewerHistoryItemDto>>> History(
         [FromQuery] ReviewerHistoryQuery query, CancellationToken ct)
