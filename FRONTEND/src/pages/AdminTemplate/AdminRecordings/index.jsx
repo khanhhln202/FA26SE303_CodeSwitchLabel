@@ -446,11 +446,9 @@ export default function AdminRecordings() {
     setIsExporting(true);
     try {
       const selectedPairs = recordings.filter((r) => selectedPairIds.includes(r.id));
-      const speakerIds = [...new Set(selectedPairs.map((r) => r.speakerId).filter(Boolean))];
+      const recordingIds = selectedPairs.flatMap((r) => r.rawIds ?? []);
 
-      const blob = await adminService.exportDatasetBySpeakers({
-        speakerIds: speakerIds.length > 0 ? speakerIds : undefined
-      });
+      const blob = await adminService.exportDatasetBySpeakers({ recordingIds });
 
       const url = window.URL.createObjectURL(new Blob([blob]));
       const link = document.createElement("a");

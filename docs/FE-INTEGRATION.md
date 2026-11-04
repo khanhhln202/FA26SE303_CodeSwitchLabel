@@ -808,7 +808,7 @@ Speaker được thu cùng một cặp. `POST /api/tasks/{id}/items` chỉ bỏ 
 
 | Màn hình | API |
 |---|---|
-| Nhập kho câu từ file | `POST /api/scripts/import` — multipart, trường **`File`** là file JSON theo mẫu `docs/Requirement.txt` |
+| Nhập kho câu từ file | `POST /api/scripts/import` — multipart. `File` là JSON theo mẫu `docs/Requirement.txt`, hoặc `.txt` mỗi cặp hai dòng (câu trộn, câu thuần Việt) kèm trường `Domain`; file `.txt` tối đa 100 cặp và được LLM gán nhãn `[vi]`/`[en]` tự động |
 | Thêm một cặp câu | `POST /api/scripts` — body như phần đóng góp câu. Câu vào thẳng `Validated` kèm một lượt duyệt `Accepted` tự động của chính Admin |
 | Kho câu | `GET /api/scripts` — lọc tuỳ chọn: `status`, `domain`, `keyword`, `page`, `pageSize`. Chi tiết: `GET /api/scripts/{id}` |
 | Xoá cứng câu chờ duyệt | `DELETE /api/scripts/{id}` — chỉ `PendingValidation`; `409 script_not_pending` nếu đã duyệt, `409 script_already_recorded` nếu đã có bản ghi âm |

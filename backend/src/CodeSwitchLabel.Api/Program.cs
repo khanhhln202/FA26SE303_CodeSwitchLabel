@@ -47,6 +47,10 @@ builder.Services
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
+// Endpoint LLM có thể để trống: API vẫn chạy, chỉ import .txt báo `llm_not_configured`.
+builder.Services.Configure<LlmOptions>(
+    builder.Configuration.GetSection(LlmOptions.SectionName));
+
 // ---------------------------------------------------------------- dịch vụ
 
 builder.Services.AddCodeSwitchLabel(connectionString);

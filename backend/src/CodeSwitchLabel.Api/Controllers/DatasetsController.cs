@@ -71,11 +71,12 @@ public class DatasetsController(IDatasetService datasets) : ControllerBase
         return NoContent();
     }
 
-    /// <summary>Tải thẳng ZIP dữ liệu đã duyệt theo Speaker hoặc theo đợt, không cần tạo dataset.</summary>
+    /// <summary>Tải thẳng ZIP dữ liệu đã duyệt theo bản ghi, Speaker hoặc theo đợt, không cần tạo dataset.</summary>
     /// <remarks>
-    /// Gửi `speakerIds` để lấy các Speaker đã chọn; bỏ trống rồi gửi `waveId` để lấy cả đợt.
-    /// Mỗi Speaker một thư mục `{email}_{ngày Bangkok}` gồm `test/{scriptId}.json` (đúng schema nhập)
-    /// và `audio/{scriptId}_CS.wav`, `audio/{scriptId}_VI.wav`. Cặp thiếu một bản hoặc thiếu audio bị bỏ.
+    /// Gửi `recordingIds` để chỉ lấy đúng các bản đã chọn; nếu không thì gửi `speakerIds`,
+    /// hoặc bỏ trống cả hai rồi gửi `waveId` để lấy cả đợt.
+    /// Mỗi cặp một thư mục `speaker_{id}_{ngày Bangkok}` gồm `text/{scriptId}.json` (đúng schema nhập)
+    /// và `audio/{scriptId}-cs.wav`, `audio/{scriptId}-vi.wav`. Cặp thiếu một bản hoặc thiếu audio bị bỏ.
     /// </remarks>
     [HttpPost("export")]
     [ProducesResponseType(typeof(FileStreamResult), StatusCodes.Status200OK)]

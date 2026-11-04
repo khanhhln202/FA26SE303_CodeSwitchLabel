@@ -33,6 +33,14 @@ public interface IScriptService
     Task<ImportResultDto> ImportAsync(
         Stream jsonFile, string fileName, long importedById, CancellationToken ct = default);
 
+    /// <summary>
+    /// Nhập file .txt: mỗi cặp đúng hai dòng (câu trộn, câu thuần Việt).
+    /// LLM gán nhãn [vi]/[en] và alignment trước, rồi câu đi qua đúng luồng import hiện có.
+    /// </summary>
+    Task<ImportResultDto> ImportRawAsync(
+        Stream textFile, string fileName, long importedById, string domain,
+        CancellationToken ct = default);
+
     /// <summary>Chấp nhận hàng loạt câu đang chờ duyệt của một batch nhập.</summary>
     /// <remarks>
     /// Người gọi (Admin) là người duyệt của từng lượt `Accepted`. Dùng luồng duyệt hiện có

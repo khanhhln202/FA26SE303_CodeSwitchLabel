@@ -601,7 +601,7 @@ released_datasets     | 0`, n: 'Số trên API lấy thẳng từ view này, nê
         { k: 'SQL', c: 'select count(*) from import_batch;', n: 'Chạy trước và sau bước này: con số không đổi.' }
       ]],
       ['A.4', 0, 'admin', 'POST', '/api/scripts/import', 'File = demo/test-them/import-4-mang-rong.json', 422, '<code>empty_file</code>: file không có câu nào thì bị từ chối hẳn, không tạo lô nhập rỗng.'],
-      ['A.5', 0, 'admin', 'POST', '/api/scripts/import', 'File = demo/test-them/import-5-van-ban.txt', 422, '<code>invalid_json</code>: file không phải JSON thì bị từ chối, không lưu gì.'],
+      ['A.5', 0, 'admin', 'POST', '/api/scripts/import', 'File = demo/test-them/import-5-van-ban.txt', 422, '<code>invalid_text_format</code>: file .txt chỉ nhận từng cặp hai dòng (câu trộn, câu thuần Việt); file này chỉ có một dòng nên bị từ chối, không lưu gì.'],
       ['A.6', 0, 'admin', 'PUT', '/api/admin/config/import.max_scripts_per_batch', { value: '2' }, 204, 'Tạm hạ giới hạn xuống 2 câu mỗi lần nhập.'],
       ['A.7', 0, 'admin', 'POST', '/api/scripts/import', 'File = demo/test-them/import-2-nhieu-loi.json', 422, '<code>import_too_large</code>: “File có 5 câu, vượt giới hạn 2 câu mỗi lần nhập.” Bị chặn trước khi ghi bất cứ thứ gì.'],
       ['A.8', 0, 'admin', 'PUT', '/api/admin/config/import.max_scripts_per_batch', { value: '100000' }, 204, 'Trả giới hạn về như cũ.', [

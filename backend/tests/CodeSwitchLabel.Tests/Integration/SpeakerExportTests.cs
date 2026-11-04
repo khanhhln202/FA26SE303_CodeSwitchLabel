@@ -125,13 +125,13 @@ public sealed class SpeakerExportTests : IntegrationTestBase
             .Select(e => e.FullName.Split('/')[0])
             .Distinct());
 
-        // Thư mục gốc: email Speaker + mốc Bangkok tới giây. Chỉ so phần ngày để test
-        // không gãy khi chạy vắt qua nửa đêm.
+        // Thư mục gốc: mã Speaker + mốc Bangkok tới giây, không mang email/danh tính.
+        // Chỉ so phần ngày để test không gãy khi chạy vắt qua nửa đêm.
         var bangkokDate = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(7))
             .ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
-        Assert.StartsWith($"speaker@test.local_{bangkokDate}_", root);
-        Assert.Matches(@"^speaker@test\.local_\d{4}-\d{2}-\d{2}_\d{6}$", root);
+        Assert.StartsWith($"speaker_{SpeakerUserId}_{bangkokDate}_", root);
+        Assert.Matches(@"^speaker_\d+_\d{4}-\d{2}-\d{2}_\d{6}$", root);
 
         // JSON nằm trong text/, audio cạnh đó; cùng một mã số cho cả ba tên file.
         var numericId = script.ScriptId[2..];
@@ -153,6 +153,36 @@ public sealed class SpeakerExportTests : IntegrationTestBase
         var alignment = Assert.Single(item.GetProperty("alignment").EnumerateArray());
         Assert.Equal("scan", alignment.GetProperty("source").GetString());
         Assert.Equal("quét", alignment.GetProperty("target").GetString());
+    }
+
+    [Fact]
+    public async Task XuatZip_TheoRecordingIds_ChiXuatDungCapDaChon()
+    {
+        var task = await CreateTaskAsync(WaveId, TaskType.Recording, 10, ManagerUserId);
+
+        var chon = await CreateScriptWithWordAsync(
+            "[vi]Em nên [en]scan [vi]tài liệu này.",
+            "[vi]Em nên quét tài liệu này.");
+        var cs = await CreateApprovedRecordingAsync(chon.ScriptId, SentenceVariant.CodeSwitching, task.TaskId);
+        var vi = await CreateApprovedRecordingAsync(chon.ScriptId, SentenceVariant.PureVietnamese, task.TaskId);
+
+        // Cùng Speaker nhưng không được chọn — trước đây lọt vào ZIP vì lọc theo speaker.
+        var khongChon = await CreateScriptWithWordAsync(
+            "[vi]Em nên [en]scan [vi]hợp đồng.",
+            "[vi]Em nên quét hợp đồng.");
+        await CreateApprovedRecordingAsync(khongChon.ScriptId, SentenceVariant.CodeSwitching, task.TaskId);
+        await CreateApprovedRecordingAsync(khongChon.ScriptId, SentenceVariant.PureVietnamese, task.TaskId);
+
+        var file = await _datasets.ExportSpeakersAsync(
+            new ExportSpeakerDataRequest { RecordingIds = [cs.RecordingId, vi.RecordingId] },
+            TestContext.Current.CancellationToken);
+
+        file.Content.Position = 0;
+        using var zip = new ZipArchive(file.Content, ZipArchiveMode.Read);
+
+        var textEntry = Assert.Single(zip.Entries, e => e.FullName.Contains("/text/"));
+        Assert.Contains(chon.ScriptId[2..], textEntry.FullName);
+        Assert.DoesNotContain(khongChon.ScriptId[2..], string.Join('\n', zip.Entries.Select(e => e.FullName)));
     }
 
     [Fact]

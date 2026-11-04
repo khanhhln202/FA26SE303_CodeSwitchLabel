@@ -57,10 +57,12 @@ public record DatasetFileDto(string FileName, string ContentType, Stream Content
 
 /// <summary>
 /// Xuất trực tiếp dữ liệu đã duyệt, không qua bước tạo/phát hành dataset.
-/// Chọn SpeakerIds thì xuất các speaker đó; bỏ trống thì xuất cả một chiến dịch.
+/// Chọn RecordingIds thì chỉ xuất đúng các bản đó; nếu không thì xuất theo SpeakerIds
+/// hoặc theo cả một chiến dịch.
 /// </summary>
 public record ExportSpeakerDataRequest
 {
+    public List<string> RecordingIds { get; init; } = [];
     public List<long> SpeakerIds { get; init; } = [];
     public long? WaveId { get; init; }
 }

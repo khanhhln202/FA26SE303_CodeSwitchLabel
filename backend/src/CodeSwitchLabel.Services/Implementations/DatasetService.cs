@@ -343,20 +343,32 @@ public class DatasetService(
     public async Task<DatasetFileDto> ExportSpeakersAsync(
         ExportSpeakerDataRequest request, CancellationToken ct = default)
     {
-        var speakerIds = request.SpeakerIds.Where(id => id > 0).Distinct().ToList();
+        var recordingIds = request.RecordingIds
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id.Trim())
+            .Distinct()
+            .ToList();
+        // Chọn bản ghi cụ thể thì chỉ xuất đúng các bản đó, không trộn thêm phạm vi Speaker/đợt.
+        var scopedToRecordings = recordingIds.Count > 0;
+        var speakerIds = scopedToRecordings
+            ? new List<long>()
+            : request.SpeakerIds.Where(id => id > 0).Distinct().ToList();
+        var waveId = scopedToRecordings ? null : request.WaveId;
 
-        if (speakerIds.Count == 0 && request.WaveId is null)
+        if (recordingIds.Count == 0 && speakerIds.Count == 0 && waveId is null)
         {
             throw new UnprocessableException(
-                "export_scope_required", "Chọn ít nhất một Speaker hoặc một chiến dịch để tải dữ liệu.");
+                "export_scope_required",
+                "Chọn ít nhất một bản ghi, một Speaker hoặc một chiến dịch để tải dữ liệu.");
         }
 
         var recordings = await db.Recordings.AsNoTracking()
             .Include(r => r.Script).ThenInclude(s => s.Words)
             .Include(r => r.Speaker)
             .Where(r => r.Status == RecordingStatus.Approved)
+            .Where(r => recordingIds.Count == 0 || recordingIds.Contains(r.RecordingId))
             .Where(r => speakerIds.Count == 0 || speakerIds.Contains(r.SpeakerId))
-            .Where(r => request.WaveId == null || (r.Task != null && r.Task.WaveId == request.WaveId))
+            .Where(r => waveId == null || (r.Task != null && r.Task.WaveId == waveId))
             .ToListAsync(ct);
 
         // Chỉ đóng gói cặp đủ hai bản. Thiếu một bản thì bỏ cả cặp, không để JSON trỏ tới file không có.
@@ -409,7 +421,8 @@ public class DatasetService(
                         continue;
                     }
 
-                    var folder = $"{SafeFolderName(pair.Speaker.Email)}_{date}";
+                    // Chỉ mã Speaker trong tên thư mục: dữ liệu bàn giao không mang danh tính.
+                    var folder = $"speaker_{pair.Speaker.UserId}_{date}";
                     var scriptId = pair.Script.ScriptId;
 
                     // Dùng lại đúng DTO của bộ nhập để file JSON luôn khớp schema hiện hành.
@@ -438,9 +451,11 @@ public class DatasetService(
             throw;
         }
 
-        var fileName = speakerIds.Count == 0
-            ? $"wave-{request.WaveId}-{date}.zip"
-            : $"speakers-{date}.zip";
+        var fileName = recordingIds.Count > 0
+            ? $"recordings-{date}.zip"
+            : speakerIds.Count == 0
+                ? $"wave-{waveId}-{date}.zip"
+                : $"speakers-{date}.zip";
 
         stream.Position = 0;
         return new DatasetFileDto(fileName, "application/zip", stream);
@@ -483,10 +498,6 @@ public class DatasetService(
         await using var target = entry.Open();
         await target.WriteAsync(content, ct);
     }
-
-    /// <summary>Email không chứa dấu phân cách thư mục, nhưng vẫn chặn để tên entry không bị lạc chỗ.</summary>
-    private static string SafeFolderName(string email) =>
-        email.Replace('/', '_').Replace('\\', '_');
 
     private static string DomainLabel(ScriptDomain domain) => domain switch
     {
