@@ -12,7 +12,7 @@ Nền tảng web thu thập và kiểm soát chất lượng dữ liệu tiếng
 | **Speaker** | Review Text (duyệt/sửa câu trước khi thu), Record Speech (thu 2 bản cs + vi, nghe lại/thu lại), Contribute Text (đóng góp câu mới), theo dõi tiến độ/lịch sử |
 | **Reviewer** | Nhận task duyệt, nghe và duyệt/từ chối bản ghi (bắt buộc lý do khi từ chối), duyệt câu văn bản trong lô được giao, theo dõi target/deadline/tiến độ |
 | **Task Manager** | Tạo/giao task Speaker & Reviewer (một task giao cho **nhiều người**), chia lô câu văn bản, đặt target & deadline, theo dõi tiến độ |
-| **Admin** | Import/quản lý kho câu, quản lý user & vai, quản lý recordings & dataset (xem/lọc/download), dashboard & thống kê, cấu hình hệ thống |
+| **Admin** | Import/quản lý kho câu (JSON hoặc TXT), quản lý user & vai, quản lý recordings & dataset (xem/lọc/download, xuất ZIP theo bản ghi/Speaker/đợt), dashboard & thống kê, cấu hình hệ thống |
 
 Luồng dữ liệu cốt lõi:
 
@@ -44,7 +44,8 @@ FRONTEND (React SPA, Vercel)
    ▼
 Caddy (TLS Let's Encrypt, prod) → API (ASP.NET Core, :5053 dev / :8080 container)
    │                                ├─→ PostgreSQL 16 (lược đồ docs/codeswitchlabel.sql)
-   │                                └─→ MinIO/S3 (file WAV) + ffmpeg (chuẩn hoá & QC)
+   │                                ├─→ MinIO/S3 (file WAV) + ffmpeg (chuẩn hoá & QC)
+   │                                └─→ LLM OpenAI-compatible (tuỳ chọn: gán nhãn [vi]/[en] khi nhập .txt)
 ```
 
 Phụ thuộc backend đi một chiều: **Api → Services → Repositories**.
@@ -60,7 +61,7 @@ FA26SE303_CodeSwitchLabel/
 │   ├── Dockerfile                # build SDK 10 + runtime aspnet 10 + ffmpeg
 │   ├── README.md                 # tài liệu backend chi tiết (tiếng Việt)
 │   ├── src/CodeSwitchLabel.Api/          # Program.cs, Controllers/*, appsettings*.json
-│   ├── src/CodeSwitchLabel.Services/     # nghiệp vụ, DTO, Audio, Reviews, WorkTasks, Seeding
+│   ├── src/CodeSwitchLabel.Services/     # nghiệp vụ, DTO, Audio, Reviews, WorkTasks, Seeding, Labeling (LLM)
 │   ├── src/CodeSwitchLabel.Repositories/ # entity, DbContext, Storage/S3
 │   └── tests/
 │       ├── CodeSwitchLabel.Tests/ # xunit.v3 unit + integration (Testcontainers): Api/, Integration/, Infrastructure/, Services/
@@ -96,6 +97,7 @@ Tài liệu chi tiết:
 | Infra | Docker + Docker Compose, Caddy 2 (auto HTTPS), Azure (trial), GitHub Actions |
 | Frontend | React 19 + Vite 8, react-router-dom 7, TanStack Query 5, axios, TailwindCSS 4 + shadcn, lucide-react, sonner, wavesurfer.js, formik + yup, Vercel |
 | Test | xunit.v3 + Moq + Testcontainers.PostgreSql + coverlet, E2E Node 18+ (`fetch`/`FormData`, không cần cài gói) |
+| AI (tuỳ chọn) | LLM OpenAI-compatible (`/chat/completions`) để gán nhãn `[vi]`/`[en]` khi nhập file `.txt` |
 
 Quy ước API: JSON `camelCase` (trừ `alignment` giữ `snake_case`), enum dạng string, thời gian UTC ISO8601, phân trang `?page&pageSize` (max 100) kèm sắp xếp `?sort=<cột>&dir=asc|desc` (bỏ `sort` là thứ tự mặc định của endpoint, sai tên cột cũng vậy), `204` = hết việc, lỗi nghiệp vụ trả `code + title + traceId`.
 
@@ -140,7 +142,7 @@ Xoá sạch và dựng lại lược đồ từ `docs/codeswitchlabel.sql`:
 docker compose down -v; docker compose up -d postgres minio
 ```
 
-Database local đang có sẵn lược đề mới nhất (Postgres chạy file .sql lúc tạo volume rỗng), nên **máy dev không cần chạy migration tay**. File trong `migrations/` là để **máy deploy** nâng cấp database đang chạy; `deploy/deploy.sh` tự chạy mọi file chưa có trong sổ `schema_migration`.
+Database local đang có sẵn lược đồ mới nhất (Postgres chạy file .sql lúc tạo volume rỗng), nên **máy dev không cần chạy migration tay**. File trong `migrations/` là để **máy deploy** nâng cấp database đang chạy; `deploy/deploy.sh` tự chạy mọi file chưa có trong sổ `schema_migration`.
 
 ### 3) Frontend
 
@@ -174,7 +176,7 @@ Cần 3 reviewer vì **mỗi bản ghi cần tối đa 3 lượt duyệt của 3
 
 Luồng chính (7 bước):
 
-1. `admin`: `POST /api/scripts/import` file JSON theo mẫu `docs/Requirement.txt` → mã mới dạng `s_211000000016`, trạng thái `PendingValidation`
+1. `admin`: `POST /api/scripts/import` file JSON theo mẫu `docs/Requirement.txt` (hoặc file `.txt` mỗi cặp hai dòng kèm trường `Domain`; `.txt` cần cấu hình `Llm`) → mã mới dạng `s_211000000016`, trạng thái `PendingValidation`
 2. `speaker1`: `POST /api/scripts/{id}/review` `{ "action": "Accepted" }` → `Validated`
 3. `GET /api/speaker/scripts/next` → cặp câu kèm cả 2 biến thể
 4. `POST /api/recordings` 2 lần (`CodeSwitching` rồi `PureVietnamese`)
@@ -206,6 +208,7 @@ Luồng chính (7 bước):
 | File | Dùng cho |
 |---|---|
 | `backend/src/CodeSwitchLabel.Api/appsettings.json` + `appsettings.Development.json` | connection string, JWT (480 phút dev), CORS (5173, 3000), `Seed:DefaultPassword` |
+| `Llm` (cùng file appsettings hoặc biến môi trường `Llm__*`) | `Endpoint`, `ApiKey`, `Model`, `TimeoutSeconds` cho bước gán nhãn `.txt`; để trống `Endpoint`/`Model` thì API vẫn chạy, chỉ import `.txt` báo `llm_not_configured` |
 | `FRONTEND/.env.example` → `.env.local` | `VITE_API_BASE_URL` |
 | `deploy/.env.example` → `deploy/.env` | `API_DOMAIN`, `FILES_DOMAIN`, `CADDYFILE`, `FE_ORIGIN`, `FE_ORIGIN_PREVIEW`, `FE_ORIGIN_LOCAL`, `POSTGRES_PASSWORD`, `MINIO_*`, `JWT_KEY` (base64 48), `JWT_EXPIRY_MINUTES`, `SWAGGER_ENABLED`, `SEED_PASSWORD` |
 
@@ -249,6 +252,8 @@ docker compose -f deploy/docker-compose.prod.yml logs -f api
 
 - **Ba lượt duyệt đều là của người**, chốt ngay khi một bên đủ đa số (2/3); **không có phiếu của hệ thống**. Một thời có dự định thêm lượt kiểm tra tự động ở vòng duyệt nhưng đã bỏ: auto-QC chạy lúc nộp và bản trượt thì `qc_failed` — không bao giờ tới vòng duyệt, nên lượt đó không bao giờ có tác dụng. `review.rounds_required` giữ bằng **3**.
 - **Ngưỡng thời lượng 1–30s là đề xuất của nhóm backend**, chưa được duyệt chính thức; hệ thống chưa đo khoảng lặng đầu/cuối.
+- **Nhập `.txt` phụ thuộc LLM bên ngoài.** Cần cấu hình `Llm:Endpoint` và `Llm:Model`; cặp nào LLM lỗi bị bỏ qua kèm mã `llm_failed`/`llm_parse_error` chứ không làm hỏng cả file. E2E không phủ phần này vì cần dịch vụ LLM thật.
+- **Xuất ZIP trực tiếp chỉ gồm cặp đã duyệt đủ cả cs và vi.** Chọn `recordingIds` mà thiếu một bản của cặp thì cặp đó bị bỏ; không còn cặp nào thì trả `422 export_no_approved_pairs`.
 - **Chưa có hệ thống nhắc nhở tự động** (ghi là "yêu cầu 3.3" nhưng `docs/Requirement.txt` không có mục này) — không có bảng `notification`, không có background service. Mọi số liệu để nhắc (`deadline`, `hoursRemaining`, `isOverdue`, `overdueTasks`) backend đã trả sẵn, nên khi nào thật sự cần thì làm bằng một endpoint + một con badge là đủ, không cần bảng riêng.
 - **Trạng thái task: máy tính, người chốt.** Trạng thái tự tính lại từ số liệu thật sau mỗi việc xảy ra (đạt chỉ tiêu → `Completed`, chưa đạt → `InProgress`), chỉ còn ba giá trị (`InProgress`/`Completed`/`Cancelled`). Task Manager đổi tay được qua `PATCH /api/tasks/{id}` với `status` — `InProgress` mở lại task đã xong, `Completed` chốt sớm, `Cancelled` dừng hẳn (y hệt nút Huỷ) — và giá trị bấm tay được giữ tới khi có việc thật (đổi chỉ tiêu, nộp bản ghi, duyệt). Trạng thái đợt thì **không bấm tay**: nó là hàm của task (`Open`/`InProgress`/`Completed`). Ghi là "yêu cầu 4.1" ở `README.md` cũ nhưng `Requirement.txt` cũng không có.
 - **Xoá task** qua `DELETE /api/tasks/{id}` (xoá cứng được task đã gỡ khỏi đợt và chưa có dữ liệu nộp thật — lượt giao và hàng chờ xoá theo task; trả 409 `task_in_wave` / `task_has_work` nếu còn trong đợt hoặc đã có bản ghi nộp/lượt duyệt).
@@ -258,7 +263,7 @@ docker compose -f deploy/docker-compose.prod.yml logs -f api
 
 Ba lỗi cũ đã sửa: giao task giờ gửi `{ userIds: [...] }` và hiện lỗi thật, dashboard đọc `assignees[]` khi đếm "Đã phân công", màn Thu âm đọc `myProgress`. Màn Reviewer dùng API thật qua `services/reviewerApi.js`; chỉ `Profile` còn đọc mock trong `FRONTEND/src/mocks/reviewer/`.
 
-**Ba nút xử lý của yêu cầu 2.4 vẫn chưa có giao diện** (API đã có: `/reviews`, `/reject-audio`, `/discard-pair`) — đây là phần còn thiếu duy nhất; mock `Profile` không liên quan. Chi tiết hợp đồng: [`docs/FE-INTEGRATION.md`](docs/FE-INTEGRATION.md).
+**Ba nút xử lý của yêu cầu 2.4 vẫn chưa có giao diện** (API đã có: `/reviews`, `/reject-audio`, `/discard-pair`) — đây là phần còn thiếu chính; mock `Profile` không liên quan. Ngoài ra màn Admin TextData mới gửi file JSON (`File`), chưa có ô `Domain`/chọn `.txt` dù API đã nhận; Admin Recordings đã xuất ZIP theo các cặp đã chọn qua `recordingIds`. Chi tiết hợp đồng: [`docs/FE-INTEGRATION.md`](docs/FE-INTEGRATION.md).
 
 ## Đóng góp (Contributing)
 

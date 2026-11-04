@@ -37,9 +37,9 @@ winget install --id Gyan.FFmpeg -e
 docker compose up -d postgres minio
 ```
 
-Lần đầu, PostgreSQL tự chạy `docs/codeswitchlabel.sql`: 25 bảng, 24 kiểu ENUM, 26 trigger, 7 view,
-29 hàm (trong đó có 2 hàm sinh mã) và dữ liệu danh mục. Con số này sinh ra từ chính file lược đồ —
-đếm lại sau mỗi lần sửa (bảng ra 26 vì tính cả `audit_log_default`, là partition của `audit_log`):
+Lần đầu, PostgreSQL tự chạy `docs/codeswitchlabel.sql`: 25 bảng thật (+ partition `audit_log_default` = 26 `CREATE TABLE`),
+25 kiểu ENUM, 30 trigger, 7 view, 28 hàm (trong đó có 2 hàm sinh mã) và dữ liệu danh mục. Con số này sinh ra từ chính file lược đồ —
+đếm lại sau mỗi lần sửa:
 
 ```powershell
 Select-String -Path docs/codeswitchlabel.sql -Pattern '^CREATE (TABLE|TYPE|TRIGGER|VIEW|OR REPLACE FUNCTION)' -AllMatches |
@@ -154,7 +154,7 @@ vẫn hợp lệ và không bị đổi.
 ## Vòng đời dữ liệu
 
 ```
-Admin nhập input_text.json  →  script: pending_validation
+Admin nhập input_text.json (hoặc .txt + LLM)  →  script: pending_validation
         │
         │  Speaker/Reviewer duyệt nội dung (Review Text)
         ▼
@@ -166,6 +166,17 @@ Admin nhập input_text.json  →  script: pending_validation
                                                                │
                                           cả cs và vi đạt ──►  cặp câu tính là XONG
 ```
+
+## Nhập câu từ file .txt (LLM)
+
+`POST /api/scripts/import` nhận thêm file `.txt` bên cạnh JSON:
+
+- Mỗi cặp đúng **hai dòng không rỗng**: dòng đầu là câu trộn Việt–Anh, dòng sau là câu thuần Việt; dòng trống bị bỏ qua.
+- Mỗi câu phải kết thúc bằng **dấu chấm**; file tối đa **100 cặp**.
+- Bắt buộc gửi kèm trường form `Domain` (`IT/Technology`, `Education`, `Daily Life`).
+- Backend gọi LLM OpenAI-compatible (`LabelingService`) để chèn nhãn `[vi]`/`[en]` và sinh `alignment`. Từ ngữ và thứ tự hai câu phải giữ nguyên; LLM sửa từ thì cặp đó bị bỏ qua.
+- Cấu hình trong section `Llm`: `Endpoint`, `Model`, `ApiKey` (tuỳ chọn), `TimeoutSeconds` (mặc định 60). Thiếu `Endpoint`/`Model` thì API vẫn chạy, riêng import `.txt` trả `422 llm_not_configured`.
+- Cặp gán nhãn lỗi được ghi vào `skipped` với `id = pair-N` và mã `llm_failed`/`llm_parse_error`; các cặp còn lại vẫn nhập bình thường.
 
 ## Luật duyệt
 
@@ -318,7 +329,8 @@ Task mới tạo ra đã là `InProgress` — không còn `Draft`/`Open` (TEAM_0
 
 ## Thử luồng chính
 
-1. Đăng nhập `admin`, `POST /api/scripts/import`, chọn file JSON theo mẫu `docs/Requirement.txt`.
+1. Đăng nhập `admin`, `POST /api/scripts/import`, chọn file JSON theo mẫu `docs/Requirement.txt`
+   (hoặc file `.txt` mỗi cặp hai dòng kèm `Domain`; `.txt` cần cấu hình `Llm`).
    Kết quả trả mã mới dạng `s_211000000016`, trạng thái **PendingValidation**.
 2. Đăng nhập `speaker1`, `POST /api/scripts/{id}/review` với `{ "action": "Accepted" }` → **Validated**.
 3. `GET /api/speaker/scripts/next` → cặp câu kèm `remainingVariants` là cả hai biến thể.
@@ -333,14 +345,16 @@ Task mới tạo ra đã là `InProgress` — không còn `Draft`/`Open` (TEAM_0
 ## Lệnh hay dùng
 
 ```bash
-dotnet test backend/CodeSwitchLabel.sln
+dotnet run --project backend/tests/CodeSwitchLabel.Tests/CodeSwitchLabel.Tests.csproj -c Release
 ```
 
 Máy chưa cài ffmpeg thì bỏ qua nhóm test cần ffmpeg:
 
 ```bash
-dotnet test backend/CodeSwitchLabel.sln --filter "Category!=RequiresFfmpeg"
+dotnet run --project backend/tests/CodeSwitchLabel.Tests/CodeSwitchLabel.Tests.csproj -c Release -- --filter-not-trait "Category=RequiresFfmpeg"
 ```
+
+`dotnet test` báo "Zero tests ran" vì xunit.v3 chạy trên Microsoft.Testing.Platform; CI cũng dùng `dotnet run`.
 
 Xem nhật ký thao tác gần nhất:
 
@@ -386,9 +400,14 @@ Phụ thuộc đi một chiều: **Api → Services → Repositories**.
 ## Chỗ chưa làm
 
 `dataset` và `dataset_recording` đã có đủ endpoint trong `DatasetsController` (tạo, tìm, chi tiết,
-phát hành, lưu trữ, tải ZIP). `DatasetServiceTests` đã ghim ba luật dễ sai ở tầng service: chỉ nhận
-bản ĐÃ duyệt đạt, phát hành cần đủ hai bản của cặp câu, tải ZIP chỉ sau khi phát hành. Phần còn dở:
-chưa có test nào gọi **qua HTTP** vào `DatasetsController` — test hiện gọi thẳng service.
+phát hành, lưu trữ, tải ZIP). Ngoài ra `POST /api/datasets/export` xuất ZIP trực tiếp, không cần tạo dataset:
+chọn `recordingIds` (ưu tiên, chỉ đúng các bản đã chọn), hoặc `speakerIds`, hoặc `waveId`. ZIP chỉ gồm cặp
+đã duyệt đủ cả cs+vi, mỗi cặp một thư mục `speaker_{id}_{ngày Bangkok}` với `text/{scriptId}.json` và
+`audio/{scriptId}-cs.wav`, `audio/{scriptId}-vi.wav`.
+
+`DatasetServiceTests` đã ghim ba luật dễ sai ở tầng service: chỉ nhận bản ĐÃ duyệt đạt, phát hành cần đủ
+hai bản của cặp câu, tải ZIP chỉ sau khi phát hành. `SpeakerExportTests` phủ thêm export theo `recordingIds`.
+Phần còn dở: chưa có test nào gọi **qua HTTP** vào `DatasetsController` — test hiện gọi thẳng service.
 
 `docs/demo-test-api.html` là trang tĩnh, tự viết tay theo lần chạy của `03-demo-scenario` — **không
 có script nào sinh ra nó**. Nên khi kịch bản demo đổi (mã câu, mã bản ghi, mã lỗi), phần bảng bên
@@ -402,6 +421,10 @@ Giới hạn đã biết:
 - **Ngưỡng thời lượng bản ghi (1–30 giây) là đề xuất của nhóm backend**, chưa có trong file lược đồ
   chung và chưa được giảng viên duyệt. Lược đồ có sẵn hai tham số khoảng lặng đầu/cuối nhưng
   **hệ thống chưa đo được khoảng lặng**.
+- **Import `.txt` phụ thuộc LLM bên ngoài.** Không có LLM thì API vẫn chạy; chỉ import `.txt` trả
+  `422 llm_not_configured`. Từng cặp lỗi bị bỏ qua với `llm_failed`/`llm_parse_error`, không rollback cả file.
+- **Export ZIP chỉ gồm cặp đã duyệt đủ cả cs và vi.** Chọn `recordingIds` thiếu một bản của cặp thì cặp đó bị bỏ;
+  không còn cặp nào thì trả `422 export_no_approved_pairs`.
 - **Reviewer xem được danh sách bản ghi trong task của mình** qua
   `GET /api/reviewer/tasks/{id}/recordings` (có phân trang, có bỏ bản đã tự duyệt).
 - **Không còn tính năng "bỏ qua" câu.** Thấy câu có vấn đề thì dùng Review Text để sửa hoặc từ chối.

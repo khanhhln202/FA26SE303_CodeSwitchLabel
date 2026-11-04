@@ -130,6 +130,30 @@ docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --
 docker compose -f deploy/docker-compose.prod.yml logs -f api
 ```
 
+### Bật nhập câu `.txt` bằng LLM (tuỳ chọn)
+
+`POST /api/scripts/import` chỉ nhận file `.txt` khi API có LLM OpenAI-compatible để gán nhãn
+`[vi]`/`[en]`. Thêm các biến sau vào phần `environment` của service `api` trong
+`deploy/docker-compose.prod.yml`:
+
+```yaml
+      Llm__Endpoint: https://api.openai.com/v1
+      Llm__Model: gpt-4o-mini
+      Llm__ApiKey: ${LLM_API_KEY}
+      Llm__TimeoutSeconds: 60
+```
+
+File compose được track, nên commit thay đổi — `deploy/deploy.sh` dừng ngay khi cây làm việc còn file
+chưa commit. Sau đó thêm `LLM_API_KEY=...` vào `deploy/.env` và dựng lại API:
+
+```bash
+docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build api
+```
+
+**Hiện `deploy/docker-compose.prod.yml` chưa truyền `Llm__*`**, nên máy chủ mới deploy chỉ nhập được
+JSON; gửi `.txt` sẽ nhận `422 llm_not_configured`. Thiếu `Llm__Endpoint`/`Llm__Model` thì API vẫn khởi
+động bình thường, chỉ riêng import `.txt` bị chặn. `Llm__ApiKey` chỉ cần khi endpoint yêu cầu xác thực.
+
 ## Nghiệm thu bản deploy
 
 **Lần chạy đầu tiên** (database vừa tạo, chưa có dữ liệu thật) thì nghiệm thu bằng cả bộ kiểm thử
@@ -252,8 +276,6 @@ docker exec csl-postgres pg_dump -U csl codeswitchlabel | gzip > backup-$(date +
 cần deploy thử một thứ gì đó không lên `main`. Một lệnh duy nhất, chạy từ thư
 mục gốc của repo trên máy chủ. Script làm theo đúng thứ tự này:
 
-Một lệnh duy nhất, chạy từ thư mục gốc của repo trên máy chủ. Script làm theo đúng thứ tự này:
-
 | Bước | Việc | Dừng ngay nếu |
 |---|---|---|
 | 1. Kiểm tra | Có `deploy/.env`? đang ở nhánh `main`? thư mục làm việc sạch? volume `pg-data` còn không? còn ≥ 5 GB đĩa? | sai nhánh, có file sửa chưa commit, **mất volume** |
@@ -264,7 +286,8 @@ Một lệnh duy nhất, chạy từ thư mục gốc của repo trên máy ch�
 | 6. Dựng lại | `docker compose up -d --build` | — |
 | 7. Kiểm tra | `/health`, đăng nhập `admin@`, `GET /api/auth/me`; ghi commit vào `deploy/.deployed-sha` | API không lên, sai mật khẩu |
 
-V22 renames the legacy tables, columns, enum, views, functions, and triggers to Wave in place. It preserves the existing rows; clients must use the `/api/waves` routes and Wave JSON fields.
+V22 đổi tên tại chỗ các bảng, cột, enum, view, hàm và trigger cũ sang Wave. Dữ liệu sẵn có được giữ
+nguyên; client phải dùng route `/api/waves` và các trường JSON mang tên Wave.
 
 **Bảng `schema_migration`** là sổ ghi những migration đã chạy, do script tự tạo ở bước 5. Nhờ đó
 "migration nào đã áp rồi" trả lời bằng truy vấn thay vì đọc lại tài liệu:
