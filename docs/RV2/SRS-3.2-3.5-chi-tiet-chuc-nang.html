@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>SRS 3.2-3.5 Function Details</title>
+<style>
+body { font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.5;
+       color: #000; max-width: 1000px; margin: 24px auto; padding: 0 16px; }
+h2 { font-size: 16pt; margin: 30px 0 8px; }
+h3 { font-size: 13pt; margin: 22px 0 6px; }
+h4 { font-size: 11.5pt; margin: 14px 0 4px; }
+p, li { font-size: 11pt; }
+table { border-collapse: collapse; width: 100%; margin: 8px 0 14px; }
+th, td { border: 1px solid #666; padding: 5px 7px; font-size: 10pt;
+         vertical-align: top; text-align: left; }
+th { background: #e8e8e8; font-weight: bold; }
+code { font-family: Consolas, monospace; font-size: 9.5pt; }
+.anh td { background: #f2f2f2; text-align: center; padding: 26px 12px; color: #555; }
+</style></head><body>
+
+<h2>3.2 Record Speech</h2>
+<p>The feature a Speaker uses to turn an assigned sentence pair into two approved recordings:
+check the sentence, read it aloud, and submit. The unit of work is the <b>pair</b> — the
+code-switched sentence and its pure-Vietnamese equivalent — and both halves are read by the same
+voice (BR-10).</p>
+
+<h3>3.2.1 Review Text</h3>
+<p><b>Function trigger.</b> Speaker Home &rarr; <i>Start recording</i>. The screen also reopens by
+itself after every successful submission, so the Speaker moves straight to the next pair. The
+client calls <code>GET /api/speaker/scripts/next</code>, optionally carrying the chosen task.</p>
+
+<p><b>Function description.</b> Actor: Speaker. Purpose: let the Speaker judge the sentence
+<i>before</i> spending effort recording it, and give them a route to fix or report a bad one.
+The screen shows the code-switched sentence, its Vietnamese equivalent, the word-level alignment,
+the topic, and the recording guidance. Four actions are offered: record this pair, propose an edit,
+report an error, or switch to another assigned task. Data processing: the server claims the next
+sentence for this Speaker from the work queue through the database function
+<code>fn_queue_claim_next</code>, which uses <code>FOR UPDATE SKIP LOCKED</code> so two Speakers
+are never handed the same pair; the claim expires by itself after 30 minutes (BR-20).</p>
+
+<p><b>Screen layout.</b></p>
+<table class="anh"><tr><td><b>[SCREEN LAYOUT &mdash; Review Text]</b><br>
+Path: Speaker Home &rarr; Start recording</td></tr></table>
+
+<h4>Function details</h4>
+<table>
+<thead><tr><th>Data shown</th><th>Source</th><th>Note</th></tr></thead>
+<tbody>
+<tr><td>Code-switched sentence</td><td><code>script.cs_content</code></td><td>Carries <code>[vi]</code>/<code>[en]</code> segment tags (BR-01)</td></tr>
+<tr><td>Vietnamese sentence</td><td><code>script.vi_content</code></td><td>Must contain no English (BR-01)</td></tr>
+<tr><td>Word alignment</td><td><code>script_word</code></td><td>Each English word with its Vietnamese meaning and relation type</td></tr>
+<tr><td>Topic</td><td><code>script.domain</code></td><td>IT, education or daily life</td></tr>
+<tr><td>Recording guidance</td><td><code>system_config</code></td><td>1&ndash;30 s; at most 1 s of silence at either end</td></tr>
+<tr><td>Takes used</td><td><code>recording</code></td><td>Counted per variant; the limit is 99</td></tr>
+<tr><td>Claim expiry</td><td><code>script_queue.claim_expires_at</code></td><td>30 minutes from the claim</td></tr>
+</tbody></table>
+
+<table>
+<thead><tr><th>Rule checked</th><th>Business rule</th><th>Message when it fails</th></tr></thead>
+<tbody>
+<tr><td>Only a sentence that passed content review is handed out</td><td>BR-06</td><td><code>script_not_validated</code></td></tr>
+<tr><td>A sentence with a proposal awaiting a decision is withheld</td><td>BR-19</td><td><code>script_has_pending_proposal</code></td></tr>
+<tr><td>A pair another Speaker has already started is not offered</td><td>BR-10</td><td><code>script_owned_by_other_speaker</code></td></tr>
+<tr><td>The sentence must sit in a task assigned to this Speaker</td><td>BR-25</td><td><code>task_not_recordable</code></td></tr>
+<tr><td>The reviewer&rsquo;s topic qualification applies to content review, not to recording</td><td>BR-24</td><td>&mdash;</td></tr>
+</tbody></table>
+
+<p><b>Normal case.</b> The queue returns one sentence, the claim is written, and the 30-minute
+timer starts. The Speaker reads it and moves to Record Speech.</p>
+<p><b>Abnormal cases.</b> An empty queue returns <code>204 No Content</code> and the screen reports
+that there is no work left rather than showing an error. If the Speaker walks away, the claim
+expires and the sentence returns to the queue on its own &mdash; no cleanup job runs (BR-20). If the
+Speaker reports an error or proposes an edit, the sentence is held out of the recording queue until
+a Reviewer decides (BR-18, BR-19).</p>
+
+<h3>3.2.2 Record Speech</h3>
+<p><b>Function trigger.</b> Review Text &rarr; <i>Record</i>, once for the code-switched half and
+once for the Vietnamese half. This step runs entirely in the browser; no request is sent yet.</p>
+
+<p><b>Function description.</b> Actor: Speaker. Purpose: capture the audio and let the Speaker
+judge it before anyone else has to. The screen shows the sentence being read, a record/stop control,
+a playback control and a re-record control. The browser captures audio through the media API, so the
+Speaker must grant microphone permission once per browser. The guidance shown here uses the
+<i>same</i> thresholds the server will apply, so a take that looks acceptable on screen is not
+rejected a second later for a reason the Speaker could not see.</p>
+
+<p><b>Screen layout.</b></p>
+<table class="anh"><tr><td><b>[SCREEN LAYOUT &mdash; Record Speech]</b><br>
+Path: Speaker Home &rarr; Start recording &rarr; Record</td></tr></table>
+
+<h4>Function details</h4>
+<table>
+<thead><tr><th>Threshold</th><th>Setting</th><th>Value in use</th></tr></thead>
+<tbody>
+<tr><td>Minimum duration</td><td><code>recording.min_duration_sec</code></td><td>1 s</td></tr>
+<tr><td>Maximum duration</td><td><code>recording.max_duration_sec</code></td><td>30 s</td></tr>
+<tr><td>Leading silence allowed</td><td><code>recording.max_leading_silence_sec</code></td><td>1 s</td></tr>
+<tr><td>Trailing silence allowed</td><td><code>recording.max_trailing_silence_sec</code></td><td>1 s</td></tr>
+<tr><td>Minimum mean volume</td><td><code>recording.min_mean_volume_db</code></td><td>&minus;50 dB</td></tr>
+<tr><td>Maximum peak (clipping)</td><td><code>recording.max_peak_db</code></td><td>&minus;0.1 dB</td></tr>
+<tr><td>Silence detection floor</td><td><code>recording.silence_noise_db</code></td><td>&minus;35 dB</td></tr>
+<tr><td>Shortest run counted as silence</td><td><code>recording.silence_min_duration_sec</code></td><td>0.5 s</td></tr>
+<tr><td>Maximum takes per variant</td><td><code>recording.max_take</code></td><td>99</td></tr>
+</tbody></table>
+
+<p>Every value above is read from <code>system_config</code> at request time, so an Administrator
+can tighten or relax them without a redeployment.</p>
+
+<p><b>Normal case.</b> The Speaker records, listens, and either keeps the take or records again.
+Re-recording before submission replaces the audio in the browser and costs no take number.</p>
+<p><b>Abnormal cases.</b> If microphone permission is refused the screen explains that recording
+cannot start and points at the browser's permission setting. A take that is obviously empty or far
+too long is flagged in the browser before submission; the binding check is still the server's.</p>
+
+<h3>3.2.3 Submit Recording</h3>
+<p><b>Function trigger.</b> Record Speech &rarr; <i>Submit</i>. The client sends
+<code>POST /api/recordings</code> as a multipart request carrying the audio file, the sentence
+identifier, the variant (<code>cs</code> or <code>vi</code>) and the task.</p>
+
+<p><b>Function description.</b> Actor: Speaker. Purpose: store the take and put it in front of
+reviewers. Data processing, in order: the server checks the sentence is recordable by this Speaker
+in this task; converts the upload to 16 kHz mono WAV and measures it with FFmpeg/FFprobe; compares
+the measurements with the thresholds above; uploads the file to object storage; generates the
+recording identifier; inserts the row; then recalculates task progress and pushes the recording
+into the review tasks of the same campaign.</p>
+
+<p><b>Screen layout.</b></p>
+<table class="anh"><tr><td><b>[SCREEN LAYOUT &mdash; Submit Recording]</b><br>
+Path: Speaker Home &rarr; Start recording &rarr; Record &rarr; Submit</td></tr></table>
+
+<h4>Function details</h4>
+<table>
+<thead><tr><th>Field</th><th>Required</th><th>Validation</th></tr></thead>
+<tbody>
+<tr><td>Audio file</td><td>Yes</td><td>At most 25 MB; the cap is enforced at the reverse proxy</td></tr>
+<tr><td>Sentence identifier</td><td>Yes</td><td>Form <code>s_</code> plus 9 or 12 digits (BR-02)</td></tr>
+<tr><td>Variant</td><td>Yes</td><td><code>cs</code> or <code>vi</code>; fixes the recording-id prefix (BR-09)</td></tr>
+<tr><td>Task</td><td>No</td><td>When present, must be a recording task assigned to this Speaker (BR-25)</td></tr>
+</tbody></table>
+
+<table>
+<thead><tr><th>Rule checked</th><th>Business rule</th><th>Message when it fails</th></tr></thead>
+<tbody>
+<tr><td>The sentence passed content review</td><td>BR-06</td><td><code>script_not_validated</code></td></tr>
+<tr><td>Both halves belong to one voice</td><td>BR-10</td><td><code>script_owned_by_other_speaker</code></td></tr>
+<tr><td>At most one active take per variant</td><td>BR-11</td><td><code>recording_already_exists</code></td></tr>
+<tr><td>The re-record limit is not exceeded</td><td>BR-11</td><td><code>too_many_takes</code></td></tr>
+<tr><td>The task accepts this Speaker and this sentence</td><td>BR-25</td><td><code>task_not_recordable</code></td></tr>
+<tr><td>The sentence is not held by a proposal</td><td>BR-19</td><td><code>script_has_pending_proposal</code></td></tr>
+</tbody></table>
+
+<p><b>Normal case.</b> The server answers <code>201 Created</code> with the recording, its take
+number, whether automatic QC passed, and the full set of measurements. The recording enters status
+<i>pending review</i> and appears in reviewers' queues. The Speaker returns to Review Text for the
+next pair.</p>
+<p><b>Abnormal cases.</b> A take that <i>fails</i> automatic QC is still <code>201 Created</code>:
+the recording is stored with status <code>qc_failed</code> so repeated failures by one Speaker stay
+measurable, but it never reaches a reviewer and the Speaker is asked to record again (BR-12). Each
+rule in the table above returns a conflict carrying a stable code and a Vietnamese message, never a
+bare failure. Note that submitting one half does not complete the pair: the pair counts as done only
+when <i>both</i> recordings are approved (BR-28).</p>
+
+<h2>3.3 Review Recordings</h2>
+<p>The feature a Reviewer uses to decide whether a recording may enter the corpus. Reviews are
+blind: a Reviewer never sees how others voted before submitting (<code>review.default_blind</code>
+is true).</p>
+
+<h3>3.3.1 Review Task List</h3>
+<p><b>Function trigger.</b> Review Dashboard &rarr; <i>My tasks</i>, then a recording task. The
+client calls <code>GET /api/reviewer/tasks/{taskId}/recordings</code>. A Reviewer with no particular
+task in mind can instead ask for the next item anywhere with
+<code>GET /api/reviewer/recordings/next</code>.</p>
+
+<p><b>Function description.</b> Actor: Reviewer. Purpose: show what is waiting, how much of the
+target is done, and how long remains to the deadline. The list is grouped <b>by sentence pair</b>,
+not by individual take, because a decision on one half affects the other (BR-15); each row shows
+both takes and marks which one still needs this Reviewer's vote.</p>
+
+<p><b>Screen layout.</b></p>
+<table class="anh"><tr><td><b>[SCREEN LAYOUT &mdash; Review Task List]</b><br>
+Path: Review Dashboard &rarr; My tasks</td></tr></table>
+
+<h4>Function details</h4>
+<table>
+<thead><tr><th>Data shown</th><th>Source</th><th>Note</th></tr></thead>
+<tbody>
+<tr><td>Pair, with both takes</td><td><code>recording</code></td><td>One row per pair; <code>cs</code> and <code>vi</code> side by side</td></tr>
+<tr><td>Round reached</td><td><code>review</code></td><td>Votes cast out of <code>review.rounds_required</code> (3)</td></tr>
+<tr><td>Whether I have voted</td><td><code>review.reviewer_id</code></td><td>Drives whether the row is actionable</td></tr>
+<tr><td>Reason this row is blocked</td><td>computed</td><td>Own recording, already voted, decided, or rounds full</td></tr>
+<tr><td>Target and progress</td><td><code>task_assignment</code></td><td>Personal quota, not the whole task target</td></tr>
+<tr><td>Deadline</td><td><code>task.deadline</code></td><td>Overdue is derived when the task is read</td></tr>
+</tbody></table>
+<p><b>Normal case.</b> The list is paginated at 100 rows at most, as every list endpoint is.</p>
+<p><b>Abnormal cases.</b> A pair whose outcome is already settled stays visible but is not
+actionable, with the reason named. When nobody left on the task can still vote, the task item is
+marked finished rather than hanging.</p>
+
+<h3>3.3.2 Review Recording</h3>
+<p><b>Function trigger.</b> Review Task List &rarr; a pair, or the quick-review shortcut on the
+dashboard. The client calls <code>GET /api/reviewer/recordings/{id}</code> for the item and
+<code>GET /api/recordings/{id}/audio-url</code> for playback.</p>
+
+<p><b>Function description.</b> Actor: Reviewer. Purpose: judge content, pronunciation and audio
+quality against the sentence as written. The screen shows the sentence, the audio player, the
+automatic QC measurements, and the round this vote will occupy. Audio never passes through the
+application: the server issues a presigned link valid for 15 minutes and the browser fetches the
+file from object storage directly.</p>
+
+<p><b>Screen layout.</b></p>
+<table class="anh"><tr><td><b>[SCREEN LAYOUT &mdash; Review Recording]</b><br>
+Path: Review Dashboard &rarr; My tasks &rarr; a pair</td></tr></table>
+
+<h4>Function details</h4>
+<table>
+<thead><tr><th>Rule checked</th><th>Business rule</th><th>Message when it fails</th></tr></thead>
+<tbody>
+<tr><td>A Reviewer may not judge their own recording</td><td>BR-13</td><td><code>self_review_forbidden</code></td></tr>
+<tr><td>A Reviewer may not vote twice on one recording</td><td>BR-13</td><td><code>already_reviewed</code></td></tr>
+<tr><td>The recording must still be awaiting review</td><td>BR-14</td><td><code>recording_not_reviewable</code></td></tr>
+<tr><td>The Reviewer must be qualified for the sentence&rsquo;s topic</td><td>BR-24</td><td><code>reviewer_domain_required</code></td></tr>
+<tr><td>The recording must still be waiting in this task</td><td>BR-25</td><td><code>task_not_reviewable</code></td></tr>
+</tbody></table>
+<p><b>Normal case.</b> The Reviewer listens, reads the QC measurements, and forms a decision.</p>
+<p><b>Abnormal cases.</b> An expired playback link is re-issued on demand rather than failing the
+screen. A recording that another Reviewer settled while this one was listening becomes
+non-actionable, and the screen says so instead of accepting a vote that could not count.</p>
+
+<h3>3.3.3 Submit Review Decision</h3>
+<p><b>Function trigger.</b> Review Recording &rarr; <i>Approve</i>, or <i>Reject</i> followed by the
+Reject Reason dialog. The client sends <code>POST /api/recordings/{id}/reviews</code>.</p>
+
+<p><b>Function description.</b> Actor: Reviewer. Purpose: record one independent vote and, when the
+votes are decisive, settle the recording. The decision itself is taken <b>in the database</b>: a
+trigger on the review table recomputes the outcome after each insert, and the service reads back
+what the database decided rather than computing it. Concurrent voters are serialised by a row lock,
+so the loser of a race is told the round moved instead of having a vote written into the wrong
+round.</p>
+
+<p><b>Screen layout.</b></p>
+<table class="anh"><tr><td><b>[SCREEN LAYOUT &mdash; Reject Reason dialog]</b><br>
+Path: Review Recording &rarr; Reject</td></tr></table>
+
+<h4>Function details</h4>
+<table>
+<thead><tr><th>Field</th><th>Required</th><th>Validation</th></tr></thead>
+<tbody>
+<tr><td>Decision</td><td>Yes</td><td>Approve or reject; nothing else accepted</td></tr>
+<tr><td>Expected round</td><td>Yes</td><td>An integer 1&ndash;3, copied from the round the screen showed</td></tr>
+<tr><td>Rejection reasons</td><td>Conditional</td><td>At least one when rejecting; must be empty when approving (BR-17)</td></tr>
+<tr><td>Comment</td><td>No</td><td>Free text shown to the Speaker</td></tr>
+<tr><td>Task</td><td>No</td><td>Sent when voting inside an assigned task</td></tr>
+</tbody></table>
+
+<table>
+<thead><tr><th>Rule checked</th><th>Business rule</th><th>Message when it fails</th></tr></thead>
+<tbody>
+<tr><td>Rejecting requires a reason</td><td>BR-17</td><td><code>rejection_reason_required</code></td></tr>
+<tr><td>Approving may not carry a reason</td><td>BR-17</td><td><code>reasons_not_allowed</code></td></tr>
+<tr><td>The round must not have moved</td><td>BR-13</td><td><code>round_changed</code></td></tr>
+<tr><td>The outcome must not already be decided</td><td>BR-14</td><td><code>no_more_rounds</code></td></tr>
+</tbody></table>
+
+<p><b>Normal case.</b> The vote is written and the response states the round used, the rounds
+required, the resulting status and whether the outcome is now final. The outcome settles <b>as soon
+as one side reaches a majority</b> &mdash; two of three by default &mdash; so the third review
+usually never happens, because it could not change the result (BR-14).</p>
+<p><b>Abnormal cases.</b> When the outcome is a rejection, the <i>other</i> take of the pair is
+retired at the same time and the sentence goes back to the same Speaker to record both halves again
+(BR-15). The sentence itself stays validated: the recording was at fault, not the text (BR-16).
+A faulty sentence is raised through a proposal instead, not by rejecting audio.</p>
+
+<h2>3.4 Task Management</h2>
+<p>The feature a Task Manager uses to turn a collection campaign into assigned, measurable work.</p>
+
+<h3>3.4.1 Create Task</h3>
+<p><b>Function trigger.</b> Task Management &rarr; <i>Create task</i>. The client sends
+<code>POST /api/tasks</code>. Only a Task Manager may create one.</p>
+
+<p><b>Function description.</b> Actor: Task Manager. Purpose: define a unit of recording or review
+work with a topic, a target and a deadline, optionally inside a campaign. A task created inside a
+campaign inherits the campaign's constraints; a standalone task can be attached to a campaign later
+through <code>PATCH /api/tasks/{id}/campaign</code>. A new task starts in progress immediately;
+sentences and assignees can be added afterwards.</p>
+
+<p><b>Screen layout.</b></p>
+<table class="anh"><tr><td><b>[SCREEN LAYOUT &mdash; Create Task]</b><br>
+Path: Task Manager Home &rarr; Task Management &rarr; Create task</td></tr></table>
+
+<h4>Function details</h4>
+<table>
+<thead><tr><th>Field</th><th>Required</th><th>Validation</th></tr></thead>
+<tbody>
+<tr><td>Campaign</td><td>No</td><td>Empty means a standalone task; otherwise quota and window are checked</td></tr>
+<tr><td>Task type</td><td>Yes</td><td>Recording or Review</td></tr>
+<tr><td>Topic</td><td>Conditional</td><td>Inside a campaign it must equal the campaign&rsquo;s topic (BR-23)</td></tr>
+<tr><td>Target quantity</td><td>Yes</td><td>1 to 100,000. Recording task: pairs. Review task: recordings</td></tr>
+<tr><td>Deadline</td><td>Yes</td><td>Any time zone accepted; stored as UTC. Must fall inside the campaign window (BR-23)</td></tr>
+<tr><td>Assignees</td><td>No</td><td>May be set at creation or added later</td></tr>
+<tr><td>Description</td><td>No</td><td>Free text</td></tr>
+</tbody></table>
+
+<table>
+<thead><tr><th>Rule checked</th><th>Business rule</th><th>Message when it fails</th></tr></thead>
+<tbody>
+<tr><td>The campaign must already have an owning Task Manager</td><td>BR-22</td><td><code>campaign_not_assigned_to_manager</code></td></tr>
+<tr><td>Sibling task targets may not exceed the campaign target</td><td>BR-23</td><td><code>task_target_exceeds_campaign</code></td></tr>
+<tr><td>The topic must match the campaign</td><td>BR-23</td><td><code>task_domain_mismatch_campaign</code></td></tr>
+<tr><td>The deadline must fall inside the campaign window</td><td>BR-23</td><td><code>task_deadline_outside_campaign</code></td></tr>
+</tbody></table>
+<p><b>Normal case.</b> The task is created in progress and appears on the Task Dashboard.</p>
+<p><b>Abnormal cases.</b> Reaching the target does <b>not</b> close the task: the target measures
+progress, it does not lock the work, and only cancelling stops it (BR-27). A task that already has
+work recorded against it cannot be deleted (<code>task_has_work</code>); it is cancelled instead.</p>
+
+<h3>3.4.2 Assign Task and Set Quotas</h3>
+<p><b>Function trigger.</b> Task Detail &rarr; <i>Assign</i> or <i>Edit assignees</i>. The client
+sends <code>POST /api/tasks/{id}/assign</code> to add people and
+<code>PUT /api/tasks/{id}/assignments</code> to rewrite the quotas;
+<code>DELETE /api/tasks/{id}/assign/{userId}</code> removes someone.
+<code>GET /api/tasks/assignable-users</code> supplies the candidate list.</p>
+
+<p><b>Function description.</b> Actor: Task Manager. Purpose: divide the task target into personal
+quotas so each person knows their own number. The candidate list is filtered by role and, for review
+tasks, by topic qualification, so an ineligible person cannot be picked by accident.</p>
+
+<p><b>Screen layout.</b></p>
+<table class="anh"><tr><td><b>[SCREEN LAYOUT &mdash; Task Detail &amp; Targets]</b><br>
+Path: Task Management &rarr; a task &rarr; Assignees and targets</td></tr></table>
+
+<h4>Function details</h4>
+<table>
+<thead><tr><th>Rule checked</th><th>Business rule</th><th>Message when it fails</th></tr></thead>
+<tbody>
+<tr><td>A recording task takes Speakers, a review task takes Reviewers</td><td>BR-25</td><td><code>assignee_role_mismatch</code></td></tr>
+<tr><td>Quotas must sum exactly to the task target</td><td>BR-26</td><td><code>assignment_quota_not_equal_target</code></td></tr>
+<tr><td>Each personal quota must be at least 1</td><td>BR-26</td><td><code>assignee_quota_invalid</code></td></tr>
+<tr><td>The target cannot be smaller than the number of assignees</td><td>BR-26</td><td><code>target_less_than_assignees</code></td></tr>
+<tr><td>The target cannot exceed the sentences the task holds</td><td>BR-26</td><td><code>target_exceeds_items</code></td></tr>
+<tr><td>At least one person must be selected</td><td>BR-26</td><td><code>assignee_required</code></td></tr>
+<tr><td>A task must keep at least one assignee</td><td>BR-26</td><td><code>cannot_remove_last_assignee</code></td></tr>
+<tr><td>Quotas can only be changed for people on the task</td><td>BR-26</td><td><code>assignee_not_found</code></td></tr>
+</tbody></table>
+<p><b>Normal case.</b> Quotas are saved and each assignee immediately sees their own number on their
+dashboard.</p>
+<p><b>Abnormal cases.</b> Reassigning work mid-task is allowed; the quotas must still sum to the
+target afterwards, so the form refuses a partial redistribution rather than silently leaving a gap.</p>
+
+<h3>3.4.3 Monitor Task Progress</h3>
+<p><b>Function trigger.</b> Task Manager Home &rarr; <i>Task Dashboard</i>, which calls
+<code>GET /api/task-manager/overview</code> and <code>GET /api/tasks/by-assignee</code>.</p>
+
+<p><b>Function description.</b> Actor: Task Manager. Purpose: see who is behind, and on which task,
+early enough to reallocate. Progress is recalculated whenever a recording is submitted or reviewed,
+so the dashboard reflects the current state rather than a cached figure.</p>
+
+<p><b>Screen layout.</b></p>
+<table class="anh"><tr><td><b>[SCREEN LAYOUT &mdash; Task Dashboard]</b><br>
+Path: Task Manager Home &rarr; Task Dashboard</td></tr></table>
+
+<h4>Function details</h4>
+<table>
+<thead><tr><th>Measure</th><th>Definition</th></tr></thead>
+<tbody>
+<tr><td>Pairs completed</td><td>A pair counts only when <b>both</b> recordings are approved (BR-28)</td></tr>
+<tr><td>Recordings reviewed</td><td>Votes this Reviewer has cast, not recordings settled</td></tr>
+<tr><td>Personal progress</td><td>Completed against that person&rsquo;s own quota</td></tr>
+<tr><td>Task progress</td><td>Sum of personal progress against the task target</td></tr>
+<tr><td>Overdue</td><td>Derived when the task is read, by comparing the deadline with the current time</td></tr>
+</tbody></table>
+<p><b>Normal case.</b> The dashboard lists every assignee with their quota, their completed count
+and the time left.</p>
+<p><b>Abnormal cases.</b> An assignee who has submitted nothing is still listed, with zero, rather
+than being omitted &mdash; otherwise the people most worth chasing would be the ones missing from
+the screen. There is no scheduled job and no reminder notification: overdue status is visible when
+the dashboard is opened.</p>
+
+<h2>3.5 Manage Text Data</h2>
+<p>The feature an Administrator uses to build and maintain the sentence corpus that everything else
+consumes.</p>
+
+<h3>3.5.1 Browse and Edit Sentences</h3>
+<p><b>Function trigger.</b> Admin Dashboard &rarr; <i>Text Data</i>, which calls
+<code>GET /api/scripts</code> with search, filter and paging. Editing one sentence sends
+<code>PUT /api/scripts/{id}</code>; <code>POST /api/scripts/{id}/deactivate</code> and
+<code>/reactivate</code> take a sentence out of circulation and back.</p>
+
+<p><b>Function description.</b> Actor: Administrator. Purpose: find a sentence, correct it, or
+withdraw it. The list can be searched by content and filtered by status and topic. Editing is
+deliberately narrow, because the sentence identifier encodes facts about the sentence and the
+recordings refer to it.</p>
+
+<p><b>Screen layout.</b></p>
+<table class="anh"><tr><td><b>[SCREEN LAYOUT &mdash; Text Data]</b><br>
+Path: Admin Dashboard &rarr; Text Data</td></tr></table>
+
+<h4>Function details</h4>
+<table>
+<thead><tr><th>Field</th><th>Required</th><th>Validation</th></tr></thead>
+<tbody>
+<tr><td>Code-switched sentence</td><td>Yes</td><td>Must carry <code>[vi]</code>/<code>[en]</code> tags (BR-01)</td></tr>
+<tr><td>Vietnamese sentence</td><td>Yes</td><td>Must contain no English words (BR-01)</td></tr>
+<tr><td>Topic</td><td>Yes</td><td>IT, education or daily life; encoded in the identifier (BR-02)</td></tr>
+<tr><td>Relation</td><td>No</td><td>Direct translation by default, or contains a proper noun (BR-02)</td></tr>
+<tr><td>Alignment</td><td>Yes</td><td>Every English word needs a Vietnamese meaning</td></tr>
+</tbody></table>
+
+<table>
+<thead><tr><th>Rule checked</th><th>Business rule</th><th>Message when it fails</th></tr></thead>
+<tbody>
+<tr><td>No two sentences share the same code-switched content</td><td>BR-05</td><td><code>duplicate_content</code></td></tr>
+<tr><td>The alignment must cover every English word</td><td>BR-01</td><td><code>alignment_incomplete</code></td></tr>
+<tr><td>Between one and nine English words</td><td>BR-03</td><td><code>en_word_count_out_of_range</code></td></tr>
+<tr><td>Editing may not change the English word count</td><td>BR-07</td><td><code>en_word_count_locked</code></td></tr>
+<tr><td>Editing may not change the relation</td><td>BR-07</td><td><code>relation_locked</code></td></tr>
+<tr><td>The Vietnamese half must stay pure Vietnamese</td><td>BR-01</td><td><code>ve_not_pure_vietnamese</code></td></tr>
+<tr><td>Only a sentence awaiting review can be edited</td><td>BR-06</td><td><code>script_not_pending</code></td></tr>
+<tr><td>A sentence with recordings may not be reworded</td><td>BR-08</td><td><code>script_already_recorded</code></td></tr>
+</tbody></table>
+<p><b>Normal case.</b> The edit is saved and the sentence keeps its identifier.</p>
+<p><b>Abnormal cases.</b> The last two rules are the ones Administrators meet most often, and they
+are not arbitrary: the identifier encodes the word count, topic and relation, so changing them would
+make the identifier lie (BR-04); and audio already recorded against a sentence would no longer match
+its transcript. A sentence that must change after recording is deactivated rather than edited.</p>
+
+<h3>3.5.2 Import Sentence Batch</h3>
+<p><b>Function trigger.</b> Text Data &rarr; <i>Import JSON</i>. The client sends
+<code>POST /api/scripts/import</code>. Past batches are listed by
+<code>GET /api/scripts/import/batches</code> and one batch by <code>&hellip;/{batchId}</code>.</p>
+
+<p><b>Function description.</b> Actor: Administrator. Purpose: load sentence pairs in bulk instead of
+one at a time. Every row is validated independently, the valid ones are inserted, and the response
+reports what was accepted and what was skipped with the reason for each &mdash; a partial import is
+the normal outcome, not a failure.</p>
+
+<p><b>Screen layout.</b></p>
+<table class="anh"><tr><td><b>[SCREEN LAYOUT &mdash; Import JSON and its result report]</b><br>
+Path: Admin Dashboard &rarr; Text Data &rarr; Import JSON</td></tr></table>
+
+<h4>Function details</h4>
+<table>
+<thead><tr><th>Item</th><th>Rule</th></tr></thead>
+<tbody>
+<tr><td>Batch size</td><td>At most 100,000 sentences per batch (<code>import.max_scripts_per_batch</code>)</td></tr>
+<tr><td>Per-row validation</td><td>The same rules as a single sentence: tags, word count, alignment, duplicates</td></tr>
+<tr><td>Identifier</td><td>Issued by the database from a per-combination sequence, never supplied by the file (BR-02)</td></tr>
+<tr><td>Starting status</td><td>Every imported sentence enters as pending validation (BR-06)</td></tr>
+<tr><td>Traceability</td><td>Each sentence keeps the batch it came from, in <code>import_batch</code></td></tr>
+</tbody></table>
+<p><b>Normal case.</b> The response reports the number accepted and a row-by-row list of what was
+skipped, each with its reason code, so the Administrator can correct the file and re-import only the
+failures.</p>
+<p><b>Abnormal cases.</b> A file over the batch limit is refused before any row is read. Duplicate
+sentences inside the same file, and duplicates against sentences already in the corpus, are both
+skipped under <code>duplicate_content</code> rather than aborting the import. Imported sentences are
+not immediately recordable: they wait for content review like any other sentence.</p>
+
+</body></html>

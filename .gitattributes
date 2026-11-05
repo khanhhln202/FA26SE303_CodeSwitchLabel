@@ -19,3 +19,5 @@
 *.jpg       binary
 *.wav       binary
 *.m4a       binary
+*.pdf       binary
+*.xlsx      binary

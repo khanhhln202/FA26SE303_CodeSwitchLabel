@@ -1,0 +1,1326 @@
+﻿CAPSTONE PROJECT REPORT
+Report 3 – Software Requirement Specification
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+– Ho Chi Minh, October 2026–
+Table of Contents
+I. Project Report        3
+1. Status Report        3
+2. Team Involvements        3
+3. Issues/Suggestions        3
+II. Software Requirement Specification        4
+1. Overall Description        4
+1.1 Product Overview        4
+1.2 Business Rules        5
+2. User Requirements        6
+2.1 System Actors        6
+2.2 Use Cases        6
+3. Functional Requirements        8
+3.1 System Functional Overview        8
+3.2 <<Feature Name 1>>        10
+3.3 <<Feature Name 2>>        10
+4. Non-Functional Requirements        11
+4.1 External Interfaces        11
+4.2 Quality Attributes        12
+5. Other Requirements        14
+5.1 Appendix1 - Messages List        14
+5.2 Appendix2 - …        14
+5.3 …        14
+
+
+________________
+
+
+I. Record of Changes
+Date
+	A*
+M, D
+	In charge
+	Change Description
+	28/10/2026
+	A
+	Đặng Đinh Thiên Lân
+	Add User Requirements and ERD
+	29/10/2026
+	A
+	Đặng Đinh Thiên Lân
+	Add System Functional Overview
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	*A - Added M - Modified D - Deleted
+________________
+
+
+II. Software Requirement Specification
+1. Product Overview
+CodeSwitchLabel is a web system for collecting and quality-controlling a Vietnamese–English
+code-switching speech corpus for Automatic Speech Recognition (ASR) training.
+
+
+Vietnamese speakers frequently mix English words into Vietnamese sentences ("Em nên **scan** tài
+liệu này"). Speech recognisers trained on monolingual Vietnamese handle these utterances poorly,
+and no sizable open corpus of such speech exists. The system organises the work of building one:
+collecting sentence pairs, assigning recording work, capturing audio, and putting every recording
+through independent human review before it can enter a released dataset.
+
+
+The unit of data is a **sentence pair**: a code-switched sentence and its pure-Vietnamese
+equivalent, carrying a word-level alignment between the English words and their Vietnamese
+meanings. Both halves of a pair are read by the **same speaker**, so the two recordings differ only
+in wording, not in voice. A pair is usable only when both recordings are approved.
+  
+________________
+
+2. User Requirements
+2.1 Actors
+#
+	Actor
+	Description
+	1
+	Speaker
+	Reviews assigned sentence pairs, suggests corrections or reports problems, records the Vietnamese–English code-switching sentence and its Vietnamese equivalent, and tracks personal progress and recording history.
+	2
+	Reviewer
+	Validates sentence pairs and reviews recordings for content, pronunciation, and audio quality. Reviewers record rejection reasons and track their assignments and review progress.
+	3
+	Task Manager
+	Creates and manages work campaigns and tasks, assigns Speakers and Reviewers, sets targets and deadlines, and monitors progress.
+	4
+	Administrator
+	Manages users and roles, sentence data, campaigns, datasets, and system settings. The Administrator can also view dashboards and quality statistics.
+	
+
+2.2 Use Cases
+
+
+#
+	Use Case
+	Actor(s)
+	Outcome
+	UC-01
+	Register Speaker Account 
+	Speaker 
+	Creates a Speaker account and signs in. 
+	UC-02
+	Manage Personal Profile 
+	Speaker 
+	Updates personal and recording profile information. 
+	UC-03
+	Review Sentence Pair 
+	Speaker 
+	Checks an assigned sentence pair and submits feedback, a correction, or a rejection. 
+	UC-04
+	Submit Text Proposal 
+	Speaker 
+	Reports a sentence problem or proposes an edit for a sentence that has not yet been recorded. 
+	UC-05
+	Record Sentence Pair 
+	Speaker 
+	Submits recordings for both the code-switching sentence and its Vietnamese equivalent. 
+	UC-06
+	Review Recording History 
+	Speaker 
+	Views submitted recordings, rejected recordings, proposals, and personal progress. 
+	UC-07
+	Join Campaign
+	Speaker 
+	Registers for an available campaign and checks campaign progress. 
+	UC-08
+	Validate Sentence Pair
+	Reviewer 
+	Reviews a sentence pair and accepts, edits, or rejects it. 
+	UC-09
+	Review Recording
+	Reviewer 
+	Listens to a recording and submits an approval or rejection with a reason. 
+	UC-10
+	Resolve Text Proposal 
+	Reviewer 
+	Reviews a Speaker’s report or edit proposal and accepts or rejects it. 
+	UC-11
+	Track Review Progress
+	Reviewer 
+	Views assigned work, targets, deadlines, review history, and progress. 
+	UC-12
+	Manage Campaign
+	Task Manager 
+	Creates and updates campaigns assigned to the Task Manager. 
+	UC-13
+	Manage Work Task
+	Task Manager 
+	Creates, updates, or cancels recording and review tasks. 
+	UC-14
+	Assign Work Task
+	Task Manager 
+	Assigns tasks and work quotas to Speakers or Reviewers. 
+	UC-15
+	Monitor Task Progress
+	Task Manager 
+	Tracks individual and team progress against targets and deadlines. 
+	UC-16
+	Manage User Account
+	Administrator 
+	Creates, updates, locks, unlocks, or resets user accounts and assigns roles. 
+	UC-17
+	Manage Sentence Data
+	Administrator 
+	Imports, edits, deactivates, or reactivates sentence pairs and reviews import batches. 
+	UC-18
+	Manage Campaign Assignment
+	Administrator 
+	Creates and manages campaigns and assigns them to Task Managers. 
+	UC-19
+	Manage Dataset
+	Administrator 
+	Creates, exports, releases, archives, downloads, or deletes datasets. 
+	UC-20
+	View Dashboard and Statistics
+	Administrator 
+	Views system totals, campaign progress, reviewer statistics, and data-quality statistics. 
+	UC-21
+	Configure System Settings
+	Administrator 
+	Reads and updates configurable system settings and review reasons. 
+	2.2.1 Diagram(s)
+  
+
+ 
+  
+ 
+  
+  
+
+  
+
+  
+
+  
+
+
+  
+
+2.2.2 Descriptions
+ID
+	Use Case
+	Actors
+	Use Case Description
+	01
+	Login
+	Speaker, Reviewer, Task Manager, Administrator
+	The actor enters their credentials to access the functions available to their role.
+	02
+	Register Speaker Account
+	Speaker
+	A new Speaker provides account details and creates an account.
+	03
+	Manage Personal Profile
+	Speaker
+	The Speaker views or updates their personal and recording profile information.
+	04
+	Review Sentence Pair
+	Speaker
+	The Speaker checks an assigned sentence pair and submits feedback, a correction, or a rejection. This feedback does not validate the pair.
+	05
+	Submit Text Proposal
+	Speaker
+	The Speaker reports a problem with, or proposes an edit to, a sentence pair that has not yet been recorded. The proposal is sent for Reviewer resolution.
+	06
+	Record Sentence Pair
+	Speaker
+	The Speaker records and submits both the code-switching sentence and its Vietnamese equivalent for the same sentence pair.
+	07
+	Record Code-Switch Audio
+	Speaker
+	The Speaker records and submits the code-switching version of a sentence pair.
+	08
+	Record Vietnamese Audio
+	Speaker
+	The Speaker records and submits the Vietnamese version of the same sentence pair.
+	09
+	Review Recording History
+	Speaker
+	The Speaker views their past recordings, rejected recordings, text proposals, and contribution history.
+	10
+	Join Campaign
+	Speaker
+	The Speaker registers for an available campaign and views its progress information.
+	11
+	Validate Sentence Pair
+	Reviewer
+	The Reviewer checks a sentence pair and accepts, edits, or rejects it. A rejection includes a reason.
+	12
+	Review Recording
+	Reviewer
+	The Reviewer assesses a recording for content, pronunciation, and audio quality, then decides whether it meets the requirements. Reviews are blind to other Reviewers’ decisions.
+	13
+	Listen to Recording
+	Reviewer
+	The Reviewer plays the recording to assess its speech and audio quality.
+	14
+	Submit Review Decision
+	Reviewer
+	The Reviewer submits an approval or rejection for a recording. A rejection must include at least one reason. The system finalizes the recording when the required majority is reached.
+	15
+	Resolve Text Proposal
+	Reviewer
+	The Reviewer accepts a Speaker’s report or edit proposal, applying the final text where appropriate, or rejects it with a reason.
+	16
+	Track Review Progress
+	Reviewer
+	The Reviewer views assigned work, targets, deadlines, completed reviews, and review history.
+	17
+	Manage Campaign
+	Administrator
+	The Administrator creates, views, updates, or archives campaigns.
+	18
+	Assign Campaign to Task Manager
+	Administrator
+	The Administrator assigns a campaign to a Task Manager so that the manager can organize its work.
+	19
+	Manage Work Task
+	Task Manager
+	The Task Manager creates, updates, or cancels a recording or review task within an assigned campaign.
+	20
+	Assign Work Task
+	Task Manager
+	The Task Manager assigns a task and its work quota to one or more eligible Speakers or Reviewers.
+	21
+	Set Target and Deadline
+	Task Manager
+	The Task Manager sets or updates the task’s completion target and deadline.
+	22
+	Reassign Work Task
+	Task Manager
+	The Task Manager changes a task’s assignees or reallocates work quotas.
+	23
+	Monitor Task Progress
+	Task Manager
+	The Task Manager views progress by assignee and for the team, including target and deadline status.
+	24
+	Manage User Account
+	Administrator
+	The Administrator creates, views, updates, locks, unlocks, or resets a user account.
+	25
+	Manage User Roles
+	Administrator
+	The Administrator assigns or changes a user’s system role.
+	26
+	Manage Sentence Data
+	Administrator
+	The Administrator views, edits, deactivates, or reactivates sentence pairs in the system.
+	27
+	Import Sentence Batch
+	Administrator
+	The Administrator uploads a batch of sentence pairs and reviews its import and validation results.
+	28
+	Manage Dataset
+	Administrator
+	The Administrator creates, views, releases, archives, or deletes datasets.
+	29
+	Export Dataset
+	Administrator
+	The Administrator exports a dataset and downloads its contents.
+	30
+	View Dashboard and Statistics
+	Administrator
+	The Administrator views system totals and statistics for campaigns, users, recordings, and data quality.
+	31
+	Configure System Settings
+	Administrator
+	The Administrator views or updates configurable system settings and review reasons.
+	
+
+3. Functional Requirements
+3.1 System Functional Overview
+3.1.1 Screens Flow
+  
+ 
+  
+  
+   
+  
+ 
+  
+ 
+  
+ 
+  
+ 
+  
+ 
+  
+ 
+  
+ 
+
+3.1.2 Screen Descriptions
+#
+	Feature
+	Screen
+	Description
+	1
+	Authentication
+	Landing Page
+	Public entry page introducing CodeSwitchLabel, with links to Login and Register.
+	2
+	Authentication
+	Login
+	Users sign in with their credentials. On success, the system sends them to Role Home Redirect.
+	3
+	Authentication
+	Register
+	New users create an account, then return to Login.
+	4
+	Authentication
+	Role Home Redirect
+	Routing step with no UI of its own. It reads the signed-in user's role and opens the matching home screen (Speaker Home, Review Dashboard, Task Manager Home, or Admin Dashboard).
+	5
+	Account
+	User Profile
+	Users view and update their personal information. All roles can reach it.
+	6
+	Account
+	Change Password
+	Users change their password. Opened from User Profile.
+	7
+	Review Text
+	Speaker Home
+	Speaker's main screen, showing assigned tasks and progress. Starts the recording flow and links to Contribute Text, Recording History, and Contribution History.
+	8
+	Review Text
+	Review Text
+	Shows a sentence for the Speaker to check for meaning, naturalness, and suitability for recording. The Speaker can choose the sentence to record, edit it, report an error, or switch task.
+	9
+	Review Text
+	Edit Sentence
+	Dialog where the Speaker corrects a sentence before recording.
+	10
+	Review Text
+	Report Error
+	Dialog where the Speaker reports a sentence as unsuitable (wrong, unnatural, or inappropriate content) so it can be handled.
+	11
+	Review Text
+	Task Selector
+	Dialog where the Speaker switches to another assigned task.
+	12
+	Record Speech
+	Record Speech
+	The Speaker reads the selected sentence aloud and records it. They can play it back and re-record until satisfied.
+	13
+	Record Speech
+	Submit Recording
+	The Speaker confirms and submits the recording. After submitting, the flow returns to Review Text for the next sentence. The Speaker can also go back to Record Speech to re-record.
+	14
+	Contribute Text
+	Contribute Text
+	The Speaker proposes new Vietnamese-English code-switched sentences that meet the system requirements, for Reviewer approval.
+	15
+	Speaker History
+	Recording History
+	Lists the Speaker's submitted recordings with their review status (pending, approved, or rejected).
+	16
+	Speaker History
+	Review Result
+	Shows the review outcome for a recording, including the rejection reason if it was rejected.
+	17
+	Speaker History
+	Contribution History
+	Lists the sentences the Speaker has contributed, with their review status.
+	18
+	Speaker History
+	Contribution Result
+	Shows the review outcome for a contributed sentence, including the rejection reason if applicable.
+	19
+	Receive Review Task
+	Review Dashboard
+	Reviewer's main screen with the review workload, targets, progress, and time left to the deadline. It leads to Review Task List, the history screens, and a quick-review shortcut to Review Recording.
+	20
+	Receive Review Task
+	Review Task List
+	Lists the tasks assigned to the Reviewer. Recording tasks open Review Recording, and sentence-review tasks open Review Contribution.
+	21
+	Review Recordings
+	Review Recording
+	The Reviewer listens to a recording and checks its content, audio quality, and pronunciation. They can approve it or reject it. Reachable from a task or through quick random review.
+	22
+	Review Recordings
+	Reject Reason (Recording)
+	Dialog where the Reviewer records the specific reason for rejecting a recording.
+	23
+	Review Contributions
+	Review Contribution
+	Container for reviewing Speaker-contributed text, with two tabs: contributed sentences and edit proposals.
+	24
+	Review Contributions
+	Contributed Sentences
+	Tab listing new sentences contributed by Speakers. The Reviewer approves or rejects each one.
+	25
+	Review Contributions
+	Reject Reason (Contribution)
+	Dialog where the Reviewer records the reason for rejecting a contributed sentence.
+	26
+	Review Contributions
+	Edit Proposals
+	Tab listing edits Speakers have proposed to existing sentences, for the Reviewer to decide on.
+	27
+	Review Contributions
+	Proposal Detail
+	Shows an edit proposal in detail (original vs. proposed text) so the Reviewer can decide.
+	28
+	Reviewer History
+	Recording Review History
+	Lists the recordings the Reviewer has reviewed, with their decisions.
+	29
+	Reviewer History
+	Contribution Review History
+	Lists the contributed sentences and proposals the Reviewer has reviewed, with their decisions.
+	30
+	Task Management
+	Task Manager Home
+	Task Manager's entry screen with a menu to Task Dashboard and Task Management.
+	31
+	Monitor Progress
+	Task Dashboard
+	Shows progress of each Speaker and Reviewer against their targets and deadlines, so the Task Manager can spot delays.
+	32
+	Task Management
+	Task Management
+	Main screen for organizing tasks and rounds. Offers actions to create, edit, or delete rounds, and to create, view, edit, or remove tasks.
+	33
+	Task Management
+	Create / Edit Round
+	Dialog to create a new round or edit an existing one (name, period, and so on).
+	34
+	Task Management
+	Delete Round
+	Confirmation dialog to delete a round.
+	35
+	Create Tasks
+	Create Task
+	Form to create a task for Speakers or Reviewers and assign it to individual users.
+	36
+	Set Target & Deadline
+	Task Detail & Targets
+	Shows a task's details, assignees, per-user targets, and deadline.
+	37
+	Reassign Tasks
+	Edit Task
+	Form to change a task's assignees, targets, and deadline, including reassigning work to other users.
+	38
+	Task Management
+	Remove Task from Round
+	Confirmation dialog to detach a task from a round without deleting it.
+	39
+	View Dashboard & Statistics
+	Admin Dashboard
+	Admin's main screen with overall statistics: total sentences, total recording duration, approved and rejected recordings, user counts, and data status. It leads to all other admin screens.
+	40
+	Manage Users & Roles
+	User Management
+	Lists, searches, and filters system accounts and their roles and permissions.
+	41
+	Manage Users & Roles
+	User Form
+	Dialog or form to add a user or edit user information and role.
+	42
+	Manage Text Data
+	Text Data
+	Lists and manages the text corpus: search, filter, edit, and delete sentences.
+	43
+	Manage Text Data
+	Sentence Form / Import JSON
+	Form to add or edit a single sentence, or bulk-import sentences from a JSON file.
+	44
+	Manage Recordings & Dataset
+	Recordings & Dataset
+	Lists, searches, and filters all recordings and datasets. Leads to Recording Detail and dataset creation.
+	45
+	Manage Recordings & Dataset
+	Recording Detail
+	Shows one recording with its audio, text, speaker, review status, and review history.
+	46
+	Manage Recordings & Dataset
+	Create / Release Dataset
+	Builds a dataset from approved recordings, then releases it for download and ASR training.
+	47
+	System Configuration
+	System Configuration
+	Entry screen for system-wide settings: review criteria, quality requirements, and general configuration.
+	48
+	System Configuration
+	English Word Limit
+	Sets the limit on English words allowed per sentence, which controls the quality of code-switched text.
+	49
+	System Configuration
+	Topic
+	Adds and edits the topics used to categorize sentences.
+	
+
+3.1.3 Screen Authorization
+Screen
+	Speaker
+	Reviewer
+	Task Manager
+	Admin
+	Authentication & Account
+	
+
+	
+
+	
+
+	
+
+	Landing Page, Login, Register (public, no role needed)
+	
+
+	
+
+	
+
+	
+
+	Role Home Redirect
+	X
+	X
+	X
+	X
+	View / update own profile
+	X
+	X
+	X
+	X
+	Change password
+	X
+	X
+	X
+	X
+	Speaker
+	
+
+	
+
+	
+
+	
+
+	Speaker Home
+	X
+	
+
+	
+
+	
+
+	Review Text: view assigned sentence
+	X
+	
+
+	
+
+	
+
+	Edit Sentence (propose a correction)
+	X
+	
+
+	
+
+	
+
+	Report Error on a sentence
+	X
+	
+
+	
+
+	
+
+	Task Selector (switch task)
+	X
+	
+
+	
+
+	
+
+	Record Speech: record, play back, re-record
+	X
+	
+
+	
+
+	
+
+	Submit Recording
+	X
+	
+
+	
+
+	
+
+	Contribute Text (propose a new sentence)
+	X
+	
+
+	
+
+	
+
+	Recording History, Review Result
+	X
+	
+
+	
+
+	
+
+	Contribution History, Contribution Result
+	X
+	
+
+	
+
+	
+
+	Reviewer
+	
+
+	
+
+	
+
+	
+
+	Review Dashboard
+	
+
+	X
+	
+
+	
+
+	Review Task List
+	
+
+	X
+	
+
+	
+
+	Review Recording: listen, approve
+	
+
+	X
+	
+
+	
+
+	Review Recording: reject, enter Reject Reason
+	
+
+	X
+	
+
+	
+
+	Quick Review (random recordings)
+	
+
+	X
+	
+
+	
+
+	Review Contribution, Contributed Sentences: approve
+	
+
+	X
+	
+
+	
+
+	Contributed Sentences: reject, enter Reject Reason
+	
+
+	X
+	
+
+	
+
+	Edit Proposals, Proposal Detail: decide
+	
+
+	X
+	
+
+	
+
+	Recording Review History
+	
+
+	X
+	
+
+	
+
+	Contribution Review History
+	
+
+	X
+	
+
+	
+
+	Task Manager
+	
+
+	
+
+	
+
+	
+
+	Task Manager Home
+	
+
+	
+
+	X
+	
+
+	Task Dashboard (monitor Speaker/Reviewer progress)
+	
+
+	
+
+	X
+	
+
+	Task Management (view tasks and rounds)
+	
+
+	
+
+	X
+	
+
+	Create / Edit Round
+	
+
+	
+
+	X
+	
+
+	Delete Round
+	
+
+	
+
+	X
+	
+
+	Create Task, assign users
+	
+
+	
+
+	X
+	
+
+	Task Detail & Targets
+	
+
+	
+
+	X
+	
+
+	Edit Task (change assignees, target, deadline, reassign)
+	
+
+	
+
+	X
+	
+
+	Remove Task from Round
+	
+
+	
+
+	X
+	
+
+	Admin
+	
+
+	
+
+	
+
+	
+
+	Admin Dashboard (statistics)
+	
+
+	
+
+	
+
+	X
+	User Management: view, search, filter
+	
+
+	
+
+	
+
+	X
+	User Form: add / edit user and role
+	
+
+	
+
+	
+
+	X
+	Text Data: view, search, edit, delete sentences
+	
+
+	
+
+	
+
+	X
+	Sentence Form: add / edit a sentence
+	
+
+	
+
+	
+
+	X
+	Import JSON (bulk import sentences)
+	
+
+	
+
+	
+
+	X
+	Recordings & Dataset: view, search, filter
+	
+
+	
+
+	
+
+	X
+	Recording Detail
+	
+
+	
+
+	
+
+	X
+	Create / Release Dataset, download
+	
+
+	
+
+	
+
+	X
+	System Configuration
+	
+
+	
+
+	
+
+	X
+	English Word Limit: add / edit
+	
+
+	
+
+	
+
+	X
+	Topic: add / edit
+	
+
+	
+
+	
+
+	X
+	
+
+3.1.4 Non-Screen Functions
+#
+	Feature
+	System Function
+	Description
+	1
+	Authentication
+	Token Issuance & Validation
+	Issues a signed token (for example JWT) after a successful login and validates it on every API request.
+	2
+	Authentication
+	Role-Based Access Control
+	Middleware that checks the user's role against the requested API and blocks unauthorized access.
+	3
+	Authentication
+	Password Hashing
+	Stores passwords as salted hashes and verifies them on login and password change.
+	4
+	Text Management
+	Sentence Validation
+	Checks every new or edited sentence: required fields, Vietnamese-English mix, and the English word limit from System Configuration.
+	5
+	Text Management
+	Duplicate Detection
+	Normalizes text and rejects sentences that already exist in the corpus, for both contributions and imports.
+	6
+	Text Management
+	JSON Import Processing
+	Parses an uploaded JSON file, validates each sentence, and inserts the valid ones. Returns a report of accepted and rejected rows with reasons.
+	7
+	Recording
+	Next Sentence Allocation
+	Picks the next sentence for a Speaker from the assigned task, skipping sentences already recorded and keeping the topic distribution balanced.
+	8
+	Recording
+	Sentence Reservation
+	Temporarily locks a sentence while a Speaker works on it, so concurrent Speakers do not get the same one. Expires the lock if the Speaker goes idle.
+	9
+	Recording
+	Audio Upload & Storage
+	Receives the submitted audio, saves it to object storage, and stores the metadata (speaker, sentence, duration, path) in PostgreSQL.
+	10
+	Recording
+	Audio Normalization
+	Converts uploaded audio to a standard format (for example WAV, 16 kHz, mono) for consistent processing and training.
+	11
+	Recording
+	Automatic Audio Quality Check
+	Computes duration, silence ratio, clipping, and estimated noise level. Flags recordings that fail basic thresholds before they reach a Reviewer.
+	12
+	Review
+	Review Assignment & Sampling
+	Distributes recordings to Reviewers per task and draws random samples for quick review. Prevents a Reviewer from reviewing their own recordings.
+	13
+	Review
+	Contribution Approval Processing
+	When a Reviewer approves a contributed sentence, adds it to the text corpus. When an edit proposal is accepted, updates the sentence and keeps the old version in history.
+	14
+	Review
+	Rejection Handling
+	Marks a rejected recording or sentence, saves the reason, and returns the item to the Speaker's queue for re-recording or revision.
+	15
+	Task Management
+	Progress Calculation
+	Recalculates each user's completed count against their target whenever a recording is submitted or reviewed. Feeds the Task Dashboard and Review Dashboard.
+	16
+	Task Management
+	Deadline Monitoring Job
+	Scheduled job (cron) that marks tasks as overdue and sends reminders as deadlines approach.
+	17
+	Dataset
+	Dataset Build & Export
+	Collects approved recordings, applies the train/dev/test split, generates a manifest file (CSV/JSON) with audio path and transcript), and packages the dataset for download.
+	18
+	Statistics
+	Statistics Aggregation Job
+	Scheduled job (Python) that computes totals, recording duration, approval rate, common rejection reasons, and per-Speaker quality. Caches the results for the dashboards.
+	19
+	Audit
+	History & Audit Logging
+	Records every change to recordings, reviews, sentences, and configuration (who, what, when, old and new value) to keep complete histories.
+	
+
+3.1.5 Entity Relationship Diagram
+  
+ 
+ 
+Entities Description
+#
+	Entity
+	Description
+	1
+	User
+	A person using the system. Their role determines whether they act as a Speaker, Reviewer, Task Manager, or Administrator.
+	2
+	Speaker Profile
+	Optional profile information associated with a Speaker.
+	3
+	Campaign
+	A collection period with a topic, target, dates, and an assigned Task Manager.
+	4
+	Campaign Registration
+	Records a Speaker’s registration for a campaign.
+	5
+	Task
+	A recording or review assignment, optionally grouped under a campaign.
+	6
+	Task Assignment
+	Connects a task to its assigned user and records that user’s target.
+	7
+	Sentence Pair
+	A code-switching sentence and its equivalent Vietnamese sentence, with a topic and review status.
+	8
+	Word Alignment
+	Links an English term in a sentence pair to its Vietnamese equivalent and describes their relationship.
+	9
+	Text Review
+	Records a decision or feedback on a sentence pair.
+	10
+	Text Proposal
+	A Speaker’s report or suggested edit to a sentence pair, including its resolution.
+	11
+	Recording
+	An audio recording of one version of a sentence pair, submitted by a Speaker.
+	12
+	Recording Review
+	A Reviewer’s decision about a recording, including the review round and any cited reasons.
+	13
+	Review Reason
+	A reason used to explain why a recording was rejected.
+	14
+	Dataset
+	A named, versioned collection of recordings for release or download.
+	
+
+3.2 <<Feature Name 1>>
+3.2.1 <<Function Name 1>>
+[A function can be a screen or a non-screen function (listed in the part 3.1.5 above). In this part, you need to provide the details on the related function, focus on mentioning below information
+* Function trigger: how this function is triggered (navigation path, a timing frequency, etc.
+* Function description: actors/roles, purpose, interface, data processing, etc.
+* Screen layout: mock-up prototype of the screen, sample below is for Manage Products screen
+  
+
+* Function Details: provide explanation for the data, validation, business rules, functionalities (for both normal cases and abnormal cases), etc. of the function so that the reader can image how it work.
+]
+3.2.2 <<Function Name 2>>
+…
+3.3 <<Feature Name 2>>
+…
+________________
+
+
+4. Non-Functional Requirements
+4.1 External Interfaces
+[This section provides information to ensure that the system will communicate properly with users and with external hardware or software/system elements.]
+4.2 Quality Attributes
+[List all the required system characteristics (quality attributes) specification. Some of the possible attributes are provided with the guide/descriptions are mentioned here]
+4.2.1 Usability 
+[This section includes all those requirements that affect usability. For example, specify the required training time for a normal users and a power user to become productive at particular operations specify measurable task times for typical tasks or base the new system’s usability requirements on other systems that the users know and like specify requirement to conform to common usability standards, such as IBM’s CUA standards Microsoft’s GUI standards]
+4.2.2 Reliability 
+[Requirements for reliability of the system should be specified here. Some suggestions follow:
+Availability—specify the percentage of time available ( xx.xx%), hours of use, maintenance access, degraded mode operations, and so on.
+Mean Time Between Failures (MTBF) — this is usually specified in hours, but it could also be specified in terms of days, months or years.
+Mean Time To Repair (MTTR)—how long is the system allowed to be out of operation after it has failed?
+Accuracy—specifies precision (resolution) and accuracy (by some known standard) that is required in the system’s output.
+Maximum Bugs or Defect Rate—usually expressed in terms of bugs per thousand lines of code (bugs/KLOC) or bugs per function-point( bugs/function-point).
+Bugs or Defect Rate—categorized in terms of minor, significant, and critical bugs: the requirement(s) must define what is meant by a “critical” bug; for example, complete loss of data or a complete inability to use certain parts of the system’s functionality.]
+4.2.3 Performance
+[The system’s performance characteristics are outlined in this section. Include specific response times. Where applicable, reference related Use Cases by name.
+Response time for a transaction (average, maximum)
+Throughput, for example, transactions per second
+Capacity, for example, the number of customers or transactions the system can accommodate
+Resource utilization, such as memory, disk, communications, and so forth.]
+4.2.4 …
+
+
+5. Requirement Appendix
+[Provide business rules, common requirements, or other extra requirements information here]
+5.1 Business Rules
+[Provide common business rules that you must follow. The information can be provided in the table format as the sample below]
+ID
+	Rule Definition
+	BR-01
+	Delivery time windows are 15 minutes, beginning on each quarter hour.
+	BR-02
+	Deliveries must be completed between 10:00 A.M. and 2:00 P.M. local time, inclusive.
+	BR-03
+	All meals in a single order must be delivered to the same location.
+	BR-04
+	All meals in a single order must be paid for by using the same payment method.
+	BR-11
+	If an order is to be delivered, the patron must pay by payroll deduction.
+	BR-12
+	Order price is calculated as the sum of each food item price times the quantity of that food item ordered, plus applicable sales tax, plus a delivery charge if a meal is delivered outside the free delivery zone.
+	BR-24
+	Only cafeteria employees who are designated as Menu Managers by the Cafeteria Manager can create, modify, or delete cafeteria menus.
+	BR-33
+	Network transmissions that involve financial information or personally identifiable information require 256-bit encryption.
+	BR-86
+	Only regular employees can register for payroll deduction for any company purchase.
+	BR-88
+	An employee can register for payroll deduction payment of cafeteria meals if no more than 40 percent of his gross pay is currently being deducted for other reasons.
+	
+
+5.2 Common Requirements
+[Fill all the common requirements here..]
+5.3 Application Messages List
+#
+	Message code
+	Message Type
+	Context
+	Content
+	1
+	MSG01
+	In line
+	There is not any search result
+	No search results.  
+	2
+	MSG02
+	In red, under the text box
+	Input-required fields are empty
+	The * field is required. 
+	3
+	MSG03
+	Toast message
+	Updating asset(s) information successfully
+	Update asset(s) successfully. 
+	4
+	MSG04
+	Toast message
+	Adding new asset successfully
+	Add asset successfully. 
+	5
+	MSG05
+	Toast message
+	Confirming email of asset hand-over is sent successfully
+	A confirmation email has been sent to {email_address}. 
+	6
+	MSG06
+	Toast message
+	Resetting asset information successfully
+	Return asset(s) successfully. 
+	7
+	MSG07
+	Toast message
+	Deleting asset information successfully
+	Delete asset(s) successfully. 
+	8
+	MSG08
+	In red, under the text box
+	Input value length > max length
+	Exceed max length of {max_length}. 
+	9
+	MSG09
+	In line
+	Username or password is not correct when clicking sign-in
+	Incorrrect user name or password. Please check again.
+	
+
+5.4 Other Requirements…
+ | Page
