@@ -54,6 +54,7 @@ public sealed class ScriptImportDedupeTests
             Mock.Of<IUserDomainRepository>(),
             config.Object,
             Mock.Of<ITaskProgressTracker>(),
+            Mock.Of<ILabelingService>(),
             TimeProvider.System,
             Mock.Of<ILogger<ScriptService>>());
 
@@ -146,6 +147,7 @@ public sealed class ScriptImportDedupeTests
             Mock.Of<IUserDomainRepository>(),
             config.Object,
             Mock.Of<ITaskProgressTracker>(),
+            Mock.Of<ILabelingService>(),
             TimeProvider.System,
             Mock.Of<ILogger<ScriptService>>());
 

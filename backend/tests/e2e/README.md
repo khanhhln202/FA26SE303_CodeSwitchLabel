@@ -4,7 +4,7 @@ Năm kịch bản gọi thẳng API đang chạy, không giả lập gì cả: m
 các trường trong kết quả với kỳ vọng, rồi in PASS/FAIL. Dùng để kiểm tra nhanh sau khi sửa code, và làm
 bằng chứng kiểm thử khi viết báo cáo.
 
-Khác với unit test trong `CodeSwitchLabel.Tests` (chạy bằng `dotnet test`, không cần database), các
+Khác với unit test trong `CodeSwitchLabel.Tests` (chạy bằng `dotnet run --project backend/tests/CodeSwitchLabel.Tests/CodeSwitchLabel.Tests.csproj -c Release`, không cần database), các
 kịch bản này cần cả hệ thống đang chạy.
 
 | File | Nội dung | Số bước |
@@ -18,6 +18,11 @@ kịch bản này cần cả hệ thống đang chạy.
 Số bước là con số **in ra ở lần chạy gần nhất**, nên lệch khi kịch bản được thêm bước mới — lấy lại từ
 dòng cuối mà script in (`83/83 bước đúng kỳ vọng`) hoặc từ `last-run.json`. Không phải hợp đồng: script
 tự đếm, chạy xong thấy `KẾT QUẢ: x/y bước đúng` là biết.
+
+**Nhập `.txt` không có trong E2E** vì cần dịch vụ LLM thật. Phần này được phủ ở unit test:
+`RawScriptTextParserTests` (định dạng hai dòng, dấu chấm, giới hạn 100 cặp), `LabelingServiceTests`
+(gọi LLM và mã lỗi) và `ScriptRawImportTests` (ghép cặp, bỏ qua cặp lỗi). E2E chỉ kiểm tra nhánh từ chối
+file `.txt` sai định dạng/thiếu `Domain`.
 
 ## Cần có trước khi chạy
 
@@ -77,5 +82,5 @@ Nằm trong thư mục `demo/` ở gốc repo, script tự tìm theo đường d
 - `demo-live-import.json` — file câu riêng cho kịch bản 04, không chứa lỗi cố ý.
 - `demo-proposals-import.json` — file câu riêng cho kịch bản 05, sinh lại mỗi lần chạy.
 - `giong-4s.m4a`, `giong-3s.wav`, `qua-ngan.wav` — file âm thanh đạt và không đạt kiểm tra thời lượng.
-- `test-them/` — các trường hợp lỗi: JSON sai cú pháp, mảng rỗng, file văn bản, file âm thanh rỗng,
-  file giả đặt đuôi `.m4a`, bản ghi dài 35 giây.
+- `test-them/` — các trường hợp lỗi: JSON sai cú pháp, mảng rỗng, file `.txt` sai định dạng/thiếu `Domain`,
+  file âm thanh rỗng, file giả đặt đuôi `.m4a`, bản ghi dài 35 giây.

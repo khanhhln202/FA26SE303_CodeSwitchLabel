@@ -45,6 +45,11 @@ src/
 ├── hooks/ lib/ utils/ constants/ assets/ mocks/
 ```
 
+## Tính năng Admin đang nối API
+
+- **TextData**: form nhập câu hiện chỉ gửi file **JSON** (`File`). API backend đã nhận thêm `.txt` kèm trường `Domain`, nhưng UI chưa có ô chọn chủ đề hay chấp nhận `.txt`.
+- **Recordings**: nút "Tải dataset" xuất ZIP theo đúng các cặp đã chọn — gửi `recordingIds` (mã các bản thật trong cặp) lên `POST /api/datasets/export`; backend chỉ đóng gói cặp đã duyệt đủ cs+vi.
+
 ## Liên quan
 
 - Root: [`../README.md`](../README.md) — quickstart full-stack, tài khoản demo, luồng thử 7 bước

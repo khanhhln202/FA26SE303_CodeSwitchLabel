@@ -69,6 +69,10 @@ public static class ServiceRegistration
         services.AddSingleton<IObjectStorage, S3ObjectStorage>();
         services.AddSingleton<IAudioProcessor, FfmpegAudioProcessor>();
 
+        // Timeout đặt theo từng request trong LabelingService; client dùng chung thì không tự cắt.
+        services.AddSingleton(_ => new HttpClient { Timeout = Timeout.InfiniteTimeSpan });
+        services.AddScoped<ILabelingService, LabelingService>();
+
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IScriptRepository, ScriptRepository>();
         services.AddScoped<IScriptQueueRepository, ScriptQueueRepository>();

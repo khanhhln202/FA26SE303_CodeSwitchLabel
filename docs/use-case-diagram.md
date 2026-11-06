@@ -50,6 +50,7 @@ flowchart LR
         ManageText([Manage text data])
         ImportText([Import text file])
         ManageRecordings([Browse recordings and review results])
+        ExportDataset([Export approved recordings to ZIP])
         ManageDatasets([Manage datasets])
         ReleaseDataset([Release dataset])
         DownloadDataset([Download dataset])
@@ -106,10 +107,11 @@ flowchart LR
     Admin --> ManageText
     ImportText -.->|«extend»| ManageText
     Admin --> ManageRecordings
+    ExportDataset -.->|«extend»| ManageRecordings
     Admin --> ManageDatasets
     ReleaseDataset -.->|«extend»| ManageDatasets
     DownloadDataset -.->|«extend»| ManageDatasets
     Admin --> Configure
 ```
 
-**Implementation note:** Reviewer profile editing is currently mock-only in the frontend; password changes use the backend API. Admin recording review/discard actions that exist only in the API are not shown because the frontend does not expose them.
+**Implementation note:** Reviewer profile editing is currently mock-only in the frontend; password changes use the backend API. Admin recording review/discard actions that exist only in the API are not shown because the frontend does not expose them. The text import screen currently sends JSON only; the backend also accepts `.txt` pairs with a `Domain` field and auto-labeling (LLM when configured, rule-based fallback otherwise). The recording screen exports a ZIP of the selected approved pairs via `POST /api/datasets/export`.

@@ -103,10 +103,20 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
         string id, [FromBody] UpdateScriptContentRequest request, CancellationToken ct)
         => Ok(await scriptService.UpdatePendingAsync(id, request, ct));
 
-    /// <summary>Nhập hàng loạt từ file input_text.json.</summary>
+    /// <summary>Nhập hàng loạt câu từ file .json hoặc .txt.</summary>
     /// <remarks>
-    /// Nhận cả file một câu lẫn file nhiều câu. Mỗi phần tử gồm `id`, `domain`, `cs_transcript`,
+    /// File **.json**: mỗi phần tử gồm `id`, `domain`, `cs_transcript`,
     /// `vi_equivalent` và `alignment`.
+    ///
+    /// File **.txt**: mỗi cặp đúng hai dòng không rỗng — dòng đầu là câu trộn Việt–Anh,
+    /// dòng sau là câu thuần Việt tương đương; mỗi câu kết thúc bằng dấu chấm. Dòng trống
+    /// bị bỏ qua. Tối đa **100 cặp** mỗi file và bắt buộc gửi kèm trường `Domain`.
+    /// Có cấu hình LLM (OpenAI-compatible) thì LLM chèn nhãn `[vi]`/`[en]` và sinh `alignment`;
+    /// chưa cấu hình thì backend gán nhãn bằng luật: đối chiếu các từ chung của hai câu để
+    /// lấy đoạn nghĩa tương ứng (có thể nhiều từ, ví dụ `email` → `thư điện tử`); đoạn không
+    /// đối chiếu được thì lấy theo vị trí, hết từ thì để trống cho người duyệt điền.
+    /// Cặp nào gán nhãn hỏng bị bỏ qua, không làm hỏng cả file: LLM lỗi có mã
+    /// `llm_failed`/`llm_parse_error`, luật lỗi có mã `invalid_text_format`/`invalid_language_tags`.
     ///
     /// Mã câu **được sinh lại** theo đúng quy tắc của database: giữ ý nghĩa ba chữ số đầu
     /// (số từ tiếng Anh, chủ đề, quan hệ Anh–Việt) rồi cấp số thứ tự mới.
@@ -134,14 +144,18 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
         var fileName = string.IsNullOrWhiteSpace(file.FileName) ? "import.json" : file.FileName;
 
         var ext = Path.GetExtension(fileName).ToLowerInvariant();
-        if (ext is not (".json" or ""))
+        if (ext is not (".json" or ".txt" or ""))
         {
             return UnprocessableEntity(new ProblemDetails
             {
                 Status = StatusCodes.Status422UnprocessableEntity,
-                Title = $"File {fileName} không phải JSON.",
+                Title = $"File {fileName} không phải JSON hoặc TXT.",
                 Type = "https://codeswitchlabel.local/errors/invalid_file_type",
-                Extensions = { ["code"] = "invalid_file_type" }
+                Extensions =
+                {
+                    ["code"] = "invalid_file_type",
+                    ["traceId"] = HttpContext.TraceIdentifier
+                }
             });
         }
 
@@ -152,13 +166,34 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
                 Status = StatusCodes.Status422UnprocessableEntity,
                 Title = "File rỗng, không có gì để nhập.",
                 Type = "https://codeswitchlabel.local/errors/empty_file",
-                Extensions = { ["code"] = "empty_file" }
+                Extensions =
+                {
+                    ["code"] = "empty_file",
+                    ["traceId"] = HttpContext.TraceIdentifier
+                }
+            });
+        }
+
+        if (ext == ".txt" && string.IsNullOrWhiteSpace(form.Domain))
+        {
+            return UnprocessableEntity(new ProblemDetails
+            {
+                Status = StatusCodes.Status422UnprocessableEntity,
+                Title = "File .txt cần chọn chủ đề: IT/Technology, Education hoặc Daily Life.",
+                Type = "https://codeswitchlabel.local/errors/domain_required",
+                Extensions =
+                {
+                    ["code"] = "domain_required",
+                    ["traceId"] = HttpContext.TraceIdentifier
+                }
             });
         }
 
         await using var stream = file.OpenReadStream();
 
-        return Ok(await scriptService.ImportAsync(stream, fileName, User.GetUserId(), ct));
+        return Ok(ext == ".txt"
+            ? await scriptService.ImportRawAsync(stream, fileName, User.GetUserId(), form.Domain!, ct)
+            : await scriptService.ImportAsync(stream, fileName, User.GetUserId(), ct));
     }
 
     /// <summary>Danh sách batch đã nhập, mới nhất trước.</summary>
@@ -260,6 +295,9 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
 
 public class ImportScriptsForm
 {
-    [Required(ErrorMessage = "Chưa đính kèm file JSON.")]
+    [Required(ErrorMessage = "Chưa đính kèm file JSON hoặc TXT.")]
     public IFormFile? File { get; set; }
+
+    /// <summary>Bắt buộc với file .txt; file .json lấy chủ đề trong từng câu.</summary>
+    public string? Domain { get; set; }
 }

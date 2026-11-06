@@ -1,6 +1,6 @@
 # Hướng dẫn tích hợp Frontend — CodeSwitchLabel API
 
-> **Breaking change V22:** Campaign is now Wave throughout the API and database. Existing clients must switch to the Wave routes and JSON fields.
+> **Breaking change V22:** Campaign đổi tên thành Wave trong toàn bộ API và database. Client cũ phải chuyển sang route và trường JSON của Wave.
 
 Tài liệu cho đội frontend. **Chi tiết từng endpoint** (tham số, kiểu dữ liệu, mẫu request/response) xem trên
 Swagger — đó là nguồn chính xác nhất vì sinh thẳng từ code. File này nói những gì Swagger không nói được:
@@ -34,6 +34,11 @@ màn hình nào gọi API nào theo thứ tự nào, cách xử lý đăng nhậ
 > Cập nhật V21 — nhiều Speaker được dùng chung một cặp câu: mỗi người một dòng `task_script`
 > (`taskScriptId`), recording ID có `_u<speakerId>`, bản của người khác không chặn. Bỏ lỗi
 > `recording_not_enough_pairs` và `script_owned_by_other_speaker`; gỡ mục nên gửi `taskScriptId`.
+>
+> Cập nhật 04/11/2026 — `POST /api/scripts/import` nhận thêm file **`.txt`** (mỗi cặp hai dòng,
+> kèm trường `Domain`, LLM gán nhãn `[vi]`/`[en]` khi có cấu hình, không có thì gán nhãn bằng luật);
+> thêm `POST /api/datasets/export` tải ZIP trực tiếp theo `recordingIds` / `speakerIds` / `waveId`.
+> Xem mục 3 (mã lỗi) và mục 4 (Admin).
 
 ---
 
@@ -258,14 +263,19 @@ export function parseTagged(tagged: string): Span[] {
 
 ## 3. Xử lý lỗi
 
-Có **bốn dạng phản hồi lỗi khác nhau**, frontend phải phân biệt được:
+Có **năm dạng phản hồi lỗi khác nhau**, frontend phải phân biệt được:
 
 | Trường hợp | Mã HTTP | Body | Xử lý |
 |---|---|---|---|
 | Chưa đăng nhập, token hết hạn, hoặc tài khoản vừa bị khoá, đổi vai, đổi mật khẩu | 401 | **Rỗng**, header `WWW-Authenticate: Bearer` | Về trang đăng nhập |
 | Sai vai — ví dụ Speaker gọi API của Admin | 403 | **Rỗng** | Ẩn chức năng đó theo `role`; nếu vẫn gặp thì báo "không có quyền" |
 | Dữ liệu gửi lên sai định dạng hoặc thiếu trường | 400 | Có `errors`, **không có `code`** | Hiện lỗi cạnh từng ô nhập |
+| Gửi quá nhiều lần đăng nhập/đăng ký từ một IP | **429** | **Rỗng** | Chờ một phút rồi thử lại; không tự động retry liên tục |
 | Lỗi nghiệp vụ | 400 / 403 / 404 / 409 / 422 | Có **`code`** | Xử lý theo `code`, xem bảng dưới |
+
+> **429 chỉ áp cho `POST /api/auth/login` và `POST /api/auth/register-speaker`**: 10 request/phút/IP ở production
+> (Development đặt rất cao để chạy test). Body rỗng, không có `code` — hiện thông báo "quá nhiều lần thử,
+> vui lòng chờ một phút".
 
 **Lỗi kiểm tra dữ liệu (400)** — khoá trong `errors` là tên trường **viết hoa chữ đầu** (`Deadline`, không phải `deadline`):
 
@@ -329,7 +339,12 @@ Lỗi hệ thống trả 500 với `code: "internal_error"`. Gặp lỗi này th
 | `batch_size_invalid` | 422 | Chia lô câu với `count` < 1 | Chặn ở ô nhập số câu |
 | `not_a_review_task` / `text_review_not_assigned` | 422 / 403 | Chia lô câu cho task không phải task duyệt, hoặc duyệt câu chưa được giao cho mình | Tải lại danh sách lô được giao |
 | `text_review_already_done` | 409 | Câu đã có người duyệt nội dung rồi | Bỏ câu khỏi danh sách, tải lại |
-| `invalid_file_type` | 422 | File nhập câu không phải JSON (mở rộng lạ) | Chọn đúng file `.json` theo mẫu |
+| `invalid_file_type` | 422 | File nhập câu không phải `.json` hoặc `.txt` (mở rộng lạ) | Chọn đúng file `.json` theo mẫu hoặc `.txt` đúng định dạng |
+| `invalid_text_format` | 422 hoặc trong `skipped` | File `.txt` có dòng không kết thúc bằng dấu chấm / số dòng lẻ, hoặc một câu đã có nhãn `[vi]`/`[en]` khi backend gán nhãn bằng luật (chỉ cặp đó bị bỏ) | Sửa file: mỗi cặp đúng hai dòng, mỗi câu kết thúc bằng `.`; bỏ nhãn khỏi câu thô |
+| `domain_required` | 422 | File `.txt` mà thiếu trường form `Domain` | Bắt chọn chủ đề trước khi gửi |
+| `llm_failed` / `llm_parse_error` | trong `skipped` | Có cấu hình LLM nhưng LLM lỗi khi gọi hoặc trả kết quả không đọc được — chỉ **một cặp** bị bỏ, các cặp khác vẫn nhập | Hiện trong `skipped` của kết quả; không cần gửi lại cả file |
+| `export_scope_required` | 422 | Export dataset mà không gửi `recordingIds`, `speakerIds` hay `waveId` | Bắt chọn ít nhất một phạm vi |
+| `export_no_approved_pairs` | 422 | Phạm vi đã chọn không có cặp nào duyệt đủ cả cs+vi | Báo không có dữ liệu; kiểm tra lại bộ lọc |
 | `email_taken` | 409 | Tự đăng ký Speaker bằng email đã có | Hiện lỗi cạnh ô email |
 | `task_cancelled` | 409 | Sửa task đã huỷ (kể cả đổi trạng thái) — task huỷ là khoá hẳn | Ẩn mọi nút sửa theo `status` của task |
 | `email_already_exists` | 409 | Tạo tài khoản bằng email đã có, kể cả khi chỉ khác chữ hoa | Hiện lỗi cạnh ô email |
@@ -808,13 +823,14 @@ Speaker được thu cùng một cặp. `POST /api/tasks/{id}/items` chỉ bỏ 
 
 | Màn hình | API |
 |---|---|
-| Nhập kho câu từ file | `POST /api/scripts/import` — multipart, trường **`File`** là file JSON theo mẫu `docs/Requirement.txt` |
+| Nhập kho câu từ file | `POST /api/scripts/import` — multipart. `File` là JSON theo mẫu `docs/Requirement.txt`, hoặc `.txt` (chi tiết bên dưới) kèm trường `Domain` |
 | Thêm một cặp câu | `POST /api/scripts` — body như phần đóng góp câu. Câu vào thẳng `Validated` kèm một lượt duyệt `Accepted` tự động của chính Admin |
 | Kho câu | `GET /api/scripts` — lọc tuỳ chọn: `status`, `domain`, `keyword`, `page`, `pageSize`. Chi tiết: `GET /api/scripts/{id}` |
 | Xoá cứng câu chờ duyệt | `DELETE /api/scripts/{id}` — chỉ `PendingValidation`; `409 script_not_pending` nếu đã duyệt, `409 script_already_recorded` nếu đã có bản ghi âm |
 | Ngừng dùng câu (xoá mềm) | `POST /api/scripts/{id}/deactivate` — `PendingValidation`/`Validated` → `Deactivated`; chặn nếu đã có bản ghi âm |
 | Khôi phục câu đã loại/ngừng dùng | `POST /api/scripts/{id}/reactivate` — `Rejected`/`Deactivated` về `PendingValidation` |
 | Dataset | `POST /api/datasets` (gom bản duyệt đạt theo `recordingIds` và/hoặc `waveIds`), `GET /api/datasets`, `GET /api/datasets/{id}` (kèm `missingPairs`), `POST /api/datasets/{id}/release`, `POST /api/datasets/{id}/archive`, `GET /api/datasets/{id}/download` (ZIP `manifest.json` + `metadata.csv` + `audio/{recordingId}.wav`; `?includeAudio=false` để chỉ lấy metadata, vẫn kèm link nghe 15 phút) |
+| Xuất ZIP trực tiếp (không cần tạo dataset) | `POST /api/datasets/export` — body `{ "recordingIds": ["r_cs_…"], "speakerIds": [6], "waveId": 2 }`. Gửi `recordingIds` thì **chỉ** xuất đúng các bản đó (bỏ qua `speakerIds`/`waveId`); không gửi thì lọc theo `speakerIds` và/hoặc `waveId`. Bỏ trống cả ba → `422 export_scope_required`. Chỉ gồm bản `Approved`; cặp thiếu cs hoặc vi bị bỏ; phạm vi không có cặp đủ hai bản → `422 export_no_approved_pairs` (cặp thiếu file audio cũng bị bỏ khỏi ZIP) |
 | Bản ghi | `GET /api/recordings` — lọc tuỳ chọn: `status`, `scriptId`, `speakerId`, `page`, `pageSize`. Nghe: `GET /api/recordings/{id}/audio-url` |
 | Cấu hình | `GET /api/config`, `PUT /api/admin/config/{key}` `{ "value": "30" }` |
 | Danh mục lý do | `GET /api/rejection-reasons?activeOnly=false`, `GET /api/script-error-reasons?activeOnly=false` |
@@ -825,6 +841,28 @@ Speaker được thu cùng một cặp. `POST /api/tasks/{id}/items` chỉ bỏ 
 | Tiến độ theo chiến dịch | `GET /api/admin/statistics/waves` |
 
 Kết quả nhập file có `imported`, `scriptIds` và `skipped` (kèm lý do từng câu bị loại). Một câu hỏng không làm hỏng cả file.
+
+**Nhập `.txt`** — cùng endpoint, khác định dạng:
+
+- Mỗi cặp đúng **hai dòng không rỗng**: dòng đầu là câu trộn Việt–Anh, dòng sau là câu thuần Việt. Dòng trống bị bỏ qua.
+- Mỗi câu phải kết thúc bằng **dấu chấm**; tối đa **100 cặp** mỗi file (`422 invalid_text_format` khi sai, `422 import_too_large` khi vượt).
+- Gửi kèm trường form `Domain`: `IT/Technology`, `Education` hoặc `Daily Life` (cùng danh mục với `GET /api/config/topics`). Thiếu trường này → `422 domain_required`.
+- Không cần tự gán nhãn trong file. Có cấu hình `Llm:Endpoint`/`Model` thì backend gọi LLM để chèn nhãn `[vi]`/`[en]` và sinh `alignment`; không có LLM thì gán nhãn bằng luật: đối chiếu các từ chung của hai câu, đoạn giữa hai mốc là nghĩa (có thể nhiều từ, ví dụ `email` → `thư điện tử`); đoạn không đối chiếu được lấy theo vị trí, hết từ thì `target` để trống cho người duyệt điền.
+- Một cặp gán nhãn lỗi vào `skipped` với `id = pair-N`: LLM lỗi có mã `llm_failed`/`llm_parse_error`, luật lỗi có mã `invalid_text_format`/`invalid_language_tags`; các cặp còn lại vẫn nhập. File `.txt` cũng đi qua đúng luật import JSON: kiểm chủ đề Admin, chống trùng, câu vào `PendingValidation`.
+
+**Cấu trúc ZIP của `POST /api/datasets/export`** — mỗi cặp một thư mục, ngày theo múi giờ Bangkok:
+
+```
+speaker_{speakerId}_{yyyy-MM-dd_HHmmss}/
+├── text/{scriptId}.json          # đúng schema input_text.json: id, domain, cs_transcript, vi_equivalent, alignment
+└── audio/
+    ├── {scriptId}-cs.wav
+    └── {scriptId}-vi.wav
+```
+
+- `{scriptId}` trong tên file là **phần số** (bỏ tiền tố `s_`), khớp mẫu `input_text.json`.
+- Tên ZIP theo phạm vi: `recordings-…zip`, `speakers-…zip`, `wave-{waveId}-…zip`.
+- Chỉ tải được khi bản ghi đã `Approved`; dữ liệu chưa duyệt hoặc thiếu một bản của cặp không xuất hiện trong ZIP.
 
 > **Nhập file và thêm câu tay đòi Admin được phân đúng chủ đề.** Câu Admin đưa vào hệ thống được duyệt sẵn,
 > nên backend kiểm trước: Admin phải có **mọi chủ đề xuất hiện trong file**, nếu không **cả lần nhập bị từ chối**
@@ -1086,6 +1124,8 @@ Ai đã code theo bản API trước ngày 22/09/2026 thì cần sửa:
 | Token cấp trước bản cập nhật này | Hết hiệu lực — đăng nhập lại một lần |
 | `POST /api/tasks` không cần chiến dịch | Từng bắt buộc **`waveId`** — nay **không bắt buộc** nữa: thiếu/`null` là task độc lập, gắn sau bằng `PATCH /api/tasks/{id}/wave`. Chiến dịch (khi có) vẫn phải được Admin giao cho đúng Task Manager đó |
 | Nhập file và thêm câu tay không kiểm chủ đề | Vẫn vào `Validated`, nhưng Admin phải có đúng chủ đề của câu; nhập file thiếu chủ đề là **cả lần nhập** trả 422 `reviewer_domain_required` |
+| File nhập câu chỉ nhận JSON | Nhận thêm **`.txt`** mỗi cặp đúng hai dòng kèm trường `Domain`; LLM gán nhãn `[vi]`/`[en]` khi có cấu hình, không có thì gán nhãn bằng luật, tối đa 100 cặp, lỗi từng cặp vào `skipped` |
+| Chưa có cách tải thẳng dữ liệu đã duyệt | `POST /api/datasets/export` — ZIP theo `recordingIds` / `speakerIds` / `waveId`, không cần tạo dataset; chỉ gồm cặp `Approved` đủ cs+vi |
 | Ai duyệt câu cũng chốt được sang `Validated` | Chỉ **Reviewer được phân đúng chủ đề**; Speaker và Admin nhận 422 `reviewer_domain_required` |
 | — | Mới: chiến dịch `/api/waves/*`, phân chủ đề `/api/users/{id}/domains`, tự xem chủ đề `GET /api/me/domains` |
 | — | Mới: Reviewer xem danh sách bản ghi trong task `GET /api/reviewer/tasks/{taskId}/recordings` và mở một bản `GET /api/reviewer/recordings/{id}` |

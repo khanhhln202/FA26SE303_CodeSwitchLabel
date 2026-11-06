@@ -46,6 +46,7 @@ public class ScriptService(
     IUserDomainRepository domainRepository,
     ISystemConfigService config,
     ITaskProgressTracker taskTracker,
+    ILabelingService labeling,
     TimeProvider clock,
     ILogger<ScriptService> logger) : IScriptService
 {
@@ -130,6 +131,66 @@ public class ScriptService(
             throw new UnprocessableException("empty_file", "File không có câu nào để nhập.");
         }
 
+        return await ImportCoreAsync(items, [], fileName, importedById, false, ct);
+    }
+
+    public async Task<ImportResultDto> ImportRawAsync(
+        Stream textFile, string fileName, long importedById, string domain,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(domain))
+        {
+            throw new UnprocessableException(
+                "domain_required", "File .txt cần chọn chủ đề: IT/Technology, Education hoặc Daily Life.");
+        }
+
+        // Kiểm tra chủ đề một lần trước khi gán nhãn; từng câu vẫn đi qua đúng luật import hiện có.
+        _ = ParseDomain(domain);
+
+        var pairs = await RawScriptTextParser.ParseAsync(textFile, ct);
+
+        // Không có LLM thì gắn nhãn bằng luật; nghĩa tiếng Việt là đoạn giữa hai từ chung
+        // của hai câu, hết từ tương ứng thì để trống cho người duyệt điền.
+        var useRule = !labeling.IsConfigured;
+
+        var items = new List<ImportScriptItem>(pairs.Count);
+        var skipped = new List<ImportSkippedDto>();
+
+        // Tuần tự từng cặp: endpoint local thường chịu tải kém khi bắn song song,
+        // và cần biết chính xác cặp nào hỏng để báo lại.
+        for (var i = 0; i < pairs.Count; i++)
+        {
+            var id = $"pair-{i + 1}";
+
+            try
+            {
+                var labeled = useRule
+                    ? RuleBasedLabeler.Label(pairs[i].Cs, pairs[i].Vi)
+                    : await labeling.LabelAsync(pairs[i].Cs, pairs[i].Vi, ct);
+
+                items.Add(new ImportScriptItem
+                {
+                    Id = id,
+                    Domain = domain,
+                    CsTranscript = labeled.CsTagged,
+                    ViEquivalent = CodeSwitchText.ViTag + pairs[i].Vi,
+                    Alignment = labeled.Alignment
+                });
+            }
+            catch (UnprocessableException ex)
+            {
+                // Một cặp gán nhãn hỏng không làm hỏng cả file; ghi lý do rồi đi tiếp.
+                skipped.Add(new ImportSkippedDto(id, ex.Code, ex.Message));
+            }
+        }
+
+        return await ImportCoreAsync(items, skipped, fileName, importedById, useRule, ct);
+    }
+
+    private async Task<ImportResultDto> ImportCoreAsync(
+        List<ImportScriptItem> items, List<ImportSkippedDto> skipped,
+        string fileName, long importedById, bool allowEmptyTargets, CancellationToken ct)
+    {
         var safeName = SanitizeFileName(fileName);
 
         await using var transaction = await repository.BeginTransactionAsync(ct);
@@ -155,7 +216,6 @@ public class ScriptService(
         var existing = await repository.FindExistingContentsAsync(keys, ct);
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
-        var skipped = new List<ImportSkippedDto>();
         var pendingScripts = new List<Script>();
         var pendingWords = new List<ScriptWord>();
         var imported = new List<string>();
@@ -182,7 +242,7 @@ public class ScriptService(
                 }
 
                 var domain = ParseDomain(item.Domain);
-                var words = ScriptPairRules.BuildWords(item.Alignment ?? [], enWordCount);
+                var words = ScriptPairRules.BuildWords(item.Alignment ?? [], enWordCount, allowEmptyTargets);
                 var relation = ScriptPairRules.RelationOf(words);
                 var scriptId = await repository.GenerateIdAsync(enWordCount, domain, relation, ct);
                 var now = clock.GetUtcNow();

@@ -123,7 +123,7 @@ body.short .act.extra{display:none}
   <p class="raw"><i>[vi]</i>Em nên <i>[en]</i>scan <i>[vi]</i>tài liệu này rồi gửi qua <i>[en]</i>email <i>[vi]</i>cho tôi.</p>
   <div class="spec">câu mẫu trong input_text.json của cô · nhập vào thành s_211000007 · bản ghi được chuyển thành WAV · 16 kHz · mono</div>
   <div class="facts">
-    <span><b>48</b> endpoint</span><span><b>19</b> bảng · <b>8</b> trigger · <b>6</b> view</span><span><b>68</b> unit test đạt</span><span><b>15/19</b> chức năng của cô đã xong, 4 làm một phần</span><span>Mọi bước bên dưới, kể cả câu SQL kiểm tra, đã chạy thử trên database trống</span>
+    <span><b>113</b> endpoint</span><span><b>25</b> bảng · <b>25</b> enum · <b>30</b> trigger · <b>7</b> view</span><span>Unit test đạt toàn bộ</span><span><b>15/19</b> chức năng của cô đã xong, 4 làm một phần</span><span>Mọi bước bên dưới, kể cả câu SQL kiểm tra, đã chạy thử trên database trống</span>
   </div>
 </header>
 
@@ -143,16 +143,16 @@ body.short .act.extra{display:none}
       <tr><td class="actor" rowspan="5">Reviewer</td><td>Receive Review Task</td><td><span class="pill part">Một phần</span></td><td>Nhận task, chỉ tiêu, hạn, lấy lần lượt từng bản. Chưa xem được cả danh sách bản ghi trong task.</td></tr>
       <tr><td>Review Recordings</td><td><span class="pill done">Xong</span></td><td>Lấy bản kế tiếp theo từng người đọc (<code>speakerId</code>) hoặc ngẫu nhiên (<code>random=true</code>).</td></tr>
       <tr><td>Duyệt Recordings</td><td><span class="pill done">Xong</span></td><td>Mỗi bản ghi ba lượt duyệt mù của ba người khác nhau. Database chốt theo đa số.</td></tr>
-      <tr><td>Record Rejection Reason</td><td><span class="pill done">Xong</span></td><td>Bắt buộc ít nhất một trong 9 lý do, chia 4 nhóm: nội dung, âm thanh, phát âm, khác. Lỗi nội dung tự đưa câu về bước duyệt văn bản.</td></tr>
+      <tr><td>Record Rejection Reason</td><td><span class="pill done">Xong</span></td><td>Bắt buộc ít nhất một trong 4 lý do đang dùng, chia 4 nhóm: nội dung, âm thanh, phát âm, khác. Lỗi nội dung tự đưa câu về bước duyệt văn bản.</td></tr>
       <tr><td>Track Review Progress</td><td><span class="pill done">Xong</span></td><td>Số đã duyệt, chỉ tiêu, phần trăm, số giờ còn lại tới hạn.</td></tr>
       <tr><td class="actor" rowspan="5">Task Manager</td><td>Create Tasks</td><td><span class="pill done">Xong</span></td><td>Task thu âm và task duyệt. Thêm mục bằng tay hoặc để hệ thống tự lấp.</td></tr>
       <tr><td>Assign Tasks</td><td><span class="pill done">Xong</span></td><td>Ô chọn người nhận kèm khối lượng đang nhận. Kiểm tra đúng vai và đủ mục làm được.</td></tr>
       <tr><td>Set Target &amp; Deadline</td><td><span class="pill done">Xong</span></td><td>Chỉ tiêu thu âm đếm theo cặp câu. Sửa được về sau; nâng chỉ tiêu thì task tự mở lại.</td></tr>
       <tr><td>Monitor Progress</td><td><span class="pill done">Xong</span></td><td>Lọc task quá hạn, chi tiết từng task, tổng hợp theo người nhận.</td></tr>
       <tr><td>Reassign Tasks</td><td><span class="pill done">Xong</span></td><td>Giao sang người khác, lượt giao cũ giữ lại trong lịch sử.</td></tr>
-      <tr><td class="actor" rowspan="6">Admin</td><td>Manage Text Data</td><td><span class="pill part">Một phần</span></td><td>Nhập file <code>input_text.json</code>, thêm từng cặp, tìm và lọc. Chưa ẩn hay khôi phục được câu đã bị loại.</td></tr>
+      <tr><td class="actor" rowspan="6">Admin</td><td>Manage Text Data</td><td><span class="pill part">Một phần</span></td><td>Nhập file <code>input_text.json</code>, thêm từng cặp, tìm và lọc. API đã nhận thêm file <code>.txt</code> kèm <code>Domain</code> và LLM gán nhãn, nhưng giao diện chưa nối. Chưa ẩn hay khôi phục được câu đã bị loại trên UI.</td></tr>
       <tr><td>Manage Users &amp; Roles</td><td><span class="pill done">Xong</span></td><td>Tạo tài khoản kèm mật khẩu tạm, khoá, đổi vai, cấp lại mật khẩu. Có hiệu lực ngay.</td></tr>
-      <tr><td>Manage Recordings &amp; Dataset</td><td><span class="pill part">Một phần</span></td><td>Xem, lọc, nghe bản ghi. Chưa có dataset và tải về.</td></tr>
+      <tr><td>Manage Recordings &amp; Dataset</td><td><span class="pill part">Một phần</span></td><td>Xem, lọc, nghe bản ghi; tải ZIP các cặp đã chọn qua <code>POST /api/datasets/export</code>. Chưa có giao diện tạo/phát hành dataset.</td></tr>
       <tr><td>View Dashboard &amp; Statistics</td><td><span class="pill done">Xong</span></td><td>Tổng số câu, số bản đạt và bị từ chối, tổng thời lượng đã duyệt, số người đọc và người duyệt.</td></tr>
       <tr><td>Monitor Data Quality</td><td><span class="pill done">Xong</span></td><td>Lý do từ chối phổ biến, tỉ lệ đạt của từng người đọc, hiệu suất từng người duyệt.</td></tr>
       <tr><td>System Configuration</td><td><span class="pill part">Một phần</span></td><td>Đổi ngưỡng khi đang chạy. Danh mục lý do mới chỉ đọc được; 3 tham số chưa có tác dụng.</td></tr>
@@ -163,12 +163,12 @@ body.short .act.extra{display:none}
 <section id="noi-bat">
   <h2>Điểm kỹ thuật nổi bật</h2>
   <ul class="points">
-    <li><b>Database tự giữ luật.</b> Lược đồ nhóm chốt có 7 trigger: chốt đa số sau ba lượt duyệt, chặn tự duyệt, lỗi nội dung đưa câu về duyệt lại, tự ghi nhật ký kèm người thao tác. Backend không tự đặt trạng thái bản ghi: ghi lượt duyệt rồi đọc lại kết quả.</li>
+    <li><b>Database tự giữ luật.</b> Lược đồ nhóm chốt có 30 trigger: chốt đa số sau ba lượt duyệt, chặn tự duyệt, lỗi nội dung đưa câu về duyệt lại, tự ghi nhật ký kèm người thao tác. Backend không tự đặt trạng thái bản ghi: ghi lượt duyệt rồi đọc lại kết quả.</li>
     <li><b>Ba lượt duyệt mù.</b> Không ai thấy ý kiến người khác khi bản ghi chưa chốt, kể cả qua API lịch sử. Hai người bấm cùng lúc thì khoá hàng bằng <code>SELECT … FOR UPDATE</code> và so vòng client đã thấy (<code>expectedRound</code>): người đến sau nhận <code>409 round_changed</code>.</li>
     <li><b>Âm thanh.</b> Nhận file trình duyệt ghi ra (WebM, M4A, WAV), ffmpeg chuyển sang WAV 16 kHz mono, đo thời lượng trên file đã chuyển rồi kiểm tra theo ngưỡng cấu hình. File nằm trong MinIO, người nghe nhận link tạm 15 phút.</li>
-    <li><b>Task tự chạy trạng thái</b> Draft → Open → InProgress → Completed. Chỉ tiêu thu âm đếm theo cặp câu: một cặp chỉ xong khi cả hai bản được duyệt đạt.</li>
+    <li><b>Task tự chạy trạng thái</b> InProgress → Completed (hoặc Cancelled); đợt tự tính Open → InProgress → Completed theo task. Chỉ tiêu thu âm đếm theo cặp câu: một cặp chỉ xong khi cả hai bản được duyệt đạt.</li>
     <li><b>Tài khoản.</b> Mật khẩu băm bcrypt. Khoá, đổi vai hay đổi mật khẩu có hiệu lực ngay: mỗi request đối chiếu token với database, và token mang dấu của mật khẩu lúc cấp.</li>
-    <li><b>Lỗi trả về theo một chuẩn</b> (ProblemDetails, RFC 7807) với 58 mã ổn định để FE xử lý. Cả hệ thống chạy bằng một lệnh Docker.</li>
+    <li><b>Lỗi trả về theo một chuẩn</b> (ProblemDetails, RFC 7807) với mã lỗi ổn định để FE xử lý. Cả hệ thống chạy bằng một lệnh Docker.</li>
   </ul>
 
   <h3>Mã có nghĩa, do database sinh</h3>
@@ -207,14 +207,14 @@ body.short .act.extra{display:none}
   <div class="tbl"><table>
     <thead><tr><th>Phần</th><th>Công nghệ</th><th>Dùng để</th></tr></thead>
     <tbody>
-      <tr><td>Nền tảng</td><td>.NET 10 LTS · ASP.NET Core Web API · C# 14</td><td>REST API, tách 3 tầng Api → Services → Repositories. Được hỗ trợ tới 11/2028</td></tr>
-      <tr><td>Database</td><td>PostgreSQL 16</td><td>Lược đồ nhóm chốt <code>docs/codeswitchlabel.sql</code>: 19 bảng, 18 enum, 7 trigger, 6 view. Tự chạy khi tạo database, không dùng migration</td></tr>
+      <tr><td>Nền tảng</td><td>.NET 10 LTS · ASP.NET Core Web API · C# 14</td><td>REST API, tách 3 tầng Api → Services → Repositories. Được hỗ trợ tới 14/11/2028</td></tr>
+      <tr><td>Database</td><td>PostgreSQL 16</td><td>Lược đồ nhóm chốt <code>docs/codeswitchlabel.sql</code>: 25 bảng (+ partition <code>audit_log_default</code>), 25 enum, 30 trigger, 7 view, 28 hàm. Tự chạy khi tạo database, không dùng migration</td></tr>
       <tr><td>ORM</td><td>Entity Framework Core 10 · Npgsql 10</td><td>Ánh xạ bảng và enum của lược đồ, tên cột snake_case</td></tr>
       <tr><td>Xác thực</td><td>JWT Bearer · BCrypt.Net-Next 4.2</td><td>Đăng nhập, phân quyền 4 vai, thu hồi quyền ngay khi khoá tài khoản</td></tr>
-      <tr><td>Tài liệu API</td><td>Swagger · Swashbuckle 10.2</td><td>48 endpoint chia 12 nhóm, chú thích tiếng Việt từng endpoint</td></tr>
+      <tr><td>Tài liệu API</td><td>Swagger · Swashbuckle 10.2</td><td>113 endpoint chia 13 controller, chú thích tiếng Việt từng endpoint</td></tr>
       <tr><td>Lưu file</td><td>MinIO · AWSSDK.S3</td><td>Lưu âm thanh theo chuẩn S3; sau này đổi sang AWS S3 chỉ cần sửa cấu hình</td></tr>
       <tr><td>Âm thanh</td><td>ffmpeg / ffprobe</td><td>Chuyển về WAV 16 kHz mono, đo thời lượng</td></tr>
-      <tr><td>Kiểm thử</td><td>xUnit 2.9</td><td>68 unit test cho luật duyệt, luật task, nhãn ngôn ngữ, âm thanh, token. Kịch bản đầu–cuối chính là trang này</td></tr>
+      <tr><td>Kiểm thử</td><td>xunit.v3</td><td>Unit + integration test cho luật duyệt, luật task, nhãn ngôn ngữ, âm thanh, token. Kịch bản đầu–cuối chính là trang này</td></tr>
       <tr><td>Đóng gói</td><td>Docker Compose</td><td>Bật PostgreSQL, MinIO và API bằng một lệnh, đội FE không phải cài .NET</td></tr>
     </tbody>
   </table></div>
@@ -230,7 +230,7 @@ body.short .act.extra{display:none}
       <ul class="points">
         <li><code>input_text_demo.json</code>: 7 câu theo đúng định dạng của cô, 4 câu hợp lệ và 3 câu cố ý sai. Dùng ở màn 2.</li>
         <li><code>giong-4s.m4a</code> dài 4 giây, định dạng điện thoại hay ghi. <code>giong-3s.wav</code> dài 3 giây. <code>qua-ngan.wav</code> dài 0,5 giây, để trượt kiểm tra tự động. Dùng ở màn 5 và 8.</li>
-        <li><code>test-them/</code>: 5 file nhập (một câu, nhiều lỗi, sai cú pháp JSON, mảng rỗng, file văn bản) và 4 file âm thanh (WebM của Chrome, dài 35 giây, file rỗng, file giả). Dùng ở phần bổ sung A và B.</li>
+        <li><code>test-them/</code>: 5 file nhập (một câu, nhiều lỗi, sai cú pháp JSON, mảng rỗng, file <code>.txt</code> thiếu <code>Domain</code>/sai định dạng) và 4 file âm thanh (WebM của Chrome, dài 35 giây, file rỗng, file giả). Dùng ở phần bổ sung A và B.</li>
         <li>Muốn thật hơn thì thu giọng mình bằng <b>Sound Recorder</b> đọc câu <i>“Mình cần review lại phần mã nguồn này”</i> để dùng ở bước 5.2. Riêng bước 8.4 vẫn dùng <code>giong-4s.m4a</code> vì file phải ngắn hơn 5 giây.</li>
       </ul>
     </li>
@@ -296,11 +296,11 @@ body.short .act.extra{display:none}
     <li><b>Khối lượng duyệt.</b> Mỗi cặp câu cần 6 lượt duyệt (hai bản, mỗi bản ba lượt) trong khi nhóm có 4 người. Có khả thi khi thu dữ liệu thật không?</li>
     <li><b>Nhiều Speaker cùng một cặp câu</b> — mỗi người vẫn có bản ghi riêng, mã kèm <code>_u&lt;speakerId&gt;</code>, nên một cặp có thể góp nhiều giọng vào dataset. Có cần giới hạn số giọng cho mỗi cặp không?</li>
     <li><b>Một người từ chối câu là câu bị loại với mọi người.</b> Có cần Admin xác nhận, hoặc khôi phục được không?</li>
-    <li><b>Dataset xuất định dạng gì</b>, có kèm alignment và nhãn <code>[vi]</code>/<code>[en]</code> không?</li>
+    <li><b>Dataset ZIP hiện có</b> <code>text/*.json</code> (kèm alignment và nhãn <code>[vi]</code>/<code>[en]</code>) cùng WAV riêng cho bản cs và vi; định dạng này đã đủ dùng chưa?</li>
     <li><b>Các ngưỡng do nhóm đề xuất</b>, chưa được duyệt: bản ghi dài 1–30 giây. Hai tham số khoảng lặng đầu/cuối có trong lược đồ nhưng hệ thống chưa đo được.</li>
     <li><b>Đồng ý cho dùng dữ liệu.</b> Có cần người đọc đồng ý trước khi thu không? Hệ thống lưu giọng nói, năm sinh, tỉnh.</li>
     <li><b>Thông báo.</b> Có cần báo cho người đọc khi bản ghi bị từ chối không? Hiện người đọc tự xem lý do trong danh sách bản ghi của mình.</li>
-    <li><b>Còn phải làm:</b> Reviewer xem danh sách bản ghi trong task, khôi phục câu bị loại, dataset và tải về, Admin quản lý danh mục lý do, giới hạn đăng nhập sai, deploy lên máy chủ (dự kiến 12/2026).</li>
+    <li><b>Còn phải làm:</b> giao diện cho ba nút xử lý của yêu cầu 2.4 (duyệt, từ chối âm thanh, bỏ cặp), nối UI nhập <code>.txt</code> + <code>Domain</code>, khôi phục câu bị loại trên UI, quản lý danh mục lý do trên giao diện.</li>
   </ul>
 </section>
 </div>
@@ -517,14 +517,14 @@ released_datasets     | 0`, n: 'Số trên API lấy thẳng từ view này, nê
       ['3.6', 0, 'speaker1', 'POST', '/api/speaker/scripts/contribute', { csContent: '[vi]Tối nay mình phải [en]fix bug [vi]gấp cho khách.', viContent: '[vi]Tối nay mình phải sửa lỗi gấp cho khách.', domain: 'ItTechnology', alignment: [{ source: 'fix', source_lang: 'en', target: 'sửa', target_lang: 'vi', relation: 'semantic_equivalent' }, { source: 'bug', source_lang: 'en', target: 'lỗi', target_lang: 'vi', relation: 'semantic_equivalent' }] }, 201, 'Contribute Text: câu mới <code>s_211000011</code>, “fix bug” tính là 2 từ tiếng Anh, trạng thái <code>PendingValidation</code>.', V.scriptReview]
     ]},
     { t: 'Màn 4 · Chiến dịch và giao việc', g: 'Waves · Tasks · Users', time: '4 phút', steps: [
-      ['4.0a', 1, 'admin', 'POST', '/api/waves', { waveName: 'Đợt thu thập demo', targetQty: 2000, domain: 'ItTechnology', startDate: HOM_QUA, endDate: BA_MUOI_NGAY }, 201, 'Chiến dịch #2, trạng thái <code>Draft</code>. <b>Mọi task phải thuộc một chiến dịch</b> — đây là đơn vị kế hoạch của cả đợt thu thập. Chỉ tiêu nằm trong khoảng 2000–5000 cặp câu theo lược đồ của nhóm.'],
+      ['4.0a', 1, 'admin', 'POST', '/api/waves', { waveName: 'Đợt thu thập demo', targetQty: 2000, domain: 'ItTechnology', startDate: HOM_QUA, endDate: BA_MUOI_NGAY }, 201, 'Chiến dịch #2, trạng thái <code>Open</code> (chưa có task). Chỉ tiêu nằm trong khoảng 2000–5000 cặp câu theo lược đồ của nhóm.'],
       ['4.0b', 0, 'manager', 'POST', '/api/tasks', { waveId: 2, taskType: 'Recording', description: 'Tạo sớm quá', targetQty: 1, deadline: DEADLINE }, 422, '<code>wave_not_assigned_to_manager</code>: chiến dịch chưa giao cho ai thì chưa nhận task.'],
       ['4.0c', 1, 'admin', 'POST', '/api/waves/2/assign', { assignedToUserId: 2 }, 200, 'Giao chiến dịch cho Task Manager. Chỉ Admin giao được, và chỉ giao được cho người giữ vai Task Manager.'],
       ['4.1', 1, 'manager', 'GET', '/api/tasks/assignable-users?taskType=Recording', null, 200, 'speaker1 (6) và speaker2 (7), đang nhận 0 task. Chỉ trả tên và khối lượng, không lộ email hay số điện thoại.'],
-      ['4.2', 1, 'manager', 'POST', '/api/tasks', { waveId: 2, taskType: 'Recording', description: 'Thu âm câu chủ đề IT', targetQty: 1, deadline: DEADLINE }, 201, 'Task #1, <code>Draft</code>. Hạn gửi theo giờ Việt Nam, backend lưu UTC. Chỉ tiêu 1 nghĩa là một cặp câu, cả hai bản phải đạt.'],
+      ['4.2', 1, 'manager', 'POST', '/api/tasks', { waveId: 2, taskType: 'Recording', description: 'Thu âm câu chủ đề IT', targetQty: 1, deadline: DEADLINE }, 201, 'Task #1, trạng thái <code>InProgress</code>. Hạn gửi theo giờ Việt Nam, backend lưu UTC. Chỉ tiêu 1 nghĩa là một cặp câu, cả hai bản phải đạt.'],
       ['4.3', 1, 'manager', 'POST', '/api/tasks/1/items', { autoFill: { count: 2, domain: 'ItTechnology' } }, 200, '<code>added = 2</code>: <code>s_111000003</code> và <code>s_211000001</code>. Hệ thống ưu tiên câu có ít giọng đã duyệt nhất.'],
       ['4.4', 0, 'manager', 'POST', '/api/tasks/1/assign', { userIds: [3] }, 422, '<code>assignee_role_mismatch</code>: task thu âm không giao được cho Reviewer.'],
-      ['4.5', 1, 'manager', 'POST', '/api/tasks/1/assign', { userIds: [6] }, 200, 'Giao cho speaker1, task chuyển sang <code>Open</code>. Giao được cho nhiều người: body <code>{ "userIds": [6, 7] }</code>.', V.task],
+      ['4.5', 1, 'manager', 'POST', '/api/tasks/1/assign', { userIds: [6] }, 200, 'Giao cho speaker1; task vẫn <code>InProgress</code> và đã có người nhận. Giao được cho nhiều người: body <code>{ "userIds": [6, 7] }</code>.', V.task],
       ['4.6', 0, 'admin', 'PUT', '/api/users/6/role', { role: 'Reviewer' }, 409, '<code>user_has_active_tasks</code>: speaker1 đang nhận task #1 nên chưa đổi vai được.']
     ]},
     { t: 'Màn 5 · Thu âm', g: 'Speaker · Recordings', time: '4 phút', steps: [
@@ -540,7 +540,7 @@ released_datasets     | 0`, n: 'Số trên API lấy thẳng từ view này, nê
       ['5.10', 0, 'speaker1', 'GET', '/api/recordings', null, 200, 'Ba bản của chính mình, kể cả bản trượt kiểm tra. Speaker không thấy bản của người khác.']
     ]},
     { t: 'Màn 6 · Duyệt ba lượt mù', g: 'Reviews · Rejection Reasons', time: '6 phút', steps: [
-      ['6.1', 1, 'reviewer', 'GET', '/api/rejection-reasons', null, 200, '9 lý do chia 4 nhóm <code>Content</code>, <code>AudioQuality</code>, <code>Pronunciation</code>, <code>Other</code>, đúng câu trong đề: “lỗi về nội dung, âm thanh hoặc phát âm”.'],
+      ['6.1', 1, 'reviewer', 'GET', '/api/rejection-reasons', null, 200, '4 lý do đang dùng chia 4 nhóm <code>Content</code>, <code>AudioQuality</code>, <code>Pronunciation</code>, <code>Other</code>, đúng câu trong đề: “lỗi về nội dung, âm thanh hoặc phát âm”.'],
       ['6.2', 1, 'reviewer', 'GET', '/api/reviewer/recordings/next', null, 200, '<code>r_cs_111000003_u6</code>, <code>round = 1</code>, <code>isBlind = true</code>, kèm câu cần đối chiếu và <code>audioUrl</code> để nghe.'],
       ['6.3', 1, 'reviewer', 'POST', '/api/recordings/r_cs_111000003_u6/reviews', { decision: 'Approved', expectedRound: 1 }, 201, '<code>isFinal = false</code>: mới 1/3 lượt.'],
       ['6.4', 0, 'reviewer2', 'POST', '/api/recordings/r_cs_111000003_u6/reviews', { decision: 'Approved', expectedRound: 1 }, 409, '<code>round_changed</code>: giả sử reviewer2 mở bản ghi từ lúc còn vòng 1. Server từ chối thay vì ghi nhầm sang vòng 2.'],
@@ -585,7 +585,7 @@ released_datasets     | 0`, n: 'Số trên API lấy thẳng từ view này, nê
       ['10.1', 0, 'psql', 'SQL', 'Chặn tự duyệt ngay trong database', "insert into review (recording_id, reviewer_id, review_round, decision) values ('r_cs_121000004_u7', 7, 1, 'approved');", 'ERR', 'Báo lỗi <code>self-review blocked: user 7 is the speaker of r_cs_121000004_u7</code>, do trigger <code>trg_review_no_self</code> chặn, kể cả khi ghi thẳng bằng SQL.'],
       ['10.2', 0, 'psql', 'SQL', 'Nhật ký tự ghi người thao tác', 'select changed_at::time(0), user_id, entity_type, entity_id, action from audit_log order by changed_at desc limit 5;', 'OK', 'Các lượt duyệt câu ghi <code>user_id = 6</code> (speaker1), lượt nhập file ghi <code>user_id = 1</code> (admin). Trigger <code>fn_audit</code> tự ghi; backend chỉ đặt biến phiên <code>app.user_id</code>.'],
       ['10.3', 0, 'trình duyệt', 'WEB', 'http://localhost:9090', 'Tài khoản: MINIO_ROOT_USER / MINIO_ROOT_PASSWORD trong docker-compose.yml', 'OK', 'Bucket <code>recordings</code> chứa các file WAV đã chuyển đổi.'],
-      ['10.4', 0, 'terminal', 'CLI', 'Chạy unit test', 'dotnet test backend/CodeSwitchLabel.sln', 'OK', '68 test đạt. Cần cài .NET 10 SDK.']
+      ['10.4', 0, 'terminal', 'CLI', 'Chạy unit test', 'dotnet run --project backend/tests/CodeSwitchLabel.Tests/CodeSwitchLabel.Tests.csproj -c Release', 'OK', 'Toàn bộ test đạt. Cần cài .NET 10 SDK.']
     ]},
     { t: 'Bổ sung A · Các trường hợp nhập file', g: 'Scripts', time: '4 phút', extra: 1,
       note: 'Chạy sau màn 9. Mọi file nằm trong <code>demo/test-them/</code>. Chạy trên database vừa xoá thì mã câu mới có số thứ tự nhỏ hơn.', steps: [
@@ -601,7 +601,7 @@ released_datasets     | 0`, n: 'Số trên API lấy thẳng từ view này, nê
         { k: 'SQL', c: 'select count(*) from import_batch;', n: 'Chạy trước và sau bước này: con số không đổi.' }
       ]],
       ['A.4', 0, 'admin', 'POST', '/api/scripts/import', 'File = demo/test-them/import-4-mang-rong.json', 422, '<code>empty_file</code>: file không có câu nào thì bị từ chối hẳn, không tạo lô nhập rỗng.'],
-      ['A.5', 0, 'admin', 'POST', '/api/scripts/import', 'File = demo/test-them/import-5-van-ban.txt', 422, '<code>invalid_json</code>: file không phải JSON thì bị từ chối, không lưu gì.'],
+      ['A.5', 0, 'admin', 'POST', '/api/scripts/import', 'File = demo/test-them/import-5-van-ban.txt', 422, '<code>domain_required</code>: file .txt bắt buộc gửi kèm trường <code>Domain</code>. Nếu gửi kèm Domain thì file một dòng này vẫn bị <code>invalid_text_format</code> vì .txt chỉ nhận từng cặp hai dòng (câu trộn, câu thuần Việt). Không lưu gì.'],
       ['A.6', 0, 'admin', 'PUT', '/api/admin/config/import.max_scripts_per_batch', { value: '2' }, 204, 'Tạm hạ giới hạn xuống 2 câu mỗi lần nhập.'],
       ['A.7', 0, 'admin', 'POST', '/api/scripts/import', 'File = demo/test-them/import-2-nhieu-loi.json', 422, '<code>import_too_large</code>: “File có 5 câu, vượt giới hạn 2 câu mỗi lần nhập.” Bị chặn trước khi ghi bất cứ thứ gì.'],
       ['A.8', 0, 'admin', 'PUT', '/api/admin/config/import.max_scripts_per_batch', { value: '100000' }, 204, 'Trả giới hạn về như cũ.', [

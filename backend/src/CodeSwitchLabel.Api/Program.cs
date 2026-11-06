@@ -47,6 +47,10 @@ builder.Services
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
+// Endpoint LLM có thể để trống: API vẫn chạy, import .txt chuyển sang gán nhãn bằng luật.
+builder.Services.Configure<LlmOptions>(
+    builder.Configuration.GetSection(LlmOptions.SectionName));
+
 // ---------------------------------------------------------------- dịch vụ
 
 builder.Services.AddCodeSwitchLabel(connectionString);
