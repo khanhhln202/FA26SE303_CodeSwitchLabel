@@ -51,6 +51,21 @@ public static class ConfigKeys
 
     /// <summary>lô câu văn bản mặc định Task Manager giao cho mỗi người duyệt.</summary>
     public const string TextReviewBatchSize = "text_review.batch_size";
+
+    /// <summary>Bật tính năng máy duyệt bản ghi. Tắt thì endpoint trả ai_review_disabled.</summary>
+    public const string AiReviewEnabled = "ai_review.enabled";
+
+    /// <summary>Tỉ lệ sai từ (WER) từ mức này trở lên thì máy bỏ phiếu từ chối.</summary>
+    public const string AiReviewWerRejectMin = "ai_review.wer_reject_min";
+
+    /// <summary>Tỉ lệ sai từ tới mức này thì bản ghi đủ điều kiện được máy duyệt đạt.</summary>
+    public const string AiReviewWerApproveMax = "ai_review.wer_approve_max";
+
+    /// <summary>
+    /// Cho máy bỏ phiếu ĐẠT hay không. Mặc định tắt: máy chỉ đo được nội dung, không
+    /// phán được tạp âm và phát âm, nên phiếu đạt của nó che đúng hai lỗi nó không thấy.
+    /// </summary>
+    public const string AiReviewAllowApproveVote = "ai_review.allow_approve_vote";
 }
 
 /// <summary>

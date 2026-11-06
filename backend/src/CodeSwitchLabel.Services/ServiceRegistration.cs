@@ -73,6 +73,11 @@ public static class ServiceRegistration
         services.AddSingleton(_ => new HttpClient { Timeout = Timeout.InfiniteTimeSpan });
         services.AddScoped<ILabelingService, LabelingService>();
 
+        // Máy duyệt bản ghi: dùng chung HttpClient ở trên, timeout cũng đặt theo từng request.
+        services.AddScoped<IAsrClient, WhisperAsrClient>();
+        services.AddScoped<IAiReviewRepository, AiReviewRepository>();
+        services.AddScoped<IAiReviewService, AiReviewService>();
+
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IScriptRepository, ScriptRepository>();
         services.AddScoped<IScriptQueueRepository, ScriptQueueRepository>();
