@@ -2,8 +2,8 @@ namespace CodeSwitchLabel.Services.Options;
 
 /// <summary>
 /// Endpoint OpenAI-compatible dùng cho bước gán nhãn [vi]/[en] khi nhập file .txt.
-/// Để trống Endpoint/Model thì API vẫn khởi động bình thường; riêng import .txt sẽ báo
-/// `llm_not_configured` thay vì làm sập ứng dụng.
+/// Để trống Endpoint/Model thì API vẫn khởi động bình thường; import .txt chuyển sang
+/// gán nhãn bằng luật thay vì gọi LLM.
 /// </summary>
 public class LlmOptions
 {

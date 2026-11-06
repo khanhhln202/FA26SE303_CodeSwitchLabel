@@ -131,7 +131,7 @@ public class ScriptService(
             throw new UnprocessableException("empty_file", "File không có câu nào để nhập.");
         }
 
-        return await ImportCoreAsync(items, [], fileName, importedById, ct);
+        return await ImportCoreAsync(items, [], fileName, importedById, false, ct);
     }
 
     public async Task<ImportResultDto> ImportRawAsync(
@@ -144,17 +144,14 @@ public class ScriptService(
                 "domain_required", "File .txt cần chọn chủ đề: IT/Technology, Education hoặc Daily Life.");
         }
 
-        // Kiểm tra chủ đề một lần trước khi gọi LLM; từng câu vẫn đi qua đúng luật import hiện có.
+        // Kiểm tra chủ đề một lần trước khi gán nhãn; từng câu vẫn đi qua đúng luật import hiện có.
         _ = ParseDomain(domain);
 
         var pairs = await RawScriptTextParser.ParseAsync(textFile, ct);
 
-        if (!labeling.IsConfigured)
-        {
-            throw new UnprocessableException(
-                "llm_not_configured",
-                "Chưa cấu hình Llm:Endpoint và Llm:Model nên không gán nhãn được file .txt.");
-        }
+        // Không có LLM thì gắn nhãn bằng luật; nghĩa tiếng Việt là đoạn giữa hai từ chung
+        // của hai câu, hết từ tương ứng thì để trống cho người duyệt điền.
+        var useRule = !labeling.IsConfigured;
 
         var items = new List<ImportScriptItem>(pairs.Count);
         var skipped = new List<ImportSkippedDto>();
@@ -167,7 +164,9 @@ public class ScriptService(
 
             try
             {
-                var labeled = await labeling.LabelAsync(pairs[i].Cs, pairs[i].Vi, ct);
+                var labeled = useRule
+                    ? RuleBasedLabeler.Label(pairs[i].Cs, pairs[i].Vi)
+                    : await labeling.LabelAsync(pairs[i].Cs, pairs[i].Vi, ct);
 
                 items.Add(new ImportScriptItem
                 {
@@ -185,12 +184,12 @@ public class ScriptService(
             }
         }
 
-        return await ImportCoreAsync(items, skipped, fileName, importedById, ct);
+        return await ImportCoreAsync(items, skipped, fileName, importedById, useRule, ct);
     }
 
     private async Task<ImportResultDto> ImportCoreAsync(
         List<ImportScriptItem> items, List<ImportSkippedDto> skipped,
-        string fileName, long importedById, CancellationToken ct)
+        string fileName, long importedById, bool allowEmptyTargets, CancellationToken ct)
     {
         var safeName = SanitizeFileName(fileName);
 
@@ -243,7 +242,7 @@ public class ScriptService(
                 }
 
                 var domain = ParseDomain(item.Domain);
-                var words = ScriptPairRules.BuildWords(item.Alignment ?? [], enWordCount);
+                var words = ScriptPairRules.BuildWords(item.Alignment ?? [], enWordCount, allowEmptyTargets);
                 var relation = ScriptPairRules.RelationOf(words);
                 var scriptId = await repository.GenerateIdAsync(enWordCount, domain, relation, ct);
                 var now = clock.GetUtcNow();

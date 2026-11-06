@@ -79,6 +79,36 @@ public sealed class ScriptRawImportTests
     }
 
     [Fact]
+    public async Task ImportRaw_KhongCoLlm_TuGanNhanVaLayNghiaTheoViTri()
+    {
+        var (service, repo, labeling) = CreateService(configured: false);
+        var added = CaptureAdded(repo);
+        var words = CaptureAddedWords(repo);
+
+        using var stream = Of("""
+            Em nên scan tài liệu này.
+            Em nên quét tài liệu này.
+            """);
+
+        var result = await service.ImportRawAsync(
+            stream, "raw.txt", importedById: 1, domain: "IT/Technology",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, result.Imported);
+        Assert.Empty(result.Skipped);
+
+        var script = Assert.Single(added);
+        Assert.Equal("[vi]Em nên [en]scan [vi]tài liệu này.", script.CsContent);
+
+        var word = Assert.Single(words);
+        Assert.Equal("scan", word.EnWord);
+        Assert.Equal("quét", word.ViWord);
+
+        labeling.Verify(l => l.LabelAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task ImportRaw_ThieuChuDe_ThiBaoLoiTruocKhiGoiLlm()
     {
         var (service, _, labeling) = CreateService();
@@ -97,7 +127,7 @@ public sealed class ScriptRawImportTests
     private static (
         ScriptService Service,
         Mock<IScriptRepository> Repository,
-        Mock<ILabelingService> Labeling) CreateService()
+        Mock<ILabelingService> Labeling) CreateService(bool configured = true)
     {
         var repo = new Mock<IScriptRepository>();
 
@@ -120,7 +150,7 @@ public sealed class ScriptRawImportTests
             .ReturnsAsync(() => $"s_11100000{nextId++}");
 
         var labeling = new Mock<ILabelingService>();
-        labeling.SetupGet(l => l.IsConfigured).Returns(true);
+        labeling.SetupGet(l => l.IsConfigured).Returns(configured);
 
         var config = new Mock<ISystemConfigService>();
         config.Setup(c => c.GetIntAsync(
@@ -145,6 +175,14 @@ public sealed class ScriptRawImportTests
     {
         var added = new List<Script>();
         repo.Setup(r => r.Add(It.IsAny<Script>())).Callback<Script>(added.Add);
+        return added;
+    }
+
+    private static List<ScriptWord> CaptureAddedWords(Mock<IScriptRepository> repo)
+    {
+        var added = new List<ScriptWord>();
+        repo.Setup(r => r.AddWords(It.IsAny<IEnumerable<ScriptWord>>()))
+            .Callback<IEnumerable<ScriptWord>>(added.AddRange);
         return added;
     }
 

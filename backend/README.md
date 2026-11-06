@@ -154,7 +154,7 @@ vẫn hợp lệ và không bị đổi.
 ## Vòng đời dữ liệu
 
 ```
-Admin nhập input_text.json (hoặc .txt + LLM)  →  script: pending_validation
+Admin nhập input_text.json (hoặc .txt, LLM/luật)  →  script: pending_validation
         │
         │  Speaker/Reviewer duyệt nội dung (Review Text)
         ▼
@@ -167,16 +167,17 @@ Admin nhập input_text.json (hoặc .txt + LLM)  →  script: pending_validatio
                                           cả cs và vi đạt ──►  cặp câu tính là XONG
 ```
 
-## Nhập câu từ file .txt (LLM)
+## Nhập câu từ file .txt (LLM hoặc luật)
 
 `POST /api/scripts/import` nhận thêm file `.txt` bên cạnh JSON:
 
 - Mỗi cặp đúng **hai dòng không rỗng**: dòng đầu là câu trộn Việt–Anh, dòng sau là câu thuần Việt; dòng trống bị bỏ qua.
 - Mỗi câu phải kết thúc bằng **dấu chấm**; file tối đa **100 cặp**.
 - Bắt buộc gửi kèm trường form `Domain` (`IT/Technology`, `Education`, `Daily Life`).
-- Backend gọi LLM OpenAI-compatible (`LabelingService`) để chèn nhãn `[vi]`/`[en]` và sinh `alignment`. Từ ngữ và thứ tự hai câu phải giữ nguyên; LLM sửa từ thì cặp đó bị bỏ qua.
-- Cấu hình trong section `Llm`: `Endpoint`, `Model`, `ApiKey` (tuỳ chọn), `TimeoutSeconds` (mặc định 60). Thiếu `Endpoint`/`Model` thì API vẫn chạy, riêng import `.txt` trả `422 llm_not_configured`.
-- Cặp gán nhãn lỗi được ghi vào `skipped` với `id = pair-N` và mã `llm_failed`/`llm_parse_error`; các cặp còn lại vẫn nhập bình thường.
+- Có cấu hình `Llm:Endpoint`/`Model` thì backend gọi LLM OpenAI-compatible (`LabelingService`) để chèn nhãn `[vi]`/`[en]` và sinh `alignment`. Từ ngữ và thứ tự hai câu phải giữ nguyên; LLM sửa từ thì cặp đó bị bỏ qua.
+- Không cấu hình LLM thì backend gán nhãn bằng luật: từ có ký tự ngoài ASCII là tiếng Việt, từ ASCII không nằm trong danh sách âm tiết Việt không dấu là tiếng Anh. Nghĩa tiếng Việt lấy bằng cách đối chiếu các từ chung của hai câu: đoạn giữa hai từ chung là nghĩa của đoạn tiếng Anh giữa hai mốc đó, nên một từ có thể ứng với nhiều từ (`email` → `thư điện tử`) mà không làm lệch các từ phía sau; đoạn không đối chiếu được thì lấy theo vị trí, hết từ thì để trống cho người duyệt điền. Đây là heuristic, không thay thế bước duyệt nội dung.
+- Cấu hình trong section `Llm`: `Endpoint`, `Model`, `ApiKey` (tuỳ chọn), `TimeoutSeconds` (mặc định 60). Thiếu `Endpoint`/`Model` thì API vẫn chạy và import `.txt` dùng luật.
+- Cặp gán nhãn lỗi được ghi vào `skipped` với `id = pair-N`: LLM lỗi có mã `llm_failed`/`llm_parse_error`, luật lỗi có mã `invalid_text_format`/`invalid_language_tags`; các cặp còn lại vẫn nhập bình thường.
 
 ## Luật duyệt
 
@@ -330,7 +331,7 @@ Task mới tạo ra đã là `InProgress` — không còn `Draft`/`Open` (TEAM_0
 ## Thử luồng chính
 
 1. Đăng nhập `admin`, `POST /api/scripts/import`, chọn file JSON theo mẫu `docs/Requirement.txt`
-   (hoặc file `.txt` mỗi cặp hai dòng kèm `Domain`; `.txt` cần cấu hình `Llm`).
+   (hoặc file `.txt` mỗi cặp hai dòng kèm `Domain`; có `Llm` thì LLM sinh nghĩa từ, không có thì gán nhãn bằng luật).
    Kết quả trả mã mới dạng `s_211000000016`, trạng thái **PendingValidation**.
 2. Đăng nhập `speaker1`, `POST /api/scripts/{id}/review` với `{ "action": "Accepted" }` → **Validated**.
 3. `GET /api/speaker/scripts/next` → cặp câu kèm `remainingVariants` là cả hai biến thể.
@@ -421,8 +422,10 @@ Giới hạn đã biết:
 - **Ngưỡng thời lượng bản ghi (1–30 giây) là đề xuất của nhóm backend**, chưa có trong file lược đồ
   chung và chưa được giảng viên duyệt. Lược đồ có sẵn hai tham số khoảng lặng đầu/cuối nhưng
   **hệ thống chưa đo được khoảng lặng**.
-- **Import `.txt` phụ thuộc LLM bên ngoài.** Không có LLM thì API vẫn chạy; chỉ import `.txt` trả
-  `422 llm_not_configured`. Từng cặp lỗi bị bỏ qua với `llm_failed`/`llm_parse_error`, không rollback cả file.
+- **Import `.txt` không có LLM dùng heuristic.** Backend gán nhãn bằng luật và lấy nghĩa từ bằng các
+  từ chung của hai câu (có thể nhiều từ, `email` → `thư điện tử`); đoạn không đối chiếu được lấy theo
+  vị trí, hết từ thì để trống cho người duyệt điền. Có LLM thì dùng LLM; từng cặp lỗi bị bỏ qua với
+  `llm_failed`/`llm_parse_error`, không rollback cả file.
 - **Export ZIP chỉ gồm cặp đã duyệt đủ cả cs và vi.** Chọn `recordingIds` thiếu một bản của cặp thì cặp đó bị bỏ;
   không còn cặp nào thì trả `422 export_no_approved_pairs`.
 - **Reviewer xem được danh sách bản ghi trong task của mình** qua

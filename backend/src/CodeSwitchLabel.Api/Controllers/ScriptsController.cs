@@ -111,8 +111,12 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
     /// File **.txt**: mỗi cặp đúng hai dòng không rỗng — dòng đầu là câu trộn Việt–Anh,
     /// dòng sau là câu thuần Việt tương đương; mỗi câu kết thúc bằng dấu chấm. Dòng trống
     /// bị bỏ qua. Tối đa **100 cặp** mỗi file và bắt buộc gửi kèm trường `Domain`.
-    /// LLM (OpenAI-compatible) chèn nhãn `[vi]`/`[en]` và sinh `alignment`; cặp nào gán nhãn
-    /// hỏng bị bỏ qua kèm mã `llm_failed`/`llm_parse_error`, không làm hỏng cả file.
+    /// Có cấu hình LLM (OpenAI-compatible) thì LLM chèn nhãn `[vi]`/`[en]` và sinh `alignment`;
+    /// chưa cấu hình thì backend gán nhãn bằng luật: đối chiếu các từ chung của hai câu để
+    /// lấy đoạn nghĩa tương ứng (có thể nhiều từ, ví dụ `email` → `thư điện tử`); đoạn không
+    /// đối chiếu được thì lấy theo vị trí, hết từ thì để trống cho người duyệt điền.
+    /// Cặp nào gán nhãn hỏng bị bỏ qua, không làm hỏng cả file: LLM lỗi có mã
+    /// `llm_failed`/`llm_parse_error`, luật lỗi có mã `invalid_text_format`/`invalid_language_tags`.
     ///
     /// Mã câu **được sinh lại** theo đúng quy tắc của database: giữ ý nghĩa ba chữ số đầu
     /// (số từ tiếng Anh, chủ đề, quan hệ Anh–Việt) rồi cấp số thứ tự mới.

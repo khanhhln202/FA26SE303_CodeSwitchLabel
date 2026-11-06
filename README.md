@@ -45,7 +45,7 @@ FRONTEND (React SPA, Vercel)
 Caddy (TLS Let's Encrypt, prod) → API (ASP.NET Core, :5053 dev / :8080 container)
    │                                ├─→ PostgreSQL 16 (lược đồ docs/codeswitchlabel.sql)
    │                                ├─→ MinIO/S3 (file WAV) + ffmpeg (chuẩn hoá & QC)
-   │                                └─→ LLM OpenAI-compatible (tuỳ chọn: gán nhãn [vi]/[en] khi nhập .txt)
+   │                                └─→ LLM OpenAI-compatible (tuỳ chọn: sinh nghĩa từ khi nhập .txt; không có thì gán nhãn bằng luật)
 ```
 
 Phụ thuộc backend đi một chiều: **Api → Services → Repositories**.
@@ -97,7 +97,7 @@ Tài liệu chi tiết:
 | Infra | Docker + Docker Compose, Caddy 2 (auto HTTPS), Azure (trial), GitHub Actions |
 | Frontend | React 19 + Vite 8, react-router-dom 7, TanStack Query 5, axios, TailwindCSS 4 + shadcn, lucide-react, sonner, wavesurfer.js, formik + yup, Vercel |
 | Test | xunit.v3 + Moq + Testcontainers.PostgreSql + coverlet, E2E Node 18+ (`fetch`/`FormData`, không cần cài gói) |
-| AI (tuỳ chọn) | LLM OpenAI-compatible (`/chat/completions`) để gán nhãn `[vi]`/`[en]` khi nhập file `.txt` |
+| AI (tuỳ chọn) | LLM OpenAI-compatible (`/chat/completions`) để gán nhãn `[vi]`/`[en]` và sinh nghĩa từ khi nhập `.txt`; không cấu hình thì backend gán nhãn bằng luật |
 
 Quy ước API: JSON `camelCase` (trừ `alignment` giữ `snake_case`), enum dạng string, thời gian UTC ISO8601, phân trang `?page&pageSize` (max 100) kèm sắp xếp `?sort=<cột>&dir=asc|desc` (bỏ `sort` là thứ tự mặc định của endpoint, sai tên cột cũng vậy), `204` = hết việc, lỗi nghiệp vụ trả `code + title + traceId`.
 
@@ -176,7 +176,7 @@ Cần 3 reviewer vì **mỗi bản ghi cần tối đa 3 lượt duyệt của 3
 
 Luồng chính (7 bước):
 
-1. `admin`: `POST /api/scripts/import` file JSON theo mẫu `docs/Requirement.txt` (hoặc file `.txt` mỗi cặp hai dòng kèm trường `Domain`; `.txt` cần cấu hình `Llm`) → mã mới dạng `s_211000000016`, trạng thái `PendingValidation`
+1. `admin`: `POST /api/scripts/import` file JSON theo mẫu `docs/Requirement.txt` (hoặc file `.txt` mỗi cặp hai dòng kèm trường `Domain`; có `Llm` thì LLM sinh nghĩa từ, không có thì gán nhãn bằng luật) → mã mới dạng `s_211000000016`, trạng thái `PendingValidation`
 2. `speaker1`: `POST /api/scripts/{id}/review` `{ "action": "Accepted" }` → `Validated`
 3. `GET /api/speaker/scripts/next` → cặp câu kèm cả 2 biến thể
 4. `POST /api/recordings` 2 lần (`CodeSwitching` rồi `PureVietnamese`)
@@ -208,7 +208,7 @@ Luồng chính (7 bước):
 | File | Dùng cho |
 |---|---|
 | `backend/src/CodeSwitchLabel.Api/appsettings.json` + `appsettings.Development.json` | connection string, JWT (480 phút dev), CORS (5173, 3000), `Seed:DefaultPassword` |
-| `Llm` (cùng file appsettings hoặc biến môi trường `Llm__*`) | `Endpoint`, `ApiKey`, `Model`, `TimeoutSeconds` cho bước gán nhãn `.txt`; để trống `Endpoint`/`Model` thì API vẫn chạy, chỉ import `.txt` báo `llm_not_configured` |
+| `Llm` (cùng file appsettings hoặc biến môi trường `Llm__*`) | `Endpoint`, `ApiKey`, `Model`, `TimeoutSeconds` cho bước gán nhãn `.txt`; để trống `Endpoint`/`Model` thì API vẫn chạy và import `.txt` chuyển sang gán nhãn bằng luật |
 | `FRONTEND/.env.example` → `.env.local` | `VITE_API_BASE_URL` |
 | `deploy/.env.example` → `deploy/.env` | `API_DOMAIN`, `FILES_DOMAIN`, `CADDYFILE`, `FE_ORIGIN`, `FE_ORIGIN_PREVIEW`, `FE_ORIGIN_LOCAL`, `POSTGRES_PASSWORD`, `MINIO_*`, `JWT_KEY` (base64 48), `JWT_EXPIRY_MINUTES`, `SWAGGER_ENABLED`, `SEED_PASSWORD` |
 
@@ -252,7 +252,7 @@ docker compose -f deploy/docker-compose.prod.yml logs -f api
 
 - **Ba lượt duyệt đều là của người**, chốt ngay khi một bên đủ đa số (2/3); **không có phiếu của hệ thống**. Một thời có dự định thêm lượt kiểm tra tự động ở vòng duyệt nhưng đã bỏ: auto-QC chạy lúc nộp và bản trượt thì `qc_failed` — không bao giờ tới vòng duyệt, nên lượt đó không bao giờ có tác dụng. `review.rounds_required` giữ bằng **3**.
 - **Ngưỡng thời lượng 1–30s là đề xuất của nhóm backend**, chưa được duyệt chính thức; hệ thống chưa đo khoảng lặng đầu/cuối.
-- **Nhập `.txt` phụ thuộc LLM bên ngoài.** Cần cấu hình `Llm:Endpoint` và `Llm:Model`; cặp nào LLM lỗi bị bỏ qua kèm mã `llm_failed`/`llm_parse_error` chứ không làm hỏng cả file. E2E không phủ phần này vì cần dịch vụ LLM thật.
+- **Nhập `.txt` không có LLM thì nghĩa từ là heuristic.** Backend gán nhãn `[vi]`/`[en]` bằng luật (từ ASCII không nằm trong danh sách âm tiết Việt không dấu), rồi đối chiếu các từ chung của hai câu để lấy đoạn nghĩa tương ứng — có thể nhiều từ (`email` → `thư điện tử`) và không làm lệch các từ phía sau. Đoạn không đối chiếu được thì lấy theo vị trí; hết từ thì nghĩa để trống cho người duyệt điền. Có `Llm` thì dùng LLM như cũ; cặp nào LLM lỗi bị bỏ qua kèm mã `llm_failed`/`llm_parse_error` chứ không làm hỏng cả file.
 - **Xuất ZIP trực tiếp chỉ gồm cặp đã duyệt đủ cả cs và vi.** Chọn `recordingIds` mà thiếu một bản của cặp thì cặp đó bị bỏ; không còn cặp nào thì trả `422 export_no_approved_pairs`.
 - **Chưa có hệ thống nhắc nhở tự động** (ghi là "yêu cầu 3.3" nhưng `docs/Requirement.txt` không có mục này) — không có bảng `notification`, không có background service. Mọi số liệu để nhắc (`deadline`, `hoursRemaining`, `isOverdue`, `overdueTasks`) backend đã trả sẵn, nên khi nào thật sự cần thì làm bằng một endpoint + một con badge là đủ, không cần bảng riêng.
 - **Trạng thái task: máy tính, người chốt.** Trạng thái tự tính lại từ số liệu thật sau mỗi việc xảy ra (đạt chỉ tiêu → `Completed`, chưa đạt → `InProgress`), chỉ còn ba giá trị (`InProgress`/`Completed`/`Cancelled`). Task Manager đổi tay được qua `PATCH /api/tasks/{id}` với `status` — `InProgress` mở lại task đã xong, `Completed` chốt sớm, `Cancelled` dừng hẳn (y hệt nút Huỷ) — và giá trị bấm tay được giữ tới khi có việc thật (đổi chỉ tiêu, nộp bản ghi, duyệt). Trạng thái đợt thì **không bấm tay**: nó là hàm của task (`Open`/`InProgress`/`Completed`). Ghi là "yêu cầu 4.1" ở `README.md` cũ nhưng `Requirement.txt` cũng không có.

@@ -130,10 +130,11 @@ docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --
 docker compose -f deploy/docker-compose.prod.yml logs -f api
 ```
 
-### Bật nhập câu `.txt` bằng LLM (tuỳ chọn)
+### Bật sinh nghĩa từ bằng LLM khi nhập `.txt` (tuỳ chọn)
 
-`POST /api/scripts/import` chỉ nhận file `.txt` khi API có LLM OpenAI-compatible để gán nhãn
-`[vi]`/`[en]`. Thêm các biến sau vào phần `environment` của service `api` trong
+`POST /api/scripts/import` nhận file `.txt` cả khi không có LLM: backend gán nhãn `[vi]`/`[en]`
+bằng luật và lấy nghĩa tiếng Việt bằng các từ chung của hai câu (có thể nhiều từ). Cấu hình LLM
+OpenAI-compatible để sinh nghĩa từ chính xác hơn. Thêm các biến sau vào phần `environment` của service `api` trong
 `deploy/docker-compose.prod.yml`:
 
 ```yaml
@@ -150,9 +151,9 @@ chưa commit. Sau đó thêm `LLM_API_KEY=...` vào `deploy/.env` và dựng l�
 docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build api
 ```
 
-**Hiện `deploy/docker-compose.prod.yml` chưa truyền `Llm__*`**, nên máy chủ mới deploy chỉ nhập được
-JSON; gửi `.txt` sẽ nhận `422 llm_not_configured`. Thiếu `Llm__Endpoint`/`Llm__Model` thì API vẫn khởi
-động bình thường, chỉ riêng import `.txt` bị chặn. `Llm__ApiKey` chỉ cần khi endpoint yêu cầu xác thực.
+**Hiện `deploy/docker-compose.prod.yml` chưa truyền `Llm__*`**, nên máy chủ mới deploy vẫn nhập được
+`.txt` bằng luật; nghĩa từ có thể trống và người duyệt phải điền. Cấu hình `Llm__Endpoint`/`Llm__Model`
+để LLM sinh nghĩa từ. `Llm__ApiKey` chỉ cần khi endpoint yêu cầu xác thực.
 
 ## Nghiệm thu bản deploy
 
