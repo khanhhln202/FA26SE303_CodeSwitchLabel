@@ -485,6 +485,7 @@ export default function RecordSpeech() {
                 scriptId: sentence.scriptId,
                 csContent: sentence.csContent,
                 viPlain: sentence.viPlain,
+                viContent: sentence.viContent,
                 remainingVariants: sentence.remainingVariants, // bản backend còn thiếu - chỉ nộp những bản này
                 recordings, // { cs: { url, blob }, vi: { url, blob } } - Blob giữ được qua state của router
               },
