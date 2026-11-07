@@ -116,6 +116,18 @@ public sealed class ScriptLifecycleApiTests(DatabaseFixture fixture) : ApiTestBa
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
+    /// <summary>Speaker không được gọi POST /api/scripts/{id}/review (chỉ Admin,Reviewer).</summary>
+    [Fact]
+    public async Task Speaker_GoIReview_TraVe403()
+    {
+        var scriptId = await TaoCauChoDuyetAsync();
+        var speaker = await GetSpeakerTokenAsync();
+
+        var response = await PostAsync($"/api/scripts/{scriptId}/review", new { action = "Accepted" }, speaker);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
     // ----------------------------------------------------------------- dựng dữ liệu
 
     private static string Dau() => Guid.NewGuid().ToString("N")[..6];

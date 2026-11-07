@@ -195,14 +195,13 @@ public static partial class DatabaseSeeder
         hash.Length == 60 && hash.StartsWith("$2", StringComparison.Ordinal);
 
     /// <summary>
-    /// Admin (người nhập/duyệt tự động) và ba Reviewer demo được phân CẢ BA chủ đề, để câu mẫu
-    /// nào cũng có người đủ trình độ duyệt. Nhờ vậy luồng "Admin nhập vào thẳng đã duyệt"
-    /// (kèm lượt Accepted tự động) qua được trigger trg_script_validated_domain ngay sau khi seed.
+    /// Ba Reviewer demo được phân CẢ BA chủ đề, để câu mẫu nào cũng có người đủ trình độ duyệt.
+    /// Admin không cần dòng user_domain: role Admin đủ mọi chủ đề ở cả service lẫn trigger.
     /// </summary>
     private static async Task SeedReviewerDomainsAsync(CodeSwitchLabelDbContext db, CancellationToken ct)
     {
         var userIds = await db.AppUsers
-            .Where(u => u.Email.StartsWith("reviewer") || u.Email == "admin@codeswitchlabel.local")
+            .Where(u => u.Email.StartsWith("reviewer"))
             .Select(u => u.UserId)
             .ToListAsync(ct);
 

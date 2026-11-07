@@ -30,7 +30,11 @@ public class UserDomainRepository(CodeSwitchLabelDbContext db) : IUserDomainRepo
             .ToListAsync(ct);
 
     public Task<bool> IsQualifiedAsync(long userId, ScriptDomain domain, CancellationToken ct = default) =>
-        db.UserDomains.AsNoTracking().AnyAsync(d => d.UserId == userId && d.Domain == domain, ct);
+        // Admin duyệt được mọi chủ đề: không phải phân công chủ đề cho Admin ở màn quản lý
+        // người dùng, nên đòi user_domain sẽ chặn nhầm chính người vận hành.
+        db.AppUsers.AsNoTracking().AnyAsync(
+            u => u.UserId == userId &&
+                 (u.Role.RoleName == RoleName.Admin || u.Domains.Any(d => d.Domain == domain)), ct);
 
     public async Task ReplaceAsync(
         long userId, IEnumerable<ScriptDomain> domains, CancellationToken ct = default)

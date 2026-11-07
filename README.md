@@ -177,7 +177,7 @@ Cần 3 reviewer vì **mỗi bản ghi cần tối đa 3 lượt duyệt của 3
 Luồng chính (7 bước):
 
 1. `admin`: `POST /api/scripts/import` file JSON theo mẫu `docs/Requirement.txt` (hoặc file `.txt` mỗi cặp hai dòng kèm trường `Domain`; có `Llm` thì LLM sinh nghĩa từ, không có thì gán nhãn bằng luật) → mã mới dạng `s_211000000016`, trạng thái `PendingValidation`
-2. `speaker1`: `POST /api/scripts/{id}/review` `{ "action": "Accepted" }` → `Validated`
+2. `reviewer`: `POST /api/scripts/{id}/review` `{ "action": "Accepted" }` → `Validated`
 3. `GET /api/speaker/scripts/next` → cặp câu kèm cả 2 biến thể
 4. `POST /api/recordings` 2 lần (`CodeSwitching` rồi `PureVietnamese`)
 5. `reviewer`, `reviewer2` mỗi người `POST /api/recordings/{id}/reviews` 1 lần — lượt thứ 2 (đủ 2 phiếu đạt) trả `isFinal = true` và chốt luôn; `reviewer3` chỉ cần khi hai phiếu đầu lệch nhau

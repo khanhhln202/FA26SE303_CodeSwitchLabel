@@ -106,4 +106,33 @@ public sealed class SortSpecTests
         Assert.Equal(ScriptSortField.Status, spec.Field);
         Assert.True(spec.Descending);
     }
+
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(-5, 1)]
+    [InlineData(1, 1)]
+    [InlineData(100_000, 100_000)]
+    [InlineData(100_001, 100_000)]
+    [InlineData(int.MaxValue, 100_000)]
+    public void PageRequest_Page_ClampedTo1ThroughMaxPage(int input, int expected)
+    {
+        var req = new PageRequest { Page = input };
+
+        Assert.Equal(expected, req.Page);
+    }
+
+    [Theory]
+    [InlineData(0, 20)]
+    [InlineData(-5, 20)]
+    [InlineData(1, 1)]
+    [InlineData(20, 20)]
+    [InlineData(100, 100)]
+    [InlineData(101, 100)]
+    [InlineData(int.MaxValue, 100)]
+    public void PageRequest_PageSize_ClampedTo1ThroughMaxPageSize(int input, int expected)
+    {
+        var req = new PageRequest { PageSize = input };
+
+        Assert.Equal(expected, req.PageSize);
+    }
 }

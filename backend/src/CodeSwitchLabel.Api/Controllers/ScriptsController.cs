@@ -232,6 +232,8 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
     /// <summary>Duyệt nội dung một cặp câu: chấp nhận, sửa, hoặc từ chối.</summary>
     /// <remarks>
     /// Đây là use case "Review Text". Mỗi lượt duyệt ghi thành một dòng lịch sử riêng.
+    /// Chỉ **Admin** và **Reviewer** gọi được; Speaker báo lỗi hoặc đề xuất sửa câu qua
+    /// `POST /api/speaker/scripts/{scriptId}/proposals`.
     ///
     /// - **Edited** — bắt buộc gửi **cả hai** câu đã sửa; lược đồ chỉ cho sửa theo cặp.
     ///   Số từ tiếng Anh không được đổi vì nó nằm trong mã câu.
@@ -241,7 +243,7 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
     /// Cặp câu đã có bản ghi âm thì **không sửa nội dung được nữa**.
     /// </remarks>
     [HttpPost("{id}/review")]
-    [Authorize(Roles = "Admin,Speaker,Reviewer")]
+    [Authorize(Roles = "Admin,Reviewer")]
     [ProducesResponseType(typeof(ScriptDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]

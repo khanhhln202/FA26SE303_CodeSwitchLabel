@@ -188,9 +188,9 @@ Admin nhập input_text.json (hoặc .txt, LLM/luật)  →  script: pending_val
 - **Trigger `trg_review_majority` chốt ngay khi một bên đủ đa số** `(n/2)+1` — với 3 lượt là 2 phiếu.
   Lượt thứ ba chỉ còn cần khi hai phiếu đầu lệch nhau; hoà ở số vòng chẵn thì tính là trượt.
 - **Từ chối bắt buộc ít nhất một lý do**; duyệt đạt thì không được kèm lý do.
-- **Lý do thuộc nhóm `content`** kéo cả cặp câu về `pending_validation`: lỗi nằm ở văn bản
-  chứ không phải ở giọng đọc. Trigger `trg_review_majority` làm việc này, trong hàm
-  `fn_review_majority_status` (mỗi lần chốt trạng thái bản ghi).
+- **Lý do thuộc nhóm `content`** là lỗi của bản ghi — người đọc đọc lệch văn bản.
+  Từ V18, từ chối bản ghi vì nhóm này **không** đưa cặp câu về `pending_validation` nữa;
+  câu giữ nguyên `Validated` và chỉ cần thu lại. Câu viết sai thật thì dùng đề xuất sửa câu.
 
 > **Trạng thái bản ghi do DATABASE chốt, không phải code.** `ReviewService` ghi lượt duyệt rồi
 > **đọc lại** trạng thái. Lớp `ReviewRules` trong C# chỉ là bản sao của luật để tầng trên hiển thị
@@ -333,7 +333,7 @@ Task mới tạo ra đã là `InProgress` — không còn `Draft`/`Open` (TEAM_0
 1. Đăng nhập `admin`, `POST /api/scripts/import`, chọn file JSON theo mẫu `docs/Requirement.txt`
    (hoặc file `.txt` mỗi cặp hai dòng kèm `Domain`; có `Llm` thì LLM sinh nghĩa từ, không có thì gán nhãn bằng luật).
    Kết quả trả mã mới dạng `s_211000000016`, trạng thái **PendingValidation**.
-2. Đăng nhập `speaker1`, `POST /api/scripts/{id}/review` với `{ "action": "Accepted" }` → **Validated**.
+2. Đăng nhập `reviewer`, `POST /api/scripts/{id}/review` với `{ "action": "Accepted" }` → **Validated**.
 3. `GET /api/speaker/scripts/next` → cặp câu kèm `remainingVariants` là cả hai biến thể.
 4. `POST /api/recordings` hai lần, `sentenceVariant` lần lượt là `CodeSwitching` và `PureVietnamese`.
 5. Đăng nhập `reviewer`, `reviewer2`, mỗi người `POST /api/recordings/{id}/reviews` một lần.

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using CodeSwitchLabel.Repositories.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Repositories.Persistence;
 using CodeSwitchLabel.Repositories.Repositories;
@@ -440,6 +441,8 @@ public class ScriptService(
     public async Task<ScriptDetailDto> UpdatePendingAsync(
         string scriptId, UpdateScriptContentRequest request, CancellationToken ct = default)
     {
+        await using var transaction = await BeginTransactionIfNeededAsync(ct);
+
         var script = await repository.GetForUpdateAsync(scriptId, ct)
                      ?? throw NotFoundException.Script(scriptId);
 
@@ -459,7 +462,10 @@ public class ScriptService(
 
         await repository.SaveChangesAsync(ct);
 
-        return (await repository.GetWithReviewsAsync(scriptId, ct))!.ToDetail();
+        var detail = (await repository.GetWithReviewsAsync(scriptId, ct))!.ToDetail();
+        if (transaction is not null) await transaction.CommitAsync(ct);
+
+        return detail;
     }
 
     public async Task<ScriptDetailDto> ReviewAsync(
@@ -483,6 +489,10 @@ public class ScriptService(
     private async Task<ScriptDetailDto> ReviewCoreAsync(
         string scriptId, long userId, ReviewScriptRequest request, CancellationToken ct)
     {
+        // Khoá dòng câu tới hết quyết định: hai Reviewer mở cùng lúc, người thứ hai
+        // phải đọc được trạng thái/lượt duyệt sau khi người đầu commit rồi mới kết luận.
+        await using var transaction = await BeginTransactionIfNeededAsync(ct);
+
         var script = await repository.GetForUpdateAsync(scriptId, ct)
                      ?? throw NotFoundException.Script(scriptId);
 
@@ -580,10 +590,31 @@ public class ScriptService(
             await taskTracker.OnScriptRejectedAsync(scriptId, ct);
         }
 
-        return (await repository.GetWithReviewsAsync(scriptId, ct))!.ToDetail();
+        var detail = (await repository.GetWithReviewsAsync(scriptId, ct))!.ToDetail();
+        if (transaction is not null) await transaction.CommitAsync(ct);
+
+        return detail;
     }
 
     // ----------------------------------------------------------------- nội bộ
+
+    /// <summary>
+    /// Mở transaction riêng, trừ khi caller đã ở trong một transaction (test tích hợp giữ
+    /// transaction ambient để rollback). EF không cho transaction lồng nhau trên cùng
+    /// connection nên trường hợp đó dùng luôn ambient — cùng cách ScriptProposalService.
+    /// </summary>
+    private async Task<IDbContextTransaction?> BeginTransactionIfNeededAsync(CancellationToken ct)
+    {
+        try
+        {
+            return await repository.BeginTransactionAsync(ct);
+        }
+        catch (InvalidOperationException ex)
+            when (ex.Message.Contains("already in a transaction", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+    }
 
     /// <summary>
     /// Xoá cứng một câu đang chờ duyệt.

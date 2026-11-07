@@ -47,7 +47,9 @@ public class SpeakerController(
     /// Câu đóng góp nằm ở trạng thái chờ duyệt nội dung.
     ///
     /// Thấy câu được giao không tự nhiên hay sai chính tả thì dùng
-    /// `POST /api/scripts/{id}/review` để sửa hoặc từ chối, thay vì bỏ qua.
+    /// `POST /api/speaker/scripts/{scriptId}/proposals` để báo lỗi hoặc đề xuất bản sửa,
+    /// thay vì bỏ qua. Đường duyệt nội dung `POST /api/scripts/{id}/review` chỉ dành cho
+    /// Admin và Reviewer.
     /// </remarks>
     [HttpPost("scripts/contribute")]
     [ProducesResponseType(typeof(ScriptDetailDto), StatusCodes.Status201Created)]
