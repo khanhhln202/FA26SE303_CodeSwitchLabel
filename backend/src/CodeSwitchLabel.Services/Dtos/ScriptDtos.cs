@@ -131,17 +131,39 @@ public record RecordingGuidanceDto(
     decimal MaxLeadingSilenceSec,
     decimal MaxTrailingSilenceSec);
 
+/// <summary>Cặp câu thô cần gán nhãn tự động — LLM nếu đã cấu hình, ngược lại dùng luật.</summary>
+public record AutoLabelRequest
+{
+    [Required(ErrorMessage = "Thiếu câu trộn Việt–Anh.")]
+    [StringLength(1000, MinimumLength = 3)]
+    public string CsRaw { get; init; } = string.Empty;
+
+    [Required(ErrorMessage = "Thiếu câu thuần Việt tương đương.")]
+    [StringLength(1000, MinimumLength = 3)]
+    public string ViRaw { get; init; } = string.Empty;
+}
+
+/// <summary>
+/// Gửi một trong hai dạng: cặp đã gắn nhãn (CsContent/ViContent + Alignment) hoặc cặp thô
+/// (CsRaw/ViRaw). Cặp thô thắng nếu gửi cả hai; khi đó backend tự gán nhãn và bỏ qua Alignment.
+/// </summary>
 public record CreateScriptRequest
 {
     /// <summary>Câu chen tiếng Anh, PHẢI có nhãn: [vi]Em nên [en]scan [vi]tài liệu này.</summary>
-    [Required(ErrorMessage = "Thiếu câu chen tiếng Anh.")]
     [StringLength(1000, MinimumLength = 3)]
-    public string CsContent { get; init; } = string.Empty;
+    public string? CsContent { get; init; }
 
     /// <summary>Câu thuần Việt tương đương, cũng có nhãn: [vi]Em nên quét tài liệu này.</summary>
-    [Required(ErrorMessage = "Thiếu câu thuần Việt tương đương.")]
     [StringLength(1000, MinimumLength = 3)]
-    public string ViContent { get; init; } = string.Empty;
+    public string? ViContent { get; init; }
+
+    /// <summary>Câu trộn Việt–Anh thô, chưa có nhãn. Gửi kèm ViRaw để backend tự gán nhãn.</summary>
+    [StringLength(1000, MinimumLength = 3)]
+    public string? CsRaw { get; init; }
+
+    /// <summary>Câu thuần Việt thô tương đương. Gửi kèm CsRaw để backend tự gán nhãn.</summary>
+    [StringLength(1000, MinimumLength = 3)]
+    public string? ViRaw { get; init; }
 
     [Required(ErrorMessage = "Phải chọn chủ đề.")]
     public ScriptDomain? Domain { get; init; }

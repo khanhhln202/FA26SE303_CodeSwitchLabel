@@ -43,11 +43,14 @@ public class SpeakerController(
 
     /// <summary>Đóng góp một cặp câu mới.</summary>
     /// <remarks>
-    /// Phải gửi đủ cả câu chen tiếng Anh lẫn câu thuần Việt tương đương, kèm nhãn [vi]/[en].
+    /// Gửi cặp đã gắn nhãn (`csContent`/`viContent`/`alignment`) hoặc cặp thô
+    /// (`csRaw`/`viRaw`); với cặp thô, backend tự gán nhãn và bỏ qua `alignment` gửi kèm.
     /// Câu đóng góp nằm ở trạng thái chờ duyệt nội dung.
     ///
     /// Thấy câu được giao không tự nhiên hay sai chính tả thì dùng
-    /// `POST /api/scripts/{id}/review` để sửa hoặc từ chối, thay vì bỏ qua.
+    /// `POST /api/speaker/scripts/{scriptId}/proposals` để báo lỗi hoặc đề xuất bản sửa,
+    /// thay vì bỏ qua. Đường duyệt nội dung `POST /api/scripts/{id}/review` chỉ dành cho
+    /// Admin và Reviewer.
     /// </remarks>
     [HttpPost("scripts/contribute")]
     [ProducesResponseType(typeof(ScriptDetailDto), StatusCodes.Status201Created)]

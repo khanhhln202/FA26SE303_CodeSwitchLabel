@@ -15,7 +15,7 @@ namespace CodeSwitchLabel.Api.Controllers;
 [Route("api/scripts")]
 [Tags(ApiTags.Scripts)]
 [Authorize]
-public class ScriptsController(IScriptService scriptService) : ControllerBase
+public class ScriptsController(IScriptService scriptService, ILabelingService labelingService) : ControllerBase
 {
     /// <summary>Tìm kiếm, lọc theo trạng thái và chủ đề, có phân trang.</summary>
     /// <remarks>
@@ -44,6 +44,8 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
     ///
     /// Hệ thống đếm số từ tiếng Anh từ nhãn — con số này đi vào **chữ số đầu của mã câu**
     /// nên phải nằm trong khoảng 1..9. Câu thuần Việt không được có nhãn [en] nào.
+    ///
+    /// Gửi cặp thô qua `csRaw`/`viRaw` thì backend tự gán nhãn và bỏ qua `alignment`.
     /// </remarks>
     [HttpPost]
     [Authorize(Roles = "Admin")]
@@ -67,6 +69,9 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
     /// Reviewer **không** dùng đường này: người vừa viết câu vừa duyệt câu là xung đột vai, cùng
     /// lý do hệ thống cấm tự duyệt bản ghi của chính mình. Màn hình duyệt câu đóng góp của
     /// Reviewer nằm ở `GET /api/reviewer/contributions`.
+    ///
+    /// Gửi cặp đã gắn nhãn (`csContent`/`viContent`/`alignment`) hoặc cặp thô
+    /// (`csRaw`/`viRaw`); với cặp thô, backend tự gán nhãn và bỏ qua `alignment` gửi kèm.
     /// </remarks>
     [HttpPost("contribute")]
     [Authorize(Roles = "Speaker")]
@@ -79,6 +84,19 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
         var created = await scriptService.ContributeAsync(request, User.GetUserId(), ct);
         return CreatedAtAction(nameof(Get), new { id = created.ScriptId }, created);
     }
+
+    /// <summary>Gán nhãn [vi]/[en] và sinh alignment cho một cặp câu thô.</summary>
+    /// <remarks>
+    /// Dùng LLM nếu đã cấu hình `Llm:Endpoint`/`Model`; chưa cấu hình thì gán nhãn bằng luật.
+    /// Trả về câu đã chèn nhãn và alignment, sẵn sàng gửi vào luồng đóng góp hiện có.
+    /// </remarks>
+    [HttpPost("auto-label")]
+    [ProducesResponseType(typeof(LabeledPair), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ActionResult<LabeledPair>> AutoLabel(
+        [FromBody] AutoLabelRequest request, CancellationToken ct)
+        => Ok(await labelingService.AutoLabelAsync(
+            request.CsRaw.Trim(), request.ViRaw.Trim(), ct));
 
     /// <summary>Admin sửa nội dung một cặp câu đang chờ duyệt — sửa bao nhiêu lần cũng được.</summary>
     /// <remarks>
@@ -232,6 +250,8 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
     /// <summary>Duyệt nội dung một cặp câu: chấp nhận, sửa, hoặc từ chối.</summary>
     /// <remarks>
     /// Đây là use case "Review Text". Mỗi lượt duyệt ghi thành một dòng lịch sử riêng.
+    /// Chỉ **Admin** và **Reviewer** gọi được; Speaker báo lỗi hoặc đề xuất sửa câu qua
+    /// `POST /api/speaker/scripts/{scriptId}/proposals`.
     ///
     /// - **Edited** — bắt buộc gửi **cả hai** câu đã sửa; lược đồ chỉ cho sửa theo cặp.
     ///   Số từ tiếng Anh không được đổi vì nó nằm trong mã câu.
@@ -241,7 +261,7 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
     /// Cặp câu đã có bản ghi âm thì **không sửa nội dung được nữa**.
     /// </remarks>
     [HttpPost("{id}/review")]
-    [Authorize(Roles = "Admin,Speaker,Reviewer")]
+    [Authorize(Roles = "Admin,Reviewer")]
     [ProducesResponseType(typeof(ScriptDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]

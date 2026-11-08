@@ -15,8 +15,9 @@ public class ReasonsController(IReasonService reasonService) : ControllerBase
 {
     /// <summary>Lý do từ chối BẢN GHI ÂM, chia theo bốn nhóm: nội dung, âm thanh, phát âm, khác.</summary>
     /// <remarks>
-    /// Lý do thuộc nhóm **content** có tác dụng đặc biệt: database tự đưa cặp câu về trạng thái
-    /// chờ duyệt nội dung, vì lỗi nằm ở văn bản chứ không phải ở giọng đọc.
+    /// Lý do thuộc nhóm **content** là lỗi của bản ghi — người đọc đọc lệch văn bản.
+    /// Từ V18, từ chối bản ghi vì nhóm này **không** đưa cặp câu về chờ duyệt nội dung nữa;
+    /// câu giữ nguyên `Validated` và chỉ cần thu lại. Câu viết sai thật thì dùng đề xuất sửa câu.
     /// </remarks>
     [HttpGet("api/rejection-reasons")]
     [ProducesResponseType(typeof(IEnumerable<ReasonDto>), StatusCodes.Status200OK)]

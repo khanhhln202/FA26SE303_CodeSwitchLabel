@@ -134,26 +134,28 @@ docker compose -f deploy/docker-compose.prod.yml logs -f api
 
 `POST /api/scripts/import` nhận file `.txt` cả khi không có LLM: backend gán nhãn `[vi]`/`[en]`
 bằng luật và lấy nghĩa tiếng Việt bằng các từ chung của hai câu (có thể nhiều từ). Cấu hình LLM
-OpenAI-compatible để sinh nghĩa từ chính xác hơn. Thêm các biến sau vào phần `environment` của service `api` trong
-`deploy/docker-compose.prod.yml`:
-
-```yaml
-      Llm__Endpoint: https://api.openai.com/v1
-      Llm__Model: gpt-4o-mini
-      Llm__ApiKey: ${LLM_API_KEY}
-      Llm__TimeoutSeconds: 60
-```
-
-File compose được track, nên commit thay đổi — `deploy/deploy.sh` dừng ngay khi cây làm việc còn file
-chưa commit. Sau đó thêm `LLM_API_KEY=...` vào `deploy/.env` và dựng lại API:
+OpenAI-compatible để sinh nghĩa từ chính xác hơn. `deploy/docker-compose.prod.yml` đã truyền sẵn
+`Llm__*` từ `deploy/.env`, nên chỉ cần thêm các biến sau vào `deploy/.env` **trên máy chủ**:
 
 ```bash
-docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build api
+LLM_ENDPOINT=https://api.openai.com/v1
+LLM_MODEL=gpt-4o-mini
+LLM_API_KEY=...
+LLM_TIMEOUT_SECONDS=60
 ```
 
-**Hiện `deploy/docker-compose.prod.yml` chưa truyền `Llm__*`**, nên máy chủ mới deploy vẫn nhập được
-`.txt` bằng luật; nghĩa từ có thể trống và người duyệt phải điền. Cấu hình `Llm__Endpoint`/`Llm__Model`
-để LLM sinh nghĩa từ. `Llm__ApiKey` chỉ cần khi endpoint yêu cầu xác thực.
+`deploy/.env` đã bị gitignore nên khóa không vào git. Để trống `LLM_ENDPOINT`/`LLM_MODEL` thì backend
+gán nhãn bằng luật; `LLM_API_KEY` chỉ cần khi endpoint yêu cầu xác thực. Sau khi sửa, dựng lại API:
+
+```bash
+docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d api
+```
+
+Kiểm tra container đã nhận cấu hình:
+
+```bash
+docker exec csl-api printenv Llm__Model
+```
 
 ## Nghiệm thu bản deploy
 

@@ -145,8 +145,17 @@ public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
     public Task<Script?> GetAsync(string id, CancellationToken ct = default) =>
         db.Scripts.AsNoTracking().FirstOrDefaultAsync(s => s.ScriptId == id, ct);
 
-    public Task<Script?> GetForUpdateAsync(string id, CancellationToken ct = default) =>
-        db.Scripts.Include(s => s.Words).FirstOrDefaultAsync(s => s.ScriptId == id, ct);
+    public async Task<Script?> GetForUpdateAsync(string id, CancellationToken ct = default)
+    {
+        // SQL thô vì LINQ không diễn đạt được FOR UPDATE (cùng cách ReviewRepository).
+        // Câu lệnh chỉ có tác dụng khoá khi caller đang ở trong một transaction.
+        var rows = await db.Scripts
+            .FromSqlInterpolated($"SELECT * FROM script WHERE script_id = {id} FOR UPDATE")
+            .Include(s => s.Words)
+            .ToListAsync(ct);
+
+        return rows.FirstOrDefault();
+    }
 
     public Task<Script?> GetWithReviewsAsync(string id, CancellationToken ct = default) =>
         db.Scripts

@@ -21,18 +21,25 @@ public record PagedResult<T>(IReadOnlyList<T> Items, int Page, int PageSize, int
 /// `Sort`/`Dir` đặt ở đây vì cả mười hai request record đều kế thừa lớp này —
 /// quy ước sắp xếp được khai báo đúng một chỗ, không phải rải mười hai chỗ.
 ///
-/// Chặn trên pageSize để một request lỡ tay không kéo về vài chục nghìn hàng.
+/// Chặn trên pageSize để một request lỡ tay không kéo về vài chục nghìn hàng, và chặn page
+/// để phép nhân offset `(page - 1) * pageSize` không tràn int.
 /// </summary>
 public record PageRequest
 {
     private const int MaxPageSize = 100;
+    private const int MaxPage = 100_000;
     private int _pageSize = 20;
     private int _page = 1;
 
     public int Page
     {
         get => _page;
-        set => _page = value < 1 ? 1 : value;
+        set => _page = value switch
+        {
+            < 1 => 1,
+            > MaxPage => MaxPage,
+            _ => value
+        };
     }
 
     public int PageSize

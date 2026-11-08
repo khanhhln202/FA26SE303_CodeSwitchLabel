@@ -106,6 +106,13 @@ services:
       ObjectStorage__ForcePathStyle: "true"
       ObjectStorage__PresignedUrlMinutes: 15
 
+      # LLM gán nhãn (OpenAI-compatible). Để trống thì backend gán nhãn bằng luật.
+      # Giá trị thật nằm trong deploy/.env trên máy chủ, không commit.
+      Llm__Endpoint: ${LLM_ENDPOINT:-}
+      Llm__Model: ${LLM_MODEL:-}
+      Llm__ApiKey: ${LLM_API_KEY:-}
+      Llm__TimeoutSeconds: ${LLM_TIMEOUT_SECONDS:-60}
+
       # Trình duyệt chỉ cho frontend gọi API nếu origin nằm trong danh sách này.
       Cors__AllowedOrigins__0: ${FE_ORIGIN}
       Cors__AllowedOrigins__1: ${FE_ORIGIN_PREVIEW:-${FE_ORIGIN}}

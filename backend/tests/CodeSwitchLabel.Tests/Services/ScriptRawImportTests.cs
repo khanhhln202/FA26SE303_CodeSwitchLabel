@@ -22,7 +22,7 @@ public sealed class ScriptRawImportTests
         var (service, repo, labeling) = CreateService();
         var added = CaptureAdded(repo);
 
-        labeling.Setup(l => l.LabelAsync(
+        labeling.Setup(l => l.AutoLabelAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string cs, string vi, CancellationToken _) => new LabeledPair(
                 "[vi]" + cs.Replace("scan ", "[en]scan [vi]"),
@@ -52,7 +52,7 @@ public sealed class ScriptRawImportTests
         var (service, repo, labeling) = CreateService();
         var added = CaptureAdded(repo);
 
-        labeling.SetupSequence(l => l.LabelAsync(
+        labeling.SetupSequence(l => l.AutoLabelAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new UnprocessableException("llm_parse_error", "LLM trả về sai."))
             .ReturnsAsync(new LabeledPair(
@@ -85,6 +85,10 @@ public sealed class ScriptRawImportTests
         var added = CaptureAdded(repo);
         var words = CaptureAddedWords(repo);
 
+        labeling.Setup(l => l.AutoLabelAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string cs, string vi, CancellationToken _) => RuleBasedLabeler.Label(cs, vi));
+
         using var stream = Of("""
             Em nên scan tài liệu này.
             Em nên quét tài liệu này.
@@ -104,8 +108,8 @@ public sealed class ScriptRawImportTests
         Assert.Equal("scan", word.EnWord);
         Assert.Equal("quét", word.ViWord);
 
-        labeling.Verify(l => l.LabelAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        labeling.Verify(l => l.AutoLabelAsync(
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -120,7 +124,7 @@ public sealed class ScriptRawImportTests
             TestContext.Current.CancellationToken));
 
         Assert.Equal("domain_required", ex.Code);
-        labeling.Verify(l => l.LabelAsync(
+        labeling.Verify(l => l.AutoLabelAsync(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
