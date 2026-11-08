@@ -43,7 +43,8 @@ public class SpeakerController(
 
     /// <summary>Đóng góp một cặp câu mới.</summary>
     /// <remarks>
-    /// Phải gửi đủ cả câu chen tiếng Anh lẫn câu thuần Việt tương đương, kèm nhãn [vi]/[en].
+    /// Gửi cặp đã gắn nhãn (`csContent`/`viContent`/`alignment`) hoặc cặp thô
+    /// (`csRaw`/`viRaw`); với cặp thô, backend tự gán nhãn và bỏ qua `alignment` gửi kèm.
     /// Câu đóng góp nằm ở trạng thái chờ duyệt nội dung.
     ///
     /// Thấy câu được giao không tự nhiên hay sai chính tả thì dùng

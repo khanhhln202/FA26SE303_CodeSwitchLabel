@@ -150,9 +150,9 @@ public class ScriptService(
 
         var pairs = await RawScriptTextParser.ParseAsync(textFile, ct);
 
-        // Không có LLM thì gắn nhãn bằng luật; nghĩa tiếng Việt là đoạn giữa hai từ chung
-        // của hai câu, hết từ tương ứng thì để trống cho người duyệt điền.
-        var useRule = !labeling.IsConfigured;
+        // AutoLabelAsync tự chọn LLM hay luật. Luật có thể để trống nghĩa tiếng Việt
+        // (hết từ tương ứng) nên vẫn cho qua như trước cho người duyệt điền.
+        var allowEmptyTargets = !labeling.IsConfigured;
 
         var items = new List<ImportScriptItem>(pairs.Count);
         var skipped = new List<ImportSkippedDto>();
@@ -165,9 +165,7 @@ public class ScriptService(
 
             try
             {
-                var labeled = useRule
-                    ? RuleBasedLabeler.Label(pairs[i].Cs, pairs[i].Vi)
-                    : await labeling.LabelAsync(pairs[i].Cs, pairs[i].Vi, ct);
+                var labeled = await labeling.AutoLabelAsync(pairs[i].Cs, pairs[i].Vi, ct);
 
                 items.Add(new ImportScriptItem
                 {
@@ -185,7 +183,7 @@ public class ScriptService(
             }
         }
 
-        return await ImportCoreAsync(items, skipped, fileName, importedById, useRule, ct);
+        return await ImportCoreAsync(items, skipped, fileName, importedById, allowEmptyTargets, ct);
     }
 
     private async Task<ImportResultDto> ImportCoreAsync(
@@ -714,8 +712,48 @@ public class ScriptService(
     private async Task<ScriptDetailDto> CreateInternalAsync(
         CreateScriptRequest request, long userId, ScriptStatus status, long? batchId, CancellationToken ct)
     {
-        var cs = request.CsContent.Trim();
-        var ve = request.ViContent.Trim();
+        var csRaw = request.CsRaw?.Trim();
+        var viRaw = request.ViRaw?.Trim();
+        var hasRaw = csRaw is not null || viRaw is not null;
+
+        string cs;
+        string ve;
+        List<AlignmentItem> alignment;
+        var allowEmptyTargets = false;
+
+        if (hasRaw)
+        {
+            if (string.IsNullOrEmpty(csRaw) || string.IsNullOrEmpty(viRaw))
+            {
+                throw new UnprocessableException(
+                    "raw_pair_required",
+                    "Gửi câu thô thì phải gửi cả câu trộn Việt–Anh lẫn câu thuần Việt tương đương.");
+            }
+
+            // shortcut: raw phải gán nhãn trước khi dedupe vì dedupe dùng câu đã gán nhãn;
+            // câu trùng vẫn tốn một lần gọi LLM.
+            var labeled = await labeling.AutoLabelAsync(csRaw, viRaw, ct);
+            cs = labeled.CsTagged;
+            ve = CodeSwitchText.ViTag + viRaw;
+            alignment = labeled.Alignment;
+
+            // Luật có thể để trống nghĩa tiếng Việt; câu chờ duyệt cho qua như luồng
+            // import .txt để người duyệt điền sau. Admin tạo câu vào thẳng Validated
+            // nên vẫn bắt buộc đủ nghĩa, không có bước duyệt nào điền hộ.
+            allowEmptyTargets = !labeling.IsConfigured && status == ScriptStatus.PendingValidation;
+        }
+        else
+        {
+            cs = request.CsContent?.Trim() ?? string.Empty;
+            ve = request.ViContent?.Trim() ?? string.Empty;
+            alignment = request.Alignment;
+
+            if (cs.Length == 0 || ve.Length == 0)
+            {
+                throw new UnprocessableException(
+                    "empty_content", "Thiếu câu chen tiếng Anh hoặc câu thuần Việt.");
+            }
+        }
 
         var (wordCount, enWordCount) = ScriptPairRules.ValidatePair(cs, ve);
 
@@ -728,7 +766,7 @@ public class ScriptService(
 
         // Mỗi từ tiếng Anh phải có ĐÚNG một dòng script_word, nếu không trigger defer
         // trg_script_word_consistency sẽ chặn lúc COMMIT — nên alignment phải phủ đủ số từ.
-        var words = ScriptPairRules.BuildWords(request.Alignment, enWordCount);
+        var words = ScriptPairRules.BuildWords(alignment, enWordCount, allowEmptyTargets);
 
         // Chữ số thứ ba của mã lấy từ chính các dòng script_word, không tin giá trị client gửi:
         // mã và bảng script_word phải luôn khớp nhau.

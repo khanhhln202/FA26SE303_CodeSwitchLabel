@@ -239,6 +239,12 @@ public class LabelingService(
         return start >= 0 && end > start ? content[start..(end + 1)] : content.Trim();
     }
 
+    public Task<LabeledPair> AutoLabelAsync(string csRaw, string viRaw, CancellationToken ct = default)
+    {
+        if (!IsConfigured) return Task.FromResult(RuleBasedLabeler.Label(csRaw, viRaw));
+        return LabelAsync(csRaw, viRaw, ct);
+    }
+
     private static UnprocessableException ParseError(string message) =>
         new("llm_parse_error", message);
 
