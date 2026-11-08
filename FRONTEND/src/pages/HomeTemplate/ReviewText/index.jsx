@@ -15,6 +15,7 @@ import {
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import CodeSwitchText from "../../../components/CodeSwitchText/CodeSwitchText";
+import TaggedText from "../../../components/CodeSwitchText/TaggedText";
 import { editChecks } from "../../../utils/sentenceValidation";
 import {
   SPEAKER_ACCENT as ACCENT,
@@ -22,14 +23,13 @@ import {
   AUDIO_PRIMARY,
   SUCCESS,
   WARNING,
-  SURFACE_PAGE,
   SURFACE_MUTED,
+  SURFACE_PAGE,
   TEXT_HEADING,
   TEXT_BODY,
   TEXT_FAINT,
   BORDER_LIGHT,
   CHIP_DANGER_BG,
-  CHIP_DANGER_TEXT,
   DANGER,
 } from "../../../constants/theme";
 import Loading from "../../../components/Loading/Loading";
@@ -47,6 +47,18 @@ import {
 
 // "2026-10-20T00:00:00Z" -> "20/10/2026"
 const formatDate = (iso) => (iso ? new Date(iso).toLocaleDateString("vi-VN") : "—");
+
+// Chủ đề backend trả tiếng Anh -> nhãn tiếng Việt trên giao diện
+const DOMAIN_LABEL = {
+  Education: "Giáo dục",
+  "IT/Technology": "Công nghệ thông tin",
+  ItTechnology: "Công nghệ thông tin",
+  "Daily Life": "Đời sống",
+  DailyLife: "Đời sống",
+};
+
+const SECONDARY_BTN =
+  "inline-flex items-center gap-2 px-4 py-2 rounded-full text-ui font-label bg-white hover:bg-[#FAF9F5] active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed";
 
 export default function ReviewText() {
   const navigate = useNavigate();
@@ -312,7 +324,7 @@ export default function ReviewText() {
         />
       ) : (
       <>
-      {/* THẺ CẶP CÂU VĂN */}
+      {/* CẶP CÂU VĂN: 1 thẻ, 2 câu ngăn bằng đường mảnh, căn giữa - 2 lớp thẻ nghiêng phía sau làm điểm nhấn */}
       <div className="relative mt-6 [@media(min-height:900px)]:mt-8">
         <div
           className="absolute inset-x-2 -top-3 h-full rounded-[24px] rotate-[-1.5deg]"
@@ -322,86 +334,54 @@ export default function ReviewText() {
           className="absolute inset-x-1 -top-1.5 h-full rounded-[24px] rotate-[1deg]"
           style={{ background: SURFACE_PAGE, border: "1px solid #E9E6DA" }}
         />
+      <div
+        className="relative bg-white rounded-[24px] overflow-hidden"
+        style={{ border: `1px solid ${BORDER_LIGHT}`, boxShadow: "0 6px 20px rgba(16,17,20,0.07)" }}
+      >
+        <div className="h-1.5 w-full" style={{ background: ACCENT }} />
+        <p className="type-meta text-center pt-5 [@media(min-height:900px)]:pt-6" style={{ color: TEXT_BODY }}>
+          {[DOMAIN_LABEL[sentence.domain] ?? sentence.domain, sentence.wordCount != null && `${sentence.wordCount} từ`, sentence.enWordCount != null && `${sentence.enWordCount} từ tiếng Anh`]
+            .filter(Boolean)
+            .join(" · ")}
+        </p>
 
-        <div
-          className="relative bg-white rounded-[24px] overflow-hidden"
-          style={{
-            border: `1px solid ${BORDER_LIGHT}`,
-            boxShadow: "0 6px 20px rgba(16,17,20,0.07)",
-          }}
-        >
-          <div className="h-1.5 w-full" style={{ background: ACCENT }} />
-
-          <div className="px-6 sm:px-10 pt-4 pb-6 [@media(min-height:900px)]:pt-6 [@media(min-height:900px)]:pb-8">
-            <div className="flex items-center justify-end gap-2.5 mb-3 [@media(min-height:900px)]:mb-6">
-              <div className="flex items-end gap-[2.5px] h-3.5">
-                <span
-                  className="w-[2.5px] h-[5px] rounded-[1px]"
-                  style={{ background: "#D8D5C9" }}
-                />
-                <span
-                  className="w-[2.5px] h-3 rounded-[1px]"
-                  style={{ background: "#D8D5C9" }}
-                />
-                <span
-                  className="w-[2.5px] h-2 rounded-[1px]"
-                  style={{ background: "#D8D5C9" }}
-                />
-                <span
-                  className="w-[2.5px] h-3.5 rounded-[1px]"
-                  style={{ background: "#D8D5C9" }}
-                />
-                <span
-                  className="w-[2.5px] h-[7px] rounded-[1px]"
-                  style={{ background: "#D8D5C9" }}
-                />
-              </div>
-              <span
-                className="type-meta"
-                style={{ color: TEXT_BODY }}
-              >
-                Câu {Math.min(submitted + 1, targetQty)}/{targetQty}
+        {[
+          {
+            key: "cs",
+            label: "Việt – Anh",
+            chip: { background: `${AUDIO_PRIMARY}1A`, color: AUDIO_PRIMARY },
+            // csPlain, tô màu từ tiếng Anh nhờ nhãn trong csContent
+            plain: <CodeSwitchText transcript={sentence.csContent} accent={ACCENT} />,
+            tagged: sentence.csContent,
+          },
+          {
+            key: "vi",
+            label: "Tiếng Việt",
+            chip: { background: SURFACE_MUTED, color: TEXT_BODY },
+            plain: sentence.viPlain,
+            tagged: sentence.viContent,
+          },
+        ].map((part, i) => (
+          <div key={part.key}>
+            {i > 0 && <div className="h-px mx-6" style={{ background: BORDER_LIGHT }} />}
+            <div className="px-6 py-6 [@media(min-height:900px)]:py-8 text-center">
+              <span className="inline-block type-caption px-2.5 py-0.5 rounded-full mb-3" style={part.chip}>
+                {part.label}
               </span>
-            </div>
-
-            <div className="text-center">
-              <span
-                className="inline-block type-caption px-2 py-0.5 rounded-full mb-3"
-                style={{ background: `${AUDIO_PRIMARY}1A`, color: AUDIO_PRIMARY }}
-              >
-                Việt – Anh
-              </span>
-              <h2
-                // Luôn giữ chỗ 2 dòng (như câu mẫu) để thẻ không co lại khi câu ngắn - câu căn giữa trong khung
-                className="text-headline font-label sm:type-reading max-w-[650px] mx-auto min-h-14 sm:min-h-20 flex items-center justify-center"
-                style={{ color: TEXT_HEADING, textWrap: "pretty" }}
-              >
-                <CodeSwitchText
-                  transcript={sentence.csContent}
-                  accent={ACCENT}
-                />
-              </h2>
-
-              <div
-                className="w-12 h-px mx-auto my-3 [@media(min-height:900px)]:my-5"
-                style={{ background: BORDER_LIGHT }}
-              />
-
-              <span
-                className="inline-block type-caption px-2 py-0.5 rounded-full mb-3"
-                style={{ background: SURFACE_MUTED, color: TEXT_BODY }}
-              >
-                Tiếng Việt
-              </span>
+              <p className="text-headline font-label sm:type-reading" style={{ color: TEXT_HEADING, textWrap: "pretty" }}>
+                {part.plain}
+              </p>
+              {/* Câu giữ nguyên nhãn [vi]/[en] */}
               <p
-                className="text-headline font-label sm:type-reading max-w-[600px] mx-auto min-h-14 sm:min-h-20 flex items-center justify-center"
-                style={{ color: TEXT_HEADING, textWrap: "pretty" }}
+                className="inline-block type-body mt-3 px-3 py-1.5 rounded-xl"
+                style={{ background: SURFACE_PAGE, color: TEXT_HEADING }}
               >
-                {sentence.viPlain}
+                <TaggedText transcript={part.tagged} accent={ACCENT} />
               </p>
             </div>
           </div>
-        </div>
+        ))}
+      </div>
       </div>
 
       {/* CTA chính */}
@@ -417,41 +397,29 @@ export default function ReviewText() {
         Sẵn sàng, vào ghi âm <ArrowRight className="w-4 h-4" />
       </button>
 
-      {/* Hành động phụ */}
-      <div className="flex items-center justify-center gap-3.5 flex-wrap mt-3 [@media(min-height:900px)]:mt-5">
+      {/* Hành động phụ: nền trắng viền mảnh, chỉ icon có màu - nút chính vẫn nổi bật nhất */}
+      <div className="flex items-center justify-center gap-2.5 flex-wrap mt-3 [@media(min-height:900px)]:mt-4">
         <button
           onClick={handleSkip}
           disabled={isFetchingScript}
-          className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-body font-label hover:opacity-85 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{
-            background: SURFACE_MUTED,
-            color: TEXT_BODY,
-            boxShadow: "0 4px 10px rgba(85,86,91,0.18)",
-          }}
+          className={SECONDARY_BTN}
+          style={{ border: `1px solid ${BORDER_LIGHT}`, color: TEXT_BODY }}
         >
-          <SkipForward className="w-[18px] h-[18px]" /> {isFetchingScript ? "Đang lấy câu..." : "Bỏ qua câu này"}
+          <SkipForward className="w-4 h-4" /> {isFetchingScript ? "Đang lấy câu..." : "Bỏ qua câu này"}
         </button>
         <button
           onClick={() => setShowReportModal(true)}
-          className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-body font-label hover:opacity-85 active:scale-[0.98] transition-all"
-          style={{
-            background: CHIP_DANGER_BG,
-            color: CHIP_DANGER_TEXT,
-            boxShadow: "0 4px 10px rgba(198,59,59,0.22)",
-          }}
+          className={SECONDARY_BTN}
+          style={{ border: `1px solid ${BORDER_LIGHT}`, color: TEXT_BODY }}
         >
-          <Flag className="w-[18px] h-[18px]" /> Báo lỗi câu này
+          <Flag className="w-4 h-4" style={{ color: DANGER }} /> Báo lỗi câu này
         </button>
         <button
           onClick={openEditModal}
-          className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-body font-label hover:opacity-85 active:scale-[0.98] transition-all"
-          style={{
-            background: "#FFF1DE",
-            color: "#A85E12",
-            boxShadow: "0 4px 10px rgba(168,94,18,0.20)",
-          }}
+          className={SECONDARY_BTN}
+          style={{ border: `1px solid ${BORDER_LIGHT}`, color: TEXT_BODY }}
         >
-          <Edit3 className="w-[18px] h-[18px]" /> Chỉnh sửa câu
+          <Edit3 className="w-4 h-4" style={{ color: "#A85E12" }} /> Chỉnh sửa câu
         </button>
       </div>
 

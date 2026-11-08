@@ -131,6 +131,26 @@ function PairAudio({ url, variant, duration }) {
   return <WaveformInline compact label={variant === "cs" ? "VI-EN" : "VI"} src={url} demoSeed={url} demoDuration={duration} />;
 }
 
+/** Gom lượt duyệt theo cặp (cùng logic bên Speaker): có bản bị từ chối = Từ chối, còn lại có bản đạt = Đã duyệt. */
+function pairRounds(item) {
+  const byRound = new Map();
+  for (const r of item.reviews ?? []) {
+    if (!byRound.has(r.round)) byRound.set(r.round, []);
+    byRound.get(r.round).push(r);
+  }
+  return [...byRound.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([round, list]) => ({
+      round,
+      decision: list.some((r) => r.decision === "Rejected")
+        ? "Rejected"
+        : list.some((r) => r.decision === "Approved")
+          ? "Approved"
+          : "Pending",
+      reviews: list,
+    }));
+}
+
 export default function ReviewHistoryRecording() {
   const [currentPage, setCurrentPage] = useState(1);
   // Popup PHẢN HỒI (đầy đủ 3 reviewer, mở từ cột "Phản hồi")
@@ -274,10 +294,9 @@ export default function ReviewHistoryRecording() {
           >
             <colgroup>
               <col className="w-[4%]" />
-              <col className="w-[14%]" />
-              <col className="w-[18%]" />
-              <col className="w-[23%]" />
-              <col className="w-[17%]" />
+              <col className="w-[15%]" />
+              <col className="w-[38%]" />
+              <col className="w-[19%]" />
               <col className="w-[9%]" />
               <col className="w-[15%]" />
             </colgroup>
@@ -286,7 +305,6 @@ export default function ReviewHistoryRecording() {
                 {[
                   "STT",
                   "Speaker / Thời gian",
-                  "Nhiệm vụ",
                   "Nội dung",
                   "Đoạn ghi âm",
                   "Bạn",
@@ -307,7 +325,7 @@ export default function ReviewHistoryRecording() {
               <tbody className="type-ui">
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={6}
                     className="py-12 px-4 text-center text-body text-[#6E7078]"
                   >
                     Không có bản ghi phù hợp bộ lọc.
@@ -320,7 +338,6 @@ export default function ReviewHistoryRecording() {
                 // API trả số vòng của một bản thu (lấy min trong cặp); `reviews` chứa
                 // phiếu của cả hai bản nên đếm mảng này sẽ tạo số sai như 4/3.
                 const votedCount = item.reviewedRounds ?? 0;
-                const task = item.taskTitle || "Thu âm tự do";
                 return (
                   <tbody
                     key={item.scriptId}
@@ -346,11 +363,6 @@ export default function ReviewHistoryRecording() {
                                 <p className="mt-0.5 type-meta text-[#9A9CA3]">
                                   {date} - {time}
                                 </p>
-                              </td>
-                              <td rowSpan={2} className="px-3">
-                                <span title={task} className="flex w-full h-6 items-center justify-center rounded-md border border-[#E5E2D8] bg-[#F0EEE6] px-2 type-caption text-[#6E7078]"><span className="truncate">
-                                  {task}</span>
-                                </span>
                               </td>
                             </>
                           )}
@@ -483,7 +495,7 @@ export default function ReviewHistoryRecording() {
       {detailItem &&
         (() => {
           const { icon: ResultIcon, accent } = styleOf(detailItem.recordingStatus);
-          const reviews = detailItem.reviews ?? [];
+          const rounds = pairRounds(detailItem);
           return (
             <div
               className="fixed inset-0 z-50 flex items-center justify-center p-4 lg:pl-64"
@@ -527,7 +539,6 @@ export default function ReviewHistoryRecording() {
                     </button>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 mb-3">
-                    <span className="px-2.5 py-1 rounded-md text-caption font-label border border-[#E5E2D8] bg-[#F0EEE6] text-[#6E7078]">{detailItem.taskTitle || "Thu âm tự do"}</span>
                     <span className="font-label text-meta text-[#16171C]">{detailItem.speakerName}</span>
                     <span className="type-meta text-[#9A9CA3]">{splitDateTime(detailItem.reviewedAt).join(" - ")}</span>
                   </div>
@@ -544,61 +555,30 @@ export default function ReviewHistoryRecording() {
                     <span className="text-meta font-label text-[#16171C]">Quyết định của bạn:</span>
                     <MyDecision decision={detailItem.myDecision} />
                   </div>
-                    {reviews.length === 0 && (
+                  {rounds.length === 0 && (
                     <p className="type-meta text-[#6E7078]">Chưa có lượt duyệt nào cho cặp bản ghi này.</p>
                   )}
+                  {/* Mỗi lượt duyệt cả cặp: kết quả của lượt + lý do (bỏ trùng), giống popup bên Speaker */}
                   <div className="flex flex-col gap-2">
-                    {reviews.map((r, i) => {
+                    {rounds.map((r) => {
                       const isReject = r.decision === "Rejected";
                       const isApprove = r.decision === "Approved";
-                      const c = isReject
-                        ? "#C63B3B"
-                        : isApprove
-                          ? "#3FA66B"
-                          : "#A85E12";
-                      const rowBg = isReject
-                        ? "#FDEAEA"
-                        : isApprove
-                          ? "#EAF7EF"
-                          : "#FFF1DE";
-                      const rowBorder = isReject
-                        ? "#F3C9C9"
-                        : isApprove
-                          ? "rgba(63,166,107,0.2)"
-                          : "#F5DFC0";
+                      const c = isReject ? "#C63B3B" : isApprove ? "#3FA66B" : "#A85E12";
+                      const rowBg = isReject ? "#FDEAEA" : isApprove ? "#EAF7EF" : "#FFF1DE";
+                      const rowBorder = isReject ? "#F3C9C9" : isApprove ? "rgba(63,166,107,0.2)" : "#F5DFC0";
+                      const reasons = [...new Set(r.reviews.map((rv) => rv.reason).filter(Boolean))];
                       return (
-                        <div
-                          key={i}
-                          className="flex gap-2.5 px-3 py-2.5 rounded-xl border"
-                          style={{ background: rowBg, borderColor: rowBorder }}
-                        >
-                          <span
-                            className="w-6 h-6 rounded-full text-white text-caption font-label flex items-center justify-center flex-shrink-0"
-                            style={{ background: c }}
-                          >
+                        <div key={r.round} className="flex gap-2.5 px-3 py-2.5 rounded-xl border" style={{ background: rowBg, borderColor: rowBorder }}>
+                          <span className="w-6 h-6 rounded-full text-white text-caption font-label flex items-center justify-center flex-shrink-0" style={{ background: c }}>
                             R{r.round}
                           </span>
                           <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <span className="px-1.5 py-0.5 rounded text-caption font-label border border-[#E5E2D8] bg-white text-[#6E7078]">
-                                {r.recordingId === detailItem.viRecordingId ? "VI" : "VI-EN"}
-                              </span>
-                              <p
-                                className="text-meta font-label"
-                                style={{ color: isApprove ? "#1F5C3F" : c }}
-                              >
-                                {isReject
-                                  ? "Từ chối"
-                                  : isApprove
-                                    ? "Đã duyệt"
-                                    : "Chưa đánh giá"}
-                              </p>
-                            </div>
-                            {r.reason && (
-                              <p className="text-meta text-[#6E7078] mt-0.5">
-                                {r.reason}
-                              </p>
-                            )}
+                            <p className="text-meta font-label" style={{ color: isApprove ? "#1F5C3F" : c }}>
+                              {isReject ? "Từ chối" : isApprove ? "Đã duyệt" : "Chưa đánh giá"}
+                            </p>
+                            {reasons.map((reason) => (
+                              <p key={reason} className="text-meta text-[#6E7078] mt-0.5">{reason}</p>
+                            ))}
                           </div>
                         </div>
                       );
