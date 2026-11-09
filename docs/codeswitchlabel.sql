@@ -549,11 +549,14 @@ CREATE TABLE review_rejection_reason (
 -- CO Y khong nhet vao review.comment: comment la cho nguoi viet cho nguoi doc,
 -- con day la du lieu may sinh ra va can truy van duoc.
 --
--- review_id NULL nghia la may BO QUYEN: co bang chung nhung khong bo phieu nao.
+-- LUAT: hai Reviewer nguoi duyet truoc. Cung ket qua thi trigger chot ngay o luot 2
+-- va may khong tham gia. Chi khi hai nguoi LECH nhau thi may moi vao lam phieu thu
+-- ba de pha the. Vi la nguoi pha the, may luon phai quyet: khong co "bo quyen", nen
+-- review_id la NOT NULL.
 CREATE TABLE ai_review (
     ai_review_id  BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     recording_id  VARCHAR(64)  NOT NULL REFERENCES recording(recording_id),
-    review_id     BIGINT       REFERENCES review(review_id) ON DELETE SET NULL,
+    review_id     BIGINT       NOT NULL REFERENCES review(review_id) ON DELETE CASCADE,
     model         VARCHAR(120) NOT NULL,            -- ASR model name
     transcript    TEXT         NOT NULL,            -- what ASR heard
     expected_text TEXT         NOT NULL,            -- normalised script text compared against
@@ -566,14 +569,9 @@ CREATE TABLE ai_review (
     details       JSONB,                            -- thresholds used + explanation
 
     CONSTRAINT ck_ai_review_verdict
-        CHECK (verdict IN ('approved', 'rejected', 'abstained')),
+        CHECK (verdict IN ('approved', 'rejected')),
     CONSTRAINT ck_ai_review_wer_range
-        CHECK (wer >= 0 AND wer_folded >= 0),
-    -- Bat buoc: verdict co bo phieu thi phai tro toi mot dong review, bo quyen
-    -- thi phai khong tro. Khong the co "may noi da tu choi" ma chang co luot duyet nao.
-    CONSTRAINT ck_ai_review_vote_has_review
-        CHECK ((verdict =  'abstained' AND review_id IS     NULL)
-            OR (verdict <> 'abstained' AND review_id IS NOT NULL))
+        CHECK (wer >= 0 AND wer_folded >= 0)
 );
 
 CREATE INDEX idx_ai_review_recording ON ai_review (recording_id, analyzed_at DESC);
@@ -1816,13 +1814,9 @@ INSERT INTO system_config (config_key, config_value, value_type, description) VA
     ('queue.claim_ttl_minutes',                  '30',  'int', 'Minutes before an unclaimed queue item becomes claimable again'),
     -- lô câu văn bản Task Manager giao cho mỗi người duyệt (yêu cầu 2.2).
     ('text_review.batch_size',                   '100', 'int', 'Default number of pending sentences claimed per reviewer'),
-    -- [V24] may duyet ban ghi. allow_approve_vote MAC DINH TAT: may chi do duoc
-    -- noi dung, khong phan duoc tap am va phat am, nen phieu "dat" cua no che
-    -- dung hai loi no khong thay.
-    ('ai_review.enabled',             'false', 'bool',   'Enable the AI recording reviewer'),
-    ('ai_review.wer_reject_min',      '0.40',  'string', 'WER at or above this makes the AI vote rejected with content_mismatch'),
-    ('ai_review.wer_approve_max',     '0.10',  'string', 'WER at or below this makes the recording eligible for an AI approve vote'),
-    ('ai_review.allow_approve_vote',  'false', 'bool',   'Let the AI cast approve votes; off by default');
+    -- [V24] may duyet ban ghi, chi vao khi hai Reviewer nguoi lech nhau.
+    ('ai_review.enabled',                'false', 'bool',   'Enable the AI recording reviewer'),
+    ('ai_review.wer_decision_threshold', '0.40',  'string', 'Single boundary: WER below it votes approved, at or above it votes rejected with content_mismatch');
 
 -- Bootstrap admin — KHÔNG lưu mã hash mật khẩu trong SQL seed.
 -- DatabaseSeeder gán hash thật (từ Seed:DefaultPassword) khi ứng dụng khởi động,
