@@ -270,8 +270,10 @@ export default function AdminRecordings() {
         }
       });
 
-      // 6. XỬ LÝ TRẠNG THÁI KẾT QUẢ KHI DUYỆT
-      const pairedRecordings = Array.from(groupedMap.values()).map((pair) => {
+      // 6. CHỈ GIỮ LẠI CÁC CẶP CÂU ĐÃ DUYỆT (APPROVED) CÓ ĐỦ 2 AUDIO (CS & VI)
+      const pairedRecordings = [];
+
+      groupedMap.forEach((pair) => {
         let finalStatus = "Pending";
         const reviewsList = pair.reviews;
 
@@ -296,26 +298,29 @@ export default function AdminRecordings() {
           }
         }
 
-        return {
-          id: pair.id,
-          rawId: pair.rawIds[0] || pair.id,
-          rawIds: pair.rawIds,
-          scriptId: pair.scriptId,
-          csText: pair.csText,
-          viText: pair.viText,
-          topic: pair.topic,
-          speaker: pair.speaker,
-          speakerId: pair.speakerId,
-          speakerEmail: pair.speakerEmail,
-          csAudioUrl: pair.csAudioUrl,
-          viAudioUrl: pair.viAudioUrl,
-          durationSec: pair.durationSec,
-          status: finalStatus,
-          reviews: pair.reviews,
-          csRecordingId: pair.csRecordingId,
-          viRecordingId: pair.viRecordingId,
-          createdAt: pair.createdAt
-        };
+        // LỌC CỨNG: CHỈ LẤY CẶP CÂU CÓ KẾT QUẢ "APPROVED" VÀ CÓ CẢ 2 AUDIO
+        if (finalStatus === "Approved" && pair.csAudioUrl && pair.viAudioUrl) {
+          pairedRecordings.push({
+            id: pair.id,
+            rawId: pair.rawIds[0] || pair.id,
+            rawIds: pair.rawIds,
+            scriptId: pair.scriptId,
+            csText: pair.csText,
+            viText: pair.viText,
+            topic: pair.topic,
+            speaker: pair.speaker,
+            speakerId: pair.speakerId,
+            speakerEmail: pair.speakerEmail,
+            csAudioUrl: pair.csAudioUrl,
+            viAudioUrl: pair.viAudioUrl,
+            durationSec: pair.durationSec,
+            status: "Approved",
+            reviews: pair.reviews,
+            csRecordingId: pair.csRecordingId,
+            viRecordingId: pair.viRecordingId,
+            createdAt: pair.createdAt
+          });
+        }
       });
 
       // Sắp xếp giảm dần theo thời gian tạo
@@ -392,6 +397,7 @@ export default function AdminRecordings() {
     const keywords = searchTerm.trim().toLowerCase().split(/\s+/).filter(Boolean);
 
     return recordings.filter((r) => {
+      // Đã được lọc cứng ở fetchRecordings, nhưng vẫn giữ bộ lọc phụ nếu chọn dropdown
       const matchStatus = statusFilter === "all" || r.status === statusFilter;
       if (!matchStatus) return false;
 
@@ -527,8 +533,6 @@ export default function AdminRecordings() {
               >
                 <option value="all" className="bg-white dark:bg-[#25272E]">Tất cả trạng thái</option>
                 <option value="Approved" className="bg-white dark:bg-[#25272E]">Đã duyệt</option>
-                <option value="Pending" className="bg-white dark:bg-[#25272E]">Chờ duyệt</option>
-                <option value="Rejected" className="bg-white dark:bg-[#25272E]">Từ chối</option>
               </select>
             </div>
 
