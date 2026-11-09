@@ -56,9 +56,12 @@ export const adminService = {
     const res = await httpClient.post("/api/scripts", data);
     return res.data;
   },
-  importScripts: async (file) => {
+  importScripts: async (file, domain) => {
     const formData = new FormData();
     formData.append("file", file);
+    if (domain) {
+      formData.append("domain", domain);
+    }
     const res = await httpClient.post("/api/scripts/import", formData, {
       headers: {
         "Content-Type": "multipart/form-data"
