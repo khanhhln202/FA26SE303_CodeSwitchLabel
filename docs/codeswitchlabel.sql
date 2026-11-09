@@ -541,7 +541,7 @@ CREATE TABLE review_rejection_reason (
 );
 
 -- ------------------------------------------------------------
--- AI_REVIEW  [V23]
+-- AI_REVIEW  [V24]
 -- ------------------------------------------------------------
 -- Bang chung cua moi luot MAY phan ban ghi: transcript ASR doc duoc, van ban
 -- dang ra phai doc, va ti le sai tu (WER).
@@ -1810,7 +1810,7 @@ INSERT INTO system_config (config_key, config_value, value_type, description) VA
     ('queue.claim_ttl_minutes',                  '30',  'int', 'Minutes before an unclaimed queue item becomes claimable again'),
     -- lô câu văn bản Task Manager giao cho mỗi người duyệt (yêu cầu 2.2).
     ('text_review.batch_size',                   '100', 'int', 'Default number of pending sentences claimed per reviewer'),
-    -- [V23] may duyet ban ghi. allow_approve_vote MAC DINH TAT: may chi do duoc
+    -- [V24] may duyet ban ghi. allow_approve_vote MAC DINH TAT: may chi do duoc
     -- noi dung, khong phan duoc tap am va phat am, nen phieu "dat" cua no che
     -- dung hai loi no khong thay.
     ('ai_review.enabled',             'false', 'bool',   'Enable the AI recording reviewer'),
@@ -1826,7 +1826,7 @@ SELECT role_id, 'System Admin', 'admin@codeswitchlabel.local',
        '', 'active'
 FROM role WHERE role_name = 'admin';
 
--- [V23] Tai khoan nguoi duyet MAY. Phai co that vi review.reviewer_id la khoa
+-- [V24] Tai khoan nguoi duyet MAY. Phai co that vi review.reviewer_id la khoa
 -- ngoai toi app_user(user_id), khong nhan gia tri ao.
 --
 -- password_hash la chuoi KHONG phai bcrypt hop le, nen khong mat khau nao dang

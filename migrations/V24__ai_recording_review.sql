@@ -1,5 +1,5 @@
 -- ============================================================
--- V23 — AI duyệt bản ghi: tài khoản người duyệt máy, bảng bằng chứng, ngưỡng phán
+-- V24 — AI duyệt bản ghi: tài khoản người duyệt máy, bảng bằng chứng, ngưỡng phán
 --
 -- AI bỏ phiếu như một Reviewer thật, nên nó phải có một dòng app_user: cột
 -- review.reviewer_id là khoá ngoại tới app_user(user_id), không nhận giá trị ảo.
@@ -17,7 +17,7 @@
 -- database để không thể có "AI nói đã từ chối" mà chẳng có lượt duyệt nào.
 --
 -- Cài trên database ĐANG CHẠY:
---   cat migrations/V23__ai_recording_review.sql \
+--   cat migrations/V24__ai_recording_review.sql \
 --     | docker exec -i csl-postgres psql -U csl -d codeswitchlabel -v ON_ERROR_STOP=1
 --
 -- Idempotent: chạy lại nhiều lần vẫn cho kết quả như nhau.

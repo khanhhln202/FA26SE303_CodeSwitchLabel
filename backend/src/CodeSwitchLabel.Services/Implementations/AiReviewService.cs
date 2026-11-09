@@ -236,7 +236,7 @@ public class AiReviewService(
         await repo.GetAiReviewerIdAsync(ct)
         ?? throw new UnprocessableException(
             "ai_reviewer_missing",
-            $"Không có tài khoản {AiReviewer.Email}. Migration V23 chưa chạy trên database này.");
+            $"Không có tài khoản {AiReviewer.Email}. Migration V24 chưa chạy trên database này.");
 
     private async Task<byte[]> DownloadAsync(string cloudLink, string recordingId, CancellationToken ct)
     {

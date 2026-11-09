@@ -2,7 +2,7 @@ namespace CodeSwitchLabel.Repositories.Entities;
 
 /// <summary>
 /// Ba giá trị hợp lệ của ai_review.verdict, khớp đúng ràng buộc ck_ai_review_verdict
-/// trong migration V23. Để ở tầng Repositories vì đây là hợp đồng với database —
+/// trong migration V24. Để ở tầng Repositories vì đây là hợp đồng với database —
 /// tầng Services có enum riêng và tự ánh xạ sang mấy chuỗi này.
 /// </summary>
 public static class AiReviewVerdicts
@@ -13,7 +13,7 @@ public static class AiReviewVerdicts
 }
 
 /// <summary>
-/// Tài khoản người duyệt máy, do migration V23 tạo. Tra theo email chứ không ghi cứng
+/// Tài khoản người duyệt máy, do migration V24 tạo. Tra theo email chứ không ghi cứng
 /// user_id: cột app_user.user_id là identity nên số trên máy dev, máy CI và máy chủ
 /// không giống nhau.
 /// </summary>

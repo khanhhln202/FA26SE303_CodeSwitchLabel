@@ -422,7 +422,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.Property(x => x.Details).HasColumnType("jsonb");
 
             // (9,4) chứ không (6,4): WER không bị cắt về 1, nên chuỗi ASR rác dài làm
-            // tỉ lệ vọt lên rất cao — xem ghi chú trong migration V23.
+            // tỉ lệ vọt lên rất cao — xem ghi chú trong migration V24.
             e.Property(x => x.Wer).HasPrecision(9, 4);
             e.Property(x => x.WerFolded).HasPrecision(9, 4);
 

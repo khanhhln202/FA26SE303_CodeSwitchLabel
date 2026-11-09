@@ -23,7 +23,7 @@ public record AiReviewCandidate(
 
 public interface IAiReviewRepository
 {
-    /// <summary>Null nghĩa là migration V23 chưa chạy trên database này.</summary>
+    /// <summary>Null nghĩa là migration V24 chưa chạy trên database này.</summary>
     Task<long?> GetAiReviewerIdAsync(CancellationToken ct = default);
 
     Task<AiReviewCandidate?> GetCandidateAsync(string recordingId, CancellationToken ct = default);
