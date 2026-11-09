@@ -1,15 +1,17 @@
 namespace CodeSwitchLabel.Repositories.Entities;
 
 /// <summary>
-/// Ba giá trị hợp lệ của ai_review.verdict, khớp đúng ràng buộc ck_ai_review_verdict
-/// trong migration V24. Để ở tầng Repositories vì đây là hợp đồng với database —
-/// tầng Services có enum riêng và tự ánh xạ sang mấy chuỗi này.
+/// Hai giá trị hợp lệ của ai_review.verdict. V24 dựng bảng với ba giá trị; V25 siết lại
+/// còn hai khi luật đổi sang "máy là phiếu thứ ba phá thế". Để ở tầng Repositories vì đây
+/// là hợp đồng với database — tầng Services có enum riêng và tự ánh xạ sang hai chuỗi này.
+///
+/// Không có "abstained": máy chỉ vào khi hai Reviewer người lệch nhau, tức nó là người
+/// phá thế, nên luôn phải chọn một bên.
 /// </summary>
 public static class AiReviewVerdicts
 {
     public const string Approved = "approved";
     public const string Rejected = "rejected";
-    public const string Abstained = "abstained";
 }
 
 /// <summary>
@@ -30,9 +32,8 @@ public static class AiReviewer
 /// là dữ liệu máy sinh ra và cần truy vấn được (thống kê độ chính xác của máy, tra lại
 /// vì sao một bản bị loại).
 ///
-/// <see cref="ReviewId"/> null nghĩa là máy BỎ QUYỀN — có bằng chứng nhưng không có lượt
-/// duyệt nào. Ràng buộc ck_ai_review_vote_has_review dưới database bắt chặt chiều này:
-/// verdict có bỏ phiếu thì bắt buộc trỏ tới một dòng review, và ngược lại.
+/// <see cref="ReviewId"/> không nullable: máy chỉ vào để phá thế nên mỗi dòng bằng chứng
+/// luôn gắn với một lượt duyệt thật. Lược đồ chặn chiều này bằng NOT NULL.
 /// </summary>
 public class AiReview
 {
@@ -40,8 +41,7 @@ public class AiReview
 
     public string RecordingId { get; set; } = string.Empty;
 
-    /// <summary>Null khi bỏ quyền.</summary>
-    public long? ReviewId { get; set; }
+    public long ReviewId { get; set; }
 
     /// <summary>Tên mô hình ASR đã dùng, để so lại khi đổi mô hình.</summary>
     public string Model { get; set; } = string.Empty;
@@ -58,7 +58,7 @@ public class AiReview
     public decimal WerFolded { get; set; }
 
     /// <summary>Một trong <see cref="AiReviewVerdicts"/>.</summary>
-    public string Verdict { get; set; } = AiReviewVerdicts.Abstained;
+    public string Verdict { get; set; } = AiReviewVerdicts.Rejected;
 
     public DateTimeOffset AnalyzedAt { get; set; }
 
@@ -66,5 +66,5 @@ public class AiReview
     public string? Details { get; set; }
 
     public Recording Recording { get; set; } = null!;
-    public Review? Review { get; set; }
+    public Review Review { get; set; } = null!;
 }
