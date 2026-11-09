@@ -15,8 +15,12 @@ using Microsoft.Extensions.Options;
 namespace CodeSwitchLabel.Services.Implementations;
 
 /// <summary>
-/// Máy duyệt bản ghi. Lấy audio từ kho, chuyển thành chữ bằng ASR, so với văn bản đáng ra
-/// phải đọc, rồi BỎ PHIẾU như một Reviewer thật — hoặc bỏ quyền khi không đủ chắc.
+/// Máy duyệt bản ghi, đóng vai PHIẾU THỨ BA PHÁ THẾ.
+///
+/// Luật nghiệp vụ (chốt với giảng viên hướng dẫn): hai Reviewer người duyệt trước. Cùng kết
+/// quả thì trigger trg_review_majority chốt ngay ở lượt 2 và máy không tham gia. Chỉ khi hai
+/// người LỆCH nhau (1 đạt / 1 không đạt) thì máy mới vào. Vì là người phá thế, máy luôn phải
+/// chọn một bên — không có "bỏ quyền", vì bỏ quyền để lại bản ghi 1–1 không ai quyết.
 ///
 /// Bỏ phiếu bằng cách gọi đúng <see cref="IReviewService.SubmitAsync"/> mà người dùng đi,
 /// KHÔNG tự INSERT vào bảng review. Hàm đó đã khoá hàng recording trong transaction (nên
@@ -54,7 +58,7 @@ public class AiReviewService(
         var settings = await LoadSettingsAsync(ct);
         var aiReviewerId = await RequireAiReviewerAsync(ct);
 
-        var ids = await repo.GetPendingRecordingIdsAsync(limit, aiReviewerId, ct);
+        var ids = await repo.GetTiedRecordingIdsAsync(limit, aiReviewerId, ct);
 
         var items = new List<AiReviewResultDto>();
         var skipped = new List<AiReviewSkippedDto>();
@@ -68,7 +72,7 @@ public class AiReviewService(
             catch (AppException ex)
             {
                 // Một bản lỗi không được làm đổ cả lô: ASR hỏng giữa đường, hoặc có người
-                // vừa bỏ phiếu xong làm lệch vòng. Ghi lại rồi đi tiếp.
+                // vừa bỏ phiếu xong làm bản ghi không còn ở thế 1–1. Ghi lại rồi đi tiếp.
                 logger.LogWarning(ex, "Bỏ qua {RecordingId} khi chạy lô máy duyệt: {Code}", id, ex.Code);
                 skipped.Add(new AiReviewSkippedDto(id, ex.Code, ex.Message));
             }
@@ -78,7 +82,6 @@ public class AiReviewService(
             items.Count,
             items.Count(i => i.Verdict == AiReviewVerdicts.Approved),
             items.Count(i => i.Verdict == AiReviewVerdicts.Rejected),
-            items.Count(i => i.Verdict == AiReviewVerdicts.Abstained),
             items,
             skipped);
     }
@@ -126,6 +129,19 @@ public class AiReviewService(
                 "already_reviewed", $"Máy đã duyệt bản ghi {recordingId} rồi.");
         }
 
+        // CỬA CHẶN CHÍNH của luật nghiệp vụ: hai Reviewer người duyệt trước, và máy chỉ
+        // vào khi hai người đó LỆCH nhau. Kiểm trước khi gọi ASR vì mỗi lượt gọi tốn tiền.
+        var tally = await repo.GetReviewTallyAsync(recordingId, ct);
+
+        if (!tally.IsTie)
+        {
+            throw new ConflictException(
+                "ai_review_not_tiebreak",
+                $"Bản ghi {recordingId} chưa tới lượt máy: đang có {tally.Total} lượt duyệt "
+                + $"({tally.Approved} đạt / {tally.Total - tally.Approved} không đạt). "
+                + "Máy chỉ vào khi đã có đúng hai lượt của người và hai lượt đó khác kết quả.");
+        }
+
         var audio = await DownloadAsync(candidate.CloudLink, recordingId, ct);
         var transcription = await asr.TranscribeAsync(audio, $"{recordingId}.wav", ct);
 
@@ -153,31 +169,28 @@ public class AiReviewService(
     {
         await using var transaction = await repo.BeginTransactionAsync(ct);
 
-        SubmitReviewResult? submitted = null;
+        // Đọc lại số lượt BÊN TRONG transaction: SubmitAsync khoá hàng recording và bắt
+        // ExpectedRound khớp vòng hiện tại, nên con số phải lấy sau khi đã vào transaction.
+        var tally = await repo.GetReviewTallyAsync(candidate.RecordingId, ct);
 
-        if (decision.Verdict != AiReviewVerdict.Abstained)
-        {
-            var existing = await repo.GetReviewCountAsync(candidate.RecordingId, ct);
-
-            submitted = await reviews.SubmitAsync(
-                candidate.RecordingId,
-                aiReviewerId,
-                new SubmitReviewRequest
-                {
-                    Decision = decision.Verdict == AiReviewVerdict.Approved
-                        ? ReviewDecision.Approved
-                        : ReviewDecision.Rejected,
-                    ExpectedRound = ReviewRules.NextRound(existing),
-                    RejectionReasonCodes = [.. decision.RejectionReasonCodes],
-                    Comment = BuildComment(decision, comparison, transcription)
-                },
-                ct);
-        }
+        var submitted = await reviews.SubmitAsync(
+            candidate.RecordingId,
+            aiReviewerId,
+            new SubmitReviewRequest
+            {
+                Decision = decision.Verdict == AiReviewVerdict.Approved
+                    ? ReviewDecision.Approved
+                    : ReviewDecision.Rejected,
+                ExpectedRound = ReviewRules.NextRound(tally.Total),
+                RejectionReasonCodes = [.. decision.RejectionReasonCodes],
+                Comment = BuildComment(decision, comparison, transcription)
+            },
+            ct);
 
         var row = new AiReview
         {
             RecordingId = candidate.RecordingId,
-            ReviewId = submitted?.ReviewId,
+            ReviewId = submitted.ReviewId,
             Model = transcription.Model,
             Transcript = transcription.Text,
             ExpectedText = comparison.ExpectedNormalized,
@@ -206,8 +219,8 @@ public class AiReviewService(
             comparison.ExpectedNormalized,
             decision.Explanation,
             transcription.Model,
-            submitted?.ReviewId,
-            submitted?.RecordingStatus,
+            submitted.ReviewId,
+            submitted.RecordingStatus,
             row.AnalyzedAt);
     }
 
@@ -293,9 +306,7 @@ public class AiReviewService(
         {
             explanation = decision.Explanation,
             effective_wer = comparison.Effective,
-            wer_reject_min = settings.WerRejectMin,
-            wer_approve_max = settings.WerApproveMax,
-            allow_approve_vote = settings.AllowApproveVote,
+            wer_decision_threshold = settings.WerDecisionThreshold,
             reason_codes = decision.RejectionReasonCodes
         });
 
@@ -318,12 +329,8 @@ public class AiReviewService(
         }
     }
 
-    private static string ToColumn(AiReviewVerdict verdict) => verdict switch
-    {
-        AiReviewVerdict.Approved => AiReviewVerdicts.Approved,
-        AiReviewVerdict.Rejected => AiReviewVerdicts.Rejected,
-        _ => AiReviewVerdicts.Abstained
-    };
+    private static string ToColumn(AiReviewVerdict verdict) =>
+        verdict == AiReviewVerdict.Approved ? AiReviewVerdicts.Approved : AiReviewVerdicts.Rejected;
 
     private static string Cut(string value, int limit) =>
         string.IsNullOrEmpty(value) || value.Length <= limit

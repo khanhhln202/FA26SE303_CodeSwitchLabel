@@ -55,17 +55,12 @@ public static class ConfigKeys
     /// <summary>Bật tính năng máy duyệt bản ghi. Tắt thì endpoint trả ai_review_disabled.</summary>
     public const string AiReviewEnabled = "ai_review.enabled";
 
-    /// <summary>Tỉ lệ sai từ (WER) từ mức này trở lên thì máy bỏ phiếu từ chối.</summary>
-    public const string AiReviewWerRejectMin = "ai_review.wer_reject_min";
-
-    /// <summary>Tỉ lệ sai từ tới mức này thì bản ghi đủ điều kiện được máy duyệt đạt.</summary>
-    public const string AiReviewWerApproveMax = "ai_review.wer_approve_max";
-
     /// <summary>
-    /// Cho máy bỏ phiếu ĐẠT hay không. Mặc định tắt: máy chỉ đo được nội dung, không
-    /// phán được tạp âm và phát âm, nên phiếu đạt của nó che đúng hai lỗi nó không thấy.
+    /// Ranh giới DUY NHẤT của máy duyệt: WER dưới mức này thì bỏ phiếu đạt, từ mức này
+    /// trở lên thì từ chối. Máy là người phá thế nên luôn phải chọn một bên — không có
+    /// vùng bỏ quyền, nên chỉ cần một ngưỡng.
     /// </summary>
-    public const string AiReviewAllowApproveVote = "ai_review.allow_approve_vote";
+    public const string AiReviewWerDecisionThreshold = "ai_review.wer_decision_threshold";
 }
 
 /// <summary>
