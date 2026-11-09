@@ -71,7 +71,8 @@ internal static class ScriptPairRules
     /// Đổi alignment thành các dòng script_word — đúng một dòng cho mỗi từ tiếng Anh.
     /// Thiếu hay thừa dòng đều bị từ chối vì trigger defer của database buộc số dòng khớp en_word_count.
     /// </summary>
-    public static List<ScriptWord> BuildWords(List<AlignmentItem> alignment, int enWordCount)
+    public static List<ScriptWord> BuildWords(
+        List<AlignmentItem> alignment, int enWordCount, bool allowEmptyTargets = false)
     {
         if (alignment.Count != enWordCount)
         {
@@ -99,7 +100,7 @@ internal static class ScriptPairRules
             // Danh từ riêng giữ nguyên, không dịch: lược đồ bắt buộc vi_word = en_word.
             var vi = isProper ? en : (item.Target ?? string.Empty).Trim();
 
-            if (vi.Length == 0)
+            if (vi.Length == 0 && !allowEmptyTargets)
             {
                 throw new UnprocessableException(
                     "alignment_word_missing", $"Mục alignment thứ {i + 1} thiếu nghĩa tiếng Việt.");

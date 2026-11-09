@@ -114,4 +114,4 @@ flowchart LR
     Admin --> Configure
 ```
 
-**Implementation note:** Reviewer profile editing is currently mock-only in the frontend; password changes use the backend API. Admin recording review/discard actions that exist only in the API are not shown because the frontend does not expose them. The text import screen currently sends JSON only; the backend also accepts `.txt` pairs with a `Domain` field and LLM labeling. The recording screen exports a ZIP of the selected approved pairs via `POST /api/datasets/export`.
+**Implementation note:** Reviewer profile editing is currently mock-only in the frontend; password changes use the backend API. Admin recording review/discard actions that exist only in the API are not shown because the frontend does not expose them. The text import screen currently sends JSON only; the backend also accepts `.txt` pairs with a `Domain` field and auto-labeling (LLM when configured, rule-based fallback otherwise). The recording screen exports a ZIP of the selected approved pairs via `POST /api/datasets/export`.

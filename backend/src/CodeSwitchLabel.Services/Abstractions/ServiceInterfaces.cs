@@ -35,7 +35,8 @@ public interface IScriptService
 
     /// <summary>
     /// Nhập file .txt: mỗi cặp đúng hai dòng (câu trộn, câu thuần Việt).
-    /// LLM gán nhãn [vi]/[en] và alignment trước, rồi câu đi qua đúng luồng import hiện có.
+    /// Có LLM thì gán nhãn và nghĩa từ; chưa cấu hình LLM thì gán nhãn bằng luật: từ chung
+    /// của hai câu làm mốc, đoạn giữa hai mốc là nghĩa (có thể nhiều từ); hết từ thì để trống.
     /// </summary>
     Task<ImportResultDto> ImportRawAsync(
         Stream textFile, string fileName, long importedById, string domain,

@@ -5,6 +5,7 @@ import { Navigate, useNavigate, useLocation, useSearchParams } from "react-route
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import CodeSwitchText from "../../../components/CodeSwitchText/CodeSwitchText";
+import TaggedText from "../../../components/CodeSwitchText/TaggedText";
 import {
   SPEAKER_ACCENT as ACCENT,
   AUDIO_PRIMARY, AUDIO_SHADOW,
@@ -120,7 +121,7 @@ export default function SubmitTask() {
   const queryClient = useQueryClient();
 
   // Nhận từ RecordSpeech qua navigate state: câu + các bản ghi { cs?: { url, blob }, vi?: { url, blob } }
-  const { scriptId, csContent, viPlain, remainingVariants, recordings } = location.state || {};
+  const { scriptId, csContent, viPlain, viContent, remainingVariants, recordings } = location.state || {};
 
   // Chỉ nộp bản backend còn thiếu: bản đã nộp trước đó (đang chờ duyệt / đã đạt) mà gửi lại sẽ bị 409.
   // Trang vẫn cho ghi và nghe lại đủ 2 câu.
@@ -202,6 +203,9 @@ export default function SubmitTask() {
             <p className="type-reading-sm" style={{ color: TEXT_HEADING }}>
               "<CodeSwitchText transcript={csContent} accent={ACCENT} />"
             </p>
+            <p className="type-body mt-1" style={{ color: TEXT_BODY }}>
+              <TaggedText transcript={csContent} accent={ACCENT} />
+            </p>
           </div>
           <AudioBlock label="Bản ghi Việt-Anh" src={recordings.cs.url} />
         </div>
@@ -215,6 +219,11 @@ export default function SubmitTask() {
             <p className="type-reading-sm" style={{ color: TEXT_HEADING }}>
               "{viPlain}"
             </p>
+            {viContent && (
+              <p className="type-body mt-1" style={{ color: TEXT_BODY }}>
+                <TaggedText transcript={viContent} accent={ACCENT} />
+              </p>
+            )}
           </div>
           <AudioBlock label="Bản ghi tiếng Việt" src={recordings.vi.url} />
         </div>

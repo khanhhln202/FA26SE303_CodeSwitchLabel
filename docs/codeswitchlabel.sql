@@ -1056,17 +1056,23 @@ CREATE TRIGGER trg_wave_assigned_to_role
 
 -- [ERD / USER_DOMAIN] A script may only become 'validated' after an
 -- accepted/edited SCRIPT_REVIEW by a user qualified for the script's domain.
+-- Admin is qualified for every domain; other roles need a matching user_domain row.
 CREATE OR REPLACE FUNCTION fn_script_validated_by_domain_reviewer() RETURNS trigger AS $$ BEGIN
     IF NEW.status = 'validated'
        AND (TG_OP = 'INSERT' OR OLD.status IS DISTINCT FROM 'validated') THEN
         IF NOT EXISTS (
             SELECT 1
               FROM script_review sr
-              JOIN user_domain ud ON ud.user_id = sr.user_id
-                                 AND ud.domain  = NEW.domain
+              JOIN app_user u ON u.user_id = sr.user_id
+              JOIN role r ON r.role_id = u.role_id
              WHERE sr.script_id = NEW.script_id
                AND sr.action IN ('accepted','edited')
                AND (TG_OP = 'INSERT' OR sr.reviewed_at >= OLD.updated_at)
+               AND (r.role_name = 'admin'
+                    OR EXISTS (
+                        SELECT 1 FROM user_domain ud
+                         WHERE ud.user_id = sr.user_id
+                           AND ud.domain = NEW.domain))
         ) THEN
             RAISE EXCEPTION
                 'script % cannot be validated: no accepted/edited review by a reviewer qualified for domain % after last reset',
@@ -1536,7 +1542,7 @@ BEGIN
     UPDATE recording SET status = v_final
      WHERE recording_id = NEW.recording_id AND status = 'pending_review';
 
-    -- V12: KHÔNG đẩy câu về duyệt nội dung nữa. Xem ghi chú ở đầu migration.
+    -- V18: KHÔNG đẩy câu về duyệt nội dung nữa. Xem ghi chú ở đầu migration V18.
     RETURN NEW;
 END $$ LANGUAGE plpgsql;
 

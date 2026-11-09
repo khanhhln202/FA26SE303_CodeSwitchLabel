@@ -14,6 +14,11 @@ public interface ILabelingService
     /// khi gọi hoặc đọc kết quả thất bại.
     /// </summary>
     Task<LabeledPair> LabelAsync(string csRaw, string viRaw, CancellationToken ct = default);
+
+    /// <summary>
+    /// Gán nhãn tự động: dùng LLM nếu đã cấu hình, ngược lại dùng luật.
+    /// </summary>
+    Task<LabeledPair> AutoLabelAsync(string csRaw, string viRaw, CancellationToken ct = default);
 }
 
 /// <summary>Câu đã gán nhãn và alignment tương ứng, sẵn sàng đưa vào luồng import hiện có.</summary>

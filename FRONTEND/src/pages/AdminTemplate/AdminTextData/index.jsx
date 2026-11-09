@@ -10,7 +10,7 @@ import {
   X,
   AlertTriangle,
   Upload,
-  FileJson,
+  FileText,
   Loader2,
   ChevronDown
 } from "lucide-react";
@@ -24,9 +24,11 @@ import {
   CHIP_SUCCESS_TEXT,
   CHIP_WARNING_BG,
   CHIP_WARNING_BORDER,
-  CHIP_WARNING_TEXT
+  CHIP_WARNING_TEXT,
+  AUDIO_PRIMARY
 } from "../../../constants/theme";
 import { adminService } from "../../../services/adminService";
+import { parseCodeSwitch } from "../../../utils/codeSwitch";
 
 const CATEGORY_COLORS = {
   'Hội thoại hàng ngày': { bg: '#E6F0FE', text: '#1E40AF', border: '#C9DEFB' },
@@ -56,69 +58,25 @@ const catStyle = (cat) => {
   return CATEGORY_COLORS[normalized] || { bg: '#F7F5EF', text: '#6E7078', border: '#E5E2D8' };
 };
 
-// Hàm xóa thẻ [vi] và [en] chỉ dùng khi cần kiểm tra trùng lặp Client
-const cleanLanguageTags = (str) => {
-  if (!str) return "";
-  return str
-    .replace(/\[vi\]/gi, " ")
-    .replace(/\[en\]/gi, " ")
-    .replace(/\[\/vi\]/gi, " ")
-    .replace(/\[\/en\]/gi, " ")
-    .replace(/\s+/g, " ") // Chuẩn hóa khoảng trắng thừa
-    .trim();
-};
-
-// Helper tự động gắn nhãn [vi]...[/vi] và [en]...[/en] cho từng từ
-const addTagsToCsContent = (str) => {
-  if (!str) return "";
-  if (str.includes("[vi]") || str.includes("[en]")) return str;
-
-  const words = str.trim().split(/\s+/);
-  return words
-    .map((word) => {
-      const cleanWord = word.replace(/^[.,!?;:]+|[.,!?;:]+$/g, "").toLowerCase();
-      const isEnglishWord =
-        /^[a-z]+$/i.test(cleanWord) &&
-        !/^(la|cho|co|hay|ho|ma|voi|nay|ngay|hai|tu|khac|loi|truy|goc|gop|truoc|sau|duong|dan|hop|giao|dien|dung|dang|phien|ban|chua|cai|dat|phan|mem|chia|se|man|hinh|nen)$/i.test(
-          cleanWord
-        ) &&
-        cleanWord.length > 1;
-
-      if (isEnglishWord) {
-        return `[en]${word}[/en]`;
-      }
-      return `[vi]${word}[/vi]`;
-    })
-    .join(" ");
-};
-
-// Hiển thị đầy đủ cả thẻ [vi], [/vi], [en], [/en] thô gốc và in đậm từ tiếng Anh
+// Loại bỏ sạch sẽ các thẻ [vi], [/vi], [en], [/en] và tô màu chữ tiếng Anh
 function HighlightCsText({ rawText }) {
   if (!rawText) return null;
 
-  if (rawText.includes("[en]") || rawText.includes("[vi]")) {
-    const parts = rawText.split(/(\[en\].*?\[\/en\]|\[vi\].*?\[\/vi\])/gi);
-    
-    return (
-      <>
-        {parts.map((part, index) => {
-          if (!part) return null;
-          const lowerPart = part.toLowerCase();
+  // Sử dụng helper parseCodeSwitch chuẩn để bóc tách nhãn và làm sạch chuỗi
+  const segments = parseCodeSwitch(rawText);
 
-          if (lowerPart.startsWith("[en]")) {
-            return (
-              <span key={index} className="font-semibold">
-                {part}
-              </span>
-            );
-          }
-          return part;
-        })}
-      </>
-    );
-  }
-
-  return <>{rawText}</>;
+  return (
+    <>
+      {segments.map((segment, i) => (
+        <span 
+          key={i} 
+          style={segment.lang === "en" ? { color: AUDIO_PRIMARY, fontWeight: 600 } : undefined}
+        >
+          {segment.text}
+        </span>
+      ))}
+    </>
+  );
 }
 
 export default function AdminTextData() {
@@ -135,7 +93,14 @@ export default function AdminTextData() {
   const [editingItem, setEditingItem] = useState(null); 
   const [itemToDelete, setItemToDelete] = useState(null);
   
-  const [selectedJsonFile, setSelectedJsonFile] = useState(null);
+  // State phục vụ modal thêm mới file .txt & chọn domain
+  const [selectedTxtFile, setSelectedTxtFile] = useState(null);
+  const [domainSelect, setDomainSelect] = useState("IT/Technology");
+  
+  // State phục vụ modal chỉnh sửa 1 cặp câu
+  const [editCsText, setEditCsText] = useState("");
+  const [editViText, setEditViText] = useState("");
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fileLoading, setFileLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -145,14 +110,17 @@ export default function AdminTextData() {
     try {
       const params = {
         page: currentPage,
-        pageSize: pageSize
+        pageSize: pageSize,
+        sort: "createdAt",
+        dir: "desc"
       };
       
       if (activeSearchTerm) {
         params.search = activeSearchTerm;
       }
       if (selectedStatus !== "all") {
-        params.status = selectedStatus === "active" ? "Validated" : "Pending";
+        // ĐÃ SỬA: Dùng "PendingValidation" chuẩn Enum của Backend thay vì "Pending"
+        params.status = selectedStatus === "active" ? "Validated" : "PendingValidation";
       }
 
       const res = await adminService.getTexts(params);
@@ -163,7 +131,6 @@ export default function AdminTextData() {
       setTextList(
         items.map((item) => ({
           id: item.scriptId || item.id,
-          // Giữ NGUYÊN 100% chuỗi gốc chứa [vi], [/vi], [en], [/en] cho cả 2 trường
           csContent: item.csContent || item.csPlain || item.content || "",
           viContent: item.viContent || item.viEquivalent || item.csContent || item.content || "",
           content: item.csContent || item.csPlain || item.content || "",
@@ -216,14 +183,14 @@ export default function AdminTextData() {
 
   const handleFileSelected = (file) => {
     if (!file) return;
-    if (!file.name.endsWith(".json")) {
-      toast.error("Vui lòng chọn đúng file định dạng .json!");
+    if (!file.name.endsWith(".txt")) {
+      toast.error("Vui lòng chọn đúng file định dạng .txt!");
       return;
     }
 
     setFileLoading(true);
     setUploadProgress(0);
-    setSelectedJsonFile(null);
+    setSelectedTxtFile(null);
 
     let current = 0;
     const interval = setInterval(() => {
@@ -232,7 +199,7 @@ export default function AdminTextData() {
       if (current >= 100) {
         clearInterval(interval);
         setTimeout(() => {
-          setSelectedJsonFile(file);
+          setSelectedTxtFile(file);
           setFileLoading(false);
         }, 150);
       }
@@ -241,7 +208,8 @@ export default function AdminTextData() {
 
   const handleOpenAddModal = () => {
     setEditingItem(null);
-    setSelectedJsonFile(null);
+    setSelectedTxtFile(null);
+    setDomainSelect("IT/Technology");
     setFileLoading(false);
     setUploadProgress(0);
     setShowModal(true);
@@ -249,7 +217,9 @@ export default function AdminTextData() {
 
   const handleOpenEditModal = (item) => {
     setEditingItem(item);
-    setSelectedJsonFile(null);
+    setEditCsText(item.csContent || item.rawCsContent || "");
+    setEditViText(item.viContent || "");
+    setSelectedTxtFile(null);
     setFileLoading(false);
     setUploadProgress(0);
     setShowModal(true);
@@ -259,72 +229,40 @@ export default function AdminTextData() {
     e.preventDefault();
 
     try {
-      if (!selectedJsonFile) {
-        toast.error("Vui lòng chọn hoặc kéo thả file JSON!");
-        return;
-      }
-
       setIsSubmitting(true);
 
-      const fileContent = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (event) => resolve(event.target.result);
-        reader.onerror = (error) => reject(error);
-        reader.readAsText(selectedJsonFile, "UTF-8");
-      });
-
-      let parsedData;
-      try {
-        parsedData = JSON.parse(fileContent);
-      } catch (jsonErr) {
-        toast.error("File không đúng chuẩn JSON! Vui lòng kiểm tra lại cú pháp.");
-        setIsSubmitting(false);
-        return;
-      }
-
-      const itemsToUpload = Array.isArray(parsedData) ? parsedData : [parsedData];
-      if (itemsToUpload.length === 0) {
-        toast.error("File JSON rỗng!");
-        setIsSubmitting(false);
-        return;
-      }
-
-      const item = itemsToUpload[0];
-      const rawCs = item.cs_transcript || item.csContent || item.content || "";
-      const rawVi = item.vi_equivalent || item.viContent || rawCs;
-
-      const taggedCsContent = addTagsToCsContent(rawCs);
-      const cleanCsForCheck = cleanLanguageTags(rawCs).toLowerCase();
-
-      const isDuplicateOnClient = textList.some((existingItem) => {
-        if (editingItem && existingItem.id === editingItem.id) return false;
-        const existingClean = cleanLanguageTags(existingItem.csContent).toLowerCase();
-        return existingClean === cleanCsForCheck;
-      });
-
-      if (isDuplicateOnClient) {
-        toast.error("Câu văn bản này đã tồn tại trên hệ thống! Vui lòng không thêm trùng.");
-        setIsSubmitting(false);
-        return;
-      }
-
       if (editingItem) {
+        // LUỒNG EDIT: Chỉnh sửa 1 cặp câu text trực tiếp
+        if (!editCsText.trim() || !editViText.trim()) {
+          toast.error("Vui lòng nhập đầy đủ cả câu trộn VI-EN và câu thuần VI!");
+          setIsSubmitting(false);
+          return;
+        }
+
         await adminService.updatePendingScript(editingItem.id, {
-          csContent: taggedCsContent,
-          viContent: rawVi
+          csContent: editCsText.trim(),
+          viContent: editViText.trim()
         });
         toast.success("Đã cập nhật câu văn bản! Trạng thái vẫn giữ nguyên Chờ duyệt.");
       } else {
-        await adminService.importScripts(selectedJsonFile);
-        toast.success("Đã thêm thành công câu văn bản ở trạng thái Chờ duyệt!");
+        // LUỒNG ADD NEW: Import file .txt kèm Domain
+        if (!selectedTxtFile) {
+          toast.error("Vui lòng chọn hoặc kéo thả file .txt!");
+          setIsSubmitting(false);
+          return;
+        }
+
+        await adminService.importScripts(selectedTxtFile, domainSelect);
+        toast.success("Đã tải lên file .txt thành công! Các cặp câu đang ở trạng thái Chờ duyệt.");
       }
 
       setShowModal(false);
+      setCurrentPage(1);
       fetchTexts();
     } catch (err) {
       console.error("Lỗi xử lý form:", err);
       const responseData = err?.response?.data;
-      let errorMsg = responseData?.title || responseData?.message || err?.message || "Thao tác xử lý file thất bại!";
+      let errorMsg = responseData?.title || responseData?.message || err?.message || "Thao tác xử lý thất bại!";
 
       if (
         errorMsg.toLowerCase().includes("trùng") ||
@@ -333,7 +271,7 @@ export default function AdminTextData() {
         err?.response?.status === 409 ||
         err?.response?.status === 422
       ) {
-        errorMsg = "Câu văn bản bị trùng lặp! Backend từ chối lưu câu đã tồn tại.";
+        errorMsg = "Câu văn bản bị trùng lặp hoặc không đúng định dạng! Backend từ chối lưu.";
       }
 
       toast.error(errorMsg);
@@ -468,7 +406,7 @@ export default function AdminTextData() {
                       
                       {/* Hiển thị 2 dòng dạng badge VI-EN và VI */}
                       <div className="px-4 flex-1 space-y-0.5 my-0.5 pr-6 min-w-0">
-                        {/* Dòng 1: Trộn ngôn ngữ (VI-EN) - HIỂN THỊ ĐẦY ĐỦ THẺ [vi], [en] */}
+                        {/* Dòng 1: Trộn ngôn ngữ (VI-EN) */}
                         <div className="flex items-center gap-2">
                           <span 
                             style={{ background: `${ADMIN_ACCENT}1A`, color: ADMIN_ACCENT }}
@@ -481,7 +419,7 @@ export default function AdminTextData() {
                           </p>
                         </div>
 
-                        {/* Dòng 2: Tiếng Việt thuần (VI) - GIỮ NGUYÊN MÃ THÔ NẾU CÓ */}
+                        {/* Dòng 2: Tiếng Việt thuần (VI) */}
                         <div className="flex items-center gap-2">
                           <span 
                             style={{ background: '#F0EEE6', color: '#6E7078' }}
@@ -585,7 +523,7 @@ export default function AdminTextData() {
         </div>
       </div>
 
-      {/* Modal Thêm & Chỉnh Sửa Dùng Chung Kéo Thả File JSON */}
+      {/* MODAL THÊM & CHỈNH SỬA VĂN BẢN */}
       {showModal && (
         <div className="fixed inset-0 bg-[#16171C]/55 backdrop-blur-xs flex items-center justify-center p-4 z-50" onClick={() => setShowModal(false)}>
           <div className="bg-white dark:bg-[#1C1D22] rounded-[24px] w-full max-w-md shadow-[0_20px_50px_rgba(16,17,20,0.25)] overflow-hidden border border-[#E5E2D8] dark:border-gray-800 animate-in fade-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
@@ -604,85 +542,143 @@ export default function AdminTextData() {
                 </button>
               </div>
 
-              <div className="space-y-3">
-                <label className="block type-label text-[#2B2C31] dark:text-gray-200">
-                  Kéo thả hoặc chọn file dữ liệu (.json)
-                </label>
-                
-                <div 
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    setIsDragging(true);
-                  }}
-                  onDragLeave={(e) => {
-                    e.preventDefault();
-                    setIsDragging(false);
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    setIsDragging(false);
-                    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                      handleFileSelected(e.dataTransfer.files[0]);
-                    }
-                  }}
-                  style={{
-                    borderColor: isDragging ? ADMIN_ACCENT : undefined,
-                    backgroundColor: isDragging ? `${ADMIN_ACCENT}0D` : undefined
-                  }}
-                  className="border-2 border-dashed rounded-2xl p-6 text-center transition-all bg-[#F7F5EF]/50 dark:bg-[#25272E]/50 border-[#E5E2D8] dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500"
-                >
-                  <input
-                    type="file"
-                    accept=".json"
-                    id="json-file-input"
-                    className="hidden"
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        handleFileSelected(e.target.files[0]);
-                      }
-                    }}
-                  />
+              {!editingItem ? (
+                /* GIAO DIỆN ADD NEW: UPLOAD FILE .TXT + SELECT DOMAIN */
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="block type-label text-[#2B2C31] dark:text-gray-200">
+                      Kéo thả hoặc chọn file dữ liệu (.txt)
+                    </label>
+                    
+                    <div 
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setIsDragging(true);
+                      }}
+                      onDragLeave={(e) => {
+                        e.preventDefault();
+                        setIsDragging(false);
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setIsDragging(false);
+                        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                          handleFileSelected(e.dataTransfer.files[0]);
+                        }
+                      }}
+                      style={{
+                        borderColor: isDragging ? ADMIN_ACCENT : undefined,
+                        backgroundColor: isDragging ? `${ADMIN_ACCENT}0D` : undefined
+                      }}
+                      className="border-2 border-dashed rounded-2xl p-6 text-center transition-all bg-[#F7F5EF]/50 dark:bg-[#25272E]/50 border-[#E5E2D8] dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500"
+                    >
+                      <input
+                        type="file"
+                        accept=".txt"
+                        id="txt-file-input"
+                        className="hidden"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            handleFileSelected(e.target.files[0]);
+                          }
+                        }}
+                      />
 
-                  {fileLoading ? (
-                    <div className="flex flex-col items-center justify-center space-y-3 py-2">
-                      <Loader2 className="w-8 h-8 animate-spin" style={{ color: ADMIN_ACCENT }} />
-                      <div className="w-full bg-[#E5E2D8] dark:bg-gray-700 h-2 rounded-full overflow-hidden max-w-[200px]">
-                        <div 
-                          className="h-full transition-all duration-100 ease-out"
-                          style={{ width: `${uploadProgress}%`, backgroundColor: ADMIN_ACCENT }}
-                        />
-                      </div>
-                      <span className="type-meta font-medium text-[#6E7078] dark:text-gray-300">
-                        Đang đọc dữ liệu JSON ({uploadProgress}%)...
-                      </span>
+                      {fileLoading ? (
+                        <div className="flex flex-col items-center justify-center space-y-3 py-2">
+                          <Loader2 className="w-8 h-8 animate-spin" style={{ color: ADMIN_ACCENT }} />
+                          <div className="w-full bg-[#E5E2D8] dark:bg-gray-700 h-2 rounded-full overflow-hidden max-w-[200px]">
+                            <div 
+                              className="h-full transition-all duration-100 ease-out"
+                              style={{ width: `${uploadProgress}%`, backgroundColor: ADMIN_ACCENT }}
+                            />
+                          </div>
+                          <span className="type-meta font-medium text-[#6E7078] dark:text-gray-300">
+                            Đang đọc file text ({uploadProgress}%)...
+                          </span>
+                        </div>
+                      ) : selectedTxtFile ? (
+                        <label htmlFor="txt-file-input" className="cursor-pointer flex flex-col items-center justify-center space-y-2 py-1">
+                          <div 
+                            className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-xs"
+                            style={{ backgroundColor: `${ADMIN_ACCENT}1A`, color: ADMIN_ACCENT }}
+                          >
+                            <FileText className="w-7 h-7" style={{ color: ADMIN_ACCENT }} />
+                          </div>
+                          <span className="type-body font-bold text-[#16171C] dark:text-gray-100 max-w-[260px] truncate">
+                            {selectedTxtFile.name}
+                          </span>
+                          <span className="type-caption font-medium hover:underline" style={{ color: ADMIN_ACCENT }}>
+                            Bấm để chọn file .txt khác
+                          </span>
+                        </label>
+                      ) : (
+                        <label htmlFor="txt-file-input" className="cursor-pointer flex flex-col items-center justify-center space-y-2">
+                          <div className="w-12 h-12 rounded-full bg-white dark:bg-[#1C1D22] flex items-center justify-center shadow-xs">
+                            <Upload className="w-6 h-6 text-[#6E7078] dark:text-gray-300" />
+                          </div>
+                          <span className="type-body font-medium text-[#16171C] dark:text-gray-200">
+                            Kéo thả file .txt vào đây hoặc nhấp để tải lên
+                          </span>
+                        </label>
+                      )}
                     </div>
-                  ) : selectedJsonFile ? (
-                    <label htmlFor="json-file-input" className="cursor-pointer flex flex-col items-center justify-center space-y-2 py-1">
-                      <div 
-                        className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-xs"
-                        style={{ backgroundColor: `${ADMIN_ACCENT}1A`, color: ADMIN_ACCENT }}
-                      >
-                        <FileJson className="w-7 h-7" style={{ color: ADMIN_ACCENT }} />
-                      </div>
-                      <span className="type-body font-bold text-[#16171C] dark:text-gray-100 max-w-[260px] truncate">
-                        {selectedJsonFile.name}
-                      </span>
-                      <span className="type-caption font-medium hover:underline" style={{ color: ADMIN_ACCENT }}>
-                        Bấm để chọn file .json khác
-                      </span>
+                  </div>
+
+                  {/* Thanh Select Chọn Chủ đề Bắt buộc cho file .txt */}
+                  <div className="space-y-1.5 text-left">
+                    <label className="block type-label text-[#2B2C31] dark:text-gray-200 font-label">
+                      Chủ đề văn bản <span className="text-red-500">*</span>
                     </label>
-                  ) : (
-                    <label htmlFor="json-file-input" className="cursor-pointer flex flex-col items-center justify-center space-y-2">
-                      <div className="w-12 h-12 rounded-full bg-white dark:bg-[#1C1D22] flex items-center justify-center shadow-xs">
-                        <Upload className="w-6 h-6 text-[#6E7078] dark:text-gray-300" />
-                      </div>
-                      <span className="type-body font-medium text-[#16171C] dark:text-gray-200">
-                        Kéo thả file vào đây hoặc nhấp để tải lên
-                      </span>
-                    </label>
-                  )}
+                    <select
+                      value={domainSelect}
+                      onChange={(e) => setDomainSelect(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-ui text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
+                      onFocus={(e) => {
+                        e.target.style.borderColor = ADMIN_ACCENT;
+                        e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+                      }}
+                      onBlur={(e) => {
+                        e.target.style.borderColor = '';
+                        e.target.style.boxShadow = 'none';
+                      }}
+                    >
+                      <option value="IT/Technology" className="bg-white dark:bg-[#25272E]">Công nghệ thông tin (IT/Technology)</option>
+                      <option value="Education" className="bg-white dark:bg-[#25272E]">Giáo dục (Education)</option>
+                      <option value="Daily Life" className="bg-white dark:bg-[#25272E]">Hội thoại hàng ngày (Daily Life)</option>
+                    </select>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                /* GIAO DIỆN EDIT: NHẬP 1 CẶP CÂU TEXT */
+                <div className="space-y-3.5 text-left">
+                  <div className="space-y-1.5">
+                    <label className="block type-label text-[#2B2C31] dark:text-gray-200 font-label">
+                      Câu trộn Việt - Anh (Code-Switching)
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={editCsText}
+                      onChange={(e) => setEditCsText(e.target.value)}
+                      placeholder="Nhập câu trộn ngôn ngữ..."
+                      className="w-full px-3.5 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-ui text-[#16171C] dark:text-white outline-none transition-all resize-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block type-label text-[#2B2C31] dark:text-gray-200 font-label">
+                      Câu thuần Việt tương đương (Pure Vietnamese)
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={editViText}
+                      onChange={(e) => setEditViText(e.target.value)}
+                      placeholder="Nhập câu thuần Việt..."
+                      className="w-full px-3.5 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-ui text-[#16171C] dark:text-white outline-none transition-all resize-none"
+                    />
+                  </div>
+                </div>
+              )}
 
               <div className="flex gap-2.5 pt-2">
                 <button
@@ -695,7 +691,7 @@ export default function AdminTextData() {
                 </button>
                 <button
                   type="submit"
-                  disabled={isSubmitting || fileLoading || !selectedJsonFile}
+                  disabled={isSubmitting || fileLoading || (!editingItem && !selectedTxtFile)}
                   style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 10px 24px ${ADMIN_ACCENT}40` }}
                   className="flex-1 py-2.5 text-white rounded-xl type-button hover:opacity-90 active:scale-[0.99] cursor-pointer transition-all disabled:opacity-50"
                 >

@@ -36,8 +36,9 @@ màn hình nào gọi API nào theo thứ tự nào, cách xử lý đăng nhậ
 > `recording_not_enough_pairs` và `script_owned_by_other_speaker`; gỡ mục nên gửi `taskScriptId`.
 >
 > Cập nhật 04/11/2026 — `POST /api/scripts/import` nhận thêm file **`.txt`** (mỗi cặp hai dòng,
-> kèm trường `Domain`, LLM gán nhãn `[vi]`/`[en]`); thêm `POST /api/datasets/export` tải ZIP trực tiếp
-> theo `recordingIds` / `speakerIds` / `waveId`. Xem mục 3 (mã lỗi) và mục 4 (Admin).
+> kèm trường `Domain`, LLM gán nhãn `[vi]`/`[en]` khi có cấu hình, không có thì gán nhãn bằng luật);
+> thêm `POST /api/datasets/export` tải ZIP trực tiếp theo `recordingIds` / `speakerIds` / `waveId`.
+> Xem mục 3 (mã lỗi) và mục 4 (Admin).
 
 ---
 
@@ -339,10 +340,9 @@ Lỗi hệ thống trả 500 với `code: "internal_error"`. Gặp lỗi này th
 | `not_a_review_task` / `text_review_not_assigned` | 422 / 403 | Chia lô câu cho task không phải task duyệt, hoặc duyệt câu chưa được giao cho mình | Tải lại danh sách lô được giao |
 | `text_review_already_done` | 409 | Câu đã có người duyệt nội dung rồi | Bỏ câu khỏi danh sách, tải lại |
 | `invalid_file_type` | 422 | File nhập câu không phải `.json` hoặc `.txt` (mở rộng lạ) | Chọn đúng file `.json` theo mẫu hoặc `.txt` đúng định dạng |
-| `invalid_text_format` | 422 | File `.txt` có dòng không kết thúc bằng dấu chấm, hoặc số dòng lẻ (thiếu câu thuần Việt) | Sửa file: mỗi cặp đúng hai dòng, mỗi câu kết thúc bằng `.` |
+| `invalid_text_format` | 422 hoặc trong `skipped` | File `.txt` có dòng không kết thúc bằng dấu chấm / số dòng lẻ, hoặc một câu đã có nhãn `[vi]`/`[en]` khi backend gán nhãn bằng luật (chỉ cặp đó bị bỏ) | Sửa file: mỗi cặp đúng hai dòng, mỗi câu kết thúc bằng `.`; bỏ nhãn khỏi câu thô |
 | `domain_required` | 422 | File `.txt` mà thiếu trường form `Domain` | Bắt chọn chủ đề trước khi gửi |
-| `llm_not_configured` | 422 | Server chưa cấu hình `Llm:Endpoint`/`Llm:Model` nên không gán nhãn `.txt` được | Báo backend bật LLM; tạm thời dùng file JSON |
-| `llm_failed` / `llm_parse_error` | trong `skipped` | LLM lỗi khi gọi hoặc trả kết quả không đọc được — chỉ **một cặp** bị bỏ, các cặp khác vẫn nhập | Hiện trong `skipped` của kết quả; không cần gửi lại cả file |
+| `llm_failed` / `llm_parse_error` | trong `skipped` | Có cấu hình LLM nhưng LLM lỗi khi gọi hoặc trả kết quả không đọc được — chỉ **một cặp** bị bỏ, các cặp khác vẫn nhập | Hiện trong `skipped` của kết quả; không cần gửi lại cả file |
 | `export_scope_required` | 422 | Export dataset mà không gửi `recordingIds`, `speakerIds` hay `waveId` | Bắt chọn ít nhất một phạm vi |
 | `export_no_approved_pairs` | 422 | Phạm vi đã chọn không có cặp nào duyệt đủ cả cs+vi | Báo không có dữ liệu; kiểm tra lại bộ lọc |
 | `email_taken` | 409 | Tự đăng ký Speaker bằng email đã có | Hiện lỗi cạnh ô email |
@@ -847,8 +847,8 @@ Kết quả nhập file có `imported`, `scriptIds` và `skipped` (kèm lý do t
 - Mỗi cặp đúng **hai dòng không rỗng**: dòng đầu là câu trộn Việt–Anh, dòng sau là câu thuần Việt. Dòng trống bị bỏ qua.
 - Mỗi câu phải kết thúc bằng **dấu chấm**; tối đa **100 cặp** mỗi file (`422 invalid_text_format` khi sai, `422 import_too_large` khi vượt).
 - Gửi kèm trường form `Domain`: `IT/Technology`, `Education` hoặc `Daily Life` (cùng danh mục với `GET /api/config/topics`). Thiếu trường này → `422 domain_required`.
-- Backend gọi LLM để chèn nhãn `[vi]`/`[en]` và sinh `alignment`; không cần tự gán nhãn trong file. Server chưa cấu hình `Llm:Endpoint`/`Llm:Model` → `422 llm_not_configured` cho cả file.
-- Một cặp gán nhãn lỗi vào `skipped` với `id = pair-N` và mã `llm_failed`/`llm_parse_error`; các cặp còn lại vẫn nhập. File `.txt` cũng đi qua đúng luật import JSON: kiểm chủ đề Admin, chống trùng, câu vào `PendingValidation`.
+- Không cần tự gán nhãn trong file. Có cấu hình `Llm:Endpoint`/`Model` thì backend gọi LLM để chèn nhãn `[vi]`/`[en]` và sinh `alignment`; không có LLM thì gán nhãn bằng luật: đối chiếu các từ chung của hai câu, đoạn giữa hai mốc là nghĩa (có thể nhiều từ, ví dụ `email` → `thư điện tử`); đoạn không đối chiếu được lấy theo vị trí, hết từ thì `target` để trống cho người duyệt điền.
+- Một cặp gán nhãn lỗi vào `skipped` với `id = pair-N`: LLM lỗi có mã `llm_failed`/`llm_parse_error`, luật lỗi có mã `invalid_text_format`/`invalid_language_tags`; các cặp còn lại vẫn nhập. File `.txt` cũng đi qua đúng luật import JSON: kiểm chủ đề Admin, chống trùng, câu vào `PendingValidation`.
 
 **Cấu trúc ZIP của `POST /api/datasets/export`** — mỗi cặp một thư mục, ngày theo múi giờ Bangkok:
 
@@ -1124,7 +1124,7 @@ Ai đã code theo bản API trước ngày 22/09/2026 thì cần sửa:
 | Token cấp trước bản cập nhật này | Hết hiệu lực — đăng nhập lại một lần |
 | `POST /api/tasks` không cần chiến dịch | Từng bắt buộc **`waveId`** — nay **không bắt buộc** nữa: thiếu/`null` là task độc lập, gắn sau bằng `PATCH /api/tasks/{id}/wave`. Chiến dịch (khi có) vẫn phải được Admin giao cho đúng Task Manager đó |
 | Nhập file và thêm câu tay không kiểm chủ đề | Vẫn vào `Validated`, nhưng Admin phải có đúng chủ đề của câu; nhập file thiếu chủ đề là **cả lần nhập** trả 422 `reviewer_domain_required` |
-| File nhập câu chỉ nhận JSON | Nhận thêm **`.txt`** mỗi cặp đúng hai dòng kèm trường `Domain`; LLM gán nhãn `[vi]`/`[en]`, tối đa 100 cặp, lỗi từng cặp vào `skipped` |
+| File nhập câu chỉ nhận JSON | Nhận thêm **`.txt`** mỗi cặp đúng hai dòng kèm trường `Domain`; LLM gán nhãn `[vi]`/`[en]` khi có cấu hình, không có thì gán nhãn bằng luật, tối đa 100 cặp, lỗi từng cặp vào `skipped` |
 | Chưa có cách tải thẳng dữ liệu đã duyệt | `POST /api/datasets/export` — ZIP theo `recordingIds` / `speakerIds` / `waveId`, không cần tạo dataset; chỉ gồm cặp `Approved` đủ cs+vi |
 | Ai duyệt câu cũng chốt được sang `Validated` | Chỉ **Reviewer được phân đúng chủ đề**; Speaker và Admin nhận 422 `reviewer_domain_required` |
 | — | Mới: chiến dịch `/api/waves/*`, phân chủ đề `/api/users/{id}/domains`, tự xem chủ đề `GET /api/me/domains` |

@@ -105,6 +105,37 @@ public sealed class LabelingServiceTests
         Assert.Equal(0, handler.Calls);
     }
 
+    [Fact]
+    public async Task AutoLabel_KhongCauHinh_DungLuat()
+    {
+        var handler = new StubHandler(() => Ok(ChatResponse(ValidContent)));
+        var service = CreateService(handler, new LlmOptions());
+
+        var result = await service.AutoLabelAsync(
+            "Em nên scan tài liệu này.", "Em nên quét tài liệu này.",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("[vi]Em nên [en]scan [vi]tài liệu này.", result.CsTagged);
+        var word = Assert.Single(result.Alignment);
+        Assert.Equal("scan", word.Source);
+        Assert.Equal("quét", word.Target);
+        Assert.Equal(0, handler.Calls);
+    }
+
+    [Fact]
+    public async Task AutoLabel_CoCauHinh_GoiLlm()
+    {
+        var handler = new StubHandler(() => Ok(ChatResponse(ValidContent)));
+        var service = CreateService(handler);
+
+        var result = await service.AutoLabelAsync(
+            "Em nên scan tài liệu này.", "Em nên quét tài liệu này.",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("[vi]Em nên [en]scan [vi]tài liệu này.", result.CsTagged);
+        Assert.Equal(1, handler.Calls);
+    }
+
     private static LabelingService CreateService(
         StubHandler handler, LlmOptions? options = null)
     {

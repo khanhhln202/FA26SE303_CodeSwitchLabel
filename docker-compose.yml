@@ -72,6 +72,12 @@ services:
       ObjectStorage__ServiceUrl: "http://minio:9000"
       # Còn trình duyệt chỉ vào được localhost, nên link nghe tạm phải ký bằng địa chỉ này.
       ObjectStorage__PublicUrl: "http://localhost:9000"
+      # LLM gán nhãn (OpenAI-compatible). Để trống thì backend gán nhãn bằng luật.
+      # Khai báo LLM_ENDPOINT/LLM_MODEL/LLM_API_KEY trong .env ở thư mục gốc (đã gitignore).
+      Llm__Endpoint: ${LLM_ENDPOINT:-}
+      Llm__Model: ${LLM_MODEL:-}
+      Llm__ApiKey: ${LLM_API_KEY:-}
+      Llm__TimeoutSeconds: ${LLM_TIMEOUT_SECONDS:-60}
     ports:
       - "5053:8080"   # cùng cổng với lúc chạy dotnet run — frontend không phải đổi cấu hình
 
