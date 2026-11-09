@@ -239,10 +239,18 @@ public class LabelingService(
         return start >= 0 && end > start ? content[start..(end + 1)] : content.Trim();
     }
 
-    public Task<LabeledPair> AutoLabelAsync(string csRaw, string viRaw, CancellationToken ct = default)
+    public async Task<LabeledPair> AutoLabelAsync(string csRaw, string viRaw, CancellationToken ct = default)
     {
-        if (!IsConfigured) return Task.FromResult(RuleBasedLabeler.Label(csRaw, viRaw));
-        return LabelAsync(csRaw, viRaw, ct);
+        if (!IsConfigured) return RuleBasedLabeler.Label(csRaw, viRaw);
+        try
+        {
+            return await LabelAsync(csRaw, viRaw, ct);
+        }
+        catch (UnprocessableException ex) when (ex.Code == "llm_failed")
+        {
+            logger.LogWarning(ex, "LLM failed, falling back to rule-based labeler.");
+            return RuleBasedLabeler.Label(csRaw, viRaw);
+        }
     }
 
     private static UnprocessableException ParseError(string message) =>
