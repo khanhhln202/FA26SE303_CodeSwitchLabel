@@ -541,6 +541,44 @@ CREATE TABLE review_rejection_reason (
 );
 
 -- ------------------------------------------------------------
+-- AI_REVIEW  [V24]
+-- ------------------------------------------------------------
+-- Bang chung cua moi luot MAY phan ban ghi: transcript ASR doc duoc, van ban
+-- dang ra phai doc, va ti le sai tu (WER).
+--
+-- CO Y khong nhet vao review.comment: comment la cho nguoi viet cho nguoi doc,
+-- con day la du lieu may sinh ra va can truy van duoc.
+--
+-- review_id NULL nghia la may BO QUYEN: co bang chung nhung khong bo phieu nao.
+CREATE TABLE ai_review (
+    ai_review_id  BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    recording_id  VARCHAR(64)  NOT NULL REFERENCES recording(recording_id),
+    review_id     BIGINT       REFERENCES review(review_id) ON DELETE SET NULL,
+    model         VARCHAR(120) NOT NULL,            -- ASR model name
+    transcript    TEXT         NOT NULL,            -- what ASR heard
+    expected_text TEXT         NOT NULL,            -- normalised script text compared against
+    -- (9,4) not (6,4): WER is never capped at 1, so a long garbage transcript
+    -- pushes the ratio far above 1 and that signal is kept, not clamped.
+    wer           NUMERIC(9,4) NOT NULL,            -- diacritics kept
+    wer_folded    NUMERIC(9,4) NOT NULL,            -- diacritics folded; the lower of the two decides
+    verdict       VARCHAR(12)  NOT NULL,
+    analyzed_at   TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    details       JSONB,                            -- thresholds used + explanation
+
+    CONSTRAINT ck_ai_review_verdict
+        CHECK (verdict IN ('approved', 'rejected', 'abstained')),
+    CONSTRAINT ck_ai_review_wer_range
+        CHECK (wer >= 0 AND wer_folded >= 0),
+    -- Bat buoc: verdict co bo phieu thi phai tro toi mot dong review, bo quyen
+    -- thi phai khong tro. Khong the co "may noi da tu choi" ma chang co luot duyet nao.
+    CONSTRAINT ck_ai_review_vote_has_review
+        CHECK ((verdict =  'abstained' AND review_id IS     NULL)
+            OR (verdict <> 'abstained' AND review_id IS NOT NULL))
+);
+
+CREATE INDEX idx_ai_review_recording ON ai_review (recording_id, analyzed_at DESC);
+
+-- ------------------------------------------------------------
 -- DATASET
 -- ------------------------------------------------------------
 CREATE TABLE dataset (
@@ -1777,7 +1815,14 @@ INSERT INTO system_config (config_key, config_value, value_type, description) VA
     -- hàng đợi sau tối đa số phút này, thay vì giữ mãi.
     ('queue.claim_ttl_minutes',                  '30',  'int', 'Minutes before an unclaimed queue item becomes claimable again'),
     -- lô câu văn bản Task Manager giao cho mỗi người duyệt (yêu cầu 2.2).
-    ('text_review.batch_size',                   '100', 'int', 'Default number of pending sentences claimed per reviewer');
+    ('text_review.batch_size',                   '100', 'int', 'Default number of pending sentences claimed per reviewer'),
+    -- [V24] may duyet ban ghi. allow_approve_vote MAC DINH TAT: may chi do duoc
+    -- noi dung, khong phan duoc tap am va phat am, nen phieu "dat" cua no che
+    -- dung hai loi no khong thay.
+    ('ai_review.enabled',             'false', 'bool',   'Enable the AI recording reviewer'),
+    ('ai_review.wer_reject_min',      '0.40',  'string', 'WER at or above this makes the AI vote rejected with content_mismatch'),
+    ('ai_review.wer_approve_max',     '0.10',  'string', 'WER at or below this makes the recording eligible for an AI approve vote'),
+    ('ai_review.allow_approve_vote',  'false', 'bool',   'Let the AI cast approve votes; off by default');
 
 -- Bootstrap admin — KHÔNG lưu mã hash mật khẩu trong SQL seed.
 -- DatabaseSeeder gán hash thật (từ Seed:DefaultPassword) khi ứng dụng khởi động,
@@ -1786,6 +1831,17 @@ INSERT INTO app_user (role_id, full_name, email, password_hash, status)
 SELECT role_id, 'System Admin', 'admin@codeswitchlabel.local',
        '', 'active'
 FROM role WHERE role_name = 'admin';
+
+-- [V24] Tai khoan nguoi duyet MAY. Phai co that vi review.reviewer_id la khoa
+-- ngoai toi app_user(user_id), khong nhan gia tri ao.
+--
+-- password_hash la chuoi KHONG phai bcrypt hop le, nen khong mat khau nao dang
+-- nhap duoc. An toan vi BcryptPasswordHasher.Verify bat loi parse va tra false.
+-- DatabaseSeeder chi gan hash cho danh sach email co dinh cua no, khong co email nay.
+INSERT INTO app_user (role_id, full_name, email, password_hash, status)
+SELECT role_id, 'AI Reviewer', 'ai-reviewer@codeswitchlabel.local',
+       '!ai-reviewer-no-login', 'active'
+FROM role WHERE role_name = 'reviewer';
 
 -- ============================================================
 -- 8. DASHBOARD / STATISTICS VIEWS  (proposal §3.2c — Admin)

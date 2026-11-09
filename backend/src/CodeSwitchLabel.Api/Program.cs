@@ -51,6 +51,10 @@ builder.Services
 builder.Services.Configure<LlmOptions>(
     builder.Configuration.GetSection(LlmOptions.SectionName));
 
+// Endpoint ASR cũng vậy: để trống thì API vẫn chạy, chỉ máy duyệt báo `asr_not_configured`.
+builder.Services.Configure<AsrOptions>(
+    builder.Configuration.GetSection(AsrOptions.SectionName));
+
 // ---------------------------------------------------------------- dịch vụ
 
 builder.Services.AddCodeSwitchLabel(connectionString);

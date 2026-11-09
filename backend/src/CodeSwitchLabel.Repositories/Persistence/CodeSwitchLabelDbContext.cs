@@ -51,6 +51,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
     public DbSet<RejectionReason> RejectionReasons => Set<RejectionReason>();
     public DbSet<Review> Reviews => Set<Review>();
     public DbSet<ReviewRejectionReason> ReviewRejectionReasons => Set<ReviewRejectionReason>();
+    public DbSet<AiReview> AiReviews => Set<AiReview>();
 
     public DbSet<Dataset> Datasets => Set<Dataset>();
     public DbSet<DatasetRecording> DatasetRecordings => Set<DatasetRecording>();
@@ -409,6 +410,26 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             // Hai ràng buộc duy nhất của lược đồ: một vòng chỉ một lượt, một người chỉ duyệt một lần.
             e.HasIndex(x => new { x.RecordingId, x.ReviewRound }).IsUnique();
             e.HasIndex(x => new { x.RecordingId, x.ReviewerId }).IsUnique();
+        });
+
+        modelBuilder.Entity<AiReview>(e =>
+        {
+            e.ToTable("ai_review");
+            e.HasKey(x => x.AiReviewId);
+            e.Property(x => x.RecordingId).HasMaxLength(64);
+            e.Property(x => x.Model).HasMaxLength(120);
+            e.Property(x => x.Verdict).HasMaxLength(12);
+            e.Property(x => x.Details).HasColumnType("jsonb");
+
+            // (9,4) chứ không (6,4): WER không bị cắt về 1, nên chuỗi ASR rác dài làm
+            // tỉ lệ vọt lên rất cao — xem ghi chú trong migration V24.
+            e.Property(x => x.Wer).HasPrecision(9, 4);
+            e.Property(x => x.WerFolded).HasPrecision(9, 4);
+
+            e.HasOne(x => x.Recording).WithMany().HasForeignKey(x => x.RecordingId);
+            e.HasOne(x => x.Review).WithMany().HasForeignKey(x => x.ReviewId);
+
+            e.HasIndex(x => new { x.RecordingId, x.AnalyzedAt });
         });
 
         modelBuilder.Entity<ReviewRejectionReason>(e =>
