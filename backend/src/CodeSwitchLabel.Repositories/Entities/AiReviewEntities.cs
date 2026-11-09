@@ -1,9 +1,9 @@
 namespace CodeSwitchLabel.Repositories.Entities;
 
 /// <summary>
-/// Hai giá trị hợp lệ của ai_review.verdict, khớp đúng ràng buộc ck_ai_review_verdict
-/// trong migration V24. Để ở tầng Repositories vì đây là hợp đồng với database —
-/// tầng Services có enum riêng và tự ánh xạ sang hai chuỗi này.
+/// Hai giá trị hợp lệ của ai_review.verdict. V24 dựng bảng với ba giá trị; V25 siết lại
+/// còn hai khi luật đổi sang "máy là phiếu thứ ba phá thế". Để ở tầng Repositories vì đây
+/// là hợp đồng với database — tầng Services có enum riêng và tự ánh xạ sang hai chuỗi này.
 ///
 /// Không có "abstained": máy chỉ vào khi hai Reviewer người lệch nhau, tức nó là người
 /// phá thế, nên luôn phải chọn một bên.

@@ -12,14 +12,9 @@
 -- WER. Không nhét vào review.comment vì comment là chỗ người viết cho người đọc,
 -- còn đây là dữ liệu máy sinh ra và cần truy vấn được.
 --
--- LUẬT NGHIỆP VỤ (chốt với giảng viên hướng dẫn): hai Reviewer người duyệt trước.
--- Cùng kết quả thì trigger trg_review_majority chốt ngay ở lượt 2 và máy không
--- tham gia. Chỉ khi hai người LỆCH nhau (1 đạt / 1 không đạt) thì máy mới vào làm
--- phiếu thứ ba để phá thế.
---
--- Vì máy là người PHÁ THẾ, nó bắt buộc phải quyết: không có trạng thái "bỏ quyền".
--- Nên review_id là NOT NULL — mỗi dòng bằng chứng luôn gắn với một lượt duyệt thật,
--- không thể có "máy nói đã từ chối" mà chẳng có phiếu nào.
+-- Ràng buộc ck_ai_review_vote_has_review là bất biến thật: verdict có bỏ phiếu
+-- thì BẮT BUỘC trỏ tới một dòng review; bỏ quyền thì BẮT BUỘC không trỏ. Đặt ở
+-- database để không thể có "AI nói đã từ chối" mà chẳng có lượt duyệt nào.
 --
 -- Cài trên database ĐANG CHẠY:
 --   cat migrations/V24__ai_recording_review.sql \
@@ -44,9 +39,8 @@ CREATE TABLE IF NOT EXISTS ai_review (
     ai_review_id  bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     recording_id  varchar(64)  NOT NULL REFERENCES recording(recording_id),
 
-    -- NOT NULL: máy là người phá thế nên luôn phải bỏ phiếu. Bằng chứng chết theo
-    -- lượt duyệt của nó, vì không còn phiếu thì bằng chứng cũng hết nghĩa.
-    review_id     bigint       NOT NULL REFERENCES review(review_id) ON DELETE CASCADE,
+    -- null khi AI bỏ quyền: có bằng chứng nhưng không có lượt duyệt nào.
+    review_id     bigint       REFERENCES review(review_id) ON DELETE SET NULL,
 
     model         varchar(120) NOT NULL,
     transcript    text         NOT NULL,
@@ -66,10 +60,14 @@ CREATE TABLE IF NOT EXISTS ai_review (
     details       jsonb,
 
     CONSTRAINT ck_ai_review_verdict
-        CHECK (verdict IN ('approved', 'rejected')),
+        CHECK (verdict IN ('approved', 'rejected', 'abstained')),
 
     CONSTRAINT ck_ai_review_wer_range
-        CHECK (wer >= 0 AND wer_folded >= 0)
+        CHECK (wer >= 0 AND wer_folded >= 0),
+
+    CONSTRAINT ck_ai_review_vote_has_review
+        CHECK ((verdict =  'abstained' AND review_id IS     NULL)
+            OR (verdict <> 'abstained' AND review_id IS NOT NULL))
 );
 
 CREATE INDEX IF NOT EXISTS idx_ai_review_recording
@@ -82,11 +80,18 @@ INSERT INTO system_config (config_key, config_value, value_type, description) VA
     ('ai_review.enabled', 'false', 'bool',
      'Bật tính năng AI duyệt bản ghi. Tắt thì endpoint trả ai_review_disabled.'),
 
-    ('ai_review.wer_decision_threshold', '0.40', 'string',
-     'RANH GIỚI DUY NHẤT. WER dưới mức này thì máy bỏ phiếu approved; từ mức này trở lên '
-     'thì rejected với lý do content_mismatch. Máy là người phá thế nên luôn phải chọn một '
-     'bên, không có vùng bỏ quyền. Để cao vì ASR gặp câu trộn Việt-Anh đã sai sẵn một phần; '
-     'để thấp là loại oan bản đọc đúng.')
+    ('ai_review.wer_reject_min', '0.40', 'string',
+     'WER từ mức này trở lên thì AI bỏ phiếu rejected với lý do content_mismatch. '
+     'Để cao vì ASR gặp câu trộn Việt-Anh đã sai sẵn một phần; để thấp là loại oan bản tốt.'),
+
+    ('ai_review.wer_approve_max', '0.10', 'string',
+     'WER tới mức này thì bản ghi đủ điều kiện được AI duyệt đạt, '
+     'nhưng còn phải bật ai_review.allow_approve_vote.'),
+
+    ('ai_review.allow_approve_vote', 'false', 'bool',
+     'Mặc định tắt. AI chỉ đo được nội dung, không phán được tạp âm và phát âm — '
+     'cho nó bỏ phiếu đạt là âm thầm duyệt đúng hai lỗi nó không thấy. '
+     'Bỏ phiếu không đạt sai thì chỉ phải thu lại; bỏ phiếu đạt sai thì dữ liệu rác vào dataset.')
 ON CONFLICT (config_key) DO NOTHING;
 
 COMMIT;
