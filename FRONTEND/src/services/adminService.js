@@ -87,6 +87,11 @@ export const adminService = {
     const res = await httpClient.get("/api/recordings", { params });
     return res.data;
   },
+  // Cặp bản ghi cho Admin: trạng thái cặp do BE chốt (GET /api/admin/recordings)
+  getAdminRecordingPairs: async (params) => {
+    const res = await httpClient.get("/api/admin/recordings", { params });
+    return res.data;
+  },
   getAudioUrl: async (id) => {
     const res = await httpClient.get(`/api/recordings/${id}/audio-url`);
     return res.data;

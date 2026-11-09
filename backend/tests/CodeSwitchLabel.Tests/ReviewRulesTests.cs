@@ -149,6 +149,31 @@ public class ReviewRulesTests
         Assert.Equal(RecordingStatus.Rejected, outcome);
     }
 
+    // ----------------------------------------------- trạng thái của CẶP
+
+    [Theory]
+    [InlineData(RecordingStatus.Approved, RecordingStatus.Approved, RecordingStatus.Approved)]
+    [InlineData(RecordingStatus.Approved, RecordingStatus.PendingReview, RecordingStatus.PendingReview)]
+    [InlineData(RecordingStatus.Approved, null, RecordingStatus.PendingReview)]
+    [InlineData(RecordingStatus.Rejected, null, RecordingStatus.Rejected)]
+    [InlineData(RecordingStatus.Approved, RecordingStatus.Rejected, RecordingStatus.Rejected)]
+    [InlineData(null, RecordingStatus.Rejected, RecordingStatus.Rejected)]
+    [InlineData(RecordingStatus.QcFailed, RecordingStatus.QcFailed, RecordingStatus.QcFailed)]
+    [InlineData(RecordingStatus.QcFailed, null, RecordingStatus.QcFailed)]
+    [InlineData(null, RecordingStatus.QcFailed, RecordingStatus.QcFailed)]
+    [InlineData(RecordingStatus.QcFailed, RecordingStatus.PendingReview, RecordingStatus.PendingReview)]
+    [InlineData(RecordingStatus.QcFailed, RecordingStatus.Approved, RecordingStatus.PendingReview)]
+    [InlineData(null, null, RecordingStatus.PendingReview)]
+    public void TrangThaiCap_TheoHaiBan(
+        RecordingStatus? cs, RecordingStatus? vi, RecordingStatus mongDoi)
+    {
+        // Arrange + Act
+        var pair = ReviewRules.PairOutcome(cs, vi);
+
+        // Assert
+        Assert.Equal(mongDoi, pair);
+    }
+
     // ----------------------------------------------- vì sao chưa duyệt được
 
     [Fact]

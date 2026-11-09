@@ -107,6 +107,7 @@ public static class ServiceRegistration
         services.AddScoped<IStatisticsService, StatisticsService>();
         services.AddScoped<ISpeakerRoundsService, SpeakerRoundsService>();
         services.AddScoped<IReviewerStatsService, ReviewerStatsService>();
+        services.AddScoped<IAdminRecordingService, AdminRecordingService>();
         services.AddScoped<IDatasetService, DatasetService>();
 
         return services;

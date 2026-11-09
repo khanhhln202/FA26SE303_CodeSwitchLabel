@@ -226,13 +226,7 @@ public class ReviewerStatsService(
                 : recording.Status;
             var csStatus = cs is null ? (RecordingStatus?)null : statusOf(cs);
             var viStatus = vi is null ? (RecordingStatus?)null : statusOf(vi);
-            var pairStatus = both.Any(r => statusOf(r) == RecordingStatus.Rejected)
-                ? RecordingStatus.Rejected
-                : csStatus == RecordingStatus.Approved && viStatus == RecordingStatus.Approved
-                    ? RecordingStatus.Approved
-                    : both.Length > 0 && both.All(r => statusOf(r) == RecordingStatus.QcFailed)
-                        ? RecordingStatus.QcFailed
-                        : RecordingStatus.PendingReview;
+            var pairStatus = ReviewRules.PairOutcome(csStatus, viStatus);
 
             items.Add(new ReviewerHistoryItemDto(
                 pair.ScriptId,
