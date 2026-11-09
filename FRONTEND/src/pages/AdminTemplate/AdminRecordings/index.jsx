@@ -17,9 +17,7 @@ import {
   AUDIO_PRIMARY
 } from "../../../constants/theme";
 import { adminService } from "../../../services/adminService";
-import { getScriptDetailApi } from "../../../services/scriptApi";
 import { parseCodeSwitch } from "../../../utils/codeSwitch";
-import { httpClient } from "../../../utils/setting";
 
 // Style trạng thái đồng bộ 100% với giao diện Reviewer RecordingHistory
 const STATUS_STYLE = {
@@ -37,7 +35,8 @@ const parseBeRecordingStatus = (statusFromBe) => {
     const str = String(statusFromBe).trim().toLowerCase();
     if (["approved", "accepted", "1"].includes(str)) return "Approved";
     if (["rejected", "discarded", "2"].includes(str)) return "Rejected";
-    if (["pending", "pendingreview", "qcfailed", "0", "3"].includes(str)) return "Pending";
+    if (str === "qcfailed") return "QcFailed";
+    if (["pending", "pendingreview", "0", "3"].includes(str)) return "Pending";
   }
   return "Pending";
 };
@@ -87,241 +86,32 @@ export default function AdminRecordings() {
   const pageSize = 10;
 
   const [selectedReviewersList, setSelectedReviewersList] = useState(null);
-  const [userMapState, setUserMapState] = useState({});
 
   // STATE PHỤC VỤ CHỨC NĂNG CHỌN TẢI DATASET (CHECKBOX MODE)
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedPairIds, setSelectedPairIds] = useState([]);
   const [isExporting, setIsExporting] = useState(false);
 
-  // TẢI VÀ GỘP CẶP DỮ LIỆU ĐỒNG BỘ CHUẨN XÁC THEO LUỒNG ADMIN
+  // Tải cặp bản ghi từ BE: trạng thái cặp đã được BE chốt, FE không tự gộp nữa.
   const fetchRecordings = async () => {
     try {
-      // 1. Tải danh sách User & Speaker để lấy thông tin Email
-      const [usersRes, speakersRes] = await Promise.all([
-        adminService.getUsers({ page: 1, pageSize: 500 }).catch(() => ({ items: [] })),
-        httpClient.get("/api/users/speakers", { params: { page: 1, pageSize: 500 } }).then(r => r.data).catch(() => ({ items: [] }))
-      ]);
-
-      const userItems = usersRes.items || usersRes || [];
-      const speakerItems = speakersRes.items || speakersRes || [];
-
-      const userMap = {};
-      const userDetailMap = {};
-
-      // Map dữ liệu từ danh sách User tổng
-      userItems.forEach((u) => {
-        const uId = u.userId || u.id;
-        userMap[uId] = u.fullName || u.name;
-        userDetailMap[uId] = {
-          name: u.fullName || u.name || `User #${uId}`,
-          email: u.email || "Chưa có email"
-        };
-      });
-
-      // Map đè thông tin chi tiết từ API Speaker
-      speakerItems.forEach((s) => {
-        const sId = s.userId || s.id || s.speakerId;
-        if (sId) {
-          if (s.fullName || s.name) userMap[sId] = s.fullName || s.name;
-          userDetailMap[sId] = {
-            name: s.fullName || s.name || userDetailMap[sId]?.name || `User #${sId}`,
-            email: s.email || userDetailMap[sId]?.email || "Chưa có email"
-          };
-        }
-      });
-
-      setUserMapState(userMap);
-
-      // 2. Tải tất cả bản ghi âm từ Admin API
-      let allItems = [];
+      let allPairs = [];
       let page = 1;
       let totalPages = 1;
       do {
-        const recRes = await adminService.getRecordings({ page, pageSize: 100 });
-        const items = recRes.items || recRes || [];
-        allItems = [...allItems, ...items];
-        totalPages = recRes.totalPages || 1;
+        const res = await adminService.getAdminRecordingPairs({ page, pageSize: 100 });
+        allPairs = [...allPairs, ...(res.items || [])];
+        totalPages = res.totalPages || 1;
         page++;
       } while (page <= totalPages);
 
-      // 3. Lấy chi tiết Script Text (CS & VI Content) theo danh sách scriptId
-      const scriptIds = [...new Set(allItems.map(r => r.scriptId || r.textId).filter(Boolean))];
-      const scriptMap = {};
+      setRecordings(allPairs.map((pair) => ({
+        ...pair,
+        status: parseBeRecordingStatus(pair.status),
+        rawIds: pair.rawIds || [],
+        reviews: pair.reviews || [],
+      })));
 
-      await Promise.all(
-        scriptIds.map(async (sId) => {
-          try {
-            const detail = await getScriptDetailApi(sId);
-            if (detail) {
-              scriptMap[sId] = {
-                csContent: detail.csContent || "",
-                viContent: detail.viContent || ""
-              };
-            }
-          } catch (e) {
-            console.error("Lỗi lấy chi tiết câu:", sId, e);
-          }
-        })
-      );
-
-      // 4. Tải Audio URL & Lượt Reviewer của từng bản thu
-      const rawRecordings = await Promise.all(
-        allItems.map(async (r) => {
-          const recId = r.recordingId || r.id;
-          const sId = r.scriptId || r.textId;
-          const scriptInfo = scriptMap[sId] || {};
-
-          let audioUrl = r.audioUrl || r.fileUrl || r.cloudLink || "";
-          if (recId && !audioUrl) {
-            try {
-              const audioRes = await adminService.getAudioUrl(recId);
-              if (audioRes?.url) audioUrl = audioRes.url;
-            } catch (e) {
-              console.warn("Không lấy được Audio URL:", recId, e);
-            }
-          }
-
-          let reviews = [];
-          try {
-            const revsRes = await adminService.getRecordingReviews(recId);
-            if (Array.isArray(revsRes)) {
-              reviews = revsRes;
-            }
-          } catch (e) {
-            console.warn("Lỗi tải reviews:", recId, e);
-          }
-
-          const variantRaw = r.sentenceVariant !== undefined ? r.sentenceVariant : r.variant;
-          const variantStr = String(variantRaw || r.language || r.type || "").toLowerCase();
-
-          const isCs = variantStr.includes("codeswitching") || variantStr === "1" || variantStr.includes("cs") || variantStr.includes("vi-en");
-          const isVi = variantStr.includes("purevietnamese") || variantStr === "2" || (variantStr.includes("vi") && !variantStr.includes("vi-en"));
-
-          const spkInfo = userDetailMap[r.speakerId] || {};
-
-          return {
-            recId,
-            scriptId: sId || "N/A",
-            speakerId: r.speakerId,
-            speaker: spkInfo.name || (r.speakerId ? `User #${r.speakerId}` : "Chưa xác định"),
-            speakerEmail: spkInfo.email || r.speakerEmail || r.email || "N/A",
-            csText: scriptInfo.csContent || r.csContent || r.scriptText || r.content || "",
-            viText: scriptInfo.viContent || r.viContent || r.contentVietnamese || "",
-            topic: r.domain || r.topic || "Công nghệ thông tin",
-            taskId: r.taskId || r.taskTitle || "Thu âm 20",
-            isCs,
-            isVi,
-            audioUrl,
-            durationSec: r.durationSec || 0,
-            status: parseBeRecordingStatus(r.recordingStatus || r.status),
-            reviews,
-            createdAt: r.createdAt || r.recordedAt || ""
-          };
-        })
-      );
-
-      // 5. GỘP CẶP CHUẨN XÁC THEO SCRIPT + SPEAKER + TASK
-      const groupedMap = new Map();
-
-      rawRecordings.forEach((rec) => {
-        const groupKey = `${rec.scriptId}_${rec.speakerId}_${rec.taskId}`;
-
-        if (!groupedMap.has(groupKey)) {
-          groupedMap.set(groupKey, {
-            id: groupKey,
-            rawIds: [],
-            scriptId: rec.scriptId,
-            csText: rec.csText,
-            viText: rec.viText,
-            topic: rec.topic,
-            speaker: rec.speaker,
-            speakerId: rec.speakerId,
-            speakerEmail: rec.speakerEmail,
-            csAudioUrl: "",
-            viAudioUrl: "",
-            durationSec: rec.durationSec,
-            rawStatuses: [],
-            reviews: [],
-            viRecordingId: null,
-            csRecordingId: null,
-            createdAt: rec.createdAt
-          });
-        }
-
-        const group = groupedMap.get(groupKey);
-        if (!group.rawIds.includes(rec.recId)) {
-          group.rawIds.push(rec.recId);
-        }
-
-        if (rec.isCs) {
-          if (rec.audioUrl) group.csAudioUrl = rec.audioUrl;
-          group.csRecordingId = rec.recId;
-        } else if (rec.isVi) {
-          if (rec.audioUrl) group.viAudioUrl = rec.audioUrl;
-          group.viRecordingId = rec.recId;
-        } else if (!group.csAudioUrl && rec.audioUrl) {
-          group.csAudioUrl = rec.audioUrl;
-        }
-
-        group.rawStatuses.push(rec.status);
-        if (Array.isArray(rec.reviews) && rec.reviews.length > 0) {
-          rec.reviews.forEach(rv => group.reviews.push({ ...rv, recId: rec.recId }));
-        }
-      });
-
-      // 6. XỬ LÝ TRẠNG THÁI KẾT QUẢ KHI DUYỆT
-      const pairedRecordings = Array.from(groupedMap.values()).map((pair) => {
-        let finalStatus = "Pending";
-        const reviewsList = pair.reviews;
-
-        if (reviewsList.length > 0) {
-          const approveVotes = reviewsList.filter(r => r.decision === "Approved" || String(r.status).toLowerCase().includes("approved")).length;
-          const rejectVotes = reviewsList.filter(r => r.decision === "Rejected" || String(r.status).toLowerCase().includes("rejected")).length;
-
-          if (approveVotes >= 2) {
-            finalStatus = "Approved";
-          } else if (rejectVotes >= 2) {
-            finalStatus = "Rejected";
-          } else if (pair.rawStatuses.includes("Approved")) {
-            finalStatus = "Approved";
-          } else if (pair.rawStatuses.includes("Rejected")) {
-            finalStatus = "Rejected";
-          }
-        } else {
-          if (pair.rawStatuses.every(s => s === "Approved")) {
-            finalStatus = "Approved";
-          } else if (pair.rawStatuses.some(s => s === "Rejected")) {
-            finalStatus = "Rejected";
-          }
-        }
-
-        return {
-          id: pair.id,
-          rawId: pair.rawIds[0] || pair.id,
-          rawIds: pair.rawIds,
-          scriptId: pair.scriptId,
-          csText: pair.csText,
-          viText: pair.viText,
-          topic: pair.topic,
-          speaker: pair.speaker,
-          speakerId: pair.speakerId,
-          speakerEmail: pair.speakerEmail,
-          csAudioUrl: pair.csAudioUrl,
-          viAudioUrl: pair.viAudioUrl,
-          durationSec: pair.durationSec,
-          status: finalStatus,
-          reviews: pair.reviews,
-          csRecordingId: pair.csRecordingId,
-          viRecordingId: pair.viRecordingId,
-          createdAt: pair.createdAt
-        };
-      });
-
-      // Sắp xếp giảm dần theo thời gian tạo
-      pairedRecordings.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-
-      setRecordings(pairedRecordings);
     } catch (err) {
       console.error("Lỗi lấy danh sách bản thu âm:", err);
       toast.error("Không thể tải danh sách bản thu âm!");
@@ -332,49 +122,14 @@ export default function AdminRecordings() {
     fetchRecordings();
   }, []);
 
-  const handleOpenReviewersModal = async (recording) => {
+  // Lượt duyệt đã có sẵn trong cặp do BE trả về, không gọi thêm API.
+  const handleOpenReviewersModal = (recording) => {
     setSelectedReviewersList({
       ...recording,
       csText: recording.csText || "Đang tải nội dung câu...",
       viText: recording.viText || "",
       reviews: recording.reviews || []
     });
-
-    try {
-      const rawIdsToFetch = Array.isArray(recording.rawIds) && recording.rawIds.length > 0 
-        ? recording.rawIds 
-        : [recording.rawId];
-
-      const allReviewsResponses = await Promise.all(
-        rawIdsToFetch.map(rId => adminService.getRecordingReviews(rId).catch(() => []))
-      );
-
-      let combinedRawReviews = [];
-      allReviewsResponses.forEach((res, index) => {
-        if (Array.isArray(res)) {
-          const matchedRecId = rawIdsToFetch[index];
-          res.forEach(r => combinedRawReviews.push({ ...r, recordingId: r.recordingId || matchedRecId }));
-        }
-      });
-
-      if (combinedRawReviews.length > 0) {
-        const formattedReviews = combinedRawReviews.map((r, i) => ({
-          round: r.round || r.reviewRound || (i + 1),
-          decision: r.decision || (String(r.status).toLowerCase().includes("approved") ? "Approved" : "Rejected"),
-          reason: (r.reasons && r.reasons.length > 0 ? r.reasons.map(rs => rs.description || rs.code).join(" • ") : r.reason) || r.comment || "",
-          recordingId: r.recordingId,
-          reviewerId: r.reviewerId,
-          reviewerName: userMapState[r.reviewerId] || `Reviewer #${r.reviewerId}`
-        }));
-
-        setSelectedReviewersList(prev => ({
-          ...prev,
-          reviews: formattedReviews
-        }));
-      }
-    } catch (err) {
-      console.error("Lỗi lấy thông tin kiểm duyệt:", err);
-    }
   };
 
   const handleSearch = () => {
@@ -529,6 +284,7 @@ export default function AdminRecordings() {
                 <option value="Approved" className="bg-white dark:bg-[#25272E]">Đã duyệt</option>
                 <option value="Pending" className="bg-white dark:bg-[#25272E]">Chờ duyệt</option>
                 <option value="Rejected" className="bg-white dark:bg-[#25272E]">Từ chối</option>
+                <option value="QcFailed" className="bg-white dark:bg-[#25272E]">Lỗi chất lượng</option>
               </select>
             </div>
 

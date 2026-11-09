@@ -347,16 +347,7 @@ public class SpeakerRoundsService(
                 await SignAsync(cs, ct),
                 await SignAsync(vi, ct),
                 cs?.DurationSec ?? vi?.DurationSec ?? 0,
-                // Trạng thái của cặp: có bản bị từ chối thì cặp đó từ chối; đủ cả hai bản
-                // đạt thì mới là đạt; trượt QC hết thì báo lỗi chất lượng; còn lại là đang
-                // chờ (thiếu bản, hoặc đã nộp chưa có kết quả).
-                takes.Any(r => r.Status == RecordingStatus.Rejected)
-                    ? RecordingStatus.Rejected
-                    : cs?.Status == RecordingStatus.Approved && vi?.Status == RecordingStatus.Approved
-                        ? RecordingStatus.Approved
-                        : takes.Length > 0 && takes.All(r => r.Status == RecordingStatus.QcFailed)
-                            ? RecordingStatus.QcFailed
-                            : RecordingStatus.PendingReview,
+                ReviewRules.PairOutcome(cs?.Status, vi?.Status),
                 takes.Max(r => r.RecordedAt),
                 // Hiện lượt duyệt NGAY, không chờ bản ghi chốt: người đọc cần biết đã có ai
                 // xem bản của mình chưa. Trước đây chỉ hiện khi đã chốt nên bản đang ở 1/3
