@@ -92,13 +92,13 @@ public class WhisperAsrClient(
                 using var form = new MultipartFormDataContent();
                 var file = new ByteArrayContent(audio);
                 file.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
-                form.Add(file, "file", fileName);
-                form.Add(new StringContent(Options.Model), "model");
-                form.Add(new StringContent("json"), "response_format");
+                AddPart(form, file, "file", fileName);
+                AddPart(form, new StringContent(Options.Model), "model");
+                AddPart(form, new StringContent("json"), "response_format");
 
                 if (!string.IsNullOrWhiteSpace(Options.Language))
                 {
-                    form.Add(new StringContent(Options.Language), "language");
+                    AddPart(form, new StringContent(Options.Language), "language");
                 }
 
                 using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = form };
@@ -179,6 +179,33 @@ public class WhisperAsrClient(
             }
         }
     }
+
+    /// <summary>
+    /// Gắn một phần vào form với tên đã bọc ngoặc kép.
+    /// <para>
+    /// <see cref="MultipartFormDataContent.Add(HttpContent, string)"/> sinh ra
+    /// <c>name=file</c> không ngoặc kép, trong khi RFC 7578 §4.2 đòi <c>name="file"</c>.
+    /// OpenAI và Groq bỏ qua sai lệch này nên code chạy được ở đó; OpenRouter từ chối
+    /// cả thân request với 400 <c>Invalid multipart/form-data body</c>.
+    /// </para>
+    /// <para>
+    /// Đo bằng thực nghiệm trên chính endpoint đó: hai thân giống hệt nhau, chỉ khác mấy
+    /// dấu ngoặc kép, một bên trả 400 còn bên kia qua được khâu phân tích. Tham số
+    /// <c>filename*</c> mà .NET thêm vào thì vô hại, nên không cần bỏ.
+    /// </para>
+    /// </summary>
+    private static void AddPart(
+        MultipartFormDataContent form, HttpContent part, string name, string? fileName = null)
+    {
+        var disposition = new ContentDispositionHeaderValue("form-data") { Name = Quote(name) };
+
+        if (fileName is not null) disposition.FileName = Quote(fileName);
+
+        part.Headers.ContentDisposition = disposition;
+        form.Add(part);
+    }
+
+    private static string Quote(string value) => "\"" + value + "\"";
 
     /// <summary>
     /// Thời gian nhà cung cấp bảo chờ. Header Retry-After có hai dạng: số giây, hoặc một mốc
