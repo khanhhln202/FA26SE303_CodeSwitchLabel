@@ -2,7 +2,15 @@ using CodeSwitchLabel.Repositories.Enums;
 
 namespace CodeSwitchLabel.Services.Dtos;
 
-/// <summary>Một lượt duyệt của bản ghi mới nhất trong cặp, kèm tên người duyệt để Admin khỏi phải ghép thêm.</summary>
+/// <summary>
+/// Một lượt duyệt, kèm tên người duyệt để Admin khỏi phải ghép thêm.
+///
+/// <b><see cref="RecordingId"/> là trường bắt buộc phải dùng khi hiển thị.</b> Danh sách
+/// <c>Reviews</c> của một cặp gộp phiếu của <b>CẢ HAI biến thể</b> (cs và vi), nên giao diện
+/// phải nhóm theo <c>RecordingId</c> rồi mới vẽ. Đổ chung vào một ô ba vòng sẽ khiến phiếu của
+/// bản vi trông như phiếu của bản cs vừa thu xong — một cặp có thể có bản vi đã đủ phiếu trong
+/// khi bản cs mới thu lại và chưa có phiếu nào.
+/// </summary>
 public record AdminReviewDto(
     int Round,
     string Decision,

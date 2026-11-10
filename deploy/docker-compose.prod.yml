@@ -112,6 +112,11 @@ services:
       Llm__Model: ${LLM_MODEL:-}
       Llm__ApiKey: ${LLM_API_KEY:-}
       Llm__TimeoutSeconds: ${LLM_TIMEOUT_SECONDS:-60}
+      Asr__Endpoint: ${ASR_ENDPOINT:-}
+      Asr__Model: ${ASR_MODEL:-}
+      Asr__ApiKey: ${ASR_API_KEY:-}
+      Asr__Language: ${ASR_LANGUAGE:-}
+      Asr__TimeoutSeconds: ${ASR_TIMEOUT_SECONDS:-120}
 
       # Trình duyệt chỉ cho frontend gọi API nếu origin nằm trong danh sách này.
       Cors__AllowedOrigins__0: ${FE_ORIGIN}
