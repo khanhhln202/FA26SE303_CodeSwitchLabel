@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text;
 using CodeSwitchLabel.Services.Audio;
 using CodeSwitchLabel.Services.Common;
@@ -158,6 +159,55 @@ public sealed class WhisperAsrClientTests
             Audio, "a.wav", TestContext.Current.CancellationToken);
 
         Assert.Equal(string.Empty, result.Text);
+    }
+
+    [Fact]
+    public async Task Loi429_ChoTheoRetryAfter_RoiThuLaiMotLan()
+    {
+        // Gói miễn phí của nhà cung cấp chặn ở vài chục request mỗi phút, mà lượt chạy lô
+        // gọi liên tiếp không nghỉ. 429 là 4xx nhưng đáng thử lại, khác mọi 4xx còn lại.
+        var handler = new StubHandler(
+            () => TooMany(TimeSpan.FromSeconds(1)),
+            () => Ok("""{"text":"sau khi cho thi duoc"}"""));
+
+        var result = await Create(handler).TranscribeAsync(
+            Audio, "a.wav", TestContext.Current.CancellationToken);
+
+        Assert.Equal("sau khi cho thi duoc", result.Text);
+        Assert.Equal(2, handler.Calls);
+    }
+
+    [Fact]
+    public async Task Loi429_ChoRoiVanBiChan_ThiBaoRateLimited()
+    {
+        var handler = new StubHandler(() => TooMany(TimeSpan.FromSeconds(1)));
+
+        var ex = await Assert.ThrowsAsync<UnprocessableException>(
+            () => Create(handler).TranscribeAsync(Audio, "a.wav", TestContext.Current.CancellationToken));
+
+        Assert.Equal("asr_rate_limited", ex.Code);
+        Assert.Equal(2, handler.Calls);
+    }
+
+    [Fact]
+    public async Task Loi429_BatChoQuaLau_ThiBaoNgayChuKhongTreoRequest()
+    {
+        // Giữ một request HTTP treo hàng phút là cách chắc chắn để nghẽn cả lượt chạy lô.
+        var handler = new StubHandler(() => TooMany(TimeSpan.FromSeconds(300)));
+
+        var ex = await Assert.ThrowsAsync<UnprocessableException>(
+            () => Create(handler).TranscribeAsync(Audio, "a.wav", TestContext.Current.CancellationToken));
+
+        Assert.Equal("asr_rate_limited", ex.Code);
+        Assert.Contains("300", ex.Message);
+        Assert.Equal(1, handler.Calls);
+    }
+
+    private static HttpResponseMessage TooMany(TimeSpan retryAfter)
+    {
+        var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests);
+        response.Headers.RetryAfter = new RetryConditionHeaderValue(retryAfter);
+        return response;
     }
 
     private static WhisperAsrClient Create(
