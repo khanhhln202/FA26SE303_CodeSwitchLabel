@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using CodeSwitchLabel.Services.Common;
@@ -34,6 +35,15 @@ public interface IAsrClient
 public class WhisperAsrClient(
     HttpClient http, IOptions<AsrOptions> options, ILogger<WhisperAsrClient> logger) : IAsrClient
 {
+    /// <summary>Chờ bao lâu khi nhà cung cấp không nói rõ.</summary>
+    private static readonly TimeSpan DefaultRetryAfter = TimeSpan.FromSeconds(3);
+
+    /// <summary>
+    /// Quá mức này thì không chờ nữa mà báo lỗi. Giữ một request HTTP treo hàng phút là
+    /// cách chắc chắn để làm nghẽn cả lượt chạy lô.
+    /// </summary>
+    private static readonly TimeSpan MaxRetryAfter = TimeSpan.FromSeconds(20);
+
     private AsrOptions Options => options.Value;
 
     public bool IsConfigured =>
@@ -103,6 +113,37 @@ public class WhisperAsrClient(
 
                 if (response.IsSuccessStatusCode) return body;
 
+                // 429 là lỗi 4xx nhưng KHÁC hẳn các 4xx còn lại: nó không phải sai cấu hình
+                // hay sai dữ liệu, chỉ là gọi quá nhanh. Gói miễn phí của nhà cung cấp thường
+                // chặn ở vài chục request mỗi phút, mà lượt chạy lô gọi liên tiếp không nghỉ.
+                if (response.StatusCode == HttpStatusCode.TooManyRequests && attempt == 1)
+                {
+                    var wait = RetryAfter(response);
+
+                    if (wait > MaxRetryAfter)
+                    {
+                        throw new UnprocessableException(
+                            "asr_rate_limited",
+                            $"Dịch vụ nhận dạng yêu cầu chờ {wait.TotalSeconds:0} giây, dài hơn mức "
+                            + $"{MaxRetryAfter.TotalSeconds:0} giây đáng chờ trong một request. "
+                            + "Hãy chạy lô nhỏ hơn hoặc thưa hơn.");
+                    }
+
+                    logger.LogWarning(
+                        "ASR giới hạn tần suất; chờ {Seconds:0.#}s rồi thử lại một lần.", wait.TotalSeconds);
+
+                    await Task.Delay(wait, ct);
+                    continue;
+                }
+
+                if (response.StatusCode == HttpStatusCode.TooManyRequests)
+                {
+                    throw new UnprocessableException(
+                        "asr_rate_limited",
+                        "Dịch vụ nhận dạng vẫn giới hạn tần suất sau một lần chờ. "
+                        + "Hãy chạy lô nhỏ hơn hoặc thưa hơn.");
+                }
+
                 if ((int)response.StatusCode >= 500 && attempt == 1)
                 {
                     logger.LogWarning("ASR trả {Status}; thử lại một lần.", (int)response.StatusCode);
@@ -137,6 +178,25 @@ public class WhisperAsrClient(
                     "asr_failed", $"Không gọi được dịch vụ nhận dạng: {ex.Message}");
             }
         }
+    }
+
+    /// <summary>
+    /// Thời gian nhà cung cấp bảo chờ. Header Retry-After có hai dạng: số giây, hoặc một mốc
+    /// thời gian HTTP. Không có hoặc không đọc được thì chờ một mức mặc định ngắn.
+    /// </summary>
+    private static TimeSpan RetryAfter(HttpResponseMessage response)
+    {
+        var header = response.Headers.RetryAfter;
+
+        if (header?.Delta is { } delta && delta > TimeSpan.Zero) return delta;
+
+        if (header?.Date is { } when)
+        {
+            var wait = when - DateTimeOffset.UtcNow;
+            if (wait > TimeSpan.Zero) return wait;
+        }
+
+        return DefaultRetryAfter;
     }
 
     /// <summary>Phản hồi chuẩn là {"text":"..."}. Thân lạ thì báo lỗi dữ liệu, không ném 500.</summary>
