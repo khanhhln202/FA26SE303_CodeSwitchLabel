@@ -99,7 +99,12 @@ public class AdminRecordingService(
                 ReviewRules.PairOutcome(csStatus, viStatus),
                 csStatus,
                 viStatus,
-                // Chỉ lượt của take mới nhất mới nói về trạng thái hiện tại; take cũ đã bị thay thế.
+                // Phiếu của take mới nhất, CỦA CẢ HAI BIẾN THỂ, gộp lại rồi xếp theo RecordingId.
+                // Take cũ đã bị thay thế nên không tính.
+                //
+                // Người hiển thị PHẢI tách lại theo RecordingId. Gộp chung vào một ô ba vòng là
+                // sai: cặp có thể có bản vi đã đủ phiếu từ lâu trong khi bản cs vừa thu lại chưa
+                // có phiếu nào, và màn hình sẽ trông như bản vừa thu đã được duyệt sẵn.
                 [.. both
                     .SelectMany(r => r.Reviews)
                     .OrderBy(v => v.RecordingId)
