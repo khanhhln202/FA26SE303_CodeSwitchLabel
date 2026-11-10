@@ -9,6 +9,7 @@ using CodeSwitchLabel.Services.Audio;
 using CodeSwitchLabel.Services.Common;
 using CodeSwitchLabel.Services.Dtos;
 using CodeSwitchLabel.Services.Reviews;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -167,7 +168,7 @@ public class AiReviewService(
         AiReviewDecision decision,
         CancellationToken ct)
     {
-        await using var transaction = await repo.BeginTransactionAsync(ct);
+        await using var transaction = await BeginTransactionIfNeededAsync(ct);
 
         // Đọc lại số lượt BÊN TRONG transaction: SubmitAsync khoá hàng recording và bắt
         // ExpectedRound khớp vòng hiện tại, nên con số phải lấy sau khi đã vào transaction.
@@ -203,7 +204,9 @@ public class AiReviewService(
 
         repo.Add(row);
         await repo.SaveChangesAsync(ct);
-        await transaction.CommitAsync(ct);
+
+        // null nghĩa là đang dùng transaction của caller — caller sẽ tự chốt.
+        if (transaction is not null) await transaction.CommitAsync(ct);
 
         logger.LogInformation(
             "Máy duyệt {RecordingId}: {Verdict}, WER {Wer} (bỏ dấu {Folded}), model {Model}.",
@@ -222,6 +225,25 @@ public class AiReviewService(
             submitted.ReviewId,
             submitted.RecordingStatus,
             row.AnalyzedAt);
+    }
+
+    /// <summary>
+    /// Mở transaction riêng, trừ khi caller đã ở trong một transaction (test tích hợp giữ
+    /// transaction ambient để rollback). EF không cho transaction lồng nhau trên cùng
+    /// connection nên trường hợp đó dùng luôn ambient — cùng cách ReviewService và
+    /// ScriptProposalService đã làm.
+    /// </summary>
+    private async Task<IDbContextTransaction?> BeginTransactionIfNeededAsync(CancellationToken ct)
+    {
+        try
+        {
+            return await repo.BeginTransactionAsync(ct);
+        }
+        catch (InvalidOperationException ex)
+            when (ex.Message.Contains("already in a transaction", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
     }
 
     private async Task<AiReviewSettings> LoadSettingsAsync(CancellationToken ct)
