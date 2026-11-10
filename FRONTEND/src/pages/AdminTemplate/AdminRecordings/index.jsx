@@ -294,7 +294,7 @@ export default function AdminRecordings() {
                 <button
                   onClick={() => setIsSelectMode(true)}
                   style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 8px 20px ${ADMIN_ACCENT}33` }}
-                  className="px-4 py-2 text-white rounded-xl type-button flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.97] transition-all duration-200 cursor-pointer whitespace-nowrap font-bold"
+                  className="px-3.5 py-2 text-white rounded-xl type-button flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer whitespace-nowrap"
                 >
                   <Download className="w-4 h-4 transition-transform duration-200 group-hover:translate-y-0.5" />
                   <span>Tải dataset</span>

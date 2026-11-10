@@ -117,6 +117,7 @@ export default function AdminTextData() {
       
       if (activeSearchTerm) {
         params.search = activeSearchTerm;
+        params.q = activeSearchTerm;
       }
       if (selectedStatus !== "all") {
         // ĐÃ SỬA: Dùng "PendingValidation" chuẩn Enum của Backend thay vì "Pending"
@@ -124,8 +125,8 @@ export default function AdminTextData() {
       }
 
       const res = await adminService.getTexts(params);
-      const items = res.items || res.data || (Array.isArray(res) ? res : []);
-      const total = res.totalCount || res.totalItems || res.total || (Array.isArray(res) ? res.length : items.length);
+      const items = res?.items || res?.data?.items || (Array.isArray(res) ? res : []);
+      const total = res?.totalCount ?? res?.totalItems ?? res?.data?.totalCount ?? items.length;
 
       setTotalItems(total);
       setTextList(
@@ -252,8 +253,28 @@ export default function AdminTextData() {
           return;
         }
 
-        await adminService.importScripts(selectedTxtFile, domainSelect);
-        toast.success("Đã tải lên file .txt thành công! Các cặp câu đang ở trạng thái Chờ duyệt.");
+        const res = await adminService.importScripts(selectedTxtFile, domainSelect);
+        
+        // KIỂM TRA PHẢN HỒI SKIPPED TỪ BACKEND ĐỂ BÁO TOAST LỖI
+        const skippedList = res?.skipped || res?.data?.skipped || [];
+        const importedCount = res?.imported ?? res?.data?.imported ?? 0;
+
+        if (skippedList.length > 0) {
+          const dupReason = skippedList.find(
+            (s) => s.code?.toLowerCase().includes("duplicate") || s.reason?.toLowerCase().includes("trùng")
+          );
+          
+          if (dupReason) {
+            toast.error(`Import bị từ chối: Phát hiện ${skippedList.length} câu văn bản bị trùng lặp trong hệ thống!`);
+          } else {
+            const firstReason = skippedList[0]?.reason || "Câu văn bản bị trùng lặp hoặc không đúng định dạng!";
+            toast.error(`Lỗi import (${skippedList.length} câu bị bỏ qua): ${firstReason}`);
+          }
+        } else if (importedCount > 0) {
+          toast.success(`Đã tải lên thành công ${importedCount} câu văn bản! Các câu đang ở trạng thái Chờ duyệt.`);
+        } else {
+          toast.success("Đã tải lên file .txt thành công! Các cặp câu đang ở trạng thái Chờ duyệt.");
+        }
       }
 
       setShowModal(false);
@@ -643,9 +664,9 @@ export default function AdminTextData() {
                         e.target.style.boxShadow = 'none';
                       }}
                     >
-                      <option value="IT/Technology" className="bg-white dark:bg-[#25272E]">Công nghệ thông tin (IT/Technology)</option>
-                      <option value="Education" className="bg-white dark:bg-[#25272E]">Giáo dục (Education)</option>
-                      <option value="Daily Life" className="bg-white dark:bg-[#25272E]">Hội thoại hàng ngày (Daily Life)</option>
+                      <option value="IT/Technology" className="bg-white dark:bg-[#25272E]">Công nghệ thông tin</option>
+                      <option value="Education" className="bg-white dark:bg-[#25272E]">Giáo dục</option>
+                      <option value="Daily Life" className="bg-white dark:bg-[#25272E]">Hội thoại hàng ngày</option>
                     </select>
                   </div>
                 </div>
