@@ -136,6 +136,20 @@ public sealed class LabelingServiceTests
         Assert.Equal(1, handler.Calls);
     }
 
+    [Fact]
+    public async Task GoiLlm_CoGioiHanMaxTokens()
+    {
+        var handler = new StubHandler(() => Ok(ChatResponse(ValidContent)));
+        var service = CreateService(handler);
+
+        await service.LabelAsync(
+            "Em nên scan tài liệu này.", "Em nên quét tài liệu này.",
+            TestContext.Current.CancellationToken);
+
+        using var body = JsonDocument.Parse(handler.LastBody);
+        Assert.InRange(body.RootElement.GetProperty("max_tokens").GetInt32(), 256, 8192);
+    }
+
     private static LabelingService CreateService(
         StubHandler handler, LlmOptions? options = null)
     {
@@ -166,12 +180,17 @@ public sealed class LabelingServiceTests
         private int _calls;
 
         public int Calls => _calls;
+        public string LastBody { get; private set; } = string.Empty;
 
-        protected override Task<HttpResponseMessage> SendAsync(
+        protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            LastBody = request.Content is null
+                ? string.Empty
+                : await request.Content.ReadAsStringAsync(cancellationToken);
+
             var index = Math.Min(_calls++, responses.Length - 1);
-            return Task.FromResult(responses[index]());
+            return responses[index]();
         }
     }
 }

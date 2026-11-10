@@ -55,6 +55,8 @@ public class LabelingService(
         {
             model = Options.Model,
             temperature = 0,
+            // OpenRouter giữ chỗ theo max_tokens; model có thể mặc định 131k nên bị 402 dù câu trả lời rất ngắn.
+            max_tokens = 2048,
             messages = new object[]
             {
                 new { role = "system", content = SystemPrompt },
