@@ -12,6 +12,57 @@ namespace CodeSwitchLabel.Tests.Integration;
 [Trait("Category", "Integration")]
 public sealed class RegisterSpeakerTests(DatabaseFixture fixture) : ApiTestBase(fixture)
 {
+    /// <summary>
+    /// Vùng miền là kiểu ENUM của Postgres, không phải chuỗi — chỗ dễ hỏng là lớp ánh xạ
+    /// giữa enum C# và kiểu của database, mà lỗi đó CHỈ lộ ra khi chạy với database thật.
+    /// Test này đi trọn một vòng: đăng ký kèm vùng miền, đọc lại, đổi sang vùng khác, đọc lại.
+    /// </summary>
+    [Fact]
+    public async Task VungMien_DiTronMotVongQuaDatabaseThat()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var email = $"vungmien-{Guid.NewGuid():N}@codeswitchlabel.local";
+
+        var dangKy = await PostAsync("/api/auth/register-speaker", new
+        {
+            fullName = "Người đọc miền Trung",
+            email,
+            password = "Volunteer@123",
+            speakerProfile = new
+            {
+                birthYear = (short)2001,
+                province = "Đà Nẵng",
+                region = "Central",
+                englishLevel = 6.0m,
+                major = "IT"
+            }
+        });
+
+        Assert.Equal(HttpStatusCode.OK, dangKy.StatusCode);
+        using var doc = JsonDocument.Parse(await dangKy.Content.ReadAsStringAsync(ct));
+        var token = doc.RootElement.GetProperty("accessToken").GetString();
+
+        // Đọc lại: giá trị phải đi qua được cả hai chiều ánh xạ.
+        var hoSo = await GetAsync("/api/me/speaker-profile", token);
+        Assert.Equal(HttpStatusCode.OK, hoSo.StatusCode);
+        using var doc2 = JsonDocument.Parse(await hoSo.Content.ReadAsStringAsync(ct));
+        Assert.Equal("Central", doc2.RootElement.GetProperty("region").GetString());
+        Assert.Equal("Đà Nẵng", doc2.RootElement.GetProperty("province").GetString());
+
+        // Đổi sang vùng khác — và bỏ trống tỉnh, để thấy hai trường thật sự độc lập.
+        var capNhat = await PutAsync("/api/me/speaker-profile", new
+        {
+            birthYear = (short)2001,
+            region = "North",
+            englishLevel = 6.0m
+        }, token);
+
+        Assert.Equal(HttpStatusCode.OK, capNhat.StatusCode);
+        using var doc3 = JsonDocument.Parse(await capNhat.Content.ReadAsStringAsync(ct));
+        Assert.Equal("North", doc3.RootElement.GetProperty("region").GetString());
+        Assert.Equal(JsonValueKind.Null, doc3.RootElement.GetProperty("province").ValueKind);
+    }
+
     [Fact]
     public async Task RegisterSpeaker_CreatesActiveSpeaker_AndCanLogin()
     {
