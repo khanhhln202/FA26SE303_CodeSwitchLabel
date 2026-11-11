@@ -56,6 +56,18 @@ public static class ConfigKeys
     public const string AiReviewEnabled = "ai_review.enabled";
 
     /// <summary>
+    /// Cho tiến trình nền tự quét các bản ghi đang hoà 1–1 rồi gọi máy duyệt, thay vì chờ
+    /// người bấm. Vẫn cần <see cref="AiReviewEnabled"/> bật thì máy mới phán được.
+    /// </summary>
+    public const string AiReviewAutoEnabled = "ai_review.auto_enabled";
+
+    /// <summary>Nghỉ bao lâu giữa hai lượt quét của tiến trình nền, tính bằng giây.</summary>
+    public const string AiReviewAutoIntervalSeconds = "ai_review.auto_interval_seconds";
+
+    /// <summary>Tối đa bao nhiêu bản ghi mỗi lượt quét. Xử lý tuần tự, không song song.</summary>
+    public const string AiReviewAutoBatchSize = "ai_review.auto_batch_size";
+
+    /// <summary>
     /// Ranh giới DUY NHẤT của máy duyệt: WER dưới mức này thì bỏ phiếu đạt, từ mức này
     /// trở lên thì từ chối. Máy là người phá thế nên luôn phải chọn một bên — không có
     /// vùng bỏ quyền, nên chỉ cần một ngưỡng.
