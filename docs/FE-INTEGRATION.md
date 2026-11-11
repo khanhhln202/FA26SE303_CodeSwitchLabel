@@ -342,7 +342,6 @@ Lỗi hệ thống trả 500 với `code: "internal_error"`. Gặp lỗi này th
 | `invalid_file_type` | 422 | File nhập câu không phải `.json` hoặc `.txt` (mở rộng lạ) | Chọn đúng file `.json` theo mẫu hoặc `.txt` đúng định dạng |
 | `invalid_text_format` | 422 hoặc trong `skipped` | File `.txt` có dòng không kết thúc bằng dấu chấm / số dòng lẻ, hoặc một câu đã có nhãn `[vi]`/`[en]` khi backend gán nhãn bằng luật (chỉ cặp đó bị bỏ) | Sửa file: mỗi cặp đúng hai dòng, mỗi câu kết thúc bằng `.`; bỏ nhãn khỏi câu thô |
 | `domain_required` | 422 | File `.txt` mà thiếu trường form `Domain` | Bắt chọn chủ đề trước khi gửi |
-| `llm_failed` / `llm_parse_error` | trong `skipped` | Có cấu hình LLM nhưng LLM lỗi khi gọi hoặc trả kết quả không đọc được — chỉ **một cặp** bị bỏ, các cặp khác vẫn nhập | Hiện trong `skipped` của kết quả; không cần gửi lại cả file |
 | `export_scope_required` | 422 | Export dataset mà không gửi `recordingIds`, `speakerIds` hay `waveId` | Bắt chọn ít nhất một phạm vi |
 | `export_no_approved_pairs` | 422 | Phạm vi đã chọn không có cặp nào duyệt đủ cả cs+vi | Báo không có dữ liệu; kiểm tra lại bộ lọc |
 | `email_taken` | 409 | Tự đăng ký Speaker bằng email đã có | Hiện lỗi cạnh ô email |
@@ -847,8 +846,8 @@ Kết quả nhập file có `imported`, `scriptIds` và `skipped` (kèm lý do t
 - Mỗi cặp đúng **hai dòng không rỗng**: dòng đầu là câu trộn Việt–Anh, dòng sau là câu thuần Việt. Dòng trống bị bỏ qua.
 - Mỗi câu phải kết thúc bằng **dấu chấm**; tối đa **100 cặp** mỗi file (`422 invalid_text_format` khi sai, `422 import_too_large` khi vượt).
 - Gửi kèm trường form `Domain`: `IT/Technology`, `Education` hoặc `Daily Life` (cùng danh mục với `GET /api/config/topics`). Thiếu trường này → `422 domain_required`.
-- Không cần tự gán nhãn trong file. Có cấu hình `Llm:Endpoint`/`Model` thì backend gọi LLM để chèn nhãn `[vi]`/`[en]` và sinh `alignment`; không có LLM thì gán nhãn bằng luật: đối chiếu các từ chung của hai câu, đoạn giữa hai mốc là nghĩa (có thể nhiều từ, ví dụ `email` → `thư điện tử`); đoạn không đối chiếu được lấy theo vị trí, hết từ thì `target` để trống cho người duyệt điền.
-- Một cặp gán nhãn lỗi vào `skipped` với `id = pair-N`: LLM lỗi có mã `llm_failed`/`llm_parse_error`, luật lỗi có mã `invalid_text_format`/`invalid_language_tags`; các cặp còn lại vẫn nhập. File `.txt` cũng đi qua đúng luật import JSON: kiểm chủ đề Admin, chống trùng, câu vào `PendingValidation`.
+- Không cần tự gán nhãn trong file. Có cấu hình `Llm:Endpoint`/`Model` thì backend gọi LLM để chèn nhãn `[vi]`/`[en]` và sinh `alignment`; LLM lỗi hoặc trả kết quả không đọc được thì lùi về luật. Luật gán nhãn: từ ASCII là tiếng Việt khi là hư từ quen thuộc hoặc có trong từ điển âm tiết Việt không dấu và cũng xuất hiện trong câu thuần Việt; nghĩa lấy bằng cách đối chiếu các từ chung của hai câu, đoạn giữa hai mốc là nghĩa (có thể nhiều từ, ví dụ `email` → `thư điện tử`); đoạn không đối chiếu được lấy theo vị trí, hết từ thì `target` để trống cho người duyệt điền.
+- Một cặp gán nhãn lỗi vào `skipped` với `id = pair-N`: luật lỗi có mã `invalid_text_format`/`invalid_language_tags`; các cặp còn lại vẫn nhập. File `.txt` cũng đi qua đúng luật import JSON: kiểm chủ đề Admin, chống trùng, câu vào `PendingValidation`.
 
 **Cấu trúc ZIP của `POST /api/datasets/export`** — mỗi cặp một thư mục, ngày theo múi giờ Bangkok:
 

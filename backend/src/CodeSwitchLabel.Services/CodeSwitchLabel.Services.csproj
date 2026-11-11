@@ -18,6 +18,10 @@
     <InternalsVisibleTo Include="CodeSwitchLabel.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Common\vi-syllables.txt" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

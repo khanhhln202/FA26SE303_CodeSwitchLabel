@@ -17,6 +17,7 @@ public interface ILabelingService
 
     /// <summary>
     /// Gán nhãn tự động: dùng LLM nếu đã cấu hình, ngược lại dùng luật.
+    /// LLM lỗi gọi hoặc trả kết quả không đọc được cũng lùi về luật.
     /// </summary>
     Task<LabeledPair> AutoLabelAsync(string csRaw, string viRaw, CancellationToken ct = default);
 }

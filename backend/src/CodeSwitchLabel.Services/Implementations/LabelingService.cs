@@ -248,9 +248,9 @@ public class LabelingService(
         {
             return await LabelAsync(csRaw, viRaw, ct);
         }
-        catch (UnprocessableException ex) when (ex.Code == "llm_failed")
+        catch (UnprocessableException ex) when (ex.Code is "llm_failed" or "llm_parse_error")
         {
-            logger.LogWarning(ex, "LLM failed, falling back to rule-based labeler.");
+            logger.LogWarning(ex, "LLM failed or returned unusable labels; using rule-based labeler.");
             return RuleBasedLabeler.Label(csRaw, viRaw);
         }
     }

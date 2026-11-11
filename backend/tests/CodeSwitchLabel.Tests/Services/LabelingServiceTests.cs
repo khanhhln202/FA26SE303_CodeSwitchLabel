@@ -137,6 +137,23 @@ public sealed class LabelingServiceTests
     }
 
     [Fact]
+    public async Task AutoLabel_LlmTraSaiDinhDang_DungLuat()
+    {
+        var handler = new StubHandler(() => Ok(ChatResponse("không phải json")));
+        var service = CreateService(handler);
+
+        var result = await service.AutoLabelAsync(
+            "Em nên scan tài liệu này.", "Em nên quét tài liệu này.",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("[vi]Em nên [en]scan [vi]tài liệu này.", result.CsTagged);
+        var word = Assert.Single(result.Alignment);
+        Assert.Equal("scan", word.Source);
+        Assert.Equal("quét", word.Target);
+        Assert.Equal(1, handler.Calls);
+    }
+
+    [Fact]
     public async Task GoiLlm_CoGioiHanMaxTokens()
     {
         var handler = new StubHandler(() => Ok(ChatResponse(ValidContent)));
