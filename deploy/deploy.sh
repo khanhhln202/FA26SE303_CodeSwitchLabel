@@ -92,6 +92,15 @@ STEP="kiem tra"
 command -v curl >/dev/null || die "May chu thieu curl."
 docker compose version >/dev/null 2>&1 || die "May chu thieu docker compose (v2)."
 
+# Service asr nap model bang cach doc ca khoi float16 1,5 GB roi moi nen xuong int8,
+# nen co mot dinh RAM nhat thoi vuot tran container. Khong co swap thi dinh do lam
+# container bi giet va AI duyet hong, trong khi luc chay on dinh lai thua bo nho.
+if [ "$(awk '/^SwapTotal:/{print $2}' /proc/meminfo 2>/dev/null || echo 0)" -lt 1048576 ]; then
+  warn "May chu co duoi 1 GB swap. Service asr se bi giet luc nap model.
+     Tao swap:  sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile \
+                && sudo mkswap /swapfile && sudo swapon /swapfile"
+fi
+
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 [ "$BRANCH" = "main" ] || die "Dang o nhanh '$BRANCH', phai la 'main'. May chu chay code tu nhanh main (docs/FE-INTEGRATION.md)."
 
@@ -243,6 +252,46 @@ fi
 STEP="dung container"
 say "docker compose up -d --build"
 "${COMPOSE[@]}" up -d --build
+
+# -----------------------------------------------------------------------------
+# 5b. NAP MODEL NHAN DANG GIONG NOI
+#
+# Service asr KHONG tu tai model khi co request phien am den — no tra 404. Phai goi
+# POST /v1/models/{id} truoc. Buoc nay lam viec do, va lam idempotent: co roi thi bo qua.
+# Khong co buoc nay thi moi lan volume asr-models mat la AI duyet hong lang le.
+# -----------------------------------------------------------------------------
+STEP="nap model ASR"
+ASR_MODEL_WANTED="$(read_env ASR_MODEL)"
+
+if [ -z "$ASR_MODEL_WANTED" ]; then
+  say "ASR_MODEL rong -> bo qua buoc nap model."
+elif ! "${COMPOSE[@]}" ps --services --status running 2>/dev/null | grep -qx asr; then
+  warn "Service asr khong chay -> bo qua buoc nap model. AI duyet se bao asr_failed."
+else
+  say "Kiem tra model $ASR_MODEL_WANTED (lan dau phai tai ~1,5 GB)"
+  # Hong o day KHONG duoc lam do ca lan deploy: phan con lai cua he van chay duoc,
+  # chi rieng AI duyet la chua dung duoc.
+  if "${COMPOSE[@]}" exec -T asr python - "$ASR_MODEL_WANTED" <<'PY'
+import json, sys, urllib.request
+model = sys.argv[1]
+base = "http://localhost:8000"
+have = json.load(urllib.request.urlopen(base + "/v1/models", timeout=30))
+if model in {m["id"] for m in have.get("data", [])}:
+    print("Model da co san.")
+    sys.exit(0)
+print("Chua co, dang tai...")
+urllib.request.urlopen(
+    urllib.request.Request(base + "/v1/models/" + model, method="POST"), timeout=3600)
+print("Tai xong.")
+PY
+  then
+    say "Model ASR san sang."
+  else
+    warn "Nap model ASR that bai. He thong van chay, rieng AI duyet se bao asr_failed.
+     Thu tay:  ${COMPOSE[*]} exec asr python -c \
+       \"import urllib.request as u;u.urlopen(u.Request('http://localhost:8000/v1/models/$ASR_MODEL_WANTED',method='POST'),timeout=3600)\""
+  fi
+fi
 
 # -----------------------------------------------------------------------------
 # 6. KIỂM TRA — API phai tra /health truoc khi coi la xong
