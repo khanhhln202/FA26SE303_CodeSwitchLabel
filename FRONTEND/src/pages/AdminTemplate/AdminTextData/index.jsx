@@ -124,9 +124,11 @@ export default function AdminTextData() {
         params.status = selectedStatus === "active" ? "Validated" : "PendingValidation";
       }
 
-      const res = await adminService.getTexts(params);
-      const items = res?.items || res?.data?.items || (Array.isArray(res) ? res : []);
-      const total = res?.totalCount ?? res?.totalItems ?? res?.data?.totalCount ?? items.length;
+      const response = await adminService.getTexts(params);
+      const resData = response?.data || response;
+
+      const items = Array.isArray(resData) ? resData : (resData?.items || []);
+      const total = resData?.totalCount ?? resData?.totalItems ?? resData?.total ?? (Array.isArray(resData) ? resData.length : items.length);
 
       setTotalItems(total);
       setTextList(
