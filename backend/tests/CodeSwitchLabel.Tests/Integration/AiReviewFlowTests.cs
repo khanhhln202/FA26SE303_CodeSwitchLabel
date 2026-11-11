@@ -300,6 +300,77 @@ public sealed class AiReviewFlowTests : IntegrationTestBase
 
     // ---------------------------------------------------------------- giả lập
 
+    /// <summary>
+    /// Bất biến quan trọng nhất của endpoint danh sách: nó phải mô tả ĐÚNG tập mà lượt chạy
+    /// lô sẽ xử lý. Lệch nhau thì giao diện hiện ra bản ghi mà bấm vào sẽ nhận 409, hoặc
+    /// giấu mất bản ghi đang chờ — cả hai đều rất khó lần ra nguyên nhân.
+    /// </summary>
+    [Fact]
+    public async Task DanhSachChoMay_MoTaDungTapMaLuotChayLoSeXuLy()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await EnableAsync(ct);
+
+        var choMay = await PendingRecordingAsync();          // 2 lượt, lệch nhau  -> phải có
+        var chuaAiCham = await PendingRecordingAsync();      // 0 lượt             -> không có
+        var daChot = await PendingRecordingAsync();          // 2 lượt, cùng đạt   -> không có
+
+        var nguoiHai = await SecondReviewerAsync();
+
+        await AddHumanVoteAsync(choMay, ReviewerUserId, 1, ReviewDecision.Approved, ct);
+        await AddHumanVoteAsync(choMay, nguoiHai, 2, ReviewDecision.Rejected, ct);
+
+        await AddHumanVoteAsync(daChot, ReviewerUserId, 1, ReviewDecision.Approved, ct);
+        await AddHumanVoteAsync(daChot, nguoiHai, 2, ReviewDecision.Approved, ct);
+
+        var repo = Services.GetRequiredService<IAiReviewRepository>();
+        var mayId = await repo.GetAiReviewerIdAsync(ct);
+        Assert.NotNull(mayId);
+
+        var idsLo = await repo.GetTiedRecordingIdsAsync(500, mayId.Value, ct);
+        var danhSach = await repo.GetPendingAsync(500, mayId.Value, ct);
+        var idsDanhSach = danhSach.Select(x => x.RecordingId).ToList();
+
+        foreach (var (banGhi, phaiCo) in new[]
+                 {
+                     (choMay.RecordingId, true),
+                     (chuaAiCham.RecordingId, false),
+                     (daChot.RecordingId, false)
+                 })
+        {
+            Assert.Equal(phaiCo, idsLo.Contains(banGhi));
+            Assert.Equal(phaiCo, idsDanhSach.Contains(banGhi));
+        }
+    }
+
+    [Fact]
+    public async Task DanhSachChoMay_KemVanBanDaBoNhanVaHaiLuotCuaNguoi()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await EnableAsync(ct);
+
+        var banGhi = await PendingRecordingAsync();
+        var nguoiHai = await SecondReviewerAsync();
+        await AddHumanVoteAsync(banGhi, ReviewerUserId, 1, ReviewDecision.Approved, ct);
+        await AddHumanVoteAsync(banGhi, nguoiHai, 2, ReviewDecision.Rejected, ct);
+
+        var dong = Assert.Single(
+            await ServiceWith("").GetPendingAsync(500, ct),
+            x => x.RecordingId == banGhi.RecordingId);
+
+        // Nhãn ngôn ngữ là thứ của database, không phải thứ để hiện lên màn hình.
+        Assert.DoesNotContain("[vi]", dong.ExpectedText);
+        Assert.DoesNotContain("[en]", dong.ExpectedText);
+        Assert.Contains("deploy", dong.ExpectedText);
+        Assert.Equal(SentenceVariant.CodeSwitching, dong.Variant);
+
+        // Hai lượt của người, đúng thứ tự vòng, đúng kết quả lệch nhau.
+        Assert.Equal(2, dong.Reviews.Count);
+        Assert.Equal([(short)1, (short)2], dong.Reviews.Select(v => v.Round));
+        Assert.Equal(ReviewDecision.Approved, dong.Reviews[0].Decision);
+        Assert.Equal(ReviewDecision.Rejected, dong.Reviews[1].Decision);
+    }
+
     private sealed class StubAsr(string text) : IAsrClient
     {
         public int Calls { get; private set; }
