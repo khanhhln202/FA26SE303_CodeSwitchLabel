@@ -210,14 +210,52 @@ public sealed class WhisperAsrClientTests
         return response;
     }
 
+    /// <summary>
+    /// RFC 7578 §4.2 đòi tên trường phải bọc ngoặc kép. MultipartFormDataContent của .NET
+    /// sinh ra <c>name=file</c> trần; OpenAI và Groq bỏ qua, nhưng OpenRouter trả 400
+    /// "Invalid multipart/form-data body" và bỏ luôn bản ghi. Đo được bằng thực nghiệm:
+    /// hai thân giống hệt, chỉ khác mấy dấu ngoặc kép, một bên 400 một bên qua.
+    /// </summary>
+    [Fact]
+    public async Task ThanRequest_BocNgoacKepQuanhTenTruong()
+    {
+        var handler = new StubHandler(() => Ok("""{"text":"xong"}"""));
+
+        await Create(handler).TranscribeAsync(
+            Audio, "r_cs_1.wav", TestContext.Current.CancellationToken);
+
+        Assert.Contains("name=\"file\"; filename=\"r_cs_1.wav\"", handler.LastBody);
+        Assert.Contains("name=\"model\"", handler.LastBody);
+        Assert.Contains("name=\"response_format\"", handler.LastBody);
+
+        // Dạng trần là đúng thứ làm hỏng; không được phép quay lại.
+        Assert.DoesNotContain("name=file", handler.LastBody);
+        Assert.DoesNotContain("name=model", handler.LastBody);
+        Assert.DoesNotContain("name=response_format", handler.LastBody);
+    }
+
+    [Fact]
+    public async Task KhaiNgonNgu_ThiTruongLanguageCungBocNgoacKep()
+    {
+        var handler = new StubHandler(() => Ok("""{"text":"xong"}"""));
+
+        await Create(handler, language: "vi").TranscribeAsync(
+            Audio, "r_cs_1.wav", TestContext.Current.CancellationToken);
+
+        Assert.Contains("name=\"language\"", handler.LastBody);
+        Assert.DoesNotContain("name=language", handler.LastBody);
+    }
+
     private static WhisperAsrClient Create(
-        StubHandler handler, string endpoint = "https://api.test/v1", string model = "whisper-1") =>
+        StubHandler handler, string endpoint = "https://api.test/v1",
+        string model = "whisper-1", string language = "") =>
         new(new HttpClient(handler),
             Options.Create(new AsrOptions
             {
                 Endpoint = endpoint,
                 Model = model,
                 ApiKey = "sk-test",
+                Language = language,
                 TimeoutSeconds = 5
             }),
             NullLogger<WhisperAsrClient>.Instance);
