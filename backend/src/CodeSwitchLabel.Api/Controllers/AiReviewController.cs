@@ -66,6 +66,25 @@ public class AiReviewController(IAiReviewService aiReview) : ControllerBase
         [FromQuery][Range(1, 100)] int limit = 10, CancellationToken ct = default) =>
         Ok(await aiReview.RunBatchAsync(limit, ct));
 
+    /// <summary>Hàng đợi các bản ghi đang chờ máy phán.</summary>
+    /// <remarks>
+    /// ĐÚNG tập bản ghi mà `POST /api/ai-review/run` sẽ xử lý, nhưng chỉ đọc: không gọi
+    /// ASR, không ghi phiếu, không tốn gì. Có endpoint này để giao diện dựng được hàng đợi
+    /// thay vì gọi bừa vào từng bản rồi bắt `409 ai_review_not_tiebreak`.
+    ///
+    /// Mỗi dòng kèm sẵn văn bản đáng ra phải đọc và hai lượt duyệt của người đã tạo nên thế
+    /// lệch, nên dựng xong bảng chỉ bằng một lần gọi.
+    ///
+    /// Danh sách rỗng là trạng thái BÌNH THƯỜNG — nghĩa là chưa có bản ghi nào mà hai người
+    /// duyệt cho kết quả khác nhau.
+    /// </remarks>
+    [HttpGet("api/ai-review/pending")]
+    [Authorize(Roles = "TaskManager,Admin")]
+    [ProducesResponseType(typeof(IReadOnlyList<AiReviewPendingDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<AiReviewPendingDto>>> Pending(
+        [FromQuery][Range(1, 200)] int limit = 50, CancellationToken ct = default) =>
+        Ok(await aiReview.GetPendingAsync(limit, ct));
+
     /// <summary>Xem bằng chứng máy đã phán cho một bản ghi.</summary>
     /// <remarks>
     /// Trả lượt phán gần nhất: transcript ASR nghe được, văn bản đã chuẩn hoá đem so, hai con số
