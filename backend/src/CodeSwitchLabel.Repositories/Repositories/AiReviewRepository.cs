@@ -22,6 +22,25 @@ public record AiReviewCandidate(
     long SpeakerId);
 
 /// <summary>
+/// Một dòng trong hàng đợi chờ máy phán. Kèm sẵn văn bản và hai lượt duyệt của người để
+/// giao diện dựng được bảng chỉ bằng một lần gọi, thay vì gọi thêm một lần cho mỗi bản ghi.
+/// </summary>
+public record AiReviewPendingItem(
+    string RecordingId,
+    SentenceVariant Variant,
+    decimal DurationSec,
+    string ExpectedRaw,
+    DateTimeOffset RecordedAt,
+    List<AiReviewPendingVote> Reviews);
+
+/// <summary>Một lượt duyệt của người trên bản ghi đang chờ máy.</summary>
+public record AiReviewPendingVote(
+    short Round,
+    long ReviewerId,
+    ReviewDecision Decision,
+    DateTimeOffset ReviewedAt);
+
+/// <summary>
 /// Số lượt duyệt đã có của một bản ghi. <paramref name="Approved"/> là số phiếu đạt,
 /// nên số phiếu không đạt là <c>Total - Approved</c>.
 /// </summary>
@@ -49,6 +68,14 @@ public interface IAiReviewRepository
     /// chạy lô không gọi ASR cho bản chưa tới lượt máy — mỗi lượt gọi là một lần tốn tiền.
     /// </summary>
     Task<List<string>> GetTiedRecordingIdsAsync(
+        int limit, long aiReviewerId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Cùng tập bản ghi với <see cref="GetTiedRecordingIdsAsync"/>, nhưng kèm dữ liệu để
+    /// hiển thị. Hai hàm dùng CHUNG một bộ điều kiện, nên danh sách không bao giờ chứa
+    /// bản ghi mà lượt chạy lô bỏ qua.
+    /// </summary>
+    Task<List<AiReviewPendingItem>> GetPendingAsync(
         int limit, long aiReviewerId, CancellationToken ct = default);
 
     Task<bool> HasVotedAsync(string recordingId, long aiReviewerId, CancellationToken ct = default);
@@ -96,8 +123,16 @@ public class AiReviewRepository(CodeSwitchLabelDbContext db) : IAiReviewReposito
                 r.SpeakerId))
             .FirstOrDefaultAsync(ct);
 
-    public Task<List<string>> GetTiedRecordingIdsAsync(
-        int limit, long aiReviewerId, CancellationToken ct = default) =>
+    /// <summary>
+    /// "Đã tới lượt máy": đúng hai lượt duyệt của người, hai lượt đó khác kết quả nhau, và
+    /// máy chưa từng phán bản này.
+    /// <para>
+    /// Viết một lần rồi dùng chung cho cả danh sách lẫn lượt chạy lô. Để hai chỗ tự chép lại
+    /// bộ điều kiện này thì sớm muộn chúng lệch nhau, và giao diện sẽ hiện những bản ghi mà
+    /// lượt chạy lô không bao giờ đụng tới — kiểu lỗi rất khó lần ra.
+    /// </para>
+    /// </summary>
+    private IQueryable<Recording> TiedRecordings(long aiReviewerId) =>
         db.Recordings
             .Where(r => r.Status == RecordingStatus.PendingReview)
             .Where(r => r.SpeakerId != aiReviewerId)
@@ -105,9 +140,36 @@ public class AiReviewRepository(CodeSwitchLabelDbContext db) : IAiReviewReposito
             .Where(r => db.Reviews.Count(v => v.RecordingId == r.RecordingId) == 2)
             .Where(r => db.Reviews.Count(
                 v => v.RecordingId == r.RecordingId && v.Decision == ReviewDecision.Approved) == 1)
-            .OrderBy(r => r.RecordedAt)
+            .OrderBy(r => r.RecordedAt);
+
+    public Task<List<string>> GetTiedRecordingIdsAsync(
+        int limit, long aiReviewerId, CancellationToken ct = default) =>
+        TiedRecordings(aiReviewerId)
             .Select(r => r.RecordingId)
             .Take(limit)
+            .ToListAsync(ct);
+
+    public Task<List<AiReviewPendingItem>> GetPendingAsync(
+        int limit, long aiReviewerId, CancellationToken ct = default) =>
+        TiedRecordings(aiReviewerId)
+            .Take(limit)
+            .Select(r => new AiReviewPendingItem(
+                r.RecordingId,
+                r.SentenceVariant,
+                r.DurationSec,
+                db.Scripts
+                    .Where(s => s.ScriptId == r.ScriptId)
+                    .Select(s => r.SentenceVariant == SentenceVariant.CodeSwitching
+                        ? s.CsContent
+                        : s.ViContent)
+                    .First(),
+                r.RecordedAt,
+                db.Reviews
+                    .Where(v => v.RecordingId == r.RecordingId)
+                    .OrderBy(v => v.ReviewRound)
+                    .Select(v => new AiReviewPendingVote(
+                        v.ReviewRound, v.ReviewerId, v.Decision, v.ReviewedAt))
+                    .ToList()))
             .ToListAsync(ct);
 
     public Task<bool> HasVotedAsync(string recordingId, long aiReviewerId, CancellationToken ct = default) =>

@@ -285,6 +285,7 @@ public sealed class AiReviewServiceTests
 
         public bool AlreadyVoted { get; set; }
         public List<string> TiedIds { get; set; } = [];
+        public List<AiReviewPendingItem> PendingRows { get; set; } = [];
         public HashSet<string> MissingIds { get; } = [];
         public List<AiReview> Added { get; } = [];
 
@@ -305,6 +306,10 @@ public sealed class AiReviewServiceTests
         public Task<List<string>> GetTiedRecordingIdsAsync(
             int limit, long aiReviewerId, CancellationToken ct = default) =>
             Task.FromResult(TiedIds.Take(limit).ToList());
+
+        public Task<List<AiReviewPendingItem>> GetPendingAsync(
+            int limit, long aiReviewerId, CancellationToken ct = default) =>
+            Task.FromResult(PendingRows.Take(limit).ToList());
 
         public Task<bool> HasVotedAsync(string recordingId, long aiReviewerId, CancellationToken ct = default) =>
             Task.FromResult(AlreadyVoted);

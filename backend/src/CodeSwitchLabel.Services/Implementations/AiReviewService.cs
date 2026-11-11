@@ -267,6 +267,28 @@ public class AiReviewService(
         return settings;
     }
 
+    public async Task<IReadOnlyList<AiReviewPendingDto>> GetPendingAsync(
+        int limit, CancellationToken ct = default)
+    {
+        var aiReviewerId = await RequireAiReviewerAsync(ct);
+        var rows = await repo.GetPendingAsync(limit, aiReviewerId, ct);
+
+        return rows
+            .Select(r => new AiReviewPendingDto(
+                r.RecordingId,
+                r.Variant,
+                r.DurationSec,
+                // Bỏ nhãn ngôn ngữ nhưng GIỮ hoa thường và dấu câu: đây là chuỗi để người
+                // đọc trên màn hình, không phải chuỗi đem so như trong AnalyzeOneAsync.
+                TranscriptComparison.StripLanguageTags(r.ExpectedRaw).Trim(),
+                r.RecordedAt,
+                r.Reviews
+                    .Select(v => new AiReviewPendingVoteDto(
+                        v.Round, v.ReviewerId, v.Decision, v.ReviewedAt))
+                    .ToList()))
+            .ToList();
+    }
+
     private async Task<long> RequireAiReviewerAsync(CancellationToken ct) =>
         await repo.GetAiReviewerIdAsync(ct)
         ?? throw new UnprocessableException(

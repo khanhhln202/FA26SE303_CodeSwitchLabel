@@ -33,6 +33,26 @@ public record AiReviewBatchResultDto(
     IReadOnlyList<AiReviewResultDto> Items,
     IReadOnlyList<AiReviewSkippedDto> Skipped);
 
+/// <summary>
+/// Một bản ghi đang chờ máy phán, kèm đủ dữ liệu để giao diện dựng bảng ngay.
+/// </summary>
+/// <param name="ExpectedText">Văn bản đáng ra phải đọc, đã bỏ nhãn <c>[vi]</c>/<c>[en]</c>.</param>
+/// <param name="Reviews">Hai lượt duyệt của người đã làm nên thế lệch này.</param>
+public record AiReviewPendingDto(
+    string RecordingId,
+    SentenceVariant Variant,
+    decimal DurationSec,
+    string ExpectedText,
+    DateTimeOffset RecordedAt,
+    IReadOnlyList<AiReviewPendingVoteDto> Reviews);
+
+/// <summary>Một lượt duyệt của người trên bản ghi đang chờ máy.</summary>
+public record AiReviewPendingVoteDto(
+    short Round,
+    long ReviewerId,
+    ReviewDecision Decision,
+    DateTimeOffset ReviewedAt);
+
 public interface IAiReviewService
 {
     /// <summary>
@@ -49,6 +69,12 @@ public interface IAiReviewService
     /// tính phí, nên <paramref name="limit"/> là trần bắt buộc, không phải gợi ý.
     /// </summary>
     Task<AiReviewBatchResultDto> RunBatchAsync(int limit, CancellationToken ct = default);
+
+    /// <summary>
+    /// Các bản ghi đang ở thế hai người duyệt lệch nhau mà máy chưa phán — tức đúng tập
+    /// mà <see cref="RunBatchAsync"/> sẽ xử lý, nhưng chỉ đọc, không phán gì.
+    /// </summary>
+    Task<IReadOnlyList<AiReviewPendingDto>> GetPendingAsync(int limit, CancellationToken ct = default);
 
     /// <summary>Bằng chứng gần nhất của một bản ghi. Null nghĩa là máy chưa từng phán bản này.</summary>
     Task<AiReviewResultDto?> GetLatestAsync(string recordingId, CancellationToken ct = default);
