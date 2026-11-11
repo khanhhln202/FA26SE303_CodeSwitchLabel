@@ -152,7 +152,9 @@ public class ScriptService(
 
         // AutoLabelAsync tự chọn LLM hay luật. Luật có thể để trống nghĩa tiếng Việt
         // (hết từ tương ứng) nên vẫn cho qua như trước cho người duyệt điền.
-        var allowEmptyTargets = !labeling.IsConfigured;
+        // Khi LLM lỗi, AutoLabelAsync cũng rơi về luật; lúc đó IsConfigured vẫn true nên
+        // không thể dựa vào nó để quyết định — luôn cho phép nghĩa rỗng ở đường .txt.
+        const bool allowEmptyTargets = true;
 
         var items = new List<ImportScriptItem>(pairs.Count);
         var skipped = new List<ImportSkippedDto>();
@@ -334,6 +336,9 @@ public class ScriptService(
         }
 
         batch.ScriptCount = imported.Count;
+        // Fallback ở trên gọi ClearTracked() nên batch có thể đã bị detach; Update để chắc chắn
+        // ScriptCount được lưu thay vì lịch sử import hiện 0 câu.
+        repository.UpdateBatch(batch);
         await repository.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
 

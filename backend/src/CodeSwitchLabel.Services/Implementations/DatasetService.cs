@@ -108,22 +108,17 @@ public class DatasetService(
             // Đếm ngay số bản vừa nhận. Trước đây để 0 rồi chỉ chốt lại lúc phát hành, nên mọi
             // dataset ở trạng thái nháp đều hiện "0 bản ghi" dù đã có bản trong đó.
             RecordingCount = accepted.Count,
-            CreatedAt = now
+            CreatedAt = now,
+            // Gắn con vào dataset để một lần lưu là đủ; trước đây lưu hai lần nên lần hai lỗi
+            // sẽ để lại dataset "ma" có số đếm nhưng không có bản ghi nào.
+            Recordings = [.. accepted.Select(id => new DatasetRecording
+            {
+                RecordingId = id,
+                IncludedAt = now
+            })]
         };
 
         db.Datasets.Add(dataset);
-        await db.SaveChangesAsync(ct);
-
-        foreach (var id in accepted)
-        {
-            db.DatasetRecordings.Add(new DatasetRecording
-            {
-                DatasetId = dataset.DatasetId,
-                RecordingId = id,
-                IncludedAt = now
-            });
-        }
-
         await db.SaveChangesAsync(ct);
 
         return new CreateDatasetResult(ToDto(dataset), accepted.Count, skipped);

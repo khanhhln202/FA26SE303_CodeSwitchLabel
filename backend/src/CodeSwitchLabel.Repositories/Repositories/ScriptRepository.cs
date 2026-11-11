@@ -74,6 +74,7 @@ public interface IScriptRepository
     void Add(Script script);
     void AddReview(ScriptReview review);
     void AddBatch(ImportBatch batch);
+    void UpdateBatch(ImportBatch batch);
     void RemoveBatch(ImportBatch batch);
     void Remove(Script script);
     void AddWords(IEnumerable<ScriptWord> words);
@@ -280,6 +281,7 @@ public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
     public void Add(Script script) => db.Scripts.Add(script);
     public void AddReview(ScriptReview review) => db.ScriptReviews.Add(review);
     public void AddBatch(ImportBatch batch) => db.ImportBatches.Add(batch);
+    public void UpdateBatch(ImportBatch batch) => db.ImportBatches.Update(batch);
     public void RemoveBatch(ImportBatch batch) => db.ImportBatches.Remove(batch);
     public void Remove(Script script) => db.Scripts.Remove(script);
     public void AddWords(IEnumerable<ScriptWord> words) => db.ScriptWords.AddRange(words);

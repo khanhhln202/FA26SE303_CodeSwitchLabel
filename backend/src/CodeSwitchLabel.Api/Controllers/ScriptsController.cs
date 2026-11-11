@@ -90,7 +90,10 @@ public class ScriptsController(IScriptService scriptService, ILabelingService la
     /// Dùng LLM nếu đã cấu hình `Llm:Endpoint`/`Model`; chưa cấu hình thì gán nhãn bằng luật.
     /// Trả về câu đã chèn nhãn và alignment, sẵn sàng gửi vào luồng đóng góp hiện có.
     /// </remarks>
+    // shortcut: Admin-only vì mỗi lần gọi có thể tốn quota LLM và chưa có UI nào cần cho role khác,
+    // mở lại kèm rate limit theo user khi có UI cho Speaker.
     [HttpPost("auto-label")]
+    [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(LabeledPair), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<LabeledPair>> AutoLabel(
