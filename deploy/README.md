@@ -20,6 +20,14 @@ Caddy tự xin chứng chỉ Let's Encrypt và tự gia hạn, nhóm không ph�
 ## Chuẩn bị
 
 1. **Máy chủ**: 2 vCPU, 4 GB RAM, 40 GB ổ đĩa là đủ cho giai đoạn thu dữ liệu. Ubuntu 24.04.
+   Cần thêm **ít nhất 1 GB swap** (khuyến nghị 4 GB) và khoảng 6 GB đĩa cho dịch vụ nhận
+   dạng giọng nói: lúc nạp model có một đỉnh RAM nhất thời vượt mức dùng khi chạy ổn định,
+   không có swap thì container `asr` bị giết và AI duyệt hỏng. Tạo swap:
+
+   ```bash
+   sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile      && sudo mkswap /swapfile && sudo swapon /swapfile
+   echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab   # giữ sau khi khởi động lại
+   ```
 2. **Tên miền**: một tên miền bất kỳ, tạo hai bản ghi A trỏ về IP máy chủ: `api` và `files`.
 3. **Mở cổng** 80 và 443 trên firewall của nhà cung cấp.
 

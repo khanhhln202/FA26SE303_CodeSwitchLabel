@@ -175,9 +175,9 @@ Admin nhập input_text.json (hoặc .txt, LLM/luật)  →  script: pending_val
 - Mỗi câu phải kết thúc bằng **dấu chấm**; file tối đa **100 cặp**.
 - Bắt buộc gửi kèm trường form `Domain` (`IT/Technology`, `Education`, `Daily Life`).
 - Có cấu hình `Llm:Endpoint`/`Model` thì backend gọi LLM OpenAI-compatible (`LabelingService`) để chèn nhãn `[vi]`/`[en]` và sinh `alignment`. Từ ngữ và thứ tự hai câu phải giữ nguyên; LLM sửa từ thì cặp đó bị bỏ qua.
-- Không cấu hình LLM thì backend gán nhãn bằng luật: từ có ký tự ngoài ASCII là tiếng Việt, từ ASCII không nằm trong danh sách âm tiết Việt không dấu là tiếng Anh. Nghĩa tiếng Việt lấy bằng cách đối chiếu các từ chung của hai câu: đoạn giữa hai từ chung là nghĩa của đoạn tiếng Anh giữa hai mốc đó, nên một từ có thể ứng với nhiều từ (`email` → `thư điện tử`) mà không làm lệch các từ phía sau; đoạn không đối chiếu được thì lấy theo vị trí, hết từ thì để trống cho người duyệt điền. Đây là heuristic, không thay thế bước duyệt nội dung.
+- Không cấu hình LLM thì backend gán nhãn bằng luật: từ có ký tự ngoài ASCII là tiếng Việt; từ ASCII là tiếng Việt khi là hư từ quen thuộc hoặc có trong từ điển âm tiết Việt không dấu và cũng xuất hiện trong câu thuần Việt. Nghĩa tiếng Việt lấy bằng cách đối chiếu các từ chung của hai câu: đoạn giữa hai từ chung là nghĩa của đoạn tiếng Anh giữa hai mốc đó, nên một từ có thể ứng với nhiều từ (`email` → `thư điện tử`) mà không làm lệch các từ phía sau; đoạn không đối chiếu được thì lấy theo vị trí, hết từ thì để trống cho người duyệt điền. Đây là heuristic, không thay thế bước duyệt nội dung.
 - Cấu hình trong section `Llm`: `Endpoint`, `Model`, `ApiKey` (tuỳ chọn), `TimeoutSeconds` (mặc định 60). Thiếu `Endpoint`/`Model` thì API vẫn chạy và import `.txt` dùng luật.
-- Cặp gán nhãn lỗi được ghi vào `skipped` với `id = pair-N`: LLM lỗi có mã `llm_failed`/`llm_parse_error`, luật lỗi có mã `invalid_text_format`/`invalid_language_tags`; các cặp còn lại vẫn nhập bình thường.
+- Cặp gán nhãn lỗi được ghi vào `skipped` với `id = pair-N`: LLM lỗi hoặc trả kết quả không đọc được thì lùi về luật; chỉ cặp mà luật cũng lỗi mới bị bỏ với mã `invalid_text_format`/`invalid_language_tags`, các cặp còn lại vẫn nhập bình thường.
 
 ## Luật duyệt
 
@@ -424,8 +424,8 @@ Giới hạn đã biết:
   **hệ thống chưa đo được khoảng lặng**.
 - **Import `.txt` không có LLM dùng heuristic.** Backend gán nhãn bằng luật và lấy nghĩa từ bằng các
   từ chung của hai câu (có thể nhiều từ, `email` → `thư điện tử`); đoạn không đối chiếu được lấy theo
-  vị trí, hết từ thì để trống cho người duyệt điền. Có LLM thì dùng LLM; từng cặp lỗi bị bỏ qua với
-  `llm_failed`/`llm_parse_error`, không rollback cả file.
+  vị trí, hết từ thì để trống cho người duyệt điền. Có LLM thì dùng LLM; LLM lỗi hoặc trả kết quả
+  không đọc được thì lùi về luật, chỉ cặp mà luật cũng lỗi mới bị bỏ qua, không rollback cả file.
 - **Export ZIP chỉ gồm cặp đã duyệt đủ cả cs và vi.** Chọn `recordingIds` thiếu một bản của cặp thì cặp đó bị bỏ;
   không còn cặp nào thì trả `422 export_no_approved_pairs`.
 - **Reviewer xem được danh sách bản ghi trong task của mình** qua

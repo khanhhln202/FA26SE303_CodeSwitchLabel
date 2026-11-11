@@ -49,6 +49,39 @@ services:
       timeout: 3s
       retries: 10
 
+  # Giong service asr cua ban chay that, nhung nam sau profile "asr": anh nang 3 GB va
+  # model 1,5 GB, nguoi khong lam ve AI duyet khong viec gi phai tai ve.
+  #   Bat:  docker compose --profile asr up -d
+  asr:
+    image: ghcr.io/speaches-ai/speaches:latest-cpu@sha256:21e3df06d842fb7802ab470dd77c25f0e8c0d22950e8d8c6ae886e851af53ef8
+    profiles: ["asr"]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8001:8000"
+    environment:
+      # Nha model khoi RAM sau khi khong dung mot luc. Lan goi ke tiep phai nap lai,
+      # do that la ~60 giay, nen ASR_TIMEOUT_SECONDS phai du rong cho ca lan nap do.
+      WHISPER__TTL: ${ASR_MODEL_TTL:-300}
+      # int8 la bat buoc: model tren dia la float16 ~1,5 GB, giu nguyen float16 thi
+      # khong con nhet vua bo nho may chu.
+      WHISPER__COMPUTE_TYPE: int8
+      WHISPER__INFERENCE_DEVICE: cpu
+      ENABLE_UI: "false"
+      # Khong tat Xet thi HuggingFace gom du lieu trong RAM luc tai, container bi giet
+      # giua chung va de lai file model cut MA VAN TUONG LA DA TAI XONG -> phien am tra 500.
+      HF_HUB_DISABLE_XET: "1"
+      HF_HUB_ENABLE_HF_TRANSFER: "0"
+    volumes:
+      - asr-models:/home/ubuntu/.cache/huggingface
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/v1/models', timeout=5)"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+    mem_limit: 1600m
+    memswap_limit: 4000m
+
   api:
     # Chỉ bật khi gọi kèm --profile api, nên `docker compose up -d postgres minio` vẫn như cũ
     # cho người làm backend chạy `dotnet run`. Đội frontend chạy cả hệ thống bằng:
@@ -89,3 +122,4 @@ services:
 volumes:
   postgres-data:
   minio-data:
+  asr-models:
