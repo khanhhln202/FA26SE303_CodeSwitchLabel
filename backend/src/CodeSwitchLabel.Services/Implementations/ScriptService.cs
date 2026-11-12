@@ -340,13 +340,13 @@ public class ScriptService(
         // ScriptCount được lưu thay vì lịch sử import hiện 0 câu.
         repository.UpdateBatch(batch);
         await repository.SaveChangesAsync(ct);
+
+        // Admin nhập câu là chốt luôn: repo ghi lượt duyệt Accepted của chính người nhập
+        // trước, rồi mới đổi status — trigger trg_script_validated_domain đòi lượt duyệt
+        // nằm sẵn trong database khi status chuyển sang validated.
+        await repository.AutoValidateAsync(imported, importedById, clock.GetUtcNow(), ct);
         await transaction.CommitAsync(ct);
 
-        // TEAM_010 (yêu cầu 2.1): câu nhập từ file cũng phải VÀO HÀNG ĐỜI chung, đợi
-        // người duyệt — không tự coi là đã duyệt như trước đây. Trigger
-        // trg_script_queue_sync đã tự tạo hàng chặng text_review cho từng câu lúc INSERT;
-        // ở đây không cần (và không được) tự set Validated, vì làm vậy là câu đó lọt
-        // qua hàng đợi mà không ai xem.
         return new ImportResultDto(batch.BatchId, safeName, imported.Count, imported, skipped);
     }
 
@@ -430,12 +430,13 @@ public class ScriptService(
     }
 
     /// <summary>
-    /// Sửa nội dung câu đang chờ duyệt, KHÔNG ghi lượt duyệt.
+    /// Sửa nội dung một cặp câu đang chờ duyệt hoặc đã sẵn sàng, KHÔNG ghi lượt duyệt và
+    /// KHÔNG đổi trạng thái.
     ///
     /// Vì sao tách khỏi <c>ReviewAsync</c>: ở đó "sửa" nghĩa là "sửa xong và cho qua" — hợp với
     /// Reviewer mở một câu trong hàng đợi, thấy sai chính tả thì chữa rồi duyệt luôn. Admin dọn
-    /// kho câu lại cần việc khác: đổi đi đổi lại cho tới khi ưng mới chốt. Không ghi lượt duyệt
-    /// nên <c>HasAcceptedReviewAsync</c> vẫn false, câu ở nguyên Chờ duyệt và sửa tiếp được.
+    /// kho câu lại cần việc khác: đổi đi đổi lại cho tới khi ưng. Câu đã sẵn sàng vẫn sửa được
+    /// vì Admin là người chốt nội dung, không cần duyệt lại.
     ///
     /// Dùng lại đúng bộ kiểm tra của luồng duyệt, nên các ràng buộc giữ nguyên: không sửa câu đã
     /// có bản ghi âm, không đổi số từ tiếng Anh, không đổi quan hệ Anh–Việt — hai thứ sau nằm
@@ -449,12 +450,12 @@ public class ScriptService(
         var script = await repository.GetForUpdateAsync(scriptId, ct)
                      ?? throw NotFoundException.Script(scriptId);
 
-        if (script.Status != ScriptStatus.PendingValidation)
+        if (script.Status is not (ScriptStatus.PendingValidation or ScriptStatus.Validated))
         {
             throw new ConflictException(
                 "script_not_pending",
                 $"Cặp câu {scriptId} đang là {script.Status} nên không sửa trực tiếp được. " +
-                "Chỉ câu đang chờ duyệt mới sửa được; câu đã duyệt thì gửi đề xuất sửa để Reviewer xử lý.");
+                "Chỉ câu đang chờ duyệt hoặc đã sẵn sàng mới sửa được.");
         }
 
         var cs = request.CsContent.Trim();
@@ -620,11 +621,11 @@ public class ScriptService(
     }
 
     /// <summary>
-    /// Xoá cứng một câu đang chờ duyệt.
+    /// Xoá cứng một câu đang chờ duyệt hoặc đã sẵn sàng.
     ///
-    /// Chỉ câu chưa từng được duyệt mới đi đường này. Câu đã có bản ghi âm bị chặn vì
-    /// audio/S3 và lịch sử duyệt sẽ mồ côi — trường hợp đó dùng nút "Xoá hoàn toàn" ở màn
-    /// bản ghi (xoá mềm, giữ dấu vết).
+    /// Câu đã có bản ghi âm bị chặn vì audio/S3 và lịch sử duyệt sẽ mồ côi — trường hợp đó
+    /// dùng nút "Xoá hoàn toàn" ở màn bản ghi (xoá mềm, giữ dấu vết). Câu đang nằm trong task
+    /// thu âm được gỡ khỏi task và tiến độ task tính lại trước khi xoá.
     /// </summary>
     public async Task DeletePendingAsync(string scriptId, CancellationToken ct = default)
     {
@@ -633,12 +634,12 @@ public class ScriptService(
         var script = await repository.GetForUpdateAsync(scriptId, ct)
                      ?? throw NotFoundException.Script(scriptId);
 
-        if (script.Status != ScriptStatus.PendingValidation)
+        if (script.Status is not (ScriptStatus.PendingValidation or ScriptStatus.Validated))
         {
             throw new ConflictException(
                 "script_not_pending",
                 $"Cặp câu {scriptId} đang là {script.Status} nên không xoá cứng được. " +
-                "Chỉ câu đang chờ duyệt mới xoá cứng được.");
+                "Chỉ câu đang chờ duyệt hoặc đã sẵn sàng mới xoá cứng được.");
         }
 
         if (await repository.HasRecordingsAsync(scriptId, ct))
@@ -649,6 +650,7 @@ public class ScriptService(
                 "Dùng 'Xoá hoàn toàn' ở màn bản ghi để loại cả câu lẫn audio.");
         }
 
+        await taskTracker.OnPairDiscardedAsync(scriptId, ct);
         await repository.DeleteRelatedAsync(scriptId, ct);
         repository.Remove(script);
         await repository.SaveChangesAsync(ct);

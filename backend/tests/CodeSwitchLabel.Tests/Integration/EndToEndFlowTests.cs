@@ -12,7 +12,7 @@ namespace CodeSwitchLabel.Tests.Integration;
 
 /// <summary>
 /// Chạy trọn chuỗi nghiệp vụ qua API thật (WebApplicationFactory + PostgreSQL Testcontainer):
-/// Admin nhập file câu → duyệt nội dung → chiến dịch → Task Manager phân task → Speaker ghi âm
+/// Admin nhập file câu (vào thẳng Sẵn sàng) → chiến dịch → Task Manager phân task → Speaker ghi âm
 /// → Reviewer duyệt tới khi quá bán → task tự hoàn thành. Kèm nhánh QC trượt và luật phân task.
 /// </summary>
 [Collection("Database")]
@@ -36,13 +36,8 @@ public sealed class EndToEndFlowTests : ApiTestBase
         var reviewer2 = await GetReviewer2TokenAsync();
         var reviewer3 = await GetReviewer3TokenAsync();
 
-        // 1) Admin nhập một cặp câu mới — câu vào HÀNG ĐỢI chung, chờ duyệt.
+        // 1) Admin nhập một cặp câu mới — câu vào thẳng Sẵn sàng, không chờ duyệt.
         var scriptId = await ImportOneScriptAsync(admin);
-
-        // 2) Duyệt nội dung: câu chỉ thu âm được sau lượt duyệt của người đủ chủ đề.
-        //    Trước TEAM_010 Admin nhập xong là tự validated, bỏ qua bước này.
-        var reviewScript = await PostAsync($"/api/scripts/{scriptId}/review", new { action = "Accepted" }, reviewer1);
-        Assert.Equal(HttpStatusCode.OK, reviewScript.StatusCode);
 
         using (var detail = await ReadJsonAsync(await GetAsync($"/api/scripts/{scriptId}", admin)))
         {
@@ -152,12 +147,8 @@ public sealed class EndToEndFlowTests : ApiTestBase
     {
         var admin = await GetAdminTokenAsync();
         var speaker = await GetSpeakerTokenAsync();
-        var reviewer = await GetReviewerTokenAsync();
 
         var scriptId = await ImportOneScriptAsync(admin);
-
-        var reviewScript = await PostAsync($"/api/scripts/{scriptId}/review", new { action = "Accepted" }, reviewer);
-        Assert.Equal(HttpStatusCode.OK, reviewScript.StatusCode);
 
         // Giả lập file dài quá mức cho phép để đi qua nhánh QC trượt.
         _api.ProbeDurationSec = 35m;
@@ -193,13 +184,10 @@ public sealed class EndToEndFlowTests : ApiTestBase
     public async Task TwoSpeakers_UploadSameScript_GetDistinctRecordingIds()
     {
         var admin = await GetAdminTokenAsync();
-        var reviewer = await GetReviewerTokenAsync();
         var speaker1 = await GetSpeakerTokenAsync();
         var speaker2 = await LoginAsync("speaker2@codeswitchlabel.local", "Codeswitch@2026");
 
         var scriptId = await ImportOneScriptAsync(admin);
-        var reviewScript = await PostAsync($"/api/scripts/{scriptId}/review", new { action = "Accepted" }, reviewer);
-        Assert.Equal(HttpStatusCode.OK, reviewScript.StatusCode);
 
         // Cùng một cặp câu: Speaker thứ hai không còn bị chặn, nhưng mã bản ghi phải khác.
         var first = await UploadAsync(speaker1, scriptId, "CodeSwitching");
@@ -328,6 +316,11 @@ public sealed class EndToEndFlowTests : ApiTestBase
         }))
         {
             Assert.Equal(1, first.RootElement.GetProperty("imported").GetInt32());
+
+            // Câu nhập xong là Sẵn sàng ngay, không còn nằm chờ duyệt.
+            var scriptId = first.RootElement.GetProperty("scriptIds")[0].GetString()!;
+            using var detail = await ReadJsonAsync(await GetAsync($"/api/scripts/{scriptId}", admin));
+            Assert.Equal("Validated", detail.RootElement.GetProperty("status").GetString());
 
             var skipped = first.RootElement.GetProperty("skipped").EnumerateArray().ToList();
             Assert.Equal(2, skipped.Count);

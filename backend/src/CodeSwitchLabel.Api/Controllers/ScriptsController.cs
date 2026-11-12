@@ -101,16 +101,16 @@ public class ScriptsController(IScriptService scriptService, ILabelingService la
         => Ok(await labelingService.AutoLabelAsync(
             request.CsRaw.Trim(), request.ViRaw.Trim(), ct));
 
-    /// <summary>Admin sửa nội dung một cặp câu đang chờ duyệt — sửa bao nhiêu lần cũng được.</summary>
+    /// <summary>Admin sửa nội dung một cặp câu đang chờ duyệt hoặc đã sẵn sàng — sửa bao nhiêu lần cũng được.</summary>
     /// <remarks>
     /// Khác `POST /api/scripts/{id}/review` với `action: Edited`: đường đó **sửa xong là duyệt luôn**,
-    /// câu chuyển sang đã duyệt và không sửa tiếp được. Đường này chỉ đổi nội dung, câu **ở nguyên
-    /// trạng thái chờ duyệt**, nên Admin đổi đi đổi lại tới khi ưng rồi mới chốt bằng `action: Accepted`.
+    /// câu chuyển sang đã duyệt và không sửa tiếp được. Đường này chỉ đổi nội dung và **giữ nguyên
+    /// trạng thái**, nên câu đã sẵn sàng vẫn sửa được mà không phải duyệt lại.
     ///
     /// Ba thứ không đổi được vì chúng nằm trong mã câu: **số từ tiếng Anh**, **chủ đề** và
     /// **quan hệ Anh–Việt**. Muốn đổi thì loại câu này rồi tạo cặp mới.
     ///
-    /// - **409 `script_not_pending`** — câu đã duyệt, đã bị loại hoặc đã ngừng dùng.
+    /// - **409 `script_not_pending`** — câu đã bị loại hoặc đã ngừng dùng.
     /// - **409 `script_already_recorded`** — đã có bản ghi âm, sửa sẽ làm transcript lệch với âm thanh.
     /// - **422 `en_word_count_locked`** / **`relation_locked`** — bản sửa đổi thứ nằm trong mã câu.
     /// </remarks>
@@ -147,10 +147,9 @@ public class ScriptsController(IScriptService scriptService, ILabelingService la
     /// Câu hỏng **không làm hỏng cả file**: phần hợp lệ vẫn được nhập, phần bị loại nằm trong
     /// `skipped` kèm lý do.
     ///
-    /// Câu nhập vào nằm ở trạng thái **chờ duyệt nội dung**, KHÔNG tự động duyệt. Admin xem lại
-    /// từng câu rồi chốt: `PUT /api/scripts/{id}` để sửa (sửa bao nhiêu lần cũng được),
-    /// `POST /api/scripts/{id}/review` với `action: Rejected` để loại,
-    /// hoặc `action: Accepted` để đưa sang đã duyệt — sau bước đó thì câu bị khoá, không sửa nữa.
+    /// Câu nhập vào **vào thẳng trạng thái đã duyệt** kèm một lượt duyệt `Accepted` tự động của
+    /// chính Admin. Admin vẫn sửa được về sau bằng `PUT /api/scripts/{id}` (trạng thái giữ nguyên),
+    /// hoặc loại bằng `POST /api/scripts/{id}/review` với `action: Rejected`.
     /// </remarks>
     [HttpPost("import")]
     [Authorize(Roles = "Admin")]
@@ -275,13 +274,13 @@ public class ScriptsController(IScriptService scriptService, ILabelingService la
         string id, [FromBody] ReviewScriptRequest request, CancellationToken ct)
         => Ok(await scriptService.ReviewAsync(id, User.GetUserId(), request, ct));
 
-    /// <summary>Xoá cứng một câu đang chờ duyệt.</summary>
+    /// <summary>Xoá cứng một câu đang chờ duyệt hoặc đã sẵn sàng.</summary>
     /// <remarks>
-    /// Chỉ câu `PendingValidation` mới xoá cứng được. Câu đã duyệt trả **409 `script_not_pending`**;
-    /// câu đã có bản ghi âm trả **409 `script_already_recorded`** — trường hợp đó dùng
-    /// `POST /api/recordings/{id}/discard-pair` để xoá mềm cả câu lẫn audio.
+    /// Nhận câu `PendingValidation` và `Validated`; câu đã bị loại/ngừng dùng trả
+    /// **409 `script_not_pending`**. Câu đã có bản ghi âm trả **409 `script_already_recorded`** —
+    /// trường hợp đó dùng `POST /api/recordings/{id}/discard-pair` để xoá mềm cả câu lẫn audio.
     ///
-    /// Xoá cứng kéo theo lịch sử duyệt và đề xuất của câu; dữ liệu không khôi phục được.
+    /// Xoá cứng kéo theo lịch sử duyệt, đề xuất và mục trong task của câu; dữ liệu không khôi phục được.
     /// </remarks>
     [HttpDelete("{id}")]
     [Authorize(Roles = "Admin")]
