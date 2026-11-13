@@ -362,13 +362,14 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
         var speaker = await CreateUserWithBuilderAsync(RoleName.Speaker, fullName: "Sp Only");
         var availableCount = await Db.Scripts.CountAsync(
             s => s.Status == ScriptStatus.Validated && s.Domain == "ItTechnology", ct);
+        var targetQty = Math.Max(10, availableCount + 1);
 
         // Kho câu ít hơn chỉ tiêu: vẫn tạo task, mỗi Speaker nhận tối đa số câu còn thu được.
         var detail = await TaskService.CreateAsync(new CreateTaskRequest
         {
             WaveId = WaveId,
             TaskType = TaskType.Recording,
-            TargetQty = 10,
+            TargetQty = targetQty,
             Deadline = DateTimeOffset.UtcNow.AddDays(7),
             AssigneeUserIds = [speaker.UserId]
         }, ManagerUserId, ct);
@@ -377,7 +378,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
             .Where(ts => ts.TaskId == detail.Summary.TaskId)
             .ToListAsync(ct);
 
-        Assert.True(availableCount < 10);
+        Assert.True(availableCount < targetQty);
         Assert.Equal(availableCount, items.Count);
         Assert.All(items, i => Assert.Equal(speaker.UserId, i.AssigneeUserId));
     }
