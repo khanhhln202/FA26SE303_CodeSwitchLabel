@@ -101,7 +101,12 @@ public class WaveService(
         EnsureWaveOwner(wave, callerId, isAdmin);
 
         if (request.WaveName is not null) wave.WaveName = request.WaveName.Trim();
-        if (request.Domain is not null) wave.Domain = await domains.ResolveActiveAsync(request.Domain, ct);
+        if (request.Domain is not null)
+        {
+            // Chủ đề của đợt có thể đã bị Admin xóa mềm sau khi đợt tạo — vẫn cho sửa
+            // tên/ngày/khá coefficients của đợt mà không bắt phải đổi chủ đề.
+            wave.Domain = await domains.ResolveActiveAsync(request.Domain, ct, allowInactive: true);
+        }
 
         // UpdateWaveRequest không còn trường `status`. Trạng thái đợt là hàm
         // của các task bên trong nên không bấm tay được — sửa tên/chủ đề/ngày không được đổi nó,

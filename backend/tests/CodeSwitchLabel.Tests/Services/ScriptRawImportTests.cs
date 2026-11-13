@@ -254,8 +254,8 @@ public sealed class ScriptRawImportTests
     private static IDomainService DomainPassThrough()
     {
         var domains = new Mock<IDomainService>();
-        domains.Setup(d => d.ResolveActiveAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((string value, CancellationToken _) => value);
+        domains.Setup(d => d.ResolveActiveAsync(It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<bool>()))
+            .ReturnsAsync((string value, CancellationToken _, bool _) => value);
         return domains.Object;
     }
 

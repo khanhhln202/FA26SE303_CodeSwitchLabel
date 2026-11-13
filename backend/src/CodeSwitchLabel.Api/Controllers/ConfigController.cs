@@ -3,6 +3,7 @@ using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Dtos;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace CodeSwitchLabel.Api.Controllers;
 
@@ -39,7 +40,16 @@ public class ConfigController(
     /// </remarks>
     [HttpGet("topics")]
     [ProducesResponseType(typeof(IEnumerable<TopicDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<IEnumerable<TopicDto>>> Topics(
         [FromQuery] bool includeInactive, CancellationToken ct)
-        => Ok(await domainService.ListAsync(includeInactive, ct));
+    {
+        // Danh sách chủ đề đã xóa mềm chỉ dành cho màn Admin.
+        if (includeInactive && !User.IsInRole("Admin"))
+        {
+            return Forbid();
+        }
+
+        return Ok(await domainService.ListAsync(includeInactive, ct));
+    }
 }

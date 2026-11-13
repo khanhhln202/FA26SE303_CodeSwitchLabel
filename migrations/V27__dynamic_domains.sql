@@ -10,9 +10,12 @@
 -- nên tối đa 9 domain kể cả domain đã xóa mềm. Chữ số không tái sử
 -- dụng vì mã câu cũ vẫn mang nó.
 --
--- LƯU Ý TRIỂN KHAI: migration này đổi kiểu cột và DROP ENUM, nên code
--- cũ không chạy được sau khi áp. Phải dừng API trước khi chạy
--- (deploy.sh áp migration trước khi dựng container mới).
+-- LƯU Ý TRIỂN KHAI: migration này đổi kiểu cột và DROP ENUM script_domain, nên code
+-- cũ không chạy được sau khi áp. Phải dừng API trước khi chạy (deploy.sh áp migration
+-- trước khi dựng container mới).
+-- MIGRATION MỘT CHIỀU: DROP TYPE script_domain ở bước cuối là không thể hoàn tác, và
+-- không có đoạn DOWN cung cấp. Trước khi áp trên môi trường thực, PHẢI sao lưu database
+-- và sẵn sàng khôi phục thủ công nếu migration thất bại giữa chừng.
 --
 -- Chạy một lần; toàn bộ nằm trong một transaction.
 -- ============================================================

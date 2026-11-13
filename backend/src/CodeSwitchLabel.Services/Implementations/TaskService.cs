@@ -519,7 +519,7 @@ public class TaskService(
         // Cập nhật chủ đề (nếu task đang gắn chiến dịch thì phải khớp chủ đề chiến dịch)
         if (request.Domain is not null)
         {
-            var newDomain = await domains.ResolveActiveAsync(request.Domain, ct);
+            var newDomain = await domains.ResolveActiveAsync(request.Domain, ct, allowInactive: true);
             if (task.WaveId.HasValue)
             {
                 var wave = await waves.GetAsync(task.WaveId.Value, ct);

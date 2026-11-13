@@ -20,5 +20,9 @@ public interface IDomainService
     /// Nhận code hoặc tên (bỏ dấu, không phân biệt hoa thường) và trả code chuẩn.
     /// Chủ đề đã xóa mềm bị từ chối — dùng cho mọi chỗ tạo mới.
     /// </summary>
-    Task<string> ResolveActiveAsync(string codeOrName, CancellationToken ct = default);
+    /// <param name="allowInactive">
+    /// Chỉ để true trên các đường dẫn cập nhật dữ liệu cũ (sửa đợt/câu) khi chủ đề
+    /// đã bị xóa mềm, để không chặn thao tác trên dữ liệu đang tồn tại.
+    /// </param>
+    Task<string> ResolveActiveAsync(string codeOrName, CancellationToken ct = default, bool allowInactive = false);
 }

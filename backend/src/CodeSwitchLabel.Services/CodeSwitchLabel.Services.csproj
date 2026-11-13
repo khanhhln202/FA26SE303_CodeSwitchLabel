@@ -12,6 +12,9 @@
     <!-- Giữ cùng dòng 8.x mới nhất với các gói Microsoft.IdentityModel mà JwtBearer 10 kéo theo.
          Trộn hai phiên bản khác nhau của họ gói này là nguồn lỗi xác thực token khó tìm. -->
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.23.0" />
+    <!-- Truy cập SqlState của PostgreSQL (vd. UniqueViolation = 23505) khi dịch DbUpdateException
+         thành mã nghiệp vụ thay vì để tràn ra làm 500. -->
+    <PackageReference Include="Npgsql" Version="10.0.3" />
   </ItemGroup>
 
   <ItemGroup>
