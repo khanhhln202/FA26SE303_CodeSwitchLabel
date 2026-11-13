@@ -46,6 +46,18 @@ export const adminService = {
     const res = await httpClient.get("/api/config/topics");
     return res.data;
   },
+  createTopic: async (name) => {
+    const res = await httpClient.post("/api/admin/domains", { name });
+    return res.data;
+  },
+  updateTopic: async (code, name) => {
+    const res = await httpClient.put(`/api/admin/domains/${encodeURIComponent(code)}`, { name });
+    return res.data;
+  },
+  deleteTopic: async (code) => {
+    const res = await httpClient.delete(`/api/admin/domains/${encodeURIComponent(code)}`);
+    return res.data;
+  },
 
   // 5. Quản lý Scripts (Văn bản)
   getTexts: async (params) => {

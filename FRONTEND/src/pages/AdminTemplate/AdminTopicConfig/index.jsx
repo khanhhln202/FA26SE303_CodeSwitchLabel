@@ -35,16 +35,19 @@ export default function AdminTopicConfig() {
   const [editingItem, setEditingItem] = useState(null); 
   const [itemToDelete, setItemToDelete] = useState(null);
   const [formData, setFormData] = useState({ name: "" });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchTopics = async () => {
     try {
       if (typeof adminService.getTopics === "function") {
         const data = await adminService.getTopics();
         const items = data?.items || data?.data || (Array.isArray(data) ? data : null);
-        if (Array.isArray(items) && items.length > 0) {
+        if (Array.isArray(items)) {
           setTopicList(
             items.map((item, idx) => ({
               id: item.code || item.id || `TOPIC-${String(idx + 1).padStart(3, '0')}`,
+              code: item.code || item.id,
               name: item.name || item.topicName || item.code || "Chủ đề"
             }))
           );
@@ -80,35 +83,75 @@ export default function AdminTopicConfig() {
     setShowModal(true);
   };
 
-  const handleSubmitForm = (e) => {
+  const handleSubmitForm = async (e) => {
     e.preventDefault();
-    if (!formData.name.trim()) return;
+    const trimmedName = formData.name.trim();
+    if (!trimmedName || isSubmitting) return;
 
-    if (editingItem) {
-      setTopicList((prev) =>
-        prev.map((item) =>
-          item.id === editingItem.id
-            ? { ...item, name: formData.name }
-            : item
-        )
-      );
-      toast.success(`Đã cập nhật chủ đề "${formData.name}" thành công!`);
-    } else {
-      const newItem = {
-        id: `TOPIC-${String(topicList.length + 1).padStart(3, '0')}`,
-        name: formData.name
-      };
-      setTopicList((prev) => [...prev, newItem]);
-      toast.success("Đã thêm chủ đề mới thành công!");
+    setIsSubmitting(true);
+    try {
+      if (editingItem) {
+        const targetCode = editingItem.code || editingItem.id;
+        const updated = await adminService.updateTopic(targetCode, trimmedName);
+        setTopicList((prev) =>
+          prev.map((item) =>
+            item.id === editingItem.id
+              ? {
+                  ...item,
+                  id: updated?.code || item.id,
+                  code: updated?.code || item.code,
+                  name: updated?.name || trimmedName
+                }
+              : item
+          )
+        );
+        toast.success(`Đã cập nhật chủ đề "${updated?.name || trimmedName}" thành công!`);
+      } else {
+        const created = await adminService.createTopic(trimmedName);
+        const newItem = {
+          id: created?.code || `TOPIC-${String(topicList.length + 1).padStart(3, '0')}`,
+          code: created?.code,
+          name: created?.name || trimmedName
+        };
+        setTopicList((prev) => [...prev, newItem]);
+        toast.success("Đã thêm chủ đề mới thành công!");
+      }
+      await fetchTopics();
+      setShowModal(false);
+    } catch (err) {
+      console.error("Lỗi lưu chủ đề:", err);
+      const errMsg =
+        err?.response?.data?.detail ||
+        err?.response?.data?.title ||
+        err?.response?.data?.message ||
+        (editingItem ? "Không thể cập nhật chủ đề!" : "Không thể thêm chủ đề mới!");
+      toast.error(errMsg);
+    } finally {
+      setIsSubmitting(false);
     }
-    setShowModal(false);
   };
 
-  const handleConfirmDelete = () => {
-    if (!itemToDelete) return;
-    setTopicList((prev) => prev.filter((t) => t.id !== itemToDelete.id));
-    toast.success(`Đã xóa thành công chủ đề "${itemToDelete.name}"!`);
-    setItemToDelete(null);
+  const handleConfirmDelete = async () => {
+    if (!itemToDelete || isDeleting) return;
+    setIsDeleting(true);
+    try {
+      const targetCode = itemToDelete.code || itemToDelete.id;
+      await adminService.deleteTopic(targetCode);
+      setTopicList((prev) => prev.filter((t) => t.id !== itemToDelete.id));
+      toast.success(`Đã xóa thành công chủ đề "${itemToDelete.name}"!`);
+      setItemToDelete(null);
+      await fetchTopics();
+    } catch (err) {
+      console.error("Lỗi xóa chủ đề:", err);
+      const errMsg =
+        err?.response?.data?.detail ||
+        err?.response?.data?.title ||
+        err?.response?.data?.message ||
+        "Không thể xóa chủ đề này!";
+      toast.error(errMsg);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   const filteredTopics = useMemo(() => {
@@ -245,7 +288,7 @@ export default function AdminTopicConfig() {
 
       {/* Modal Thêm & Chỉnh Sửa */}
       {showModal && (
-        <div className="fixed inset-0 bg-[#16171C]/55 backdrop-blur-xs flex items-center justify-center p-4 z-50" onClick={() => setShowModal(false)}>
+        <div className="fixed inset-0 bg-[#16171C]/55 backdrop-blur-xs flex items-center justify-center p-4 z-50" onClick={() => !isSubmitting && setShowModal(false)}>
           <div className="bg-white dark:bg-[#1C1D22] rounded-[24px] w-full max-w-md shadow-[0_20px_50px_rgba(16,17,20,0.25)] overflow-hidden border border-[#E5E2D8] dark:border-gray-800 animate-in fade-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
             <div className="h-1.5 w-full shrink-0" style={{ backgroundColor: ADMIN_ACCENT }} />
             <form onSubmit={handleSubmitForm} className="p-6 space-y-4">
@@ -255,8 +298,9 @@ export default function AdminTopicConfig() {
                 </h3>
                 <button
                   type="button"
+                  disabled={isSubmitting}
                   onClick={() => setShowModal(false)}
-                  className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#F0EEE6] dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                  className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#F0EEE6] dark:hover:bg-gray-800 transition-colors cursor-pointer disabled:opacity-50"
                 >
                   <X className="w-4 h-4 text-[#6E7078]" />
                 </button>
@@ -269,10 +313,11 @@ export default function AdminTopicConfig() {
                 <input
                   type="text"
                   required
+                  disabled={isSubmitting}
                   placeholder="Nhập tên chủ đề..."
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full h-11 px-3.5 py-2.5 bg-white dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-body text-[#16171C] dark:text-white outline-none transition-all placeholder:text-[#9A9CA3]"
+                  className="w-full h-11 px-3.5 py-2.5 bg-white dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-body text-[#16171C] dark:text-white outline-none transition-all placeholder:text-[#9A9CA3] disabled:opacity-60"
                   onFocus={(e) => {
                     e.target.style.borderColor = ADMIN_ACCENT;
                     e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
@@ -287,17 +332,19 @@ export default function AdminTopicConfig() {
               <div className="flex gap-2.5 pt-2">
                 <button
                   type="button"
+                  disabled={isSubmitting}
                   onClick={() => setShowModal(false)}
-                  className="flex-1 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 type-button text-[#6E7078] dark:text-gray-300 hover:bg-[#F7F5EF] dark:hover:bg-[#25272E] cursor-pointer transition-colors"
+                  className="flex-1 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 type-button text-[#6E7078] dark:text-gray-300 hover:bg-[#F7F5EF] dark:hover:bg-[#25272E] cursor-pointer transition-colors disabled:opacity-50"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
+                  disabled={isSubmitting}
                   style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 10px 24px ${ADMIN_ACCENT}40` }}
-                  className="flex-1 py-2.5 text-white rounded-xl type-button hover:opacity-90 active:scale-[0.99] cursor-pointer transition-all"
+                  className="flex-1 py-2.5 text-white rounded-xl type-button hover:opacity-90 active:scale-[0.99] cursor-pointer transition-all disabled:opacity-60"
                 >
-                  {editingItem ? "Lưu thay đổi" : "Lưu Chủ Đề"}
+                  {isSubmitting ? "Đang lưu..." : editingItem ? "Lưu thay đổi" : "Lưu Chủ Đề"}
                 </button>
               </div>
             </form>
@@ -307,7 +354,7 @@ export default function AdminTopicConfig() {
 
       {/* Modal Xác nhận Xóa */}
       {itemToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#16171C]/55 backdrop-blur-xs" onClick={() => setItemToDelete(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#16171C]/55 backdrop-blur-xs" onClick={() => !isDeleting && setItemToDelete(null)}>
           <div className="bg-white dark:bg-[#1C1D22] rounded-[24px] w-full max-w-sm shadow-[0_20px_50px_rgba(16,17,20,0.25)] overflow-hidden border border-[#E5E2D8] dark:border-gray-800 animate-in fade-in zoom-in-95 duration-200" onClick={(e) => e.stopPropagation()}>
             <div className="h-1.5 w-full shrink-0" style={{ backgroundColor: DANGER }} />
 
@@ -323,17 +370,19 @@ export default function AdminTopicConfig() {
               </div>
               <div className="flex gap-2.5 pt-2">
                 <button
+                  disabled={isDeleting}
                   onClick={() => setItemToDelete(null)}
-                  className="flex-1 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 type-button text-[#6E7078] dark:text-gray-300 hover:bg-[#F7F5EF] dark:hover:bg-[#25272E] cursor-pointer transition-colors"
+                  className="flex-1 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 type-button text-[#6E7078] dark:text-gray-300 hover:bg-[#F7F5EF] dark:hover:bg-[#25272E] cursor-pointer transition-colors disabled:opacity-50"
                 >
                   Hủy
                 </button>
                 <button
+                  disabled={isDeleting}
                   onClick={handleConfirmDelete}
-                  className="flex-1 py-2.5 text-white rounded-xl type-button transition-colors cursor-pointer hover:opacity-90 active:scale-[0.99]"
+                  className="flex-1 py-2.5 text-white rounded-xl type-button transition-colors cursor-pointer hover:opacity-90 active:scale-[0.99] disabled:opacity-60"
                   style={{ backgroundColor: DANGER, boxShadow: `0 10px 24px ${DANGER}40` }}
                 >
-                  Xóa ngay
+                  {isDeleting ? "Đang xóa..." : "Xóa ngay"}
                 </button>
               </div>
             </div>
