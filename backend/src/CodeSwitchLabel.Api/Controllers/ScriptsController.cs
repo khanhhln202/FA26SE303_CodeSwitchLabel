@@ -201,7 +201,7 @@ public class ScriptsController(IScriptService scriptService, ILabelingService la
             return UnprocessableEntity(new ProblemDetails
             {
                 Status = StatusCodes.Status422UnprocessableEntity,
-                Title = "File .txt cần chọn chủ đề: IT/Technology, Education hoặc Daily Life.",
+                Title = "File .txt cần chọn chủ đề đang hoạt động.",
                 Type = "https://codeswitchlabel.local/errors/domain_required",
                 Extensions =
                 {

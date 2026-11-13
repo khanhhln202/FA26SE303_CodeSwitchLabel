@@ -37,7 +37,7 @@ public sealed class ScriptReReviewTests : IntegrationTestBase
         return CreateScriptAsync(
             $"[vi]Em nên [en]scan [vi]tài liệu mã {token} này.",
             $"[vi]Em nên quét tài liệu mã {token} này.",
-            ScriptDomain.ItTechnology,
+            "ItTechnology",
             SpeakerUserId);
     }
 

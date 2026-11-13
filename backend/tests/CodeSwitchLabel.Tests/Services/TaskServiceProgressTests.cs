@@ -25,13 +25,14 @@ public sealed class TaskServiceProgressTests
             Mock.Of<IWaveRepository>(),
             Mock.Of<IScriptQueueRepository>(),
             Mock.Of<ITaskProgressTracker>(),
+            Mock.Of<IDomainService>(),
             Mock.Of<ISystemConfigService>(),
             TimeProvider.System);
     }
 
     /// <summary>Speaker vừa gửi đủ hai bản, chưa có bản nào được duyệt.</summary>
     private static TaskRow Row(int done = 0, int submittedPairs = 4, int target = 10) => new(
-        7, 1, "Đợt 1", TaskType.Recording, ScriptDomain.ItTechnology, "Thu âm", WorkTaskStatus.InProgress, target,
+        7, 1, "Đợt 1", TaskType.Recording, "ItTechnology", "Thu âm", WorkTaskStatus.InProgress, target,
         null, DateTimeOffset.UtcNow, [new TaskAssigneeRow(9, "Người đọc", target)],
         Started: 8, Done: done, SubmittedPairs: submittedPairs, UsableItems: 10, TotalItems: 10);
 

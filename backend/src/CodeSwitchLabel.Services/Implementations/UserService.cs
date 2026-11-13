@@ -15,7 +15,7 @@ internal static class UserMapper
         new(u.UserId, u.FullName, u.Email, u.Phone, u.Role.RoleName, u.Status, u.CreatedAt);
 
     public static SpeakerProfileDto ToDto(this SpeakerProfile? p) =>
-        new(p?.BirthYear, p?.Province, p?.EnglishLevel, p?.Occupation, p?.Gender, p?.Major);
+        new(p?.BirthYear, p?.Province, p?.Region, p?.EnglishLevel, p?.Occupation, p?.Gender, p?.Major);
 
     public static SpeakerListItemDto ToSpeakerListItem(this SpeakerListRow r) =>
         new(r.UserId, r.FullName, r.Email, r.Gender, r.Status, r.ApprovedPairs);
@@ -40,6 +40,7 @@ internal static class UserMapper
 public class UserService(
     IUserRepository users,
     IUserDomainRepository domains,
+    IDomainService domainService,
     IPasswordHasher hasher,
     IAccessTokenIssuer tokens,
     TimeProvider clock) : IUserService
@@ -255,7 +256,7 @@ public class UserService(
         return user.SpeakerProfile.ToDto();
     }
 
-    public async Task<IReadOnlyList<ScriptDomain>> GetDomainsAsync(
+    public async Task<IReadOnlyList<string>> GetDomainsAsync(
         long userId, CancellationToken ct = default)
     {
         var user = await users.GetByIdAsync(userId, ct) ?? throw NotFound(userId);
@@ -266,8 +267,8 @@ public class UserService(
             : [];
     }
 
-    public async Task<IReadOnlyList<ScriptDomain>> ReplaceDomainsAsync(
-        long userId, IReadOnlyList<ScriptDomain> items, CancellationToken ct = default)
+    public async Task<IReadOnlyList<string>> ReplaceDomainsAsync(
+        long userId, IReadOnlyList<string> items, CancellationToken ct = default)
     {
         var user = await users.GetByIdAsync(userId, ct) ?? throw NotFound(userId);
 
@@ -278,7 +279,13 @@ public class UserService(
                 "Chỉ Reviewer mới được phân chủ đề duyệt nội dung.");
         }
 
-        await domains.ReplaceAsync(userId, items, ct);
+        var resolved = new List<string>();
+        foreach (var item in items.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            resolved.Add(await domainService.ResolveActiveAsync(item, ct));
+        }
+
+        await domains.ReplaceAsync(userId, resolved, ct);
         return await domains.GetDomainsAsync(userId, ct);
     }
 
@@ -290,6 +297,7 @@ public class UserService(
 
         profile.BirthYear = request.BirthYear;
         profile.Province = Clean(request.Province);
+        profile.Region = request.Region;
         profile.EnglishLevel = request.EnglishLevel;
         profile.Occupation = request.Occupation;
         profile.Gender = request.Gender;

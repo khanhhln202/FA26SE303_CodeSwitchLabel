@@ -64,7 +64,7 @@ public sealed class TaskProgressTrackerTests
         }
 
         return new TaskRow(
-            id, 1, "Đợt 1", TaskType.Recording, ScriptDomain.ItTechnology, null, WorkTaskStatus.InProgress, target,
+            id, 1, "Đợt 1", TaskType.Recording, "ItTechnology", null, WorkTaskStatus.InProgress, target,
             null, DateTimeOffset.UtcNow,
             assignee.HasValue ? [new TaskAssigneeRow(assignee.Value, "Người nhận")] : [],
             started, done, started, 1, 1);

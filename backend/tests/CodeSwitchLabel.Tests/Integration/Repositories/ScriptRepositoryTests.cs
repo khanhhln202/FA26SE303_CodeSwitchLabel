@@ -20,7 +20,7 @@ public class ScriptRepositoryTests : IntegrationTestBase
         var script = await CreateScriptAsync(
             "[vi]Test [en]script [vi]here",
             "[vi]Test kịch bản ở đây",
-            ScriptDomain.ItTechnology,
+            "ItTechnology",
             AdminUserId);
 
         // Act
@@ -38,7 +38,7 @@ public class ScriptRepositoryTests : IntegrationTestBase
         var script = await CreateScriptAsync(
             "[vi]Test [en]for [vi]update",
             "[vi]Test để cập nhật",
-            ScriptDomain.ItTechnology,
+            "ItTechnology",
             AdminUserId);
 
         // Act
@@ -56,7 +56,7 @@ public class ScriptRepositoryTests : IntegrationTestBase
         var script = await CreateScriptAsync(
             "[vi]Test [en]reviews [vi]here",
             "[vi]Test có reviews",
-            ScriptDomain.ItTechnology,
+            "ItTechnology",
             AdminUserId);
 
         // Act
@@ -73,13 +73,13 @@ public class ScriptRepositoryTests : IntegrationTestBase
         await CreateScriptAsync(
             "[vi]Search [en]test [vi]one",
             "[vi]Tìm kiếm test một",
-            ScriptDomain.ItTechnology,
+            "ItTechnology",
             AdminUserId);
 
         await CreateScriptAsync(
             "[vi]Search [en]test [vi]two",
             "[vi]Tìm kiếm test hai",
-            ScriptDomain.Education,
+            "Education",
             AdminUserId);
 
         // Act
@@ -97,7 +97,7 @@ public class ScriptRepositoryTests : IntegrationTestBase
         await CreateScriptAsync(
             "[vi]Unique [en]content [vi]here",
             "[vi]Nội dung duy nhất",
-            ScriptDomain.ItTechnology,
+            "ItTechnology",
             AdminUserId);
 
         // Act
@@ -114,7 +114,7 @@ public class ScriptRepositoryTests : IntegrationTestBase
         await CreateScriptAsync(
             "[vi]Em nên [en]scan [vi]tài liệu này.",
             "[vi]Em nên quét tài liệu này.",
-            ScriptDomain.ItTechnology,
+            "ItTechnology",
             AdminUserId);
 
         // Act — khác hoa/thường và gộp nhiều khoảng trắng.
@@ -153,7 +153,7 @@ public class ScriptRepositoryTests : IntegrationTestBase
         {
             var script = await CreateScriptAsync(
                 $"[vi]Cau [en]xep {token} so {i}", $"[vi]Câu sắp xếp {token} số {i}",
-                ScriptDomain.ItTechnology, AdminUserId);
+                "ItTechnology", AdminUserId);
 
             script.CreatedAt = baseTime.AddHours(i);
             scripts.Add(script);
@@ -231,7 +231,7 @@ public class ScriptRepositoryTests : IntegrationTestBase
         var script = await CreateScriptAsync(
             "[vi]Test [en]no [vi]recordings",
             "[vi]Test không có bản ghi",
-            ScriptDomain.ItTechnology,
+            "ItTechnology",
             AdminUserId);
 
         // Act

@@ -19,7 +19,7 @@ public class ReviewRepositoryTests : IntegrationTestBase
         var script = await CreateScriptAsync(
             "[vi]Test [en]review [vi]this",
             "[vi]Test duyệt cái này",
-            ScriptDomain.ItTechnology,
+            "ItTechnology",
             AdminUserId);
 
         var recording = await CreateRecordingAsync(script.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching);
@@ -43,7 +43,7 @@ public class ReviewRepositoryTests : IntegrationTestBase
         var script = await CreateScriptAsync(
             "[vi]Test [en]next [vi]recording",
             "[vi]Test bản ghi tiếp theo",
-            ScriptDomain.ItTechnology,
+            "ItTechnology",
             AdminUserId);
 
         var recording = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
@@ -64,7 +64,7 @@ public class ReviewRepositoryTests : IntegrationTestBase
         var script = await CreateScriptAsync(
             "[vi]Test [en]with [vi]script",
             "[vi]Test có script",
-            ScriptDomain.ItTechnology,
+            "ItTechnology",
             AdminUserId);
 
         var recording = await CreateRecordingAsync(script.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching);
@@ -85,7 +85,7 @@ public class ReviewRepositoryTests : IntegrationTestBase
         var script = await CreateScriptAsync(
             "[vi]Test [en]status [vi]check",
             "[vi]Test trạng thái",
-            ScriptDomain.ItTechnology,
+            "ItTechnology",
             AdminUserId);
 
         var recording = await CreateRecordingAsync(script.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching);
@@ -104,7 +104,7 @@ public class ReviewRepositoryTests : IntegrationTestBase
         var script = await CreateScriptAsync(
             "[vi]Test [en]lock [vi]recording",
             "[vi]Test khóa bản ghi",
-            ScriptDomain.ItTechnology,
+            "ItTechnology",
             AdminUserId);
 
         var recording = await CreateRecordingAsync(script.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching);

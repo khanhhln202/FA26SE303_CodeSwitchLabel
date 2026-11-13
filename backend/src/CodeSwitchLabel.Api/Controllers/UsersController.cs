@@ -126,18 +126,18 @@ public class UsersController(IUserService userService) : ControllerBase
     /// Một cặp câu chỉ chuyển sang **đã duyệt** khi có lượt duyệt của người đúng chủ đề.
     /// </remarks>
     [HttpGet("{id:long}/domains")]
-    [ProducesResponseType(typeof(IReadOnlyList<ScriptDomain>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(IReadOnlyList<string>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<IReadOnlyList<ScriptDomain>>> GetDomains(long id, CancellationToken ct)
+    public async Task<ActionResult<IReadOnlyList<string>>> GetDomains(long id, CancellationToken ct)
         => Ok(await userService.GetDomainsAsync(id, ct));
 
     /// <summary>Đặt lại toàn bộ chủ đề duyệt của một Reviewer.</summary>
     /// <remarks>Chủ đề nào không còn trong danh sách gửi lên thì bị gỡ. Chỉ áp dụng cho vai Reviewer.</remarks>
     [HttpPut("{id:long}/domains")]
-    [ProducesResponseType(typeof(IReadOnlyList<ScriptDomain>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(IReadOnlyList<string>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
-    public async Task<ActionResult<IReadOnlyList<ScriptDomain>>> SetDomains(
+    public async Task<ActionResult<IReadOnlyList<string>>> SetDomains(
         long id, [FromBody] SetDomainsRequest request, CancellationToken ct)
         => Ok(await userService.ReplaceDomainsAsync(id, request.Domains, ct));
 }
@@ -170,7 +170,15 @@ public class MeController(IUserService userService) : ControllerBase
         [FromBody] UpdateUserRequest request, CancellationToken ct)
         => Ok(await userService.UpdateAsync(User.GetUserId(), request, ct));
 
-    /// <summary>Hồ sơ người đọc của chính mình: năm sinh, tỉnh, trình độ tiếng Anh, nghề nghiệp, chuyên ngành.</summary>
+    /// <summary>
+    /// Hồ sơ người đọc của chính mình: năm sinh, tỉnh, vùng miền, trình độ tiếng Anh,
+    /// nghề nghiệp, giới tính, chuyên ngành.
+    /// </summary>
+    /// <remarks>
+    /// `region` (<c>North</c>/<c>Central</c>/<c>South</c>) CỐ Ý tách khỏi `province`:
+    /// province là ô chữ tự do nên gom nhóm theo nó không đáng tin, còn vùng miền là thứ
+    /// dữ liệu giọng nói cần thống kê đúng. Bỏ trống nghĩa là chưa cập nhật.
+    /// </remarks>
     [HttpGet("speaker-profile")]
     [Authorize(Roles = "Speaker")]
     [ProducesResponseType(typeof(SpeakerProfileDto), StatusCodes.Status200OK)]
@@ -192,7 +200,7 @@ public class MeController(IUserService userService) : ControllerBase
     /// <summary>Chủ đề mình đủ trình độ duyệt — để Reviewer biết mình duyệt được câu thuộc chủ đề nào.</summary>
     [HttpGet("domains")]
     [Authorize(Roles = "Reviewer")]
-    [ProducesResponseType(typeof(IReadOnlyList<ScriptDomain>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<ScriptDomain>>> GetDomains(CancellationToken ct)
+    [ProducesResponseType(typeof(IReadOnlyList<string>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<string>>> GetDomains(CancellationToken ct)
         => Ok(await userService.GetDomainsAsync(User.GetUserId(), ct));
 }

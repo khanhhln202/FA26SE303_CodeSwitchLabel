@@ -17,7 +17,7 @@ public class Wave
     /// Chủ đề của cả đợt. Một đợt chỉ đi trên một chủ đề — trigger
     /// trg_task_wave_domain chặn gắn nhiệm vụ khác chủ đề vào đợt này.
     /// </summary>
-    public ScriptDomain Domain { get; set; }
+    public string Domain { get; set; } = string.Empty;
 
     /// <summary>Chỉ tiêu cặp câu cho cả chiến dịch; lược đồ giới hạn 2000..5000.</summary>
     public int TargetQty { get; set; }
@@ -56,7 +56,7 @@ public class WorkTask
     /// Chủ đề của nhiệm vụ. Task độc lập thì tự do; task gắn vào đợt thì phải
     /// trùng <see cref="Wave.Domain"/> — database chặn, không chỉ service.
     /// </summary>
-    public ScriptDomain Domain { get; set; }
+    public string Domain { get; set; } = string.Empty;
 
     public string? Description { get; set; }
 

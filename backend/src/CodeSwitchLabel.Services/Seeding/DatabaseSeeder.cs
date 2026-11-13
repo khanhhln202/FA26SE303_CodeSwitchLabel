@@ -129,15 +129,16 @@ public static partial class DatabaseSeeder
 
         // Ba Reviewer vì mỗi bản ghi cần đủ ba lượt duyệt độc lập.
         // Hai Speaker để thấy nhiều người dùng chung một cặp câu.
-        (string Email, string Name, RoleName Role, string? Province, decimal? Ielts, string? Major)[] seeds =
+        (string Email, string Name, RoleName Role, string? Province, SpeakerRegion? Region,
+         decimal? Ielts, string? Major)[] seeds =
         [
-            ("admin@codeswitchlabel.local",     "Quản trị hệ thống",     RoleName.Admin,       null, null, null),
-            ("manager@codeswitchlabel.local",   "Điều phối viên",        RoleName.TaskManager, null, null, null),
-            ("reviewer@codeswitchlabel.local",  "Người kiểm duyệt",      RoleName.Reviewer,    null, null, null),
-            ("reviewer2@codeswitchlabel.local", "Người kiểm duyệt số 2", RoleName.Reviewer,    null, null, null),
-            ("reviewer3@codeswitchlabel.local", "Người kiểm duyệt số 3", RoleName.Reviewer,    null, null, null),
-            ("speaker1@codeswitchlabel.local",  "Người đọc số 1",        RoleName.Speaker,     "TP. Hồ Chí Minh", 6.5m, "IT"),
-            ("speaker2@codeswitchlabel.local",  "Người đọc số 2",        RoleName.Speaker,     "Hà Nội",          7.0m, "Business")
+            ("admin@codeswitchlabel.local",     "Quản trị hệ thống",     RoleName.Admin,       null, null, null, null),
+            ("manager@codeswitchlabel.local",   "Điều phối viên",        RoleName.TaskManager, null, null, null, null),
+            ("reviewer@codeswitchlabel.local",  "Người kiểm duyệt",      RoleName.Reviewer,    null, null, null, null),
+            ("reviewer2@codeswitchlabel.local", "Người kiểm duyệt số 2", RoleName.Reviewer,    null, null, null, null),
+            ("reviewer3@codeswitchlabel.local", "Người kiểm duyệt số 3", RoleName.Reviewer,    null, null, null, null),
+            ("speaker1@codeswitchlabel.local",  "Người đọc số 1",        RoleName.Speaker,     "TP. Hồ Chí Minh", SpeakerRegion.South, 6.5m, "IT"),
+            ("speaker2@codeswitchlabel.local",  "Người đọc số 2",        RoleName.Speaker,     "Hà Nội",          SpeakerRegion.North, 7.0m, "Business")
         ];
 
         foreach (var seed in seeds)
@@ -173,6 +174,7 @@ public static partial class DatabaseSeeder
                 {
                     BirthYear = 2002,
                     Province = seed.Province,
+                    Region = seed.Region,
                     EnglishLevel = seed.Ielts,
                     Occupation = Occupation.Student,
                     Major = seed.Major
@@ -216,7 +218,7 @@ public static partial class DatabaseSeeder
 
         foreach (var userId in userIds)
         {
-            foreach (var domain in Enum.GetValues<ScriptDomain>())
+            foreach (var domain in new[] { "ItTechnology", "Education", "DailyLife" })
             {
                 if (have.Contains((userId, domain))) continue;
 
@@ -255,7 +257,7 @@ public static partial class DatabaseSeeder
         db.Waves.Add(new Wave
         {
             WaveName = "Đợt thu thập mẫu",
-            Domain = ScriptDomain.ItTechnology, // TEAM_003
+            Domain = "ItTechnology", // TEAM_003
             TargetQty = 2000,
             StartDate = today,
             EndDate = today.AddDays(30),
@@ -333,31 +335,31 @@ public static partial class DatabaseSeeder
 
         // Cặp câu mẫu đúng định dạng input_text.json: câu chen tiếng Anh, câu thuần Việt tương đương,
         // và ánh xạ từng từ tiếng Anh sang nghĩa tiếng Việt.
-        (string Cs, string Vi, ScriptDomain Domain, (string En, string Vi)[] Pairs)[] seeds =
+        (string Cs, string Vi, string Domain, (string En, string Vi)[] Pairs)[] seeds =
         [
             ("[vi]Em nhớ [en]upload [vi]tài liệu trước [en]deadline [vi]nhé",
              "[vi]Em nhớ tải tài liệu lên trước hạn chót nhé",
-             ScriptDomain.ItTechnology, [("upload", "tải lên"), ("deadline", "hạn chót")]),
+             "ItTechnology", [("upload", "tải lên"), ("deadline", "hạn chót")]),
 
             ("[vi]Chiều nay [en]team [vi]mình có [en]meeting [vi]với khách hàng",
              "[vi]Chiều nay nhóm mình có cuộc họp với khách hàng",
-             ScriptDomain.ItTechnology, [("team", "nhóm"), ("meeting", "cuộc họp")]),
+             "ItTechnology", [("team", "nhóm"), ("meeting", "cuộc họp")]),
 
             ("[vi]Mình cần [en]review [vi]lại phần mã nguồn này",
              "[vi]Mình cần xem lại phần mã nguồn này",
-             ScriptDomain.ItTechnology, [("review", "xem lại")]),
+             "ItTechnology", [("review", "xem lại")]),
 
             ("[vi]Thầy cho em xin [en]slide [vi]của buổi hôm nay với",
              "[vi]Thầy cho em xin bài giảng của buổi hôm nay với",
-             ScriptDomain.Education, [("slide", "bài giảng")]),
+             "Education", [("slide", "bài giảng")]),
 
             ("[vi]Nhóm mình phải nộp [en]assignment [vi]trước thứ sáu",
              "[vi]Nhóm mình phải nộp bài tập trước thứ sáu",
-             ScriptDomain.Education, [("assignment", "bài tập")]),
+             "Education", [("assignment", "bài tập")]),
 
             ("[vi]Bạn nhớ [en]check [vi]hộp thư trước khi tan làm nha",
              "[vi]Bạn nhớ kiểm tra hộp thư trước khi tan làm nha",
-             ScriptDomain.DailyLife, [("check", "kiểm tra")])
+             "DailyLife", [("check", "kiểm tra")])
         ];
 
         foreach (var seed in seeds)
@@ -375,7 +377,7 @@ public static partial class DatabaseSeeder
     private static async Task<string> CreateScriptAsync(
         CodeSwitchLabelDbContext db,
         string cs, string vi,
-        ScriptDomain domain,
+        string domain,
         (string En, string Vi)[] pairs,
         long createdBy,
         CancellationToken ct,
@@ -397,7 +399,7 @@ public static partial class DatabaseSeeder
         // Các từ mẫu đều dịch thẳng nên mã quan hệ là 1; thứ tự alignment trùng vị trí trong câu.
         var scriptId = await db.Database
             .SqlQuery<string>(
-                $"""SELECT fn_generate_script_id({enWordCount}, CAST({SnakeCaseNaming.ToSnakeCase(domain.ToString())} AS script_domain), 1) AS "Value" """)
+                $"""SELECT fn_generate_script_id({enWordCount}, {domain}, 1) AS "Value" """)
             .SingleAsync(ct);
 
         var script = new Script
@@ -493,7 +495,7 @@ public static partial class DatabaseSeeder
 
     /// <summary>Một Reviewer được phân đúng chủ đề; 0 nếu dữ liệu mẫu chưa có ai.</summary>
     private static async Task<long> PickDomainReviewerAsync(
-        CodeSwitchLabelDbContext db, ScriptDomain domain, CancellationToken ct)
+        CodeSwitchLabelDbContext db, string domain, CancellationToken ct)
     {
         // Chỉ lấy trong nhóm Reviewer: trigger chỉ cần người duyệt đúng chủ đề, nhưng lấy cả
         // Admin vào thì lượt duyệt mẫu sẽ mang vai trò sai so với thực tế.

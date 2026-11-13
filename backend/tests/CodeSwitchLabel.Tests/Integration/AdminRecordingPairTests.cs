@@ -43,7 +43,7 @@ public sealed class AdminRecordingPairTests : IntegrationTestBase
     private Task<Script> CreatePairScriptAsync()
         => CreateScriptAsync(
             "[vi]Mai [en]deploy [vi]bản mới nhé.", "[vi]Mai triển khai bản mới nhé.",
-            ScriptDomain.ItTechnology, AdminUserId);
+            "ItTechnology", AdminUserId);
 
     /// <summary>
     /// Cặp của đúng bài test này. Cả bộ test dùng chung database nên không được

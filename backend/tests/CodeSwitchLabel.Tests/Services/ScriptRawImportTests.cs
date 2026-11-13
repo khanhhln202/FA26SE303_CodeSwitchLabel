@@ -223,7 +223,7 @@ public sealed class ScriptRawImportTests
 
         var nextId = 1;
         repo.Setup(r => r.GenerateIdAsync(
-                It.IsAny<int>(), It.IsAny<ScriptDomain>(), It.IsAny<ScriptRelation>(),
+                It.IsAny<int>(), It.IsAny<string>(), It.IsAny<ScriptRelation>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => $"s_11100000{nextId++}");
 
@@ -240,6 +240,7 @@ public sealed class ScriptRawImportTests
             Mock.Of<IScriptQueueService>(),
             Mock.Of<IReasonRepository>(),
             Mock.Of<IUserDomainRepository>(),
+            DomainPassThrough(),
             config.Object,
             Mock.Of<ITaskProgressTracker>(),
             labeling.Object,
@@ -247,6 +248,15 @@ public sealed class ScriptRawImportTests
             Mock.Of<ILogger<ScriptService>>());
 
         return (service, repo, labeling);
+    }
+
+    /// <summary>Chủ đề nào gửi lên cũng giữ nguyên — test này không kiểm danh mục chủ đề.</summary>
+    private static IDomainService DomainPassThrough()
+    {
+        var domains = new Mock<IDomainService>();
+        domains.Setup(d => d.ResolveActiveAsync(It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<bool>()))
+            .ReturnsAsync((string value, CancellationToken _, bool _) => value);
+        return domains.Object;
     }
 
     private static List<Script> CaptureAdded(Mock<IScriptRepository> repo)

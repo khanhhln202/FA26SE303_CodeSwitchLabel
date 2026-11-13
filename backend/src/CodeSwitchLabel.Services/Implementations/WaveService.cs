@@ -15,6 +15,7 @@ namespace CodeSwitchLabel.Services.Implementations;
 public class WaveService(
     IWaveRepository waves,
     ITaskService tasks,
+    IDomainService domains,
     TimeProvider clock) : IWaveService
 {
     public async Task<PagedResult<WaveListItemDto>> SearchAsync(
@@ -71,7 +72,9 @@ public class WaveService(
         var wave = new Wave
         {
             WaveName = request.WaveName.Trim(),
-            Domain = request.Domain ?? throw new UnprocessableException("domain_required", "Phải chọn chủ đề (domain) cho chiến dịch."),
+            Domain = request.Domain is null
+                ? throw new UnprocessableException("domain_required", "Phải chọn chủ đề (domain) cho chiến dịch.")
+                : await domains.ResolveActiveAsync(request.Domain, ct),
             TargetQty = request.TargetQty!.Value,
             StartDate = start,
             EndDate = end,
@@ -98,7 +101,12 @@ public class WaveService(
         EnsureWaveOwner(wave, callerId, isAdmin);
 
         if (request.WaveName is not null) wave.WaveName = request.WaveName.Trim();
-        if (request.Domain.HasValue) wave.Domain = request.Domain.Value;
+        if (request.Domain is not null)
+        {
+            // Chủ đề của đợt có thể đã bị Admin xóa mềm sau khi đợt tạo — vẫn cho sửa
+            // tên/ngày/khá coefficients của đợt mà không bắt phải đổi chủ đề.
+            wave.Domain = await domains.ResolveActiveAsync(request.Domain, ct, allowInactive: true);
+        }
 
         // UpdateWaveRequest không còn trường `status`. Trạng thái đợt là hàm
         // của các task bên trong nên không bấm tay được — sửa tên/chủ đề/ngày không được đổi nó,

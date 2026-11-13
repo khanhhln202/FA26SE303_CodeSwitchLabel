@@ -179,7 +179,7 @@ public class WaveProgress
     public string WaveName { get; set; } = string.Empty;
 
     /// <summary>Chủ đề của đợt; mọi task gắn vào đều phải cùng chủ đề.</summary>
-    public ScriptDomain Domain { get; set; }
+    public string Domain { get; set; } = string.Empty;
 
     public int WaveTargetQty { get; set; }
     public DateOnly StartDate { get; set; }

@@ -35,9 +35,17 @@ public class SpeakerController(
     [ProducesResponseType(typeof(NextScriptDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult<NextScriptDto>> Next([FromQuery] long? taskId, CancellationToken ct)
+    public async Task<ActionResult<NextScriptDto>> Next(
+        [FromQuery] long? taskId, [FromQuery] string[]? exclude, CancellationToken ct)
     {
-        var next = await assignmentService.GetNextAsync(User.GetUserId(), taskId, ct);
+        // Nhận cả `?exclude=a&exclude=b` lẫn `?exclude=a,b`; chặn trên 100 để URL không dài vô hạn.
+        var excluded = (exclude ?? [])
+            .SelectMany(value => value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .Distinct(StringComparer.Ordinal)
+            .Take(100)
+            .ToArray();
+
+        var next = await assignmentService.GetNextAsync(User.GetUserId(), taskId, excluded, ct);
         return next is null ? NoContent() : Ok(next);
     }
 

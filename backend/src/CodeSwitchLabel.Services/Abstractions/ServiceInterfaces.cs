@@ -79,8 +79,13 @@ public interface IScriptService
 
 public interface IScriptAssignmentService
 {
-    /// <summary>Cặp câu tiếp theo để thu âm, kèm danh sách biến thể còn thiếu.</summary>
-    Task<NextScriptDto?> GetNextAsync(long speakerId, long? taskId, CancellationToken ct = default);
+    /// <summary>
+    /// Cặp câu tiếp theo để thu âm, kèm danh sách biến thể còn thiếu. `exclude` là các câu
+    /// Speaker vừa bỏ qua trong phiên — chỉ để tránh trả lại ngay, không lưu DB.
+    /// </summary>
+    Task<NextScriptDto?> GetNextAsync(
+        long speakerId, long? taskId, IReadOnlyCollection<string>? exclude = null,
+        CancellationToken ct = default);
 }
 
 public interface ISystemConfigService
@@ -178,7 +183,7 @@ public record RejectionStatDto(string ReasonCode, string Category, long TimesUse
 public record WaveProgressDto(
     long WaveId,
     string WaveName,
-    ScriptDomain Domain,
+    string Domain,
     int WaveTargetQty,
     DateOnly StartDate,
     DateOnly EndDate,

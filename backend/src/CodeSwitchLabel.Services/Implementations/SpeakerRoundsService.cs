@@ -406,7 +406,7 @@ public class SpeakerRoundsService(
 
         // Lọc theo tên category tiếng Việt của FE (giữ tương thích mock).
         var domain = ParseCategory(query.Category);
-        if (domain.HasValue) q = q.Where(s => s.Domain == domain.Value);
+        if (domain is not null) q = q.Where(s => s.Domain == domain);
 
         var total = await q.CountAsync(ct);
 
@@ -607,20 +607,22 @@ public class SpeakerRoundsService(
         return top is null ? null : DomainName(top.Domain);
     }
 
-    private static string DomainName(ScriptDomain domain) => domain switch
+    private static string DomainName(string domain) => domain switch
     {
-        ScriptDomain.ItTechnology => "Công nghệ thông tin",
-        ScriptDomain.Education => "Giáo dục",
-        _ => "Hội thoại hàng ngày",
+        "ItTechnology" => "Công nghệ thông tin",
+        "Education" => "Giáo dục",
+        "DailyLife" => "Hội thoại hàng ngày",
+        // Chủ đề tự tạo: dùng code làm nhãn cho tới khi FE đọc tên từ /api/config/topics.
+        _ => domain,
     };
 
-    private static ScriptDomain? ParseCategory(string? category)
+    private static string? ParseCategory(string? category)
     {
         if (string.IsNullOrWhiteSpace(category)) return null;
         var c = category.Trim().ToLowerInvariant();
-        if (c.Contains("công nghệ") || c.Contains("information") || c.Contains("it")) return ScriptDomain.ItTechnology;
-        if (c.Contains("giáo dục") || c.Contains("education")) return ScriptDomain.Education;
-        if (c.Contains("hàng ngày") || c.Contains("daily") || c.Contains("hội thoại")) return ScriptDomain.DailyLife;
+        if (c.Contains("công nghệ") || c.Contains("information") || c.Contains("it")) return "ItTechnology";
+        if (c.Contains("giáo dục") || c.Contains("education")) return "Education";
+        if (c.Contains("hàng ngày") || c.Contains("daily") || c.Contains("hội thoại")) return "DailyLife";
         return null;
     }
 

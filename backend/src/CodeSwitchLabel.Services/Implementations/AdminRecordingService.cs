@@ -144,10 +144,12 @@ public class AdminRecordingService(
         catch { return null; }
     }
 
-    private static string DomainName(ScriptDomain domain) => domain switch
+    private static string DomainName(string domain) => domain switch
     {
-        ScriptDomain.ItTechnology => "Công nghệ thông tin",
-        ScriptDomain.Education => "Giáo dục",
-        _ => "Hội thoại hàng ngày",
+        "ItTechnology" => "Công nghệ thông tin",
+        "Education" => "Giáo dục",
+        "DailyLife" => "Hội thoại hàng ngày",
+        // Chủ đề tự tạo: dùng code làm nhãn cho tới khi FE đọc tên từ /api/config/topics.
+        _ => domain,
     };
 }

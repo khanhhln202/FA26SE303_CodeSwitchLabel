@@ -12,24 +12,24 @@ namespace CodeSwitchLabel.Repositories.Repositories;
 /// </summary>
 public interface IUserDomainRepository
 {
-    Task<IReadOnlyList<ScriptDomain>> GetDomainsAsync(long userId, CancellationToken ct = default);
+    Task<IReadOnlyList<string>> GetDomainsAsync(long userId, CancellationToken ct = default);
 
-    Task<bool> IsQualifiedAsync(long userId, ScriptDomain domain, CancellationToken ct = default);
+    Task<bool> IsQualifiedAsync(long userId, string domain, CancellationToken ct = default);
 
     /// <summary>Đặt lại toàn bộ chủ đề của một người: chủ đề nào không còn trong danh sách thì bị gỡ.</summary>
-    Task ReplaceAsync(long userId, IEnumerable<ScriptDomain> domains, CancellationToken ct = default);
+    Task ReplaceAsync(long userId, IEnumerable<string> domains, CancellationToken ct = default);
 }
 
 public class UserDomainRepository(CodeSwitchLabelDbContext db) : IUserDomainRepository
 {
-    public async Task<IReadOnlyList<ScriptDomain>> GetDomainsAsync(
+    public async Task<IReadOnlyList<string>> GetDomainsAsync(
         long userId, CancellationToken ct = default) =>
         await db.UserDomains.AsNoTracking()
             .Where(d => d.UserId == userId)
             .Select(d => d.Domain)
             .ToListAsync(ct);
 
-    public Task<bool> IsQualifiedAsync(long userId, ScriptDomain domain, CancellationToken ct = default) =>
+    public Task<bool> IsQualifiedAsync(long userId, string domain, CancellationToken ct = default) =>
         // Admin duyệt được mọi chủ đề: không phải phân công chủ đề cho Admin ở màn quản lý
         // người dùng, nên đòi user_domain sẽ chặn nhầm chính người vận hành.
         db.AppUsers.AsNoTracking().AnyAsync(
@@ -37,7 +37,7 @@ public class UserDomainRepository(CodeSwitchLabelDbContext db) : IUserDomainRepo
                  (u.Role.RoleName == RoleName.Admin || u.Domains.Any(d => d.Domain == domain)), ct);
 
     public async Task ReplaceAsync(
-        long userId, IEnumerable<ScriptDomain> domains, CancellationToken ct = default)
+        long userId, IEnumerable<string> domains, CancellationToken ct = default)
     {
         var wanted = domains.ToHashSet();
 

@@ -30,7 +30,7 @@ public sealed class SpeakerExportTests : IntegrationTestBase
 
     private async Task<Script> CreateScriptWithWordAsync(string cs, string vi)
     {
-        var script = await CreateValidatedScriptAsync(cs, vi, ScriptDomain.ItTechnology, AdminUserId);
+        var script = await CreateValidatedScriptAsync(cs, vi, "ItTechnology", AdminUserId);
 
         Db.ScriptWords.Add(new ScriptWord
         {
@@ -54,6 +54,21 @@ public sealed class SpeakerExportTests : IntegrationTestBase
         recording.Status = RecordingStatus.Approved;
         await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
         return recording;
+    }
+
+    /// <summary>Thêm một lượt duyệt đạt với mốc thời gian do test chọn.</summary>
+    private async Task AddApprovalReviewAsync(Recording recording, DateTimeOffset reviewedAt)
+    {
+        Db.Reviews.Add(new Review
+        {
+            RecordingId = recording.RecordingId,
+            ReviewerId = ReviewerUserId,
+            ReviewRound = 1,
+            Decision = ReviewDecision.Approved,
+            IsBlind = true,
+            ReviewedAt = reviewedAt
+        });
+        await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -193,5 +208,66 @@ public sealed class SpeakerExportTests : IntegrationTestBase
                 new ExportSpeakerDataRequest(), TestContext.Current.CancellationToken));
 
         Assert.Equal("export_scope_required", loi.Code);
+    }
+
+    [Fact]
+    public async Task XuatZip_TheoNgay_DungMocDuyetMuonNhatCuaCap()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var script = await CreateScriptWithWordAsync(
+            $"[vi]Em nên [en]scan [vi]tài liệu {Guid.NewGuid():N}.",
+            $"[vi]Em nên quét tài liệu {Guid.NewGuid():N}.");
+        var cs = await CreateApprovedRecordingAsync(script.ScriptId, SentenceVariant.CodeSwitching, null);
+        var vi = await CreateApprovedRecordingAsync(script.ScriptId, SentenceVariant.PureVietnamese, null);
+
+        // 23:00 ngày 10/05 giờ VN và 00:00 ngày 11/05 giờ VN → cặp thuộc ngày 11.
+        await AddApprovalReviewAsync(cs, new DateTimeOffset(2026, 5, 10, 16, 0, 0, TimeSpan.Zero));
+        await AddApprovalReviewAsync(vi, new DateTimeOffset(2026, 5, 10, 17, 0, 0, TimeSpan.Zero));
+
+        var ngoaiNgay = await Assert.ThrowsAsync<UnprocessableException>(
+            () => _datasets.ExportSpeakersAsync(new ExportSpeakerDataRequest
+            {
+                SpeakerIds = [SpeakerUserId],
+                DateFrom = new DateOnly(2026, 5, 10),
+                DateTo = new DateOnly(2026, 5, 10)
+            }, ct));
+        Assert.Equal("export_no_approved_pairs", ngoaiNgay.Code);
+
+        var file = await _datasets.ExportSpeakersAsync(new ExportSpeakerDataRequest
+        {
+            SpeakerIds = [SpeakerUserId],
+            DateFrom = new DateOnly(2026, 5, 11),
+            DateTo = new DateOnly(2026, 5, 11)
+        }, ct);
+
+        file.Content.Position = 0;
+        using var zip = new ZipArchive(file.Content, ZipArchiveMode.Read);
+        Assert.Contains(zip.Entries, e => e.FullName.Contains(script.ScriptId[2..]));
+    }
+
+    [Fact]
+    public async Task XuatZip_KhoangNgayMotMinh_LaPhamViHopLe()
+    {
+        var error = await Assert.ThrowsAsync<UnprocessableException>(
+            () => _datasets.ExportSpeakersAsync(new ExportSpeakerDataRequest
+            {
+                DateFrom = new DateOnly(2000, 1, 1),
+                DateTo = new DateOnly(2000, 1, 2)
+            }, TestContext.Current.CancellationToken));
+
+        Assert.Equal("export_no_approved_pairs", error.Code);
+    }
+
+    [Fact]
+    public async Task XuatZip_NgayBatDauSauNgayKetThuc_BaoLoi()
+    {
+        var error = await Assert.ThrowsAsync<UnprocessableException>(
+            () => _datasets.ExportSpeakersAsync(new ExportSpeakerDataRequest
+            {
+                DateFrom = new DateOnly(2026, 5, 12),
+                DateTo = new DateOnly(2026, 5, 11)
+            }, TestContext.Current.CancellationToken));
+
+        Assert.Equal("invalid_date_range", error.Code);
     }
 }

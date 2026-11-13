@@ -71,7 +71,7 @@ public sealed class AiReviewFlowTests : IntegrationTestBase
 
         var script = await CreateValidatedScriptAsync(
             string.Format(CsPattern, n), string.Format(ViPattern, n),
-            ScriptDomain.ItTechnology, AdminUserId);
+            "ItTechnology", AdminUserId);
 
         _expectedText = $"mai deploy bản mới số {n} nhé";
         _transcriptDung = $"Mai deploy bản mới số {n} nhé.";

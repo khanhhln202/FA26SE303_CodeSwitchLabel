@@ -149,7 +149,7 @@ public class TaskRepositoryTests : IntegrationTestBase
 
         var script = await CreateValidatedScriptAsync(
             "[vi]Câu [en]done [vi]rồi", "[vi]Câu done rồi",
-            ScriptDomain.ItTechnology, approvedSpeaker.UserId);
+            "ItTechnology", approvedSpeaker.UserId);
         Db.TaskScripts.Add(new TaskScript
         {
             TaskId = task.TaskId, ScriptId = script.ScriptId, Status = TaskScriptStatus.Completed
@@ -181,7 +181,7 @@ public class TaskRepositoryTests : IntegrationTestBase
 
         var script = await CreateValidatedScriptAsync(
             "[vi]Câu [en]candidate [vi]này", "[vi]Câu candidate này",
-            ScriptDomain.ItTechnology, owner.UserId);
+            "ItTechnology", owner.UserId);
 
         var rejected = await CreateRecordingAsync(script.ScriptId, owner.UserId, SentenceVariant.CodeSwitching);
         rejected.Status = RecordingStatus.Rejected;
@@ -192,12 +192,12 @@ public class TaskRepositoryTests : IntegrationTestBase
 
         // Người khác nhận task vẫn thấy câu vì bản rejected đã trả cặp về hàng đợi.
         var forOther = await Tasks.FindScriptCandidatesAsync(
-            assignedTask.TaskId, [other.UserId], ScriptDomain.ItTechnology, 100, [], ct);
+            assignedTask.TaskId, [other.UserId], "ItTechnology", 100, [], ct);
         Assert.Contains(script.ScriptId, forOther);
 
         // Task chưa giao cho ai cũng vậy.
         var unassigned = await Tasks.FindScriptCandidatesAsync(
-            openTask.TaskId, [], ScriptDomain.ItTechnology, 100, [], ct);
+            openTask.TaskId, [], "ItTechnology", 100, [], ct);
         Assert.Contains(script.ScriptId, unassigned);
     }
 
@@ -230,19 +230,19 @@ public class TaskRepositoryTests : IntegrationTestBase
     {
         // free: chưa ai đụng → nhận được
         var free = await CreateValidatedScriptAsync(
-            "[vi]Câu [en]free", "[vi]Câu tự do", ScriptDomain.ItTechnology, AdminUserId);
+            "[vi]Câu [en]free", "[vi]Câu tự do", "ItTechnology", AdminUserId);
         // otherBusy: Speaker KHÁC đang có bản chờ duyệt → vẫn nhận được (dùng chung câu)
         var otherBusy = await CreateValidatedScriptAsync(
-            "[vi]Câu [en]other", "[vi]Câu người khác", ScriptDomain.ItTechnology, AdminUserId);
+            "[vi]Câu [en]other", "[vi]Câu người khác", "ItTechnology", AdminUserId);
         // mineBusy: chính Speaker này đã có bản → không giao lại
         var mineBusy = await CreateValidatedScriptAsync(
-            "[vi]Câu [en]mine", "[vi]Câu của tôi", ScriptDomain.ItTechnology, AdminUserId);
+            "[vi]Câu [en]mine", "[vi]Câu của tôi", "ItTechnology", AdminUserId);
         // mineQueued: đang là việc Pending của Speaker trong task còn chạy → không giao trùng
         var mineQueued = await CreateValidatedScriptAsync(
-            "[vi]Câu [en]queued", "[vi]Câu đang làm", ScriptDomain.ItTechnology, AdminUserId);
+            "[vi]Câu [en]queued", "[vi]Câu đang làm", "ItTechnology", AdminUserId);
         // mineCancelled: việc cũ đã huỷ → nhận lại được
         var mineCancelled = await CreateValidatedScriptAsync(
-            "[vi]Câu [en]cancelled", "[vi]Câu đã huỷ", ScriptDomain.ItTechnology, AdminUserId);
+            "[vi]Câu [en]cancelled", "[vi]Câu đã huỷ", "ItTechnology", AdminUserId);
 
         await CreateRecordingAsync(otherBusy.ScriptId, ReviewerUserId, SentenceVariant.CodeSwitching);
         await CreateRecordingAsync(mineBusy.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching);
@@ -272,7 +272,7 @@ public class TaskRepositoryTests : IntegrationTestBase
         await Db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var available = await Tasks.GetRecordableScriptIdsByDomainAsync(
-            ScriptDomain.ItTechnology, SpeakerUserId, 10, TestContext.Current.CancellationToken);
+            "ItTechnology", SpeakerUserId, 10, TestContext.Current.CancellationToken);
 
         Assert.Contains(free.ScriptId, available);
         Assert.Contains(otherBusy.ScriptId, available);
@@ -293,10 +293,10 @@ public class TaskRepositoryTests : IntegrationTestBase
         // two speakers recording the same pair.
         var goodScript = await CreateValidatedScriptAsync(
             "[vi]Xếp [en]rank [vi]ưu tiên", "[vi]Xếp hạng ưu tiên",
-            ScriptDomain.ItTechnology, AdminUserId);
+            "ItTechnology", AdminUserId);
         var badScript = await CreateValidatedScriptAsync(
             "[vi]Xếp [en]rank [vi]thấp", "[vi]Xếp hạng thấp",
-            ScriptDomain.ItTechnology, AdminUserId);
+            "ItTechnology", AdminUserId);
 
         // Good: 1 approved. Bad: 1 rejected (0% approval, sorts after good).
         var goodRec = await CreateRecordingAsync(goodScript.ScriptId, good.UserId, SentenceVariant.CodeSwitching);
