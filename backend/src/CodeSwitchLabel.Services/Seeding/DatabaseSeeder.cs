@@ -129,15 +129,16 @@ public static partial class DatabaseSeeder
 
         // Ba Reviewer vì mỗi bản ghi cần đủ ba lượt duyệt độc lập.
         // Hai Speaker để thấy nhiều người dùng chung một cặp câu.
-        (string Email, string Name, RoleName Role, string? Province, decimal? Ielts, string? Major)[] seeds =
+        (string Email, string Name, RoleName Role, string? Province, SpeakerRegion? Region,
+         decimal? Ielts, string? Major)[] seeds =
         [
-            ("admin@codeswitchlabel.local",     "Quản trị hệ thống",     RoleName.Admin,       null, null, null),
-            ("manager@codeswitchlabel.local",   "Điều phối viên",        RoleName.TaskManager, null, null, null),
-            ("reviewer@codeswitchlabel.local",  "Người kiểm duyệt",      RoleName.Reviewer,    null, null, null),
-            ("reviewer2@codeswitchlabel.local", "Người kiểm duyệt số 2", RoleName.Reviewer,    null, null, null),
-            ("reviewer3@codeswitchlabel.local", "Người kiểm duyệt số 3", RoleName.Reviewer,    null, null, null),
-            ("speaker1@codeswitchlabel.local",  "Người đọc số 1",        RoleName.Speaker,     "TP. Hồ Chí Minh", 6.5m, "IT"),
-            ("speaker2@codeswitchlabel.local",  "Người đọc số 2",        RoleName.Speaker,     "Hà Nội",          7.0m, "Business")
+            ("admin@codeswitchlabel.local",     "Quản trị hệ thống",     RoleName.Admin,       null, null, null, null),
+            ("manager@codeswitchlabel.local",   "Điều phối viên",        RoleName.TaskManager, null, null, null, null),
+            ("reviewer@codeswitchlabel.local",  "Người kiểm duyệt",      RoleName.Reviewer,    null, null, null, null),
+            ("reviewer2@codeswitchlabel.local", "Người kiểm duyệt số 2", RoleName.Reviewer,    null, null, null, null),
+            ("reviewer3@codeswitchlabel.local", "Người kiểm duyệt số 3", RoleName.Reviewer,    null, null, null, null),
+            ("speaker1@codeswitchlabel.local",  "Người đọc số 1",        RoleName.Speaker,     "TP. Hồ Chí Minh", SpeakerRegion.South, 6.5m, "IT"),
+            ("speaker2@codeswitchlabel.local",  "Người đọc số 2",        RoleName.Speaker,     "Hà Nội",          SpeakerRegion.North, 7.0m, "Business")
         ];
 
         foreach (var seed in seeds)
@@ -173,6 +174,7 @@ public static partial class DatabaseSeeder
                 {
                     BirthYear = 2002,
                     Province = seed.Province,
+                    Region = seed.Region,
                     EnglishLevel = seed.Ielts,
                     Occupation = Occupation.Student,
                     Major = seed.Major

@@ -170,7 +170,15 @@ public class MeController(IUserService userService) : ControllerBase
         [FromBody] UpdateUserRequest request, CancellationToken ct)
         => Ok(await userService.UpdateAsync(User.GetUserId(), request, ct));
 
-    /// <summary>Hồ sơ người đọc của chính mình: năm sinh, tỉnh, trình độ tiếng Anh, nghề nghiệp, chuyên ngành.</summary>
+    /// <summary>
+    /// Hồ sơ người đọc của chính mình: năm sinh, tỉnh, vùng miền, trình độ tiếng Anh,
+    /// nghề nghiệp, giới tính, chuyên ngành.
+    /// </summary>
+    /// <remarks>
+    /// `region` (<c>North</c>/<c>Central</c>/<c>South</c>) CỐ Ý tách khỏi `province`:
+    /// province là ô chữ tự do nên gom nhóm theo nó không đáng tin, còn vùng miền là thứ
+    /// dữ liệu giọng nói cần thống kê đúng. Bỏ trống nghĩa là chưa cập nhật.
+    /// </remarks>
     [HttpGet("speaker-profile")]
     [Authorize(Roles = "Speaker")]
     [ProducesResponseType(typeof(SpeakerProfileDto), StatusCodes.Status200OK)]

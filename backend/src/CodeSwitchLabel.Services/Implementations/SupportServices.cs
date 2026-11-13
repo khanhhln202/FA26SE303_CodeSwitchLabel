@@ -66,6 +66,7 @@ public class AuthService(
             {
                 BirthYear = profile?.BirthYear,
                 Province = Clean(profile?.Province),
+                Region = profile?.Region,
                 EnglishLevel = profile?.EnglishLevel,
                 Occupation = profile?.Occupation,
                 Gender = profile?.Gender,

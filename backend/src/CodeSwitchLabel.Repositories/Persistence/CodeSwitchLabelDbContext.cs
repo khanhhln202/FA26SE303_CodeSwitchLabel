@@ -110,6 +110,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         modelBuilder.HasPostgresEnum<UserStatus>();
         modelBuilder.HasPostgresEnum<Occupation>();
         modelBuilder.HasPostgresEnum<Gender>();
+        modelBuilder.HasPostgresEnum<SpeakerRegion>();
         modelBuilder.HasPostgresEnum<ConfigValueType>();
         modelBuilder.HasPostgresEnum<AuditAction>();
         modelBuilder.HasPostgresEnum<ScriptStatus>();

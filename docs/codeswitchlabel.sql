@@ -12,6 +12,7 @@ BEGIN;
 CREATE TYPE user_status           AS ENUM ('active','inactive','suspended');
 CREATE TYPE occupation            AS ENUM ('student','employed','other');
 CREATE TYPE gender                AS ENUM ('male','female','other');
+CREATE TYPE speaker_region        AS ENUM ('north','central','south');
 CREATE TYPE config_value_type     AS ENUM ('int','bool','string');
 CREATE TYPE audit_action          AS ENUM ('create','update','delete','import','export','assign','release','login');
 CREATE TYPE script_status         AS ENUM ('pending_validation','validated','rejected','deactivated');
@@ -100,7 +101,11 @@ CREATE TABLE app_user (
 CREATE TABLE speaker_profile (                    -- 1 : 0..1 with app_user
     user_id       BIGINT PRIMARY KEY REFERENCES app_user(user_id) ON DELETE CASCADE,
     birth_year    SMALLINT CHECK (birth_year BETWEEN 1900 AND 2100),
-    province      VARCHAR(100),                   -- region (N/C/S) auto-derived, not stored
+    province      VARCHAR(100),                   -- chữ tự do, KHÔNG gom nhóm được (xem region)
+    -- Bản ERD đầu định suy vùng miền từ province thay vì lưu. Không làm được: province là ô
+    -- chữ tự do và dữ liệu thật đã lệch nhau ('TP. Hồ Chí Minh' vs 'Thành phố Hồ Chí Minh'),
+    -- nên suy ra sẽ sai mà trông như đúng. Lưu riêng, kiểu ENUM đảm bảo gom nhóm luôn cộng đủ.
+    region        speaker_region,                 -- không bắt buộc (hồ sơ trước V27 chưa có)
     english_level NUMERIC(2,1) CHECK (english_level BETWEEN 0.0 AND 9.0),  -- IELTS band
     occupation    occupation,
     gender        gender,                         -- không bắt buộc (hồ sơ cũ chưa có)
