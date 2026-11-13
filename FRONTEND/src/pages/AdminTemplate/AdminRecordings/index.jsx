@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { toast } from "sonner";
-import { Search, Download, CheckCircle2, XCircle, Filter, Clock, X, AlertCircle, Loader2 } from "lucide-react";
+import { Search, Download, CheckCircle2, XCircle, Filter, Clock, X, Loader2 } from "lucide-react";
 import Pagination from "../../../components/Pagination/Pagination";
 import WaveformInline from "../../../components/AudioPlayer/WaveformInline";
 import {
@@ -19,13 +19,35 @@ import {
 import { adminService } from "../../../services/adminService";
 import { parseCodeSwitch } from "../../../utils/codeSwitch";
 
+// "2026-10-13T08:27:10Z" -> ["13/10/2026", "15:27"] (giờ máy người dùng)
+function splitDateTime(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const pad = (n) => String(n).padStart(2, "0");
+  return [`${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`, `${pad(d.getHours())}:${pad(d.getMinutes())}`];
+}
+
+// Lấy thời gian gần nhất reviewer duyệt cặp câu text và bản ghi âm
+function getLatestReviewedAt(pair) {
+  const reviewTimes = (pair.reviews || [])
+    .map((rev) => rev?.reviewedAt || rev?.createdAt || rev?.updatedAt)
+    .filter(Boolean)
+    .map((ts) => new Date(ts).getTime())
+    .filter((t) => !Number.isNaN(t));
+
+  if (reviewTimes.length > 0) {
+    return new Date(Math.max(...reviewTimes)).toISOString();
+  }
+  return pair.reviewedAt || pair.recordedAt || null;
+}
+
 // Style trạng thái đồng bộ 100% với giao diện Reviewer RecordingHistory
 const STATUS_STYLE = {
   Approved: { bg: "#EAF7EF", border: "rgba(63,166,107,0.25)", text: "#1F5C3F", accent: "#3FA66B", icon: CheckCircle2, label: "Đã duyệt" },
   Rejected: { bg: "#FDEAEA", border: "#F3C9C9", text: "#C63B3B", accent: "#C63B3B", icon: XCircle, label: "Từ chối" },
   Pending: { bg: "#FFF1DE", border: "#F5DFC0", text: "#A85E12", accent: "#A85E12", icon: Clock, label: "Chờ" },
   PendingReview: { bg: "#FFF1DE", border: "#F5DFC0", text: "#A85E12", accent: "#A85E12", icon: Clock, label: "Chờ" },
-  QcFailed: { bg: "#F0EEE6", border: "#E5E2D8", text: "#6E7078", accent: "#6E7078", icon: AlertCircle, label: "Lỗi chất lượng" },
 };
 const styleOf = (status) => STATUS_STYLE[status] ?? STATUS_STYLE.Pending;
 
@@ -81,6 +103,8 @@ export default function AdminRecordings() {
   const [recordings, setRecordings] = useState([]);
   const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [speakerFilter, setSpeakerFilter] = useState("all");
+  const [timeFilter, setTimeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
@@ -105,12 +129,17 @@ export default function AdminRecordings() {
         page++;
       } while (page <= totalPages);
 
-      setRecordings(allPairs.map((pair) => ({
-        ...pair,
-        status: parseBeRecordingStatus(pair.status),
-        rawIds: pair.rawIds || [],
-        reviews: pair.reviews || [],
-      })));
+      setRecordings(
+        allPairs
+          .map((pair) => ({
+            ...pair,
+            status: parseBeRecordingStatus(pair.status),
+            rawIds: pair.rawIds || [],
+            reviews: pair.reviews || [],
+            latestReviewedAt: getLatestReviewedAt(pair),
+          }))
+          .filter((pair) => pair.status !== "QcFailed")
+      );
 
     } catch (err) {
       console.error("Lỗi lấy danh sách bản thu âm:", err);
@@ -121,6 +150,17 @@ export default function AdminRecordings() {
   useEffect(() => {
     fetchRecordings();
   }, []);
+
+  // Tự động lấy danh sách tên Speaker duy nhất từ dữ liệu (có speaker mới tự động cập nhật)
+  const speakerOptions = useMemo(() => {
+    const uniqueSpeakers = new Set();
+    recordings.forEach((r) => {
+      if (r.speaker && String(r.speaker).trim()) {
+        uniqueSpeakers.add(String(r.speaker).trim());
+      }
+    });
+    return Array.from(uniqueSpeakers).sort((a, b) => a.localeCompare(b, "vi"));
+  }, [recordings]);
 
   // Lượt duyệt đã có sẵn trong cặp do BE trả về, không gọi thêm API.
   const handleOpenReviewersModal = (recording) => {
@@ -145,10 +185,29 @@ export default function AdminRecordings() {
 
   const filteredRecordings = useMemo(() => {
     const keywords = searchTerm.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const DAY_MS = 24 * 60 * 60 * 1000;
 
     return recordings.filter((r) => {
+      if (r.status === "QcFailed") return false;
       const matchStatus = statusFilter === "all" || r.status === statusFilter;
       if (!matchStatus) return false;
+
+      const matchSpeaker = speakerFilter === "all" || (r.speaker && String(r.speaker).trim() === speakerFilter);
+      if (!matchSpeaker) return false;
+
+      if (timeFilter !== "all") {
+        if (!r.latestReviewedAt) return false;
+        const reviewedTime = new Date(r.latestReviewedAt).getTime();
+        if (Number.isNaN(reviewedTime)) return false;
+
+        if (timeFilter === "today" && reviewedTime < startOfToday) return false;
+        if (timeFilter === "3days" && reviewedTime < now.getTime() - 3 * DAY_MS) return false;
+        if (timeFilter === "7days" && reviewedTime < now.getTime() - 7 * DAY_MS) return false;
+        if (timeFilter === "30days" && reviewedTime < now.getTime() - 30 * DAY_MS) return false;
+        if (timeFilter === "3months" && reviewedTime < now.getTime() - 90 * DAY_MS) return false;
+      }
 
       if (keywords.length === 0) return true;
 
@@ -166,7 +225,7 @@ export default function AdminRecordings() {
 
       return keywords.every((kw) => combinedSearchableText.includes(kw));
     });
-  }, [recordings, searchTerm, statusFilter]);
+  }, [recordings, searchTerm, statusFilter, speakerFilter, timeFilter]);
 
   const totalPages = Math.ceil(filteredRecordings.length / pageSize) || 1;
   const paginatedRecordings = useMemo(() => {
@@ -265,6 +324,54 @@ export default function AdminRecordings() {
             <div className="flex items-center gap-2">
               <Filter className="w-4 h-4 text-[#6E7078] dark:text-gray-400 shrink-0" />
               <select
+                value={speakerFilter}
+                onChange={(e) => {
+                  setSpeakerFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-[165px] px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
+                onFocus={(e) => {
+                  e.target.style.borderColor = ADMIN_ACCENT;
+                  e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = '';
+                  e.target.style.boxShadow = 'none';
+                }}
+              >
+                <option value="all" className="bg-white dark:bg-[#25272E]">Tất cả speaker</option>
+                {speakerOptions.map((sp) => (
+                  <option key={sp} value={sp} className="bg-white dark:bg-[#25272E]">
+                    {sp}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={timeFilter}
+                onChange={(e) => {
+                  setTimeFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-[175px] px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
+                onFocus={(e) => {
+                  e.target.style.borderColor = ADMIN_ACCENT;
+                  e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = '';
+                  e.target.style.boxShadow = 'none';
+                }}
+              >
+                <option value="all" className="bg-white dark:bg-[#25272E]">Từ trước đến nay</option>
+                <option value="today" className="bg-white dark:bg-[#25272E]">Hôm nay</option>
+                <option value="3days" className="bg-white dark:bg-[#25272E]">3 ngày gần đây</option>
+                <option value="7days" className="bg-white dark:bg-[#25272E]">7 ngày gần đây</option>
+                <option value="30days" className="bg-white dark:bg-[#25272E]">1 tháng gần đây</option>
+                <option value="3months" className="bg-white dark:bg-[#25272E]">3 tháng gần đây</option>
+              </select>
+
+              <select
                 value={statusFilter}
                 onChange={(e) => {
                   setStatusFilter(e.target.value);
@@ -284,7 +391,6 @@ export default function AdminRecordings() {
                 <option value="Approved" className="bg-white dark:bg-[#25272E]">Đã duyệt</option>
                 <option value="Pending" className="bg-white dark:bg-[#25272E]">Chờ duyệt</option>
                 <option value="Rejected" className="bg-white dark:bg-[#25272E]">Từ chối</option>
-                <option value="QcFailed" className="bg-white dark:bg-[#25272E]">Lỗi chất lượng</option>
               </select>
             </div>
 
@@ -334,7 +440,7 @@ export default function AdminRecordings() {
             <thead>
               <tr className="bg-[#F7F5EF] dark:bg-[#25272E] type-label text-[#9A9CA3] dark:text-gray-400 border-b border-[#E5E2D8] dark:border-gray-800 h-8">
                 <th className="w-[60px] px-2 text-center font-label">STT</th>
-                <th className="w-[160px] px-2 font-label">Speaker</th>
+                <th className="w-[160px] px-2 font-label">Speaker / Thời gian</th>
                 <th className="w-[240px] px-2 font-label">Email</th>
                 <th className="px-4 text-left font-label">Nội dung</th>
                 <th className="w-[250px] px-2 font-label">Đoạn ghi âm</th>
@@ -357,6 +463,7 @@ export default function AdminRecordings() {
                     
                     const stStyle = styleOf(status);
                     const StatusIcon = stStyle.icon;
+                    const dateTimeParts = splitDateTime(r.latestReviewedAt);
 
                     return (
                       <tr key={r.id} className="hover:bg-[#F7F5EF]/70 dark:hover:bg-[#25272E]/50 transition-colors duration-150 h-14">
@@ -365,9 +472,16 @@ export default function AdminRecordings() {
                           {stt}
                         </td>
 
-                        {/* 2. SPEAKER (NẰM CẠNH STT) */}
-                        <td className="px-2 font-bold text-[#16171C] dark:text-gray-100 align-middle whitespace-nowrap truncate" title={r.speaker}>
-                          {r.speaker}
+                        {/* 2. SPEAKER / THỜI GIAN (NẰM CẠNH STT) */}
+                        <td className="px-2 align-middle whitespace-nowrap" title={r.speaker}>
+                          <p className="font-bold text-[#16171C] dark:text-gray-100 truncate">
+                            {r.speaker}
+                          </p>
+                          {dateTimeParts && (
+                            <p className="mt-0.5 type-meta text-[#9A9CA3] dark:text-gray-400">
+                              {dateTimeParts[0]} - {dateTimeParts[1]}
+                            </p>
+                          )}
                         </td>
 
                         {/* 3. EMAIL HIỂN THỊ ĐẦY ĐỦ (NẰM CẠNH SPEAKER) */}
@@ -456,7 +570,7 @@ export default function AdminRecordings() {
 
                   {Array.from({ length: emptyRowsCount }).map((_, idx) => (
                     <tr key={`empty-${idx}`} className="border-b border-transparent">
-                      <td colSpan={isSelectMode ? 7 : 6} className="py-0.5">&nbsp;</td>
+                      <td colSpan={isSelectMode ? 7 : 6} className="py-0.5"> </td>
                     </tr>
                   ))}
                 </>
