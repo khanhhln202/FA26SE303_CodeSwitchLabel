@@ -15,6 +15,7 @@ public record UserListItemDto(
 public record SpeakerProfileDto(
     short? BirthYear,
     string? Province,
+    SpeakerRegion? Region,
     decimal? EnglishLevel,
     Occupation? Occupation,
     Gender? Gender,
@@ -143,6 +144,9 @@ public record UpdateSpeakerProfileRequest
 
     [StringLength(100)]
     public string? Province { get; init; }
+
+    /// <summary>Vùng miền giọng nói. Để trống nghĩa là chưa cập nhật, không phải sai.</summary>
+    public SpeakerRegion? Region { get; init; }
 
     /// <summary>Điểm IELTS quy đổi, từ 0.0 đến 9.0.</summary>
     [Range(typeof(decimal), "0.0", "9.0", ErrorMessage = "Trình độ tiếng Anh phải từ 0.0 đến 9.0 (thang IELTS).")]

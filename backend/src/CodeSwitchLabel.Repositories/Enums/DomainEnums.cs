@@ -16,6 +16,18 @@ public enum Occupation { Student, Employed, Other }
 /// <summary>Không bắt buộc: hồ sơ cũ chưa có thì để null.</summary>
 public enum Gender { Male, Female, Other }
 
+/// <summary>
+/// Vùng miền giọng nói của người đọc. Ba mức là cách chia chuẩn cho dữ liệu giọng nói
+/// tiếng Việt, và là thứ các bộ ASR tiếng Việt thường ghi kèm.
+///
+/// <para>
+/// CỐ Ý độc lập với <c>Province</c>: cột đó là văn bản tự do, không ràng buộc, và dữ
+/// liệu thật đã lệch nhau ("TP. Hồ Chí Minh" và "Thành phố Hồ Chí Minh" là hai giá trị
+/// khác nhau), nên gom nhóm theo nó không đáng tin.
+/// </para>
+/// </summary>
+public enum SpeakerRegion { North, Central, South }
+
 public enum ConfigValueType { Int, Bool, String }
 
 public enum AuditAction { Create, Update, Delete, Import, Export, Assign, Release, Login }
