@@ -95,7 +95,8 @@ public class AdminRecordingService(
                 await SignAsync(cs, ct),
                 await SignAsync(vi, ct),
                 cs?.DurationSec ?? vi?.DurationSec ?? 0,
-                takes.Sum(r => r.DurationSec),
+                // Tổng thời lượng của CẶP hiện tại: chỉ hai take mới nhất, không cộng take đã bị thay.
+                (cs?.DurationSec ?? 0) + (vi?.DurationSec ?? 0),
                 ReviewRules.PairOutcome(csStatus, viStatus),
                 csStatus,
                 viStatus,

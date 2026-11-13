@@ -74,10 +74,20 @@ public interface IScriptRepository
     void Add(Script script);
     void AddReview(ScriptReview review);
     void AddBatch(ImportBatch batch);
+    void UpdateBatch(ImportBatch batch);
     void RemoveBatch(ImportBatch batch);
     void Remove(Script script);
     void AddWords(IEnumerable<ScriptWord> words);
     void RemoveWords(IEnumerable<ScriptWord> words);
+
+    /// <summary>
+    /// Ghi lượt duyệt Accepted của người nhập cho từng câu rồi chốt Validated.
+    /// Tách hai lần lưu vì trigger trg_script_validated_domain đòi lượt duyệt nằm sẵn
+    /// trong database trước khi status đổi.
+    /// </summary>
+    Task AutoValidateAsync(
+        IReadOnlyList<string> scriptIds, long reviewerId, DateTimeOffset reviewedAt,
+        CancellationToken ct = default);
 
     /// <summary>
     /// Xoá các bảng con của câu không có ON DELETE CASCADE: script_review, script_proposal
@@ -280,11 +290,33 @@ public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
     public void Add(Script script) => db.Scripts.Add(script);
     public void AddReview(ScriptReview review) => db.ScriptReviews.Add(review);
     public void AddBatch(ImportBatch batch) => db.ImportBatches.Add(batch);
+    public void UpdateBatch(ImportBatch batch) => db.ImportBatches.Update(batch);
     public void RemoveBatch(ImportBatch batch) => db.ImportBatches.Remove(batch);
     public void Remove(Script script) => db.Scripts.Remove(script);
     public void AddWords(IEnumerable<ScriptWord> words) => db.ScriptWords.AddRange(words);
     public void RemoveWords(IEnumerable<ScriptWord> words) => db.ScriptWords.RemoveRange(words);
     public void ClearTracked() => db.ChangeTracker.Clear();
+
+    public async Task AutoValidateAsync(
+        IReadOnlyList<string> scriptIds, long reviewerId, DateTimeOffset reviewedAt,
+        CancellationToken ct = default)
+    {
+        if (scriptIds.Count == 0) return;
+
+        db.ScriptReviews.AddRange(scriptIds.Select(id => new ScriptReview
+        {
+            ScriptId = id,
+            UserId = reviewerId,
+            Action = ScriptReviewAction.Accepted,
+            Comment = "Tự động duyệt khi Admin nhập câu.",
+            ReviewedAt = reviewedAt
+        }));
+        await db.SaveChangesAsync(ct);
+
+        await db.Scripts
+            .Where(s => scriptIds.Contains(s.ScriptId) && s.Status == ScriptStatus.PendingValidation)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, ScriptStatus.Validated), ct);
+    }
 
     public async Task DeleteRelatedAsync(string scriptId, CancellationToken ct = default)
     {

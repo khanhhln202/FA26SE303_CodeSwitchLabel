@@ -5,15 +5,16 @@
 #
 #     ./deploy/deploy.sh
 #
-# Thứ tự cố định: kiểm tra trước -> sao lưu -> kéo code -> migration -> dựng
-# lại container -> kiểm tra. Không bước nào tự ý đụng dữ liệu thật nếu bước
-# trước chưa thành công.
+# Thứ tự: kiểm tra trước -> sao lưu -> kéo code -> nếu có migration mới thì
+# dựng image, dừng API, sao lưu database lần nữa -> áp migration -> dựng lại
+# container -> kiểm tra. Không bước nào tự ý đụng dữ liệu thật nếu bước trước
+# chưa thành công.
 #
-# GIẢ ĐỊNH QUAN TRỌNG: migration phải TƯƠNG THÍCH NGƯỢC với code đang chạy
-# (kiểu expand/contract — thêm cột/bảng mới, chưa xoá cái cũ). Vì vậy mới áp
-# migration TRƯỚC khi dựng lại container: code cũ vẫn chạy được với lược đồ
-# mới. Migration phá vỡ tương thích (xoá cột, đổi kiểu) thì phải làm ngược
-# lại — dựng container trước, migration sau — và sửa thứ tự trong file này.
+# MIGRATION VÀ API KHÔNG CHẠY CÙNG LÚC: migration xoá cột/đổi kiểu (như V27 bỏ
+# enum script_domain) làm code cũ hỏng ngay khi commit. Vì vậy khi có file
+# migration mới, script dựng image trước (API cũ vẫn phục vụ), dừng API, rồi
+# mới áp migration. Không cần viết migration theo kiểu expand/contract qua
+# nhiều lần deploy; đổi lại có downtime ngắn mỗi lần có migration.
 #
 # Script KHÔNG BAO GIỜ tự phục hồi database. Phục hồi từ bản sao lưu tạo
 # vài phút trước sẽ xoá mất dữ liệu thật ghi trong khoảng đó. Khi hỏng, script
@@ -51,17 +52,19 @@ print_rollback() {
 1. Loi LUC DANG CHAY API (container moi khong len):
      docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env logs --tail 100 api
 
-2. Lùi code về bản trước, rồi dựng lại:
+2. Neu migration da commit ma API moi khong len: phuc hoi database tu ban
+   pre-migration (tao luc API da dung, nen khong mat du lieu da ghi), ROI MOI
+   lui code — code cu KHONG chay duoc voi schema moi:
+     ls -lh $BACKUP_DIR
+     gunzip -c $BACKUP_DIR/pre-migration-<...>.sql.gz | docker exec -i csl-postgres psql -U $PG_USER -d $PG_DB -v ON_ERROR_STOP=1
      git checkout ${OLD_SHA:-<sha cu>}
      docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build
      git checkout main && git reset --hard origin/main
-   Chi an toan khi migration da ap tuong thich nguoc. V22 doi campaign->wave:
-   code truoc V22 KHONG chay duoc voi schema hien tai.
 
-3. CHỈ khi migration đã chạy và dữ liệu hỏng, mới phục hồi database
-   (LÀM MẤT DỮ LIỆU GHI SAU THỜI ĐIỂM SAO LƯU):
+3. Neu khong co file pre-migration (script dung truoc buoc do), dung
+   backup-<...>.sql.gz. Ban nay cu hon — LAM MAT du lieu ghi sau thoi diem
+   sao luu:
      ls -lh $BACKUP_DIR
-     gunzip -c <file>.sql.gz | docker exec -i csl-postgres psql -U $PG_USER -d $PG_DB -v ON_ERROR_STOP=1
 
 4. Neu MinIO dang dung (sau backup that bai):
      docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env start minio
@@ -69,14 +72,25 @@ print_rollback() {
 ROLLBACK
 }
 
+# API da dung nhung chua migration nao commit: luoc do van la ban cu, bat lai
+# container cu la an toan. Khong dung toi database.
+restart_old_api() {
+  if [ "${API_STOPPED:-0}" = 1 ] && [ "${SCHEMA_CHANGED:-0}" -eq 0 ]; then
+    warn "Chua migration nao commit — bat lai API cu."
+    "${COMPOSE[@]}" start api >/dev/null 2>&1 \
+      || warn "Khong bat lai duoc API cu. Xem muc 1 ben duoi."
+  fi
+}
+
 # `die` tự thoát nên KHÔNG kích hoạt trap ERR — phải in lệnh hoàn tác ở đây,
 # nếu không thì hỏng ở bước kiểm tra API sẽ không có hướng dẫn nào.
-die()  { printf '\033[1;31m[DUNG] %s\033[0m\n' "$*" >&2; print_rollback; exit 1; }
+die()  { printf '\033[1;31m[DUNG] %s\033[0m\n' "$*" >&2; restart_old_api; print_rollback; exit 1; }
 
 # Lỗi bất kỳ của lệnh -> in lệnh hoàn tác rồi dừng. Không tự phục hồi.
 on_error() {
   local code=$?
   printf '\n\033[1;31m[LOI] Deploy dung giua chung (buoc %s).\033[0m\n' "${STEP:-?}" >&2
+  restart_old_api
   print_rollback
   exit "$code"
 }
@@ -193,6 +207,9 @@ NEW_SHA="$(git rev-parse HEAD)"
 
 # -----------------------------------------------------------------------------
 # 4. MIGRATION — chỉ chạy file chưa có trong sổ schema_migration
+#
+# Khi có file mới: dựng image trước (API cũ vẫn phục vụ), dừng API, sao lưu
+# database lần nữa, rồi mới áp. Code cũ không bao giờ chạy trên lược đồ mới.
 # -----------------------------------------------------------------------------
 STEP="migration"
 
@@ -208,9 +225,10 @@ CREATE TABLE IF NOT EXISTS schema_migration (
 );
 SQL
 
-APPLIED_COUNT=0
+# Tìm file chưa áp trước khi quyết định dừng API. File __verify_ là kiểm
+# chứng, KHÔNG chạy lại.
+pending_files=()
 if [ -d "$MIGRATIONS_DIR" ]; then
-  # File dang tên V<n>__<ten>.sql. File __verify_ là kiem chung, KHONG chay lai.
   # Dung mang + for, KHONG `while read < <(...)`: psql trong vong lap doc stdin
   # va nuot mat danh sach file con lai (da lam sot V18/V19/V20 ngay 27-28/10).
   mapfile -t migration_files < <(printf '%s\n' "$MIGRATIONS_DIR"/V*.sql | sort -V)
@@ -231,19 +249,64 @@ if [ -d "$MIGRATIONS_DIR" ]; then
       fi
       continue
     fi
-
-    say "Ap migration $version ($base)"
-    t0="$(date +%s%3N)"
-    # File migration tu viet BEGIN/COMMIT nen psql o -v ON_ERROR_STOP=1 thi
-    # fail -> rollback toan bo thay doi cua file do.
-    docker exec -i csl-postgres psql -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 < "$f"
-    t1="$(date +%s%3N)"
-    # Chi ghi vao sổ khi migration đã xong. Fail o tren -> trap ERR -> dung,
-    # va file do se chay lai o lan deploy sau.
-    psql_q -c "INSERT INTO schema_migration (version, checksum, duration_ms) VALUES ('$version', '$sum', $((t1 - t0)))"
-    APPLIED_COUNT=$((APPLIED_COUNT + 1))
+    pending_files+=("$f")
   done
 fi
+
+# Script đang chạy là bản bash đã nạp TRƯỚC `git pull`. Nếu chính deploy.sh
+# vừa đổi trong lần kéo này thì nó không chạy logic mới. Code mới đã nằm
+# trên đĩa, nên dừng và yêu cầu chạy lại thay vì áp migration bằng logic cũ.
+if [ "${#pending_files[@]}" -gt 0 ] && [ "$NEW_SHA" != "$OLD_SHA" ] \
+   && ! git diff --quiet "$OLD_SHA" "$NEW_SHA" -- deploy/deploy.sh; then
+  warn "Lần kéo này vừa đổi deploy/deploy.sh vừa có migration mới."
+  warn "Tiến trình bash đang chạy vẫn là bản CŨ (nạp trước git pull)."
+  warn "Chạy lại ./deploy/deploy.sh để dùng logic mới — lúc đó migration mới được áp an toàn."
+  exit 1
+fi
+
+if [ "${#pending_files[@]}" -gt 0 ]; then
+  say "Có ${#pending_files[@]} migration mới -> dựng image, dừng API, rồi mới áp"
+
+  STEP="dung image"
+  # Dựng trước khi dừng: build hỏng thì API cũ vẫn đang phục vụ, chưa đụng gì.
+  "${COMPOSE[@]}" build
+
+  STEP="dung API"
+  API_STOPPED=1
+  "${COMPOSE[@]}" stop -t 30 api >/dev/null
+
+  # Sao lưu lúc API đã dừng: phục hồi điểm này không mất dữ liệu người dùng
+  # đã ghi. Bản sao lưu lúc đầu được tạo trước khi build nên có thể cũ vài phút.
+  STEP="sao luu migration"
+  say "Sao lưu database trước migration -> $BACKUP_DIR/pre-migration-$STAMP.sql.gz"
+  docker exec csl-postgres pg_dump -U "$PG_USER" "$PG_DB" | gzip > "$BACKUP_DIR/pre-migration-$STAMP.sql.gz"
+  gzip -t "$BACKUP_DIR/pre-migration-$STAMP.sql.gz" \
+    || die "Bản sao lưu trước migration hỏng. KHÔNG áp migration."
+  [ -s "$BACKUP_DIR/pre-migration-$STAMP.sql.gz" ] \
+    || die "Bản sao lưu trước migration rỗng. KHÔNG áp migration."
+
+  STEP="migration"
+fi
+
+SCHEMA_CHANGED=0
+APPLIED_COUNT=0
+for f in "${pending_files[@]}"; do
+  base="$(basename "$f")"
+  version="${base%%__*}"
+  sum="$(sha256sum "$f" | cut -d' ' -f1)"
+
+  say "Ap migration $version ($base)"
+  t0="$(date +%s%3N)"
+  # File migration tu viet BEGIN/COMMIT nen psql o -v ON_ERROR_STOP=1 thi
+  # fail -> rollback toan bo thay doi cua file do.
+  docker exec -i csl-postgres psql -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=1 < "$f"
+  SCHEMA_CHANGED=1
+  t1="$(date +%s%3N)"
+  # Chi ghi vao sổ khi migration đã xong. Fail o tren -> trap ERR -> dung,
+  # va file do se chay lai o lan deploy sau.
+  psql_q -c "INSERT INTO schema_migration (version, checksum, duration_ms) VALUES ('$version', '$sum', $((t1 - t0)))"
+  APPLIED_COUNT=$((APPLIED_COUNT + 1))
+done
 [ "$APPLIED_COUNT" -gt 0 ] && say "Da ap $APPLIED_COUNT migration." || say "Khong co migration moi."
 
 # -----------------------------------------------------------------------------

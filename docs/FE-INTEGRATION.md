@@ -39,6 +39,12 @@ màn hình nào gọi API nào theo thứ tự nào, cách xử lý đăng nhậ
 > kèm trường `Domain`, LLM gán nhãn `[vi]`/`[en]` khi có cấu hình, không có thì gán nhãn bằng luật);
 > thêm `POST /api/datasets/export` tải ZIP trực tiếp theo `recordingIds` / `speakerIds` / `waveId`.
 > Xem mục 3 (mã lỗi) và mục 4 (Admin).
+>
+> Cập nhật 12/11/2026 — câu Admin **thêm tay** (`POST /api/scripts`) và **nhập file**
+> (`POST /api/scripts/import`, cả JSON lẫn `.txt`) vào thẳng **`Validated`** kèm một lượt duyệt
+> `Accepted` tự động của chính Admin; không còn chờ Reviewer. Admin sửa được cả câu
+> `PendingValidation` lẫn `Validated` (trạng thái giữ nguyên), và xoá cứng được cả hai khi chưa
+> có bản ghi âm. Xem mục 4 (Admin).
 
 ---
 
@@ -359,7 +365,7 @@ Lỗi hệ thống trả 500 với `code: "internal_error"`. Gặp lỗi này th
 | `already_registered` | 409 | Đăng ký đợt đã đăng ký rồi | Hiện `title`, không làm gì thêm |
 | `registration_not_found` | 404 | Huỷ đăng ký đợt chưa đăng ký | Tải lại trạng thái đăng ký |
 | `script_not_restorable` | 409 | Khôi phục câu đang dùng được | Ẩn nút khôi phục khi `status` là `PendingValidation`/`Validated` |
-| `script_not_pending` / `script_not_deactivatable` | 409 | Xoá cứng câu không còn chờ duyệt, hoặc ngừng dùng câu đã ở trạng thái khác | Ẩn nút xoá/ngừng dùng theo `status` |
+| `script_not_pending` / `script_not_deactivatable` | 409 | Xoá cứng câu đã bị loại/ngừng dùng, hoặc ngừng dùng câu đã ở trạng thái khác | Ẩn nút xoá/ngừng dùng theo `status` |
 | `dataset_exists` | 409 | Tạo dataset trùng tên + phiên bản | Hiện lỗi cạnh ô tên/phiên bản |
 | `dataset_not_found` | 404 | Dataset không tồn tại | Tải lại danh sách |
 | `dataset_not_releasable` / `dataset_not_released` | 409 | Thao tác sai trạng thái dataset | Ẩn nút theo `status` |
@@ -822,10 +828,11 @@ Speaker được thu cùng một cặp. `POST /api/tasks/{id}/items` chỉ bỏ 
 
 | Màn hình | API |
 |---|---|
-| Nhập kho câu từ file | `POST /api/scripts/import` — multipart. `File` là JSON theo mẫu `docs/Requirement.txt`, hoặc `.txt` (chi tiết bên dưới) kèm trường `Domain` |
+| Nhập kho câu từ file | `POST /api/scripts/import` — multipart. `File` là JSON theo mẫu `docs/Requirement.txt`, hoặc `.txt` (chi tiết bên dưới) kèm trường `Domain`. Câu vào thẳng `Validated` kèm lượt duyệt `Accepted` tự động của chính Admin |
 | Thêm một cặp câu | `POST /api/scripts` — body như phần đóng góp câu. Câu vào thẳng `Validated` kèm một lượt duyệt `Accepted` tự động của chính Admin |
 | Kho câu | `GET /api/scripts` — lọc tuỳ chọn: `status`, `domain`, `keyword`, `page`, `pageSize`. Chi tiết: `GET /api/scripts/{id}` |
-| Xoá cứng câu chờ duyệt | `DELETE /api/scripts/{id}` — chỉ `PendingValidation`; `409 script_not_pending` nếu đã duyệt, `409 script_already_recorded` nếu đã có bản ghi âm |
+| Sửa nội dung câu | `PUT /api/scripts/{id}` — nhận `PendingValidation` và `Validated`; sửa bao nhiêu lần cũng được, trạng thái giữ nguyên. `409 script_not_pending` nếu câu đã loại/ngừng dùng, `409 script_already_recorded` nếu đã có bản ghi âm |
+| Xoá cứng câu | `DELETE /api/scripts/{id}` — nhận `PendingValidation` và `Validated`; `409 script_not_pending` nếu đã loại/ngừng dùng, `409 script_already_recorded` nếu đã có bản ghi âm |
 | Ngừng dùng câu (xoá mềm) | `POST /api/scripts/{id}/deactivate` — `PendingValidation`/`Validated` → `Deactivated`; chặn nếu đã có bản ghi âm |
 | Khôi phục câu đã loại/ngừng dùng | `POST /api/scripts/{id}/reactivate` — `Rejected`/`Deactivated` về `PendingValidation` |
 | Dataset | `POST /api/datasets` (gom bản duyệt đạt theo `recordingIds` và/hoặc `waveIds`), `GET /api/datasets`, `GET /api/datasets/{id}` (kèm `missingPairs`), `POST /api/datasets/{id}/release`, `POST /api/datasets/{id}/archive`, `GET /api/datasets/{id}/download` (ZIP `manifest.json` + `metadata.csv` + `audio/{recordingId}.wav`; `?includeAudio=false` để chỉ lấy metadata, vẫn kèm link nghe 15 phút) |
@@ -847,7 +854,7 @@ Kết quả nhập file có `imported`, `scriptIds` và `skipped` (kèm lý do t
 - Mỗi câu phải kết thúc bằng **dấu chấm**; tối đa **100 cặp** mỗi file (`422 invalid_text_format` khi sai, `422 import_too_large` khi vượt).
 - Gửi kèm trường form `Domain`: `IT/Technology`, `Education` hoặc `Daily Life` (cùng danh mục với `GET /api/config/topics`). Thiếu trường này → `422 domain_required`.
 - Không cần tự gán nhãn trong file. Có cấu hình `Llm:Endpoint`/`Model` thì backend gọi LLM để chèn nhãn `[vi]`/`[en]` và sinh `alignment`; LLM lỗi hoặc trả kết quả không đọc được thì lùi về luật. Luật gán nhãn: từ ASCII là tiếng Việt khi là hư từ quen thuộc hoặc có trong từ điển âm tiết Việt không dấu và cũng xuất hiện trong câu thuần Việt; nghĩa lấy bằng cách đối chiếu các từ chung của hai câu, đoạn giữa hai mốc là nghĩa (có thể nhiều từ, ví dụ `email` → `thư điện tử`); đoạn không đối chiếu được lấy theo vị trí, hết từ thì `target` để trống cho người duyệt điền.
-- Một cặp gán nhãn lỗi vào `skipped` với `id = pair-N`: luật lỗi có mã `invalid_text_format`/`invalid_language_tags`; các cặp còn lại vẫn nhập. File `.txt` cũng đi qua đúng luật import JSON: kiểm chủ đề Admin, chống trùng, câu vào `PendingValidation`.
+- Một cặp gán nhãn lỗi vào `skipped` với `id = pair-N`: luật lỗi có mã `invalid_text_format`/`invalid_language_tags`; các cặp còn lại vẫn nhập. File `.txt` cũng đi qua đúng luật import JSON: chống trùng, câu vào thẳng `Validated`.
 
 **Cấu trúc ZIP của `POST /api/datasets/export`** — mỗi cặp một thư mục, ngày theo múi giờ Bangkok:
 
@@ -863,14 +870,8 @@ speaker_{speakerId}_{yyyy-MM-dd_HHmmss}/
 - Tên ZIP theo phạm vi: `recordings-…zip`, `speakers-…zip`, `wave-{waveId}-…zip`.
 - Chỉ tải được khi bản ghi đã `Approved`; dữ liệu chưa duyệt hoặc thiếu một bản của cặp không xuất hiện trong ZIP.
 
-> **Nhập file và thêm câu tay đòi Admin được phân đúng chủ đề.** Câu Admin đưa vào hệ thống được duyệt sẵn,
-> nên backend kiểm trước: Admin phải có **mọi chủ đề xuất hiện trong file**, nếu không **cả lần nhập bị từ chối**
-> bằng **422 `reviewer_domain_required`** — không phải bỏ qua từng câu. Màn hình nhập file nên hiện lỗi này ở
-> mức toàn file và chỉ sang trang phân chủ đề.
->
-> Lưu ý ngược đời đáng biết: `GET /api/users/{id}/domains` **luôn trả `[]` cho tài khoản không phải Reviewer**,
-> kể cả khi tài khoản đó thật sự có chủ đề trong database. Vì vậy đừng dùng endpoint này để đoán Admin nhập
-> được file hay không.
+> **Admin không cần được phân chủ đề để nhập câu.** Câu Admin thêm tay hoặc nhập file được duyệt sẵn
+> bằng chính lượt duyệt `Accepted` của Admin. Việc phân chủ đề chỉ cần cho Reviewer duyệt câu đóng góp.
 
 **Chiến dịch** — Admin và Task Manager cùng tạo/sửa/xoá được; **riêng bước giao là của Admin**
 
@@ -1064,9 +1065,8 @@ cá nhân, không dùng `wave.targetQty`; số đã nộp vẫn là số thật 
 | `POST /api/recordings/{id}/reject-audio` | Reviewer | Nút **Chỉ xóa audio** |
 | `POST /api/recordings/{id}/discard-pair` | Reviewer | Nút **Xóa hoàn toàn** |
 
-**Hệ quả cần biết:** câu nhập từ file giờ **vào hàng đợi chờ duyệt**, không còn tự
-động `validated`. Màn hình sau khi import phải có bước "duyệt câu" thật, nếu không sẽ
-tưởng đã nhập xong là dùng được.
+**Hệ quả cần biết:** câu Speaker đóng góp vẫn **vào hàng đợi chờ duyệt**; câu Admin thêm tay hoặc
+nhập file vào thẳng `Validated`. Màn hình sau khi Admin import không cần bước "duyệt câu" nữa.
 
 ### 8.6 Hai nút xử lý bản ghi mới
 
@@ -1114,7 +1114,7 @@ Ai đã code theo bản API trước ngày 22/09/2026 thì cần sửa:
 | Không có nút gỡ người khỏi task | TEAM_010: `DELETE /api/tasks/{id}/assign/{userId}` |
 | `assigneeId` / `assigneeName` (một người) | TEAM_010: `assignees[]` — một task có nhiều người nhận, mỗi người kèm `targetQty` |
 | Tiến độ Speaker một bộ số | TEAM_010: `myProgress` + `teamProgress`; `myProgress.targetQty` là quota cá nhân, `teamProgress.targetQty` là chỉ tiêu task |
-| Câu nhập từ file tự `validated` | **vào hàng đợi chờ duyệt** như mọi câu khác |
+| Câu nhập từ file tự `validated` | Vào thẳng `Validated`, kèm lượt duyệt `Accepted` tự động của Admin. Admin vẫn sửa/xoá được về sau |
 | Chỉ có 2 nút duyệt bản ghi | TEAM_010: thêm `reject-audio` và `discard-pair` |
 | Không có endpoint lấy câu chờ duyệt nội dung | TEAM_010: `GET /api/reviewer/scripts/next` |
 | — | Mới: nhập file `POST /api/scripts/import`, và nhóm thống kê `/api/admin/*` |
@@ -1122,7 +1122,7 @@ Ai đã code theo bản API trước ngày 22/09/2026 thì cần sửa:
 | `PUT /api/me/password` trả 204 | Trả **200 kèm token mới** — thay token đang lưu |
 | Token cấp trước bản cập nhật này | Hết hiệu lực — đăng nhập lại một lần |
 | `POST /api/tasks` không cần chiến dịch | Từng bắt buộc **`waveId`** — nay **không bắt buộc** nữa: thiếu/`null` là task độc lập, gắn sau bằng `PATCH /api/tasks/{id}/wave`. Chiến dịch (khi có) vẫn phải được Admin giao cho đúng Task Manager đó |
-| Nhập file và thêm câu tay không kiểm chủ đề | Vẫn vào `Validated`, nhưng Admin phải có đúng chủ đề của câu; nhập file thiếu chủ đề là **cả lần nhập** trả 422 `reviewer_domain_required` |
+| Nhập file và thêm câu tay đòi Admin đúng chủ đề | Không còn đòi: câu vào thẳng `Validated` bằng lượt duyệt tự động của chính Admin |
 | File nhập câu chỉ nhận JSON | Nhận thêm **`.txt`** mỗi cặp đúng hai dòng kèm trường `Domain`; LLM gán nhãn `[vi]`/`[en]` khi có cấu hình, không có thì gán nhãn bằng luật, tối đa 100 cặp, lỗi từng cặp vào `skipped` |
 | Chưa có cách tải thẳng dữ liệu đã duyệt | `POST /api/datasets/export` — ZIP theo `recordingIds` / `speakerIds` / `waveId`, không cần tạo dataset; chỉ gồm cặp `Approved` đủ cs+vi |
 | Ai duyệt câu cũng chốt được sang `Validated` | Chỉ **Reviewer được phân đúng chủ đề**; Speaker và Admin nhận 422 `reviewer_domain_required` |

@@ -8,7 +8,7 @@ namespace CodeSwitchLabel.Tests.Integration;
 /// <summary>
 /// Vòng đời câu văn bản phía Admin:
 ///
-///   DELETE /api/scripts/{id}              xoá cứng câu đang chờ duyệt
+///   DELETE /api/scripts/{id}              xoá cứng câu chưa có bản ghi âm (chờ duyệt hoặc đã sẵn sàng)
 ///   POST   /api/scripts/{id}/deactivate   xoá mềm → Deactivated
 ///   POST   /api/scripts/{id}/reactivate   Deactivated/Rejected → PendingValidation
 ///
@@ -35,15 +35,18 @@ public sealed class ScriptLifecycleApiTests(DatabaseFixture fixture) : ApiTestBa
     }
 
     [Fact]
-    public async Task Admin_XoaCauDaDuyet_TraVe409()
+    public async Task Admin_XoaCauDaDuyet_CauBienMat()
     {
         var admin = await GetAdminTokenAsync();
         var scriptId = await TaoCauDaDuyetAsync(admin);
 
         var response = await DeleteAsync($"/api/scripts/{scriptId}", admin);
 
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-        Assert.Equal("script_not_pending", await LayTruongAsync(response, "code"));
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        using var client = CreateAuthenticatedClient(admin);
+        var get = await client.GetAsync($"/api/scripts/{scriptId}", TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.NotFound, get.StatusCode);
     }
 
     [Fact]

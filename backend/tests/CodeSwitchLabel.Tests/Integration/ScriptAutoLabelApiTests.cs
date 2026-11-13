@@ -17,14 +17,14 @@ public sealed class ScriptAutoLabelApiTests(DatabaseFixture fixture) : ApiTestBa
     [Fact]
     public async Task AutoLabel_TraVeCauDaGanNhanVaAlignment()
     {
-        var speaker = await GetSpeakerTokenAsync();
+        var admin = await GetAdminTokenAsync();
         var suffix = Random.Shared.Next(100_000, 999_999);
 
         var response = await PostAsync("/api/scripts/auto-label", new
         {
             csRaw = $"Em nên scan tài liệu số {suffix} này.",
             viRaw = $"Em nên quét tài liệu số {suffix} này."
-        }, speaker);
+        }, admin);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
@@ -37,6 +37,20 @@ public sealed class ScriptAutoLabelApiTests(DatabaseFixture fixture) : ApiTestBa
         var item = body.GetProperty("alignment").EnumerateArray().Single();
         Assert.Equal("scan", item.GetProperty("source").GetString());
         Assert.Equal("quét", item.GetProperty("target").GetString());
+    }
+
+    [Fact]
+    public async Task AutoLabel_Speaker_Tra403()
+    {
+        var speaker = await GetSpeakerTokenAsync();
+
+        var response = await PostAsync("/api/scripts/auto-label", new
+        {
+            csRaw = "Em nên scan tài liệu này.",
+            viRaw = "Em nên quét tài liệu này."
+        }, speaker);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
     [Fact]

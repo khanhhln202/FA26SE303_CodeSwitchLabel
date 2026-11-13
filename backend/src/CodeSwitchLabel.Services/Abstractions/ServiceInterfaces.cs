@@ -23,8 +23,8 @@ public interface IScriptService
     Task<ScriptDetailDto> ContributeAsync(CreateScriptRequest request, long contributorId, CancellationToken ct = default);
 
     /// <summary>
-    /// Admin sửa nội dung một cặp câu đang CHỜ DUYỆT, không ghi lượt duyệt nào nên câu
-    /// vẫn ở Chờ duyệt và sửa tiếp được. Câu đã duyệt thì không dùng đường này.
+    /// Admin sửa nội dung một cặp câu đang chờ duyệt hoặc đã sẵn sàng, không ghi lượt duyệt
+    /// và không đổi trạng thái. Câu đã có bản ghi âm thì không sửa được.
     /// </summary>
     Task<ScriptDetailDto> UpdatePendingAsync(
         string scriptId, UpdateScriptContentRequest request, CancellationToken ct = default);
@@ -37,6 +37,7 @@ public interface IScriptService
     /// Nhập file .txt: mỗi cặp đúng hai dòng (câu trộn, câu thuần Việt).
     /// Có LLM thì gán nhãn và nghĩa từ; chưa cấu hình LLM thì gán nhãn bằng luật: từ chung
     /// của hai câu làm mốc, đoạn giữa hai mốc là nghĩa (có thể nhiều từ); hết từ thì để trống.
+    /// Câu hợp lệ vào thẳng đã duyệt như luồng import JSON.
     /// </summary>
     Task<ImportResultDto> ImportRawAsync(
         Stream textFile, string fileName, long importedById, string domain,
@@ -61,7 +62,7 @@ public interface IScriptService
         string scriptId, long userId, ReviewScriptRequest request, CancellationToken ct = default);
 
     /// <summary>
-    /// Xoá CỨNG một câu đang chờ duyệt. Chặn nếu câu đã duyệt hoặc đã có bản ghi âm —
+    /// Xoá CỨNG một câu đang chờ duyệt hoặc đã sẵn sàng. Chặn nếu đã có bản ghi âm —
     /// câu đã thu phải dùng đường xoá mềm/discard-pair để không làm mồ côi audio.
     /// </summary>
     Task DeletePendingAsync(string scriptId, CancellationToken ct = default);

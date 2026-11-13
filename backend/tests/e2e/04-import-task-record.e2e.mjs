@@ -86,10 +86,9 @@ console.log('║  API: ' + BASE.padEnd(69) + '║');
 console.log('╚' + '═'.repeat(76) + '╝');
 
 const admin = await dangNhap('admin');
-const reviewer = await dangNhap('reviewer');
 const manager = await dangNhap('manager');
 const speaker = await dangNhap('speaker1');
-console.log(`\n  Đăng nhập xong: admin #${admin.userId} · reviewer #${reviewer.userId} · manager #${manager.userId} · speaker #${speaker.userId}`);
+console.log(`\n  Đăng nhập xong: admin #${admin.userId} · manager #${manager.userId} · speaker #${speaker.userId}`);
 
 // ============================================================ MÀN 1 · NHẬP CÂU
 man('MÀN 1 · NHẬP CÂU TỪ FILE JSON  (Admin)');
@@ -149,19 +148,16 @@ sql('Hai câu vừa nhập, đọc thẳng từ bảng script',
 sql('Lô nhập vừa tạo — hệ thống ghi lại ai nhập, lúc nào, bao nhiêu câu',
   'select batch_id, file_name, script_count, imported_by from import_batch order by batch_id desc limit 1;');
 
-// ====================================================== MÀN 2 · DUYỆT CÂU
-man('MÀN 2 · DUYỆT CÂU  (Reviewer) — bắt buộc trước khi giao việc');
-console.log('  Câu mới nhập ở trạng thái PendingValidation. Chỉ câu đã duyệt (Validated) mới được');
-console.log('  đưa vào task và thu âm — nên phải qua bước này.\n');
+// ====================================================== MÀN 2 · KIỂM TRA KẾT QUẢ
+man('MÀN 2 · KIỂM TRA KẾT QUẢ — câu Admin nhập vào thẳng Sẵn sàng, không chờ duyệt');
+console.log('  Admin nhập file xong là câu ở Validated kèm lượt duyệt Accepted tự động,');
+console.log('  nên đưa vào task và thu âm được ngay.\n');
 
-for (let i = 0; i < maCau.length; i++) {
-  B(`2.${i + 1}`, 'reviewer', 'POST', `/api/scripts/${maCau[i]}/review`,
-    await goi(reviewer.token, 'POST', `/api/scripts/${maCau[i]}/review`,
-      { action: 'Accepted', comment: 'Câu tự nhiên, đúng kiểu nói hằng ngày' }), 200,
-    (b) => ({ trangThai: b.status ?? b.summary?.status }));
-}
+B('2.1', 'admin', 'GET', `/api/scripts/${maCau[0]}`,
+  await goi(admin.token, 'GET', `/api/scripts/${maCau[0]}`), 200,
+  (b) => ({ trangThai: b.status, soLuotDuyet: b.reviews?.length }));
 
-sql('Trạng thái hai câu sau khi duyệt',
+sql('Trạng thái hai câu sau khi nhập',
   `select script_id, status from script where script_id in ('${maCau.join("','")}');`);
 
 // ====================================================== MÀN 3 · PHÂN TASK
@@ -261,7 +257,7 @@ console.log('═'.repeat(78));
 console.log(`
   Đã chứng minh:
     1. NHẬP CÂU   — file JSON vào, ${maCau.length} cặp câu nằm trong bảng script, có lô nhập ghi lại nguồn gốc
-    2. DUYỆT CÂU  — chỉ người duyệt đúng chủ đề mới đưa câu sang Validated
+    2. KIỂM TRA    — câu nhập xong ở Validated kèm lượt duyệt Accepted tự động của Admin
     3. PHÂN TASK  — chiến dịch #${maChienDich} → task #${maTask} → giao cho người đọc, mọi bước lưu trong database
     4. GHI ÂM     — file tải lên được chuyển sang WAV 16 kHz mono, tự chấm chất lượng, lấy được link nghe có hạn
 `);

@@ -155,6 +155,33 @@ public sealed class AdminRecordingPairTests : IntegrationTestBase
     }
 
     [Fact]
+    public async Task TongThoiLuong_ChiTinhHaiTakeMoiNhat()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var speaker = await CreateUserAsync(NewUniqueEmail("pair"), RoleName.Speaker);
+        var script = await CreatePairScriptAsync();
+        var other = await ApprovedReviewerAsync();
+
+        var csOld = await CreateRecordingAsync(
+            script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching, durationSec: 5.0m);
+        await AddReviewsAsync(csOld, other.UserId, ReviewDecision.Rejected, ct);
+
+        var csNew = await CreateRecordingAsync(
+            script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching, durationSec: 3.0m);
+        var vi = await CreateRecordingAsync(
+            script.ScriptId, speaker.UserId, SentenceVariant.PureVietnamese, durationSec: 4.0m);
+
+        csOld.RecordedAt = DateTimeOffset.UtcNow.AddMinutes(-5);
+        csNew.RecordedAt = DateTimeOffset.UtcNow;
+        await Db.SaveChangesAsync(ct);
+
+        var pair = await PairAsync(script.ScriptId, speaker.UserId, ct);
+
+        Assert.Equal(csNew.RecordingId, pair.CsRecordingId);
+        Assert.Equal(7.0m, pair.TotalDurationSec);
+    }
+
+    [Fact]
     public async Task CaHaiBanTruotQc_CapBaoLoiChatLuong()
     {
         var ct = TestContext.Current.CancellationToken;

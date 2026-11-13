@@ -136,8 +136,9 @@ S('3.4', 'reviewer', 'POST', `/api/scripts/${maChoDuyet}/review`, await call(T.r
     : '[vi]Cô vừa đăng bài kiểm tra ngắn mới lên hệ thống, cả lớp làm trước tối nay nhé.',
   comment: 'Thêm "lên hệ thống" cho rõ nghĩa'
 }), 200, (b) => ({ status: b.status }));
+// Admin nhập file xong câu đã Sẵn sàng, nên duyệt lại trả 409 — không còn bước duyệt sau import.
 S('3.5', 'reviewer', 'POST', `/api/scripts/${maNhap}/review`, await call(T.reviewer, 'POST', `/api/scripts/${maNhap}/review`,
-  { action: 'Accepted', comment: 'Câu tự nhiên, đúng kiểu nói hằng ngày' }), 200, (b) => ({ status: b.status }));
+  { action: 'Accepted', comment: 'Câu tự nhiên, đúng kiểu nói hằng ngày' }), 409);
 r = S('3.6', 'speaker1', 'POST', '/api/speaker/scripts/contribute', await call(T.speaker1, 'POST', '/api/speaker/scripts/contribute', {
   csContent: '[vi]Tối nay mình phải [en]fix bug [vi]gấp cho khách.',
   viContent: '[vi]Tối nay mình phải sửa lỗi gấp cho khách.',

@@ -293,7 +293,7 @@ mục gốc của repo trên máy chủ. Script làm theo đúng thứ tự này
 | 2. Chờ | `pg_isready` (tối đa 30 giây) | postgres không dậy |
 | 3. Sao lưu | `pg_dump` → `gzip`, kiểm tra bằng `gzip -t`; tar volume MinIO; giữ 7 bản gần nhất | dump rỗng hoặc gzip hỏng |
 | 4. Kéo code | `git pull --ff-only` | git lỗi |
-| 5. Migration | Chạy file `migrations/V*.sql` **chưa có** trong bảng `schema_migration` | migration lỗi (file tự rollback) |
+| 5. Migration | Có file mới thì dựng image, dừng API, `pg_dump` lần nữa, rồi chạy file `migrations/V*.sql` **chưa có** trong bảng `schema_migration` | migration lỗi (file tự rollback; API cũ được bật lại nếu chưa file nào commit) |
 | 6. Dựng lại | `docker compose up -d --build` | — |
 | 7. Kiểm tra | `/health`, đăng nhập `admin@`, `GET /api/auth/me`; ghi commit vào `deploy/.deployed-sha` | API không lên, sai mật khẩu |
 
@@ -328,10 +328,16 @@ chính nó.
 > Lần đang chạy vẫn dùng bản script đã nạp lúc bắt đầu; bản mới chỉ có hiệu lực từ lần sau. Vì vậy
 > bước kiểm tra cuối gọi `GET /api/auth/me`, route không đổi tên theo domain (bài học từ V22).
 
-> **Migration phải tương thích ngược** với code đang chạy (kiểu expand/contract: thêm cột/bảng mới,
-> chưa xoá cái cũ). Vì vậy mới áp migration *trước* khi dựng lại container — code cũ vẫn chạy được
-> với lược đồ mới. Migration phá vỡ tương thích (xoá cột, đổi kiểu) thì phải làm ngược lại và sửa
-> thứ tự trong `deploy/deploy.sh`.
+> **Migration chạy khi API đã dừng.** Khi có file migration mới, `deploy.sh` dựng image trước (API cũ
+> vẫn phục vụ), dừng API, sao lưu database lần nữa, rồi mới áp migration. Nhờ vậy migration xoá
+> cột/đổi kiểu không cần viết theo kiểu expand/contract; đổi lại có downtime ngắn trong lúc áp
+> migration và khởi động lại. Nếu API mới không lên sau khi migration commit, phục hồi từ bản
+> `pre-migration-*.sql.gz` rồi mới lùi code (mục "Khôi phục database..." bên dưới).
+>
+> **Lần đầu đổi chính `deploy/deploy.sh`:** push riêng một commit chỉ có `deploy/**` trước, chờ
+> deploy xanh, rồi mới push commit có migration. Tiến trình bash đang chạy luôn là bản đã nạp trước
+> `git pull`; push chung thì script cũ sẽ áp migration. Script mới có lớp bảo vệ: thấy `deploy.sh`
+> đổi cùng migration thì dừng và yêu cầu chạy lại.
 
 File âm thanh nằm trong volume `codeswitchlabel_minio-data`; sao lưu volume này cùng với database,
 vì mất file audio là mất dữ liệu nghiên cứu, không tạo lại được.
@@ -373,6 +379,10 @@ docker compose -f deploy/docker-compose.prod.yml logs -f api
 V15 thay hàm `fn_queue_claim_next` để tôn trọng `task_script.assignee_user_id`. Nếu phải rollback thủ công, dừng API trước rồi chạy lại migration V15 cũ; thao tác này làm mất phân công câu theo Speaker và hàng đợi ghi âm sẽ phát chung như cũ.
 
 ### Khôi phục database từ bản sao lưu (khi migration hoặc deploy hỏng)
+
+`deploy.sh` tạo `pre-migration-<...>.sql.gz` ngay trước khi áp migration. Dùng file đó trước:
+nó được tạo lúc API đã dừng nên không mất dữ liệu người dùng đã ghi. `backup-<...>.sql.gz` chỉ là
+phương án sau, và có thể cũ hơn vài phút.
 
 ```bash
 # 1. Phục hồi database từ file backup ở bước 0 (ghi đè toàn bộ DB hiện tại)
