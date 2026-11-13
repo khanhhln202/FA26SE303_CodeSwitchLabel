@@ -47,8 +47,8 @@ public sealed class TestDataBuildersTests
         // Arrange + Act
         var wave = new WaveBuilder().Build();
 
-        // Assert
-        Assert.True(wave.TargetQty > 0);
+        // Assert — mặc định phải nằm trong khoảng DB CHECK (2000..5000)
+        Assert.InRange(wave.TargetQty, 2000, 5000);
         Assert.True(wave.EndDate >= wave.StartDate);
     }
 

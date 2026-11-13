@@ -92,7 +92,7 @@ public static class TestDataBuilders
     {
         private string _name = $"Wave {Guid.NewGuid():N}";
         private string _domain = "ItTechnology"; // TEAM_003
-        private int _targetQty = 100;
+        private int _targetQty = 2000;
         private DateOnly _startDate = DateOnly.FromDateTime(DateTime.Today);
         private DateOnly _endDate = DateOnly.FromDateTime(DateTime.Today.AddDays(30));
         private WaveStatus _status = WaveStatus.Open;
