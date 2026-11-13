@@ -366,6 +366,9 @@ export default function AdminTextData() {
   };
 
   const totalPages = Math.ceil(totalItems / pageSize) || 1;
+  const emptyRowsCount = useMemo(() => {
+    return Math.max(0, pageSize - textList.length);
+  }, [textList.length, pageSize]);
 
   return (
     <div className="w-full h-full flex flex-col justify-between text-left font-sans p-1 overflow-hidden transition-colors relative">
@@ -444,144 +447,157 @@ export default function AdminTextData() {
       </div>
 
       {/* Main Table Container */}
-      <div className="bg-white dark:bg-[#1C1D22] rounded-2xl border border-[#E5E2D8] dark:border-gray-800 shadow-[0_1px_3px_rgba(16,17,20,0.04)] overflow-hidden transition-colors flex-1 flex flex-col justify-between my-1.5 min-h-0">
-        <div className="flex-1 flex flex-col min-h-0 overflow-y-auto overflow-x-hidden">
-          <div className="w-full flex-1 flex flex-col">
-            {/* Header Table */}
-            <div className="bg-[#F7F5EF] dark:bg-[#25272E] type-label text-[#9A9CA3] dark:text-gray-400 border-b border-[#E5E2D8] dark:border-gray-800 flex items-center shrink-0 h-8 sticky top-0 z-10">
-              <div className="px-2 text-center whitespace-nowrap w-[52px] shrink-0">STT</div>
-              <div className="px-3 text-left flex-[0.9] min-w-0">Nội dung</div>
-              <div className="px-3 text-left flex-[1.2] min-w-0">Nội dung gắn nhãn</div>
-              <div className="px-2 text-left w-[155px] shrink-0 whitespace-nowrap">Chủ đề</div>
-              <div className="px-2 text-left w-[115px] shrink-0 whitespace-nowrap">Trạng thái</div>
-              <div className="px-2 text-center w-[80px] shrink-0 whitespace-nowrap">Thao tác</div>
-            </div>
-
-            {/* Table Body */}
-            <div className="divide-y divide-[#F0EEE6] dark:divide-gray-800 type-ui flex-1 flex flex-col">
+      <div className="bg-white dark:bg-[#1C1D22] rounded-2xl border border-[#E5E2D8] dark:border-gray-800 shadow-[0_1px_3px_rgba(16,17,20,0.04)] overflow-hidden transition-colors flex-1 flex flex-col justify-between my-1 min-h-0">
+        <div className="flex-1 min-h-0 overflow-auto">
+          <table className="w-full h-full text-left border-collapse table-fixed min-w-[1000px]">
+            <thead>
+              <tr className="bg-[#F7F5EF] dark:bg-[#25272E] type-label text-[#9A9CA3] dark:text-gray-400 border-b border-[#E5E2D8] dark:border-gray-800 h-8 sticky top-0 z-10">
+                <th className="w-[52px] px-2 text-center font-label">STT</th>
+                <th className="w-[32%] px-3 text-left font-label">Nội dung</th>
+                <th className="px-3 text-left font-label">Nội dung gắn nhãn</th>
+                <th className="w-[155px] px-2 text-left font-label whitespace-nowrap">Chủ đề</th>
+                <th className="w-[115px] px-2 text-left font-label whitespace-nowrap">Trạng thái</th>
+                <th className="w-[80px] px-2 text-center font-label whitespace-nowrap">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#F0EEE6] dark:divide-gray-800 type-ui">
               {textList.length > 0 ? (
-                textList.map((item, index) => {
-                  const stt = (currentPage - 1) * pageSize + index + 1;
-                  const style = catStyle(item.topic);
-                  return (
-                    <div key={item.id} className="hover:bg-[#F7F5EF]/70 dark:hover:bg-[#25272E]/50 transition-colors flex items-center flex-1 py-2">
-                      <div className="px-2 text-center font-bold text-[#16171C] dark:text-gray-100 whitespace-nowrap w-[52px] shrink-0">
-                        {stt}
-                      </div>
-                      
-                      {/* Cột 1: Hiển thị 2 dòng dạng badge VI-EN và VI (In đậm tiếng Anh màu xanh) */}
-                      <div className="px-3 flex-[0.9] space-y-1 min-w-0">
-                        {/* Dòng 1: Trộn ngôn ngữ (VI-EN) */}
-                        <div className="flex items-start gap-2">
+                <>
+                  {textList.map((item, index) => {
+                    const stt = (currentPage - 1) * pageSize + index + 1;
+                    const style = catStyle(item.topic);
+                    return (
+                      <tr key={item.id} className="hover:bg-[#F7F5EF]/70 dark:hover:bg-[#25272E]/50 transition-colors duration-150 h-14">
+                        <td className="px-2 text-center font-bold text-[#16171C] dark:text-gray-100 align-middle whitespace-nowrap">
+                          {stt}
+                        </td>
+                        
+                        {/* Cột 1: Hiển thị 2 dòng dạng badge VI-EN và VI (In đậm tiếng Anh màu xanh) */}
+                        <td className="px-3 align-middle min-w-0">
+                          <div className="min-w-0 flex-1 space-y-0.5 my-0.5">
+                            {/* Dòng 1: Trộn ngôn ngữ (VI-EN) */}
+                            <div className="flex items-start gap-2">
+                              <span 
+                                style={{ background: `${ADMIN_ACCENT}1A`, color: ADMIN_ACCENT }}
+                                className="w-11 shrink-0 rounded text-center text-caption leading-4 font-label mt-0.5"
+                              >
+                                VI-EN
+                              </span>
+                              <p className="break-words whitespace-normal type-ui text-[#16171C] dark:text-gray-100 leading-snug">
+                                <HighlightCsText rawText={item.rawCsContent || item.csContent} />
+                              </p>
+                            </div>
+
+                            {/* Dòng 2: Tiếng Việt thuần (VI) */}
+                            <div className="flex items-start gap-2">
+                              <span 
+                                style={{ background: '#F0EEE6', color: '#6E7078' }}
+                                className="w-11 shrink-0 rounded text-center text-caption leading-4 font-label dark:bg-[#25272E] dark:text-gray-400 mt-0.5"
+                              >
+                                VI
+                              </span>
+                              <p className="break-words whitespace-normal type-ui text-[#16171C] dark:text-gray-300 leading-snug">
+                                <HighlightCsText rawText={item.viContent} />
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Cột 2: Hiển thị đầy đủ cặp câu gắn nhãn [vi] [en] */}
+                        <td className="px-3 align-middle min-w-0">
+                          <div className="min-w-0 flex-1 space-y-0.5 my-0.5">
+                            {/* Dòng 1: Trộn ngôn ngữ (VI-EN) có thẻ nhãn */}
+                            <div className="flex items-start gap-2">
+                              <span 
+                                style={{ background: `${ADMIN_ACCENT}1A`, color: ADMIN_ACCENT }}
+                                className="w-11 shrink-0 rounded text-center text-caption leading-4 font-label mt-0.5"
+                              >
+                                VI-EN
+                              </span>
+                              <p className="break-words whitespace-normal type-ui text-[#16171C] dark:text-gray-100 leading-snug">
+                                {item.rawCsContent || item.csContent}
+                              </p>
+                            </div>
+
+                            {/* Dòng 2: Tiếng Việt thuần (VI) có thẻ nhãn */}
+                            <div className="flex items-start gap-2">
+                              <span 
+                                style={{ background: '#F0EEE6', color: '#6E7078' }}
+                                className="w-11 shrink-0 rounded text-center text-caption leading-4 font-label dark:bg-[#25272E] dark:text-gray-400 mt-0.5"
+                              >
+                                VI
+                              </span>
+                              <p className="break-words whitespace-normal type-ui text-[#16171C] dark:text-gray-300 leading-snug">
+                                {item.viContent}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                        
+                        <td className="px-2 align-middle whitespace-nowrap">
                           <span 
-                            style={{ background: `${ADMIN_ACCENT}1A`, color: ADMIN_ACCENT }}
-                            className="w-11 shrink-0 rounded text-center text-caption leading-4 font-label mt-0.5"
+                            className="px-2.5 py-0.5 rounded-md type-caption font-label border inline-block whitespace-nowrap" 
+                            style={{ background: style.bg, color: style.text, borderColor: style.border }}
                           >
-                            VI-EN
+                            {normalizeTopicName(item.topic)}
                           </span>
-                          <p className="break-words whitespace-normal type-ui text-[#16171C] dark:text-gray-100 leading-snug">
-                            <HighlightCsText rawText={item.rawCsContent || item.csContent} />
-                          </p>
-                        </div>
+                        </td>
 
-                        {/* Dòng 2: Tiếng Việt thuần (VI) */}
-                        <div className="flex items-start gap-2">
+                        {/* CỘT TRẠNG THÁI: Chỉ giữ Sẵn sàng */}
+                        <td className="px-2 align-middle whitespace-nowrap">
                           <span 
-                            style={{ background: '#F0EEE6', color: '#6E7078' }}
-                            className="w-11 shrink-0 rounded text-center text-caption leading-4 font-label dark:bg-[#25272E] dark:text-gray-400 mt-0.5"
+                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full type-caption font-label border select-none"
+                            style={{
+                              backgroundColor: CHIP_SUCCESS_BG,
+                              borderColor: CHIP_SUCCESS_BORDER,
+                              color: CHIP_SUCCESS_TEXT
+                            }}
                           >
-                            VI
+                            <CheckCircle2 className="w-3 h-3 shrink-0" style={{ color: CHIP_SUCCESS_TEXT }} /> Sẵn sàng
                           </span>
-                          <p className="break-words whitespace-normal type-ui text-[#16171C] dark:text-gray-300 leading-snug">
-                            <HighlightCsText rawText={item.viContent} />
-                          </p>
-                        </div>
-                      </div>
+                        </td>
 
-                      {/* Cột 2: Hiển thị đầy đủ cặp câu gắn nhãn [vi] [en] */}
-                      <div className="px-3 flex-[1.2] space-y-1 min-w-0">
-                        {/* Dòng 1: Trộn ngôn ngữ (VI-EN) có thẻ nhãn */}
-                        <div className="flex items-start gap-2">
-                          <span 
-                            style={{ background: `${ADMIN_ACCENT}1A`, color: ADMIN_ACCENT }}
-                            className="w-11 shrink-0 rounded text-center text-caption leading-4 font-label mt-0.5"
-                          >
-                            VI-EN
-                          </span>
-                          <p className="break-words whitespace-normal type-ui text-[#16171C] dark:text-gray-100 leading-snug">
-                            {item.rawCsContent || item.csContent}
-                          </p>
-                        </div>
+                        <td className="px-2 text-center align-middle whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-1">
+                            <button 
+                              onClick={() => handleOpenEditModal(item)}
+                              className="w-7 h-7 rounded-lg flex items-center justify-center text-[#6E7078] dark:text-gray-400 hover:text-[#16171C] dark:hover:text-white hover:bg-[#F7F5EF] dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                              title="Chỉnh sửa văn bản"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => setItemToDelete({ ...item, stt })}
+                              className="w-7 h-7 rounded-lg flex items-center justify-center text-[#6E7078] dark:text-gray-400 hover:text-[#C63B3B] dark:hover:text-[#E55353] hover:bg-[#FDEAEA] dark:hover:bg-[#C63B3B]/20 transition-colors cursor-pointer"
+                              title="Xóa văn bản"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
 
-                        {/* Dòng 2: Tiếng Việt thuần (VI) có thẻ nhãn */}
-                        <div className="flex items-start gap-2">
-                          <span 
-                            style={{ background: '#F0EEE6', color: '#6E7078' }}
-                            className="w-11 shrink-0 rounded text-center text-caption leading-4 font-label dark:bg-[#25272E] dark:text-gray-400 mt-0.5"
-                          >
-                            VI
-                          </span>
-                          <p className="break-words whitespace-normal type-ui text-[#16171C] dark:text-gray-300 leading-snug">
-                            {item.viContent}
-                          </p>
-                        </div>
-                      </div>
-                      
-                      <div className="px-2 w-[155px] shrink-0 whitespace-nowrap">
-                        <span 
-                          className="px-2.5 py-0.5 rounded-md type-caption font-label border inline-block whitespace-nowrap" 
-                          style={{ background: style.bg, color: style.text, borderColor: style.border }}
-                        >
-                          {normalizeTopicName(item.topic)}
-                        </span>
-                      </div>
-
-                      {/* CỘT TRẠNG THÁI: Chỉ giữ Sẵn sàng */}
-                      <div className="px-2 w-[115px] shrink-0 whitespace-nowrap">
-                        <span 
-                          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full type-caption font-label border select-none"
-                          style={{
-                            backgroundColor: CHIP_SUCCESS_BG,
-                            borderColor: CHIP_SUCCESS_BORDER,
-                            color: CHIP_SUCCESS_TEXT
-                          }}
-                        >
-                          <CheckCircle2 className="w-3 h-3 shrink-0" style={{ color: CHIP_SUCCESS_TEXT }} /> Sẵn sàng
-                        </span>
-                      </div>
-
-                      <div className="px-2 text-center w-[80px] shrink-0 whitespace-nowrap">
-                        <div className="flex items-center justify-center gap-1">
-                          <button 
-                            onClick={() => handleOpenEditModal(item)}
-                            className="w-7 h-7 rounded-lg flex items-center justify-center text-[#6E7078] dark:text-gray-400 hover:text-[#16171C] dark:hover:text-white hover:bg-[#F7F5EF] dark:hover:bg-gray-700 transition-colors cursor-pointer"
-                            title="Chỉnh sửa văn bản"
-                          >
-                            <Edit3 className="w-4 h-4" />
-                          </button>
-                          <button 
-                            onClick={() => setItemToDelete({ ...item, stt })}
-                            className="w-7 h-7 rounded-lg flex items-center justify-center text-[#6E7078] dark:text-gray-400 hover:text-[#C63B3B] dark:hover:text-[#E55353] hover:bg-[#FDEAEA] dark:hover:bg-[#C63B3B]/20 transition-colors cursor-pointer"
-                            title="Xóa văn bản"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
+                  {Array.from({ length: emptyRowsCount }).map((_, idx) => (
+                    <tr key={`empty-${idx}`} className="border-b border-transparent">
+                      <td colSpan={6} className="py-0.5"> </td>
+                    </tr>
+                  ))}
+                </>
               ) : (
-                <div className="flex-1 flex items-center justify-center text-[#9A9CA3] dark:text-gray-500 type-ui">
-                  Không tìm thấy dữ liệu văn bản phù hợp.
-                </div>
+                <tr>
+                  <td colSpan={6} className="py-16 text-center text-[#9A9CA3] dark:text-gray-500 type-ui">
+                    Không tìm thấy dữ liệu văn bản phù hợp.
+                  </td>
+                </tr>
               )}
-            </div>
-          </div>
+            </tbody>
+          </table>
         </div>
 
         {/* Footer Pagination */}
-        <div className="px-4 py-1 border-t border-[#E5E2D8] dark:border-gray-800 shrink-0 bg-[#F7F5EF]/50 dark:bg-[#1C1D22]">
+        <div className="px-4 py-1 border-t border-[#E5E2D8] dark:border-gray-800 shrink-0 bg-white dark:bg-[#1C1D22]">
           <Pagination
             currentPage={currentPage}
             totalPages={totalPages}
