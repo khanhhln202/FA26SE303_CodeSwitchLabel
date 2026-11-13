@@ -52,7 +52,7 @@ public sealed class ScriptProposalTests : IntegrationTestBase
 
         var script = await CreateValidatedScriptAsync(
             "[vi]Em nên [en]scan [vi]tài liệu này.", "[vi]Em nên quét tài liệu này.",
-            ScriptDomain.ItTechnology, SpeakerUserId);
+            "ItTechnology", SpeakerUserId);
 
         // Câu đã duyệt nằm trong hàng đợi ghi âm (trigger TEAM_010).
         var truoc = await QueueRowsAsync(script.ScriptId);
@@ -102,7 +102,7 @@ public sealed class ScriptProposalTests : IntegrationTestBase
 
         var script = await CreateValidatedScriptAsync(
             "[vi]Em nên [en]scan [vi]tài liệu này.", "[vi]Em nên quét tài liệu này.",
-            ScriptDomain.ItTechnology, SpeakerUserId);
+            "ItTechnology", SpeakerUserId);
 
         // Lời giải gốc của câu: scan → quét.
         Db.ScriptWords.Add(new ScriptWord
@@ -179,7 +179,7 @@ public sealed class ScriptProposalTests : IntegrationTestBase
         var script = await CreateValidatedScriptAsync(
             "[vi]Em nên [en]scan [vi]tài liệu Education này.",
             "[vi]Em nên quét tài liệu Education này.",
-            ScriptDomain.Education, SpeakerUserId);
+            "Education", SpeakerUserId);
 
         var tao = await ProposalService.CreateAsync(script.ScriptId, SpeakerUserId, new CreateProposalRequest
         {
@@ -230,7 +230,7 @@ public sealed class ScriptProposalTests : IntegrationTestBase
 
         var script = await CreateValidatedScriptAsync(
             "[vi]Mình hẹn ở [en]office Daily cũ.", "[vi]Mình hẹn ở văn phòng Daily cũ.",
-            ScriptDomain.DailyLife, SpeakerUserId);
+            "DailyLife", SpeakerUserId);
 
         var tao = await ProposalService.CreateAsync(script.ScriptId, SpeakerUserId, new CreateProposalRequest
         {
@@ -258,7 +258,7 @@ public sealed class ScriptProposalTests : IntegrationTestBase
         // Câu đã có bản ghi âm → không gửi đề xuất được.
         var daThu = await CreateValidatedScriptAsync(
             "[vi]Sáng nay mình [en]scan Git log nhé.", "[vi]Sáng nay mình quét Git log nhé.",
-            ScriptDomain.ItTechnology, SpeakerUserId);
+            "ItTechnology", SpeakerUserId);
         await CreateRecordingAsync(daThu.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching);
 
         var loiThu = await Assert.ThrowsAsync<ConflictException>(
@@ -273,7 +273,7 @@ public sealed class ScriptProposalTests : IntegrationTestBase
         var script = await CreateValidatedScriptAsync(
             "[vi]Em nên [en]scan [vi]rồi [en]email [vi]tài liệu này.",
             "[vi]Em nên quét rồi gửi thư điện tử tài liệu này.",
-            ScriptDomain.ItTechnology, SpeakerUserId, enWordCount: 2);
+            "ItTechnology", SpeakerUserId, enWordCount: 2);
 
         var loiDem = await Assert.ThrowsAsync<UnprocessableException>(
             () => ProposalService.CreateAsync(script.ScriptId, SpeakerUserId, new CreateProposalRequest
@@ -299,7 +299,7 @@ public sealed class ScriptProposalTests : IntegrationTestBase
         var script = await CreateScriptAsync(
             "[vi]Em nên [en]scan [vi]tài liệu chưa duyệt.",
             "[vi]Em nên quét tài liệu chưa duyệt.",
-            ScriptDomain.ItTechnology, SpeakerUserId);
+            "ItTechnology", SpeakerUserId);
 
         var loi = await Assert.ThrowsAsync<ConflictException>(
             () => ProposalService.CreateAsync(script.ScriptId, SpeakerUserId, new CreateProposalRequest
@@ -321,7 +321,7 @@ public sealed class ScriptProposalTests : IntegrationTestBase
 
         var script = await CreateValidatedScriptAsync(
             "[vi]Tuần này mình [en]deploy đấy.", "[vi]Tuần này mình triển khai đấy.",
-            ScriptDomain.ItTechnology, SpeakerUserId);
+            "ItTechnology", SpeakerUserId);
 
         await ProposalService.CreateAsync(script.ScriptId, SpeakerUserId, new CreateProposalRequest
         {
@@ -351,7 +351,7 @@ public sealed class ScriptProposalTests : IntegrationTestBase
 
         var script = await CreateValidatedScriptAsync(
             "[vi]Câu này rồi sẽ [en]reject đấy.", "[vi]Câu này rồi sẽ bị loại đấy.",
-            ScriptDomain.DailyLife, SpeakerUserId);
+            "DailyLife", SpeakerUserId);
 
         var tao = await ProposalService.CreateAsync(script.ScriptId, SpeakerUserId, new CreateProposalRequest
         {
@@ -382,7 +382,7 @@ public sealed class ScriptProposalTests : IntegrationTestBase
 
         var script = await CreateValidatedScriptAsync(
             "[vi]Em nên [en]scan [vi]tài liệu này.", "[vi]Em nên quét tài liệu này.",
-            ScriptDomain.ItTechnology, SpeakerUserId);
+            "ItTechnology", SpeakerUserId);
 
         var tao = await ProposalService.CreateAsync(script.ScriptId, SpeakerUserId, new CreateProposalRequest
         {
@@ -450,7 +450,7 @@ public sealed class ScriptProposalTests : IntegrationTestBase
 
         var script = await CreateValidatedScriptAsync(
             "[vi]Mình hẹn ở [en]office Daily cũ.", "[vi]Mình hẹn ở văn phòng Daily cũ.",
-            ScriptDomain.DailyLife, SpeakerUserId);
+            "DailyLife", SpeakerUserId);
 
         var tao = await ProposalService.CreateAsync(script.ScriptId, SpeakerUserId, new CreateProposalRequest
         {
@@ -492,7 +492,7 @@ public sealed class ScriptProposalTests : IntegrationTestBase
 
         var script = await CreateValidatedScriptAsync(
             "[vi]Câu này [en]delete luôn.", "[vi]Câu này xoá luôn.",
-            ScriptDomain.ItTechnology, SpeakerUserId);
+            "ItTechnology", SpeakerUserId);
 
         // Câu đang nằm trong một task thu âm: xoá câu phải đóng luôn mục task.
         var task = await CreateTaskAsync(WaveId, TaskType.Recording, 10, ManagerUserId);
@@ -554,10 +554,10 @@ public sealed class ScriptProposalTests : IntegrationTestBase
 
         var script1 = await CreateValidatedScriptAsync(
             "[vi]Báo lỗi câu có [en]deadline [vi]tuần này.", "[vi]Báo lỗi câu có hạn tuần này.",
-            ScriptDomain.Education, SpeakerUserId);
+            "Education", SpeakerUserId);
         var script2 = await CreateValidatedScriptAsync(
             "[vi]Đề xuất sửa câu có [en]deadline [vi]tháng này.", "[vi]Đề xuất sửa câu có hạn tháng này.",
-            ScriptDomain.Education, SpeakerUserId);
+            "Education", SpeakerUserId);
 
         var baoLoi = await ProposalService.CreateAsync(script1.ScriptId, SpeakerUserId, new CreateProposalRequest
         {

@@ -26,8 +26,6 @@ public enum AuditAction { Create, Update, Delete, Import, Export, Assign, Releas
 /// </summary>
 public enum ScriptStatus { PendingValidation, Validated, Rejected, Deactivated }
 
-public enum ScriptDomain { ItTechnology, Education, DailyLife }
-
 public enum ScriptReviewAction { Accepted, Edited, Rejected }
 
 /// <summary>

@@ -121,7 +121,7 @@ public record ChangeRoleRequest
 /// </summary>
 public record SetDomainsRequest
 {
-    public List<ScriptDomain> Domains { get; init; } = [];
+    public List<string> Domains { get; init; } = [];
 }
 
 public record ChangePasswordRequest

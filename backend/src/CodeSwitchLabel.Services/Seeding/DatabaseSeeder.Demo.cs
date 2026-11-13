@@ -29,43 +29,43 @@ public static partial class DatabaseSeeder
 
         // Bốn câu Validated phía cuối không chỉ để đẹp số liệu: chúng làm nhiên liệu cho
         // task thu âm mẫn.
-        (string Cs, string Vi, ScriptDomain Domain, (string En, string Vi)[] Pairs)[] seeds =
+        (string Cs, string Vi, string Domain, (string En, string Vi)[] Pairs)[] seeds =
         [
             ("[vi]Sáng mai [en]laptop [vi]của mình [en]không [vi]lên nguồn nữa",
              "[vi]Sáng mai máy tính của mình không khởi động lên nữa",
-             ScriptDomain.ItTechnology, [("laptop", "máy tính"), ("không", "không")]),
+             "ItTechnology", [("laptop", "máy tính"), ("không", "không")]),
 
             ("[vi]Bọn mình [en]deploy [vi]bản [en]release [vi]thứ hai rồi đấy",
              "[vi]Nhóm mình đã triển khai bản phát hành thứ hai rồi đấy",
-             ScriptDomain.ItTechnology, [("deploy", "triển khai"), ("release", "phát hành")]),
+             "ItTechnology", [("deploy", "triển khai"), ("release", "phát hành")]),
 
             ("[vi]Cô ấy [en]interview [vi]được [en]offer [vi]rồi anh ơi",
              "[vi]Cô ấy đã phỏng vấn và nhận được lời mời rồi anh ơi",
-             ScriptDomain.DailyLife, [("interview", "phỏng vấn"), ("offer", "lời mời")]),
+             "DailyLife", [("interview", "phỏng vấn"), ("offer", "lời mời")]),
 
             ("[vi]Hôm nay [en]traffic [vi]ở cầu Sài Gòn [en]kẹt [vi]lắm",
              "[vi]Hôm nay giao thông ở cầu Sài Gòn ùn tắc lắm",
-             ScriptDomain.DailyLife, [("traffic", "giao thông"), ("kẹt", "ùn tắc")]),
+             "DailyLife", [("traffic", "giao thông"), ("kẹt", "ùn tắc")]),
 
             ("[vi]Cả nhóm [en]agree [vi]dời [en]deadline [vi]thêm một tuần",
              "[vi]Cả nhóm đồng ý dời hạn chót thêm một tuần",
-             ScriptDomain.Education, [("agree", "đồng ý"), ("deadline", "hạn chót")]),
+             "Education", [("agree", "đồng ý"), ("deadline", "hạn chót")]),
 
             ("[vi]Bác sĩ bảo anh [en]rest [vi]thêm [en]recovery [vi]một ngày",
              "[vi]Bác sĩ bảo anh nghỉ ngơi thêm một ngày nữa",
-             ScriptDomain.DailyLife, [("rest", "nghỉ ngơi"), ("recovery", "hồi phục")]),
+             "DailyLife", [("rest", "nghỉ ngơi"), ("recovery", "hồi phục")]),
 
             ("[vi]Em [en]pull [vi]nhầm [en]branch [vi]nên mất [en]code [vi]rồi",
              "[vi]Em kéo nhầm nhánh nên mất mã nguồn rồi",
-             ScriptDomain.ItTechnology, [("pull", "kéo"), ("branch", "nhánh"), ("code", "mã")]),
+             "ItTechnology", [("pull", "kéo"), ("branch", "nhánh"), ("code", "mã")]),
 
             ("[vi]Bài [en]thesis [vi]của em hạ nộp [en]deadline [vi]tháng sau",
              "[vi]Luận văn của em hạ nộp tháng sau",
-             ScriptDomain.Education, [("thesis", "luận văn"), ("deadline", "hạn chót")]),
+             "Education", [("thesis", "luận văn"), ("deadline", "hạn chót")]),
 
             ("[vi]Cà phê [en]free [vi]ở [en]quầy [vi]đối diện nhà ga",
              "[vi]Quán cà phê miễn phí ở đối diện nhà ga",
-             ScriptDomain.DailyLife, [("free", "miễn phí"), ("quầy", "quần")])
+             "DailyLife", [("free", "miễn phí"), ("quầy", "quần")])
         ];
 
         // Năm câu đầu đi qua bước duyệt nội dung như thật; bốn câu sau giữ nguyên trạng thái

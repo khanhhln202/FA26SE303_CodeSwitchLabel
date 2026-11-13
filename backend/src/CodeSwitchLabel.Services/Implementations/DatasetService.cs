@@ -338,6 +338,22 @@ public class DatasetService(
     public async Task<DatasetFileDto> ExportSpeakersAsync(
         ExportSpeakerDataRequest request, CancellationToken ct = default)
     {
+        if (request.DateFrom > request.DateTo)
+        {
+            throw new UnprocessableException(
+                "invalid_date_range", "Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.");
+        }
+
+        // Ngày của cặp = mốc duyệt MUỘN NHẤT của hai bản; tính theo ngày Việt Nam (UTC+7).
+        var fromUtc = request.DateFrom is { } from
+            ? new DateTimeOffset(from.ToDateTime(TimeOnly.MinValue), TimeSpan.FromHours(7)).ToUniversalTime()
+            : (DateTimeOffset?)null;
+        var toExclusiveUtc = request.DateTo is { } to
+            ? new DateTimeOffset(
+                to.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.FromHours(7)).ToUniversalTime()
+            : (DateTimeOffset?)null;
+        var filteredByDate = fromUtc is not null || toExclusiveUtc is not null;
+
         var recordingIds = request.RecordingIds
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Select(id => id.Trim())
@@ -350,21 +366,24 @@ public class DatasetService(
             : request.SpeakerIds.Where(id => id > 0).Distinct().ToList();
         var waveId = scopedToRecordings ? null : request.WaveId;
 
-        if (recordingIds.Count == 0 && speakerIds.Count == 0 && waveId is null)
+        if (recordingIds.Count == 0 && speakerIds.Count == 0 && waveId is null && !filteredByDate)
         {
             throw new UnprocessableException(
                 "export_scope_required",
-                "Chọn ít nhất một bản ghi, một Speaker hoặc một chiến dịch để tải dữ liệu.");
+                "Chọn ít nhất một bản ghi, một Speaker, một chiến dịch hoặc một khoảng ngày để tải dữ liệu.");
         }
 
-        var recordings = await db.Recordings.AsNoTracking()
+        var query = db.Recordings.AsNoTracking()
             .Include(r => r.Script).ThenInclude(s => s.Words)
             .Include(r => r.Speaker)
             .Where(r => r.Status == RecordingStatus.Approved)
             .Where(r => recordingIds.Count == 0 || recordingIds.Contains(r.RecordingId))
             .Where(r => speakerIds.Count == 0 || speakerIds.Contains(r.SpeakerId))
-            .Where(r => waveId == null || (r.Task != null && r.Task.WaveId == waveId))
-            .ToListAsync(ct);
+            .Where(r => waveId == null || (r.Task != null && r.Task.WaveId == waveId));
+
+        if (filteredByDate) query = query.Include(r => r.Reviews);
+
+        var recordings = await query.ToListAsync(ct);
 
         // Chỉ đóng gói cặp đủ hai bản. Thiếu một bản thì bỏ cả cặp, không để JSON trỏ tới file không có.
         var pairs = recordings
@@ -377,6 +396,9 @@ public class DatasetService(
                 Vi = g.FirstOrDefault(r => r.SentenceVariant == SentenceVariant.PureVietnamese)
             })
             .Where(p => p.Cs is not null && p.Vi is not null)
+            .Where(p => !filteredByDate || PairApprovedAt(p.Cs!, p.Vi!) is { } at &&
+                (fromUtc is null || at >= fromUtc) &&
+                (toExclusiveUtc is null || at < toExclusiveUtc))
             .OrderBy(p => p.Speaker.FullName)
             .ThenBy(p => p.Script.ScriptId)
             .ToList();
@@ -465,6 +487,15 @@ public class DatasetService(
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
 
+    /// <summary>Mốc chốt cặp = lần duyệt muộn nhất của hai bản; bản chưa có lượt duyệt thì không tính.</summary>
+    private static DateTimeOffset? PairApprovedAt(Recording cs, Recording vi)
+    {
+        var csAt = cs.Reviews.Count == 0 ? (DateTimeOffset?)null : cs.Reviews.Max(r => r.ReviewedAt);
+        var viAt = vi.Reviews.Count == 0 ? (DateTimeOffset?)null : vi.Reviews.Max(r => r.ReviewedAt);
+
+        return csAt is null || viAt is null ? null : csAt > viAt ? csAt : viAt;
+    }
+
     /// <summary>Đọc trọn file audio trước khi tạo entry, để ZIP không bao giờ có file cụt.</summary>
     private async Task<byte[]?> TryReadAudioAsync(Recording recording, CancellationToken ct)
     {
@@ -494,11 +525,13 @@ public class DatasetService(
         await target.WriteAsync(content, ct);
     }
 
-    private static string DomainLabel(ScriptDomain domain) => domain switch
+    private static string DomainLabel(string domain) => domain switch
     {
-        ScriptDomain.ItTechnology => "IT/Technology",
-        ScriptDomain.Education => "Education",
-        _ => "Daily Life"
+        "ItTechnology" => "IT/Technology",
+        "Education" => "Education",
+        "DailyLife" => "Daily Life",
+        // Chủ đề tự tạo: xuất đúng code để file nhập lại vẫn nhận ra.
+        _ => domain
     };
 
     /// <summary>

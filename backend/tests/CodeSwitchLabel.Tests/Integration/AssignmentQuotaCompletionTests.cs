@@ -71,7 +71,7 @@ public sealed class AssignmentQuotaCompletionTests(DatabaseFixture fixture) : In
         var next = await CreateValidatedScriptAsync(
             $"[vi]Em [en]thêm {Guid.NewGuid():N} [vi]một câu.",
             $"[vi]Em thêm {Guid.NewGuid():N} một câu.",
-            ScriptDomain.ItTechnology, AdminUserId);
+            "ItTechnology", AdminUserId);
         Db.TaskScripts.Add(new TaskScript
         {
             TaskId = task.TaskId,
@@ -109,7 +109,7 @@ public sealed class AssignmentQuotaCompletionTests(DatabaseFixture fixture) : In
         var script = await CreateValidatedScriptAsync(
             $"[vi]Em [en]duyệt {Guid.NewGuid():N} [vi]câu này.",
             $"[vi]Em duyệt {Guid.NewGuid():N} câu này.",
-            ScriptDomain.ItTechnology, AdminUserId);
+            "ItTechnology", AdminUserId);
         var recording = await CreateRecordingAsync(
             script.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching);
         Db.TaskRecordings.Add(new TaskRecording
@@ -163,7 +163,7 @@ public sealed class AssignmentQuotaCompletionTests(DatabaseFixture fixture) : In
             var script = await CreateValidatedScriptAsync(
                 $"[vi]Em [en]test {suffix} [vi]câu {i}.",
                 $"[vi]Em câu {suffix} {i}.",
-                ScriptDomain.ItTechnology, AdminUserId);
+                "ItTechnology", AdminUserId);
 
             var cs = await CreateRecordingAsync(
                 script.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching);

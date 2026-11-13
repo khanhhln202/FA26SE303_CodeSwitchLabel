@@ -108,6 +108,7 @@ public static class ServiceRegistration
         services.AddScoped<IWaveService, WaveService>();
 
         services.AddScoped<ISystemConfigService, SystemConfigService>();
+        services.AddScoped<IDomainService, DomainService>();
         services.AddScoped<IReasonService, ReasonService>();
         services.AddScoped<IStatisticsService, StatisticsService>();
         services.AddScoped<ISpeakerRoundsService, SpeakerRoundsService>();
@@ -131,7 +132,6 @@ public static class ServiceRegistration
         (typeof(ConfigValueType), "config_value_type"),
         (typeof(AuditAction), "audit_action"),
         (typeof(ScriptStatus), "script_status"),
-        (typeof(ScriptDomain), "script_domain"),
         (typeof(ScriptReviewAction), "script_review_action"),
         (typeof(ScriptWordRelation), "script_word_relation"),
         (typeof(TaskType), "task_type"),

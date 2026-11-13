@@ -68,7 +68,7 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
 
         // Act
         var script = await CreateScriptAsync(
-            "[vi]Anh [en]scan [vi]toi", "[vi]Anh quet toi", ScriptDomain.ItTechnology, speaker.UserId);
+            "[vi]Anh [en]scan [vi]toi", "[vi]Anh quet toi", "ItTechnology", speaker.UserId);
 
         // Assert — trigger fn_script_queue_sync tự tạo hàng, không cần code gọi.
         var row = await Queue.GetOpenRowAsync(
@@ -89,7 +89,7 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
         {
             scripts.Add(await CreateScriptAsync(
                 $"[vi]Anh [en]{word} [vi]toi", $"[vi]Anh {word} toi",
-                ScriptDomain.DailyLife, speaker.UserId));
+                "DailyLife", speaker.UserId));
         }
 
         // Act — claim liên tiếp rồi lọc ra đúng ba câu của test này.
@@ -111,8 +111,8 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
         var speakers = await TaoBaSpeakerAsync();
         var (s1, s2) = (speakers[0], speakers[1]);
 
-        var a = await CreateScriptAsync("[vi]Anh [en]alpha [vi]toi", "[vi]Anh alpha toi", ScriptDomain.ItTechnology, s1.UserId);
-        var b = await CreateScriptAsync("[vi]Anh [en]bravo [vi]toi", "[vi]Anh bravo toi", ScriptDomain.ItTechnology, s1.UserId);
+        var a = await CreateScriptAsync("[vi]Anh [en]alpha [vi]toi", "[vi]Anh alpha toi", "ItTechnology", s1.UserId);
+        var b = await CreateScriptAsync("[vi]Anh [en]bravo [vi]toi", "[vi]Anh bravo toi", "ItTechnology", s1.UserId);
 
         // Act — hai người claim gần như cùng lúc.
         var first = await ClaimNhieuLanAsync(s1.UserId);
@@ -134,7 +134,7 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
         // Arrange
         var speakers = await TaoBaSpeakerAsync();
         var script = await CreateScriptAsync(
-            "[vi]Anh [en]solo [vi]toi", "[vi]Anh solo toi", ScriptDomain.ItTechnology, speakers[0].UserId);
+            "[vi]Anh [en]solo [vi]toi", "[vi]Anh solo toi", "ItTechnology", speakers[0].UserId);
 
         // Người 0 đi lấy hết, trong đó có câu của test.
         var mine = await ClaimNhieuLanAsync(speakers[0].UserId);
@@ -153,7 +153,7 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
         // Arrange
         var speakers = await TaoBaSpeakerAsync();
         var script = await CreateScriptAsync(
-            "[vi]Anh [en]expire [vi]toi", "[vi]Anh expire toi", ScriptDomain.ItTechnology, speakers[0].UserId);
+            "[vi]Anh [en]expire [vi]toi", "[vi]Anh expire toi", "ItTechnology", speakers[0].UserId);
 
         await ClaimNhieuLanAsync(speakers[0].UserId);
 
@@ -175,7 +175,7 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
         // Arrange
         var speaker = await CreateUserAsync($"q5-{Guid.NewGuid():N}@test.local", RoleName.Speaker);
         var script = await CreateScriptAsync(
-            "[vi]Anh [en]next [vi]toi", "[vi]Anh next toi", ScriptDomain.ItTechnology, speaker.UserId);
+            "[vi]Anh [en]next [vi]toi", "[vi]Anh next toi", "ItTechnology", speaker.UserId);
 
         // Act — duyệt nội dung đúng luồng trigger.
         Db.ScriptReviews.Add(new ScriptReview
@@ -208,7 +208,7 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
         // Arrange
         var speaker = await CreateUserAsync($"q6-{Guid.NewGuid():N}@test.local", RoleName.Speaker);
         var script = await CreateScriptAsync(
-            "[vi]Anh [en]drop [vi]toi", "[vi]Anh drop toi", ScriptDomain.ItTechnology, speaker.UserId);
+            "[vi]Anh [en]drop [vi]toi", "[vi]Anh drop toi", "ItTechnology", speaker.UserId);
 
         // Act — soft-delete: xoá cả văn bản lẫn audio (nút "Xóa hoàn toàn").
         script.Status = ScriptStatus.Deactivated;
@@ -249,7 +249,7 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
         {
             var script = await CreateValidatedScriptAsync(
                 $"[vi]Anh [en]{word} [vi]toi", $"[vi]Anh {word} toi",
-                ScriptDomain.ItTechnology, speaker.UserId);
+                "ItTechnology", speaker.UserId);
 
             Db.TaskScripts.Add(new TaskScript
             {
@@ -387,7 +387,7 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
 
         // Task đã có mục công việc — gỡ người cuối sẽ đẩy task về nháp, không ai làm tiếp.
         var script = await CreateValidatedScriptAsync(
-            "[vi]Anh [en]busy [vi]toi", "[vi]Anh busy toi", ScriptDomain.ItTechnology, speaker.UserId);
+            "[vi]Anh [en]busy [vi]toi", "[vi]Anh busy toi", "ItTechnology", speaker.UserId);
 
         Db.TaskScripts.Add(new TaskScript
         {
@@ -447,9 +447,9 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
 
         // Câu của task 2 vào hàng trước, câu của task 1 sau.
         var s2 = await CreateValidatedScriptAsync(
-            "[vi]Thu [en]queue2 [vi]nhe", "[vi]Thu queue2 nhe", ScriptDomain.ItTechnology, a.UserId);
+            "[vi]Thu [en]queue2 [vi]nhe", "[vi]Thu queue2 nhe", "ItTechnology", a.UserId);
         var s1 = await CreateValidatedScriptAsync(
-            "[vi]Thu [en]queue1 [vi]nhe", "[vi]Thu queue1 nhe", ScriptDomain.ItTechnology, a.UserId);
+            "[vi]Thu [en]queue1 [vi]nhe", "[vi]Thu queue1 nhe", "ItTechnology", a.UserId);
 
         Db.TaskScripts.AddRange(
             new TaskScript { TaskId = t2.TaskId, ScriptId = s2.ScriptId, Status = TaskScriptStatus.Pending },
@@ -468,16 +468,16 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
         await Db.SaveChangesAsync(ct);
 
         // Đợt phát câu chung: A nhận task 1 vẫn thấy câu cũ hơn nằm trong task 2.
-        var first = await ScriptAssignmentService.GetNextAsync(a.UserId, t1.TaskId, ct);
+        var first = await ScriptAssignmentService.GetNextAsync(a.UserId, t1.TaskId, null, ct);
         Assert.Equal(s2.ScriptId, first?.ScriptId);
 
         // Không còn giữ chỗ nên B cũng nhận đúng câu đó — mỗi người một bản riêng.
-        var second = await ScriptAssignmentService.GetNextAsync(b.UserId, t2.TaskId, ct);
+        var second = await ScriptAssignmentService.GetNextAsync(b.UserId, t2.TaskId, null, ct);
         Assert.Equal(s2.ScriptId, second?.ScriptId);
 
         // Người ngoài đợt không mượn task để lấy câu.
         var error = await Assert.ThrowsAsync<ForbiddenException>(
-            () => ScriptAssignmentService.GetNextAsync(c.UserId, t1.TaskId, ct));
+            () => ScriptAssignmentService.GetNextAsync(c.UserId, t1.TaskId, null, ct));
         Assert.Equal("task_not_recordable", error.Code);
     }
 
@@ -510,7 +510,7 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
         {
             var script = await CreateValidatedScriptAsync(
                 $"[vi]Đủ [en]full{i} [vi]câu", $"[vi]Đủ full{i} câu",
-                ScriptDomain.ItTechnology, speaker.UserId);
+                "ItTechnology", speaker.UserId);
             scripts.Add(script);
 
             Db.TaskScripts.Add(new TaskScript
@@ -528,9 +528,69 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
 
         await Db.SaveChangesAsync(ct);
 
-        var next = await ScriptAssignmentService.GetNextAsync(speaker.UserId, task.TaskId, ct);
+        var next = await ScriptAssignmentService.GetNextAsync(speaker.UserId, task.TaskId, null, ct);
 
         Assert.Equal(scripts[10].ScriptId, next?.ScriptId);
+    }
+
+    /// <summary>
+    /// Speaker bỏ qua một câu trong phiên: lần lấy kế tiếp không trả lại câu đó, và
+    /// `alignment`/`semanticWarning` đi kèm câu trả về.
+    /// </summary>
+    [Fact]
+    public async Task GetNext_BoQuaCauTrongPhien_TraCauKeTiep()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var speaker = (await TaoBaSpeakerAsync())[0];
+
+        var wave = await CreateWaveAsync(
+            $"Đợt skip-{Guid.NewGuid():N}", 2000,
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
+            DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)), ManagerUserId, WaveStatus.Open);
+        wave.AssignedTo = ManagerUserId;
+        await Db.SaveChangesAsync(ct);
+
+        var task = await CreateTaskAsync(wave.WaveId, TaskType.Recording, 2, ManagerUserId);
+        Db.TaskAssignments.Add(new TaskAssignment
+        {
+            TaskId = task.TaskId, UserId = speaker.UserId,
+            AssignmentStatus = AssignmentStatus.Active, AssignedAt = DateTimeOffset.UtcNow
+        });
+
+        var first = await CreateValidatedScriptAsync(
+            "[vi]Thu [en]alpha [vi]nhe", "[vi]Thu alpha nhe", "ItTechnology", speaker.UserId);
+        var second = await CreateValidatedScriptAsync(
+            "[vi]Thu [en]bravo [vi]nhe", "[vi]Thu bravo nhe", "ItTechnology", speaker.UserId);
+
+        Db.TaskScripts.AddRange(
+            new TaskScript { TaskId = task.TaskId, ScriptId = first.ScriptId, Status = TaskScriptStatus.Pending },
+            new TaskScript { TaskId = task.TaskId, ScriptId = second.ScriptId, Status = TaskScriptStatus.Pending });
+        Db.ScriptWords.AddRange(
+            new ScriptWord
+            {
+                ScriptId = first.ScriptId, WordPosition = 1, EnWord = "alpha", ViWord = "alpha",
+                Relation = ScriptWordRelation.SemanticEquivalent
+            },
+            new ScriptWord
+            {
+                ScriptId = second.ScriptId, WordPosition = 1, EnWord = "bravo", ViWord = "bravo",
+                Relation = ScriptWordRelation.SemanticEquivalent
+            });
+        await Db.SaveChangesAsync(ct);
+
+        var next = await ScriptAssignmentService.GetNextAsync(speaker.UserId, task.TaskId, null, ct);
+        Assert.NotNull(next);
+        Assert.NotEmpty(next!.Alignment);
+        Assert.Null(next.SemanticWarning);
+
+        var skipped = await ScriptAssignmentService.GetNextAsync(
+            speaker.UserId, task.TaskId, [next.ScriptId], ct);
+        Assert.NotNull(skipped);
+        Assert.NotEqual(next.ScriptId, skipped!.ScriptId);
+
+        var noneLeft = await ScriptAssignmentService.GetNextAsync(
+            speaker.UserId, task.TaskId, [next.ScriptId, skipped.ScriptId], ct);
+        Assert.Null(noneLeft);
     }
 
     // ------------------------------ bản ghi bị từ chối thì ai được thu lại
@@ -549,7 +609,7 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
 
         var script = await CreateValidatedScriptAsync(
             "[vi]Thu [en]retry [vi]lai nhe", "[vi]Thu thu lai nhe",
-            ScriptDomain.ItTechnology, a.UserId);
+            "ItTechnology", a.UserId);
 
         var recording = await CreateRecordingAsync(script.ScriptId, a.UserId, SentenceVariant.CodeSwitching);
         recording.Status = RecordingStatus.Rejected;
@@ -586,7 +646,7 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
 
         var script = await CreateValidatedScriptAsync(
             "[vi]Thu [en]deadend [vi]nhe", "[vi]Thu deadend nhe",
-            ScriptDomain.ItTechnology, a.UserId);
+            "ItTechnology", a.UserId);
 
         Db.TaskScripts.Add(new TaskScript
         {
@@ -649,7 +709,7 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
 
         var script = await CreateValidatedScriptAsync(
             "[vi]Thu [en]variant [vi]nhe", "[vi]Thu variant nhe",
-            ScriptDomain.ItTechnology, a.UserId);
+            "ItTechnology", a.UserId);
 
         Db.TaskScripts.Add(new TaskScript
         {
@@ -739,7 +799,7 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
         var speaker = await CreateUserAsync($"sp-requeue-{Guid.NewGuid():N}@test.local", RoleName.Speaker);
         var script = await CreateValidatedScriptAsync(
             "[vi]Thu [en]again [vi]nhe", "[vi]Thu lai nhe",
-            ScriptDomain.ItTechnology, speaker.UserId);
+            "ItTechnology", speaker.UserId);
 
         await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
         await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.PureVietnamese);

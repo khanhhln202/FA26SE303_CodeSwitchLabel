@@ -23,6 +23,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<AppUser> AppUsers => Set<AppUser>();
     public DbSet<SpeakerProfile> SpeakerProfiles => Set<SpeakerProfile>();
+    public DbSet<Domain> Domains => Set<Domain>();
     public DbSet<UserDomain> UserDomains => Set<UserDomain>();
     public DbSet<SystemConfig> SystemConfigs => Set<SystemConfig>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
@@ -112,7 +113,6 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         modelBuilder.HasPostgresEnum<ConfigValueType>();
         modelBuilder.HasPostgresEnum<AuditAction>();
         modelBuilder.HasPostgresEnum<ScriptStatus>();
-        modelBuilder.HasPostgresEnum<ScriptDomain>();
         modelBuilder.HasPostgresEnum<ScriptReviewAction>();
         modelBuilder.HasPostgresEnum<ScriptWordRelation>();
         modelBuilder.HasPostgresEnum<TaskType>();
@@ -137,6 +137,13 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
 
     private static void MapUsers(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<Domain>(e =>
+        {
+            e.ToTable("domain");
+            e.HasKey(x => x.Code);
+            e.Property(x => x.IdDigit).HasMaxLength(1);
+        });
+
         modelBuilder.Entity<Role>(e =>
         {
             e.ToTable("role");

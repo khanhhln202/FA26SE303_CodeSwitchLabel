@@ -108,7 +108,7 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
 
         var script = await CreateValidatedScriptAsync(
             $"[vi]Em nhớ [en]upload{dau} [vi]tài liệu nhé.", $"[vi]Em nhớ tải tài liệu lên nhé {dau}.",
-            ScriptDomain.ItTechnology, speaker.UserId);
+            "ItTechnology", speaker.UserId);
 
         var recording = await CreateRecordingAsync(
             script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
@@ -157,7 +157,7 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
 
         var script = await CreateValidatedScriptAsync(
             $"[vi]Chiều nay nhóm mình [en]meeting{dau} [vi]nhé.", $"[vi]Chiều nay nhóm mình họp nhé {dau}.",
-            ScriptDomain.ItTechnology, speaker.UserId);
+            "ItTechnology", speaker.UserId);
 
         var recording = await CreateRecordingAsync(
             script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
@@ -190,7 +190,7 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
         var script = await CreateValidatedScriptAsync(
             $"[vi]Tối nay bên kỹ thuật sẽ [en]update{dau} [vi]máy chủ.",
             $"[vi]Tối nay bên kỹ thuật sẽ cập nhật máy chủ {dau}.",
-            ScriptDomain.ItTechnology, speaker.UserId);
+            "ItTechnology", speaker.UserId);
 
         var recording = await CreateRecordingAsync(
             script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
@@ -239,7 +239,7 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
 
         var script = await CreateValidatedScriptAsync(
             $"[vi]Nhớ gửi [en]report{dau} [vi]trước hạn nhé.", $"[vi]Nhớ gửi báo cáo trước hạn nhé {dau}.",
-            ScriptDomain.ItTechnology, speaker.UserId);
+            "ItTechnology", speaker.UserId);
 
         var cs = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
         var vi = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.PureVietnamese);
@@ -312,7 +312,7 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
             var script = await CreateValidatedScriptAsync(
                 $"[vi]Cả nhóm đã [en]deploy{dau}{i} [vi]xong rồi.",
                 $"[vi]Cả nhóm đã triển khai xong rồi {dau}{i}.",
-                ScriptDomain.ItTechnology, speaker.UserId);
+                "ItTechnology", speaker.UserId);
 
             scriptIds.Add(script.ScriptId);
 
@@ -415,7 +415,7 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
 
         var script = await CreateValidatedScriptAsync(
             $"[vi]Làm ơn mở [en]Teams{dau} [vi]giúp em.", $"[vi]Làm ơn mở ứng dụng giúp em {dau}.",
-            ScriptDomain.ItTechnology, speaker.UserId);
+            "ItTechnology", speaker.UserId);
 
         var cs = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
         var vi = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.PureVietnamese);
@@ -487,7 +487,7 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
         var script = await CreateValidatedScriptAsync(
             $"[vi]Cô giáo dặn cả lớp vào [en]Coursera{dau} [vi]trước thứ Sáu.",
             $"[vi]Cô giáo dặn cả lớp vào trang học trước thứ Sáu {dau}.",
-            ScriptDomain.ItTechnology, speaker.UserId);
+            "ItTechnology", speaker.UserId);
 
         var cs = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
 
@@ -542,7 +542,7 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
         var script = await CreateValidatedScriptAsync(
             $"[vi]Hôm nay mình cần cài đặt [en]Excel{dau} [vi]cho kịp giờ.",
             $"[vi]Hôm nay mình cần cài đặt bảng tính cho kịp giờ {dau}.",
-            ScriptDomain.ItTechnology, speaker.UserId);
+            "ItTechnology", speaker.UserId);
 
         var cs = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
         var vi = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.PureVietnamese);

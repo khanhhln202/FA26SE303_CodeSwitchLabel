@@ -102,6 +102,7 @@ public class TaskService(
     IWaveRepository waves,
     IScriptQueueRepository queue,
     ITaskProgressTracker tracker,
+    IDomainService domains,
     ISystemConfigService config,
     TimeProvider clock) : ITaskService
 {
@@ -147,6 +148,10 @@ public class TaskService(
         // waveId null = task độc lập (C1): bỏ qua mọi kiểm tra chiến dịch.
         // Trigger trg_task_wave_window / trg_task_wave_target / trg_task_creator_assigned
         // đều RETURN NEW ngay khi NEW.wave_id IS NULL.
+        var requestedDomain = request.Domain is null
+            ? null
+            : await domains.ResolveActiveAsync(request.Domain, ct);
+
         Wave? wave = null;
         if (request.WaveId.HasValue)
         {
@@ -183,7 +188,7 @@ public class TaskService(
                     $"{wave.StartDate:yyyy-MM-dd} đến {wave.EndDate:yyyy-MM-dd}.");
             }
 
-            var domain = request.Domain ?? wave.Domain;
+            var domain = requestedDomain ?? wave.Domain;
 
             // Nhiệm vụ phải cùng chủ đề với chiến dịch
             if (domain != wave.Domain)
@@ -205,7 +210,7 @@ public class TaskService(
             }
         }
 
-        var taskDomain = request.Domain ?? (wave != null ? wave.Domain : ScriptDomain.ItTechnology);
+        var taskDomain = requestedDomain ?? (wave != null ? wave.Domain : "ItTechnology");
 
         // Task thu âm: lấy danh sách câu RIÊNG cho từng Speaker. Hai Speaker được nhận
         // cùng một câu, nên kho câu ít hơn chỉ tiêu vẫn tạo task — mỗi người chỉ nhận
@@ -512,9 +517,9 @@ public class TaskService(
         if (request.Description is not null) task.Description = Clean(request.Description);
 
         // Cập nhật chủ đề (nếu task đang gắn chiến dịch thì phải khớp chủ đề chiến dịch)
-        if (request.Domain.HasValue)
+        if (request.Domain is not null)
         {
-            var newDomain = request.Domain.Value;
+            var newDomain = await domains.ResolveActiveAsync(request.Domain, ct);
             if (task.WaveId.HasValue)
             {
                 var wave = await waves.GetAsync(task.WaveId.Value, ct);
@@ -688,17 +693,21 @@ public class TaskService(
                 accepted = [];
                 var excludedIds = new HashSet<string>();
                 var criteria = request.AutoFill!;
-                if (criteria.Domain.HasValue && criteria.Domain != task.Domain)
+                var criteriaDomain = criteria.Domain is null
+                    ? null
+                    : await domains.ResolveActiveAsync(criteria.Domain, ct);
+
+                if (criteriaDomain is not null && criteriaDomain != task.Domain)
                 {
                     throw new UnprocessableException(
                         "auto_fill_domain_mismatch",
-                        $"Chủ đề tự lấp ({criteria.Domain}) không khớp với chủ đề nhiệm vụ ({task.Domain}).");
+                        $"Chủ đề tự lấp ({criteriaDomain}) không khớp với chủ đề nhiệm vụ ({task.Domain}).");
                 }
 
                 while (accepted.Count < criteria.Count)
                 {
                     var ids = await tasks.FindScriptCandidatesAsync(
-                        taskId, assigneeIds, criteria.Domain ?? task.Domain,
+                        taskId, assigneeIds, criteriaDomain ?? task.Domain,
                         criteria.Count - accepted.Count, [.. excludedIds], ct);
                     if (ids.Count == 0) break;
 
@@ -1496,7 +1505,7 @@ public class TaskService(
 
     /// <returns>Danh sách id được nhận vào task.</returns>
     private async Task<List<string>> FilterScriptsAsync(
-        long taskId, ScriptDomain taskDomain, string[] ids, List<SkippedItemDto> skipped,
+        long taskId, string taskDomain, string[] ids, List<SkippedItemDto> skipped,
         CancellationToken ct)
     {
         var existing = (await tasks.GetScriptItemsAsync(taskId, ct)).Select(i => i.ScriptId).ToHashSet();

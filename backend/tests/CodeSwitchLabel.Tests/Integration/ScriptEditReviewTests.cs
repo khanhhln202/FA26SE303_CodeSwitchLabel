@@ -32,7 +32,7 @@ public sealed class ScriptEditReviewTests : IntegrationTestBase
         var script = await CreateScriptAsync(
             "[vi]Em nên [en]scan [vi]tài liệu này rồi gửi qua [en]email [vi]cho tôi.",
             "[vi]Em nên quét tài liệu này rồi gửi qua thư điện tử cho tôi.",
-            ScriptDomain.ItTechnology,
+            "ItTechnology",
             SpeakerUserId,
             enWordCount: 2);
 
@@ -63,7 +63,7 @@ public sealed class ScriptEditReviewTests : IntegrationTestBase
         var script = await CreateScriptAsync(
             "[vi]Em nên [en]scan [vi]tài liệu này rồi gửi qua [en]email [vi]cho tôi.",
             "[vi]Em nên quét tài liệu này rồi gửi qua thư điện tử cho tôi.",
-            ScriptDomain.ItTechnology,
+            "ItTechnology",
             SpeakerUserId,
             enWordCount: 2);
 

@@ -38,9 +38,9 @@ public interface IUserService
         long userId, UpdateSpeakerProfileRequest request, CancellationToken ct = default);
 
     /// <summary>Chủ đề Reviewer này đủ trình độ duyệt nội dung. Rỗng với người không phải Reviewer.</summary>
-    Task<IReadOnlyList<ScriptDomain>> GetDomainsAsync(long userId, CancellationToken ct = default);
+    Task<IReadOnlyList<string>> GetDomainsAsync(long userId, CancellationToken ct = default);
 
     /// <summary>Đặt lại toàn bộ chủ đề duyệt của một Reviewer; chủ đề không còn trong danh sách thì bị gỡ.</summary>
-    Task<IReadOnlyList<ScriptDomain>> ReplaceDomainsAsync(
-        long userId, IReadOnlyList<ScriptDomain> domains, CancellationToken ct = default);
+    Task<IReadOnlyList<string>> ReplaceDomainsAsync(
+        long userId, IReadOnlyList<string> domains, CancellationToken ct = default);
 }

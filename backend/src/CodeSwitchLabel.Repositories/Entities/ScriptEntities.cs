@@ -39,8 +39,14 @@ public class Script
     public ScriptStatus Status { get; set; }
     public int WordCount { get; set; }
     public int EnWordCount { get; set; }
-    public ScriptDomain Domain { get; set; }
+    public string Domain { get; set; } = string.Empty;
     public long CreatedBy { get; set; }
+
+    /// <summary>
+    /// Cảnh báo của AI khi hai câu lệch nghĩa; NULL = không có cảnh báo. Xóa khi
+    /// nội dung được sửa vì cảnh báo cũ không còn đúng với câu mới.
+    /// </summary>
+    public string? SemanticWarning { get; set; }
 
     /// <summary>Null nghĩa là nhập tay từng câu, không qua file.</summary>
     public long? ImportBatchId { get; set; }

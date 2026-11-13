@@ -123,13 +123,13 @@ public sealed class TaskWaveIndependentTests : IntegrationTestBase
     {
         var script = await CreateValidatedScriptAsync(
             "[vi]Em nên [en]scan [vi]tài liệu này.", "[vi]Em nên quét tài liệu này.",
-            ScriptDomain.ItTechnology, AdminUserId, 1);
+            "ItTechnology", AdminUserId, 1);
 
         var recordingTask = await TaskService.CreateAsync(new CreateTaskRequest
         {
             WaveId = WaveId,
             TaskType = TaskType.Recording,
-            Domain = ScriptDomain.ItTechnology,
+            Domain = "ItTechnology",
             Description = "Xoá vĩnh viễn task thu âm",
             TargetQty = 1,
             Deadline = DateTimeOffset.UtcNow.AddDays(7)
@@ -145,7 +145,7 @@ public sealed class TaskWaveIndependentTests : IntegrationTestBase
         {
             WaveId = WaveId,
             TaskType = TaskType.Review,
-            Domain = ScriptDomain.ItTechnology,
+            Domain = "ItTechnology",
             Description = "Xoá vĩnh viễn task duyệt",
             TargetQty = 1,
             Deadline = DateTimeOffset.UtcNow.AddDays(7)
@@ -265,7 +265,7 @@ public sealed class TaskWaveIndependentTests : IntegrationTestBase
         {
             WaveId = WaveId,
             TaskType = TaskType.Recording,
-            Domain = ScriptDomain.ItTechnology,
+            Domain = "ItTechnology",
             Description = "Task của manager khác",
             TargetQty = 1,
             Deadline = DateTimeOffset.UtcNow.AddDays(7)
@@ -309,13 +309,13 @@ public sealed class TaskWaveIndependentTests : IntegrationTestBase
         // hàng và items ở lại làm dấu vết.
         var script = await CreateValidatedScriptAsync(
             "[vi]Anh gửi em cái [en]link [vi]nhé.", "[vi]Anh gửi em cái đường dẫn nhé.",
-            ScriptDomain.DailyLife, AdminUserId, 1);
+            "DailyLife", AdminUserId, 1);
 
         var created = await TaskService.CreateAsync(new CreateTaskRequest
         {
             WaveId = null,
             TaskType = TaskType.Recording,
-            Domain = ScriptDomain.DailyLife, // match script domain
+            Domain = "DailyLife", // match script domain
             Description = "Đóng thay vì xoá",
             TargetQty = 1,
             Deadline = DateTimeOffset.UtcNow.AddDays(7)

@@ -25,6 +25,10 @@ public record ImportScriptItem
 
     [JsonPropertyName("alignment")]
     public List<AlignmentItem> Alignment { get; init; } = [];
+
+    /// <summary>Cảnh báo lệch nghĩa do LLM sinh khi nhập .txt; file JSON không gửi trường này.</summary>
+    [JsonIgnore]
+    public string? SemanticWarning { get; init; }
 }
 
 public record AlignmentItem
@@ -77,7 +81,7 @@ public record ScriptListItemDto(
     string ViContent,
     string ViPlain,
     ScriptStatus Status,
-    ScriptDomain Domain,
+    string Domain,
     int WordCount,
     int EnWordCount,
     DateTimeOffset CreatedAt);
@@ -91,14 +95,15 @@ public record ScriptDetailDto(
     string ViPlain,
     IReadOnlyList<AlignmentItem> Alignment,
     ScriptStatus Status,
-    ScriptDomain Domain,
+    string Domain,
     int WordCount,
     int EnWordCount,
     long CreatedBy,
     long? ImportBatchId,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    IReadOnlyList<ScriptReviewDto> Reviews);
+    IReadOnlyList<ScriptReviewDto> Reviews,
+    string? SemanticWarning);
 
 public record ScriptReviewDto(
     long ScriptReviewId,
@@ -117,11 +122,13 @@ public record NextScriptDto(
     string CsPlain,
     string ViContent,
     string ViPlain,
-    ScriptDomain Domain,
+    string Domain,
     int WordCount,
     int EnWordCount,
     IReadOnlyList<SentenceVariant> RemainingVariants,
-    RecordingGuidanceDto Guidance);
+    RecordingGuidanceDto Guidance,
+    IReadOnlyList<AlignmentItem> Alignment,
+    string? SemanticWarning);
 
 /// <param name="MaxLeadingSilenceSec">Khoảng lặng đầu tối đa; vượt mức này là trượt kiểm tra tự động.</param>
 /// <param name="MaxTrailingSilenceSec">Khoảng lặng cuối tối đa; vượt mức này là trượt kiểm tra tự động.</param>
@@ -166,7 +173,7 @@ public record CreateScriptRequest
     public string? ViRaw { get; init; }
 
     [Required(ErrorMessage = "Phải chọn chủ đề.")]
-    public ScriptDomain? Domain { get; init; }
+    public string? Domain { get; init; }
 
     /// <summary>Quan hệ Anh–Việt, vào chữ số thứ ba của mã script. Bỏ trống là dịch trực tiếp.</summary>
     public ScriptRelation? Relation { get; init; }
@@ -246,7 +253,7 @@ public record ContributionReviewItemDto(
     string ScriptId,
     string CsContent,
     string ViContent,
-    ScriptDomain Domain,
+    string Domain,
     DateTimeOffset CreatedAt,
     ContributorDto Contributor,
     ContributionBlocker Blocker)
@@ -258,14 +265,14 @@ public record ContributionReviewItemDto(
 /// <param name="OnlyReviewable">true: bỏ qua câu đang nằm trong lô của người khác.</param>
 public record ContributionSearchRequest : PageRequest
 {
-    public ScriptDomain? Domain { get; init; }
+    public string? Domain { get; init; }
     public bool OnlyReviewable { get; init; }
 }
 
 public record ScriptSearchRequest : PageRequest
 {
     public ScriptStatus? Status { get; init; }
-    public ScriptDomain? Domain { get; init; }
+    public string? Domain { get; init; }
     public string? Keyword { get; init; }
 }
 

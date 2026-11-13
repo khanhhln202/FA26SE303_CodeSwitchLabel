@@ -26,7 +26,7 @@ public record ProposalQueueItemDto(
     ProposalKind Kind,
     ProposalStatus Status,
     string ScriptId,
-    ScriptDomain Domain,
+    string Domain,
     long ProposerId,
     string ProposerName,
     string? ErrorReasonCode,
@@ -54,7 +54,7 @@ public record SpeakerProposalHistoryDto(
     ProposalKind Kind,
     ProposalStatus Status,
     string ScriptId,
-    ScriptDomain Domain,
+    string Domain,
     string? ErrorReasonCode,
     string? ErrorReasonDescription,
     string? Comment,
@@ -175,7 +175,7 @@ public record ProposalDraftDto(
 public record ProposalQueueQuery : PageRequest
 {
     public ProposalKind? Kind { get; init; }
-    public ScriptDomain? Domain { get; init; }
+    public string? Domain { get; init; }
     public string? Keyword { get; init; }
 }
 

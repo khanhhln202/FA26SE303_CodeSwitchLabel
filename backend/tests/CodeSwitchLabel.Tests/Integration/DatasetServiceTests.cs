@@ -48,7 +48,7 @@ public sealed class DatasetServiceTests : IntegrationTestBase
         var script = await CreateValidatedScriptAsync(
             "[vi]Em nên [en]scan [vi]tài liệu này rồi gửi qua [en]email [vi]cho tôi.",
             "[vi]Em nên quét tài liệu này rồi gửi qua thư điện tử cho tôi.",
-            ScriptDomain.ItTechnology,
+            "ItTechnology",
             AdminUserId,
             enWordCount: 2);
 

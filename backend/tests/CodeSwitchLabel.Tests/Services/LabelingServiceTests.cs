@@ -167,6 +167,34 @@ public sealed class LabelingServiceTests
         Assert.InRange(body.RootElement.GetProperty("max_tokens").GetInt32(), 256, 8192);
     }
 
+    [Fact]
+    public async Task LlmBaoLechNghia_TraVeCanhBao()
+    {
+        const string mismatch =
+            """{"cs_tagged":"[vi]Em nên [en]scan [vi]tài liệu này.","alignment":[{"source":"scan","target":"quét","relation":"semantic_equivalent"}],"semantic_warning":"Câu tiếng Việt nói về quét tài liệu, câu trộn lại nói về nộp hồ sơ."}""";
+        var service = CreateService(new StubHandler(() => Ok(ChatResponse(mismatch))));
+
+        var result = await service.LabelAsync(
+            "Em nên scan tài liệu này.", "Em nên quét tài liệu này.",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            "Câu tiếng Việt nói về quét tài liệu, câu trộn lại nói về nộp hồ sơ.",
+            result.SemanticWarning);
+    }
+
+    [Fact]
+    public async Task LlmKhongBaoLechNghia_CanhBaoNull()
+    {
+        var service = CreateService(new StubHandler(() => Ok(ChatResponse(ValidContent))));
+
+        var result = await service.LabelAsync(
+            "Em nên scan tài liệu này.", "Em nên quét tài liệu này.",
+            TestContext.Current.CancellationToken);
+
+        Assert.Null(result.SemanticWarning);
+    }
+
     private static LabelingService CreateService(
         StubHandler handler, LlmOptions? options = null)
     {

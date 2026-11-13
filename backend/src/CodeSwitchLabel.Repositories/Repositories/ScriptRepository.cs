@@ -9,7 +9,7 @@ public interface IScriptRepository
 {
     /// <summary><paramref name="sort"/> rỗng (Field = null) là thứ tự mặc định.</summary>
     Task<(IReadOnlyList<Script> Items, int Total)> SearchAsync(
-        ScriptStatus? status, ScriptDomain? domain, string? keyword,
+        ScriptStatus? status, string? domain, string? keyword,
         int page, int pageSize, SortSpec<ScriptSortField> sort, CancellationToken ct = default);
 
     Task<Script?> GetAsync(string id, CancellationToken ct = default);
@@ -66,7 +66,7 @@ public interface IScriptRepository
 
     /// <summary>Gọi hàm fn_generate_script_id của database để lấy mã đúng chuẩn s_ + 9 hoặc 12 chữ số.</summary>
     Task<string> GenerateIdAsync(
-        int enWordCount, ScriptDomain domain, ScriptRelation relation, CancellationToken ct = default);
+        int enWordCount, string domain, ScriptRelation relation, CancellationToken ct = default);
 
     Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction> BeginTransactionAsync(
         CancellationToken ct = default);
@@ -103,13 +103,13 @@ public interface IScriptRepository
 public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
 {
     public async Task<(IReadOnlyList<Script> Items, int Total)> SearchAsync(
-        ScriptStatus? status, ScriptDomain? domain, string? keyword,
+        ScriptStatus? status, string? domain, string? keyword,
         int page, int pageSize, SortSpec<ScriptSortField> sort, CancellationToken ct = default)
     {
         var query = db.Scripts.AsNoTracking();
 
         if (status.HasValue) query = query.Where(s => s.Status == status.Value);
-        if (domain.HasValue) query = query.Where(s => s.Domain == domain.Value);
+        if (domain is not null) query = query.Where(s => s.Domain == domain);
 
         if (!string.IsNullOrWhiteSpace(keyword))
         {
@@ -153,7 +153,9 @@ public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
     }
 
     public Task<Script?> GetAsync(string id, CancellationToken ct = default) =>
-        db.Scripts.AsNoTracking().FirstOrDefaultAsync(s => s.ScriptId == id, ct);
+        db.Scripts.AsNoTracking()
+            .Include(s => s.Words.OrderBy(w => w.WordPosition))
+            .FirstOrDefaultAsync(s => s.ScriptId == id, ct);
 
     public async Task<Script?> GetForUpdateAsync(string id, CancellationToken ct = default)
     {
@@ -275,15 +277,12 @@ public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
                  r.Status != RecordingStatus.Rejected, ct);
 
     public async Task<string> GenerateIdAsync(
-        int enWordCount, ScriptDomain domain, ScriptRelation relation, CancellationToken ct = default)
+        int enWordCount, string domain, ScriptRelation relation, CancellationToken ct = default)
     {
         // Số thứ tự nằm trong một sequence của database, nên phải để database sinh mã.
-        // Ép kiểu tường minh sang script_domain để PostgreSQL chọn đúng hàm.
-        var domainName = SnakeCaseNaming.ToSnakeCase(domain.ToString());
-
         return await db.Database
             .SqlQuery<string>(
-                $"""SELECT fn_generate_script_id({enWordCount}, CAST({domainName} AS script_domain), {(int)relation}) AS "Value" """)
+                $"""SELECT fn_generate_script_id({enWordCount}, {domain}, {(int)relation}) AS "Value" """)
             .SingleAsync(ct);
     }
 

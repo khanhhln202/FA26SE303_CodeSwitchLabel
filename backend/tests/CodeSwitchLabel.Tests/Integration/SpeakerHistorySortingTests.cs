@@ -43,7 +43,7 @@ public sealed class SpeakerHistorySortingTests : IntegrationTestBase
         {
             var script = await CreateScriptAsync(
                 $"[vi]Cap [en]lich su {token} so {i}", $"[vi]Cặp lịch sử {token} số {i}",
-                ScriptDomain.ItTechnology, AdminUserId);
+                "ItTechnology", AdminUserId);
 
             var recording = await CreateRecordingAsync(
                 script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);

@@ -37,7 +37,8 @@ internal static class ScriptMapper
             s.UpdatedAt,
             [.. s.Reviews.Select(r => new ScriptReviewDto(
                 r.ScriptReviewId, r.UserId, r.Action, r.ErrorReason?.ReasonCode,
-                r.EditedCsContent, r.EditedViContent, r.Comment, r.ReviewedAt))]);
+                r.EditedCsContent, r.EditedViContent, r.Comment, r.ReviewedAt))],
+            s.SemanticWarning);
 }
 
 public class ScriptService(
@@ -45,6 +46,7 @@ public class ScriptService(
     IScriptQueueService queue,
     IReasonRepository reasonRepository,
     IUserDomainRepository domainRepository,
+    IDomainService domains,
     ISystemConfigService config,
     ITaskProgressTracker taskTracker,
     ILabelingService labeling,
@@ -142,11 +144,11 @@ public class ScriptService(
         if (string.IsNullOrWhiteSpace(domain))
         {
             throw new UnprocessableException(
-                "domain_required", "File .txt cần chọn chủ đề: IT/Technology, Education hoặc Daily Life.");
+                "domain_required", "File .txt cần chọn chủ đề đang hoạt động.");
         }
 
         // Kiểm tra chủ đề một lần trước khi gán nhãn; từng câu vẫn đi qua đúng luật import hiện có.
-        _ = ParseDomain(domain);
+        var domainCode = await domains.ResolveActiveAsync(domain, ct);
 
         var pairs = await RawScriptTextParser.ParseAsync(textFile, ct);
 
@@ -172,10 +174,11 @@ public class ScriptService(
                 items.Add(new ImportScriptItem
                 {
                     Id = id,
-                    Domain = domain,
+                    Domain = domainCode,
                     CsTranscript = labeled.CsTagged,
                     ViEquivalent = CodeSwitchText.ViTag + pairs[i].Vi,
-                    Alignment = labeled.Alignment
+                    Alignment = labeled.Alignment,
+                    SemanticWarning = labeled.SemanticWarning
                 });
             }
             catch (UnprocessableException ex)
@@ -234,6 +237,9 @@ public class ScriptService(
                     throw new UnprocessableException("empty_content", "Thiếu câu chen tiếng Anh hoặc câu thuần Việt.");
                 }
 
+                cs = ScriptPairRules.NormalizePunctuation(cs);
+                ve = ScriptPairRules.NormalizePunctuation(ve);
+
                 var (wordCount, enWordCount) = ScriptPairRules.ValidatePair(cs, ve);
                 var key = CodeSwitchText.ComparisonKey(cs);
 
@@ -242,7 +248,7 @@ public class ScriptService(
                     throw ConflictException.DuplicateContent();
                 }
 
-                var domain = ParseDomain(item.Domain);
+                var domain = await domains.ResolveActiveAsync(item.Domain ?? string.Empty, ct);
                 var words = ScriptPairRules.BuildWords(item.Alignment ?? [], enWordCount, allowEmptyTargets);
                 var relation = ScriptPairRules.RelationOf(words);
                 var scriptId = await repository.GenerateIdAsync(enWordCount, domain, relation, ct);
@@ -260,7 +266,8 @@ public class ScriptService(
                     CreatedBy = importedById,
                     ImportBatchId = batch.BatchId,
                     CreatedAt = now,
-                    UpdatedAt = now
+                    UpdatedAt = now,
+                    SemanticWarning = item.SemanticWarning
                 };
 
                 foreach (var word in words) word.ScriptId = scriptId;
@@ -462,7 +469,7 @@ public class ScriptService(
         var vi = request.ViContent.Trim();
 
         var plan = await ScriptPairRules.ValidateEditContentAsync(repository, script, cs, vi, request.Alignment, ct);
-        ScriptPairRules.ApplyEdit(repository, script, cs, vi, plan);
+        ScriptPairRules.ApplyEdit(repository, script, plan);
 
         await repository.SaveChangesAsync(ct);
 
@@ -541,10 +548,10 @@ public class ScriptService(
 
             case ScriptReviewAction.Edited:
                 (editedCs, editedVe) = RequireEditedPair(request);
-                review.EditedCsContent = editedCs;
-                review.EditedViContent = editedVe;
                 edit = await ScriptPairRules.ValidateEditContentAsync(
                     repository, script, editedCs, editedVe, request.EditedAlignment, ct);
+                review.EditedCsContent = edit.Cs;
+                review.EditedViContent = edit.Vi;
                 break;
 
             case ScriptReviewAction.Rejected:
@@ -578,7 +585,7 @@ public class ScriptService(
         // LƯU LẦN 2 — sửa câu và chốt trạng thái, lúc này lượt duyệt đã nằm trong database.
         if (edit is not null)
         {
-            ScriptPairRules.ApplyEdit(repository, script, editedCs!, editedVe!, edit);
+            ScriptPairRules.ApplyEdit(repository, script, edit);
         }
 
         if (action is ScriptReviewAction.Accepted or ScriptReviewAction.Edited)
@@ -727,6 +734,7 @@ public class ScriptService(
         string ve;
         List<AlignmentItem> alignment;
         var allowEmptyTargets = false;
+        string? semanticWarning = null;
 
         if (hasRaw)
         {
@@ -743,6 +751,7 @@ public class ScriptService(
             cs = labeled.CsTagged;
             ve = CodeSwitchText.ViTag + viRaw;
             alignment = labeled.Alignment;
+            semanticWarning = labeled.SemanticWarning;
 
             // Luật có thể để trống nghĩa tiếng Việt; câu chờ duyệt cho qua như luồng
             // import .txt để người duyệt điền sau. Admin tạo câu vào thẳng Validated
@@ -762,6 +771,9 @@ public class ScriptService(
             }
         }
 
+        cs = ScriptPairRules.NormalizePunctuation(cs);
+        ve = ScriptPairRules.NormalizePunctuation(ve);
+
         var (wordCount, enWordCount) = ScriptPairRules.ValidatePair(cs, ve);
 
         if (await repository.ContentExistsAsync(cs, ct))
@@ -769,7 +781,7 @@ public class ScriptService(
             throw ConflictException.DuplicateContent();
         }
 
-        var domain = request.Domain!.Value;
+        var domain = await domains.ResolveActiveAsync(request.Domain ?? string.Empty, ct);
 
         // Mỗi từ tiếng Anh phải có ĐÚNG một dòng script_word, nếu không trigger defer
         // trg_script_word_consistency sẽ chặn lúc COMMIT — nên alignment phải phủ đủ số từ.
@@ -800,7 +812,8 @@ public class ScriptService(
             CreatedBy = userId,
             ImportBatchId = batchId,
             CreatedAt = now,
-            UpdatedAt = now
+            UpdatedAt = now,
+            SemanticWarning = semanticWarning
         };
 
         foreach (var word in words) word.ScriptId = scriptId;
@@ -916,21 +929,5 @@ public class ScriptService(
         }
 
         return false;
-    }
-
-    /// <summary>"IT/Technology", "daily life", "Daily_Life" đều hiểu được.</summary>
-    private static ScriptDomain ParseDomain(string value)
-    {
-        var normalized = new string((value ?? string.Empty).Where(char.IsLetter).ToArray()).ToLowerInvariant();
-
-        return normalized switch
-        {
-            "ittechnology" or "it" or "technology" => ScriptDomain.ItTechnology,
-            "education" => ScriptDomain.Education,
-            "dailylife" => ScriptDomain.DailyLife,
-            _ => throw new UnprocessableException(
-                "unknown_domain",
-                $"Chủ đề \"{value}\" không thuộc ba chủ đề của hệ thống: IT/Technology, Education, Daily Life.")
-        };
     }
 }

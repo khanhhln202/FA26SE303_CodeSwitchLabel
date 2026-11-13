@@ -15,7 +15,6 @@ CREATE TYPE gender                AS ENUM ('male','female','other');
 CREATE TYPE config_value_type     AS ENUM ('int','bool','string');
 CREATE TYPE audit_action          AS ENUM ('create','update','delete','import','export','assign','release','login');
 CREATE TYPE script_status         AS ENUM ('pending_validation','validated','rejected','deactivated');
-CREATE TYPE script_domain         AS ENUM ('it_technology','education','daily_life');
 CREATE TYPE script_review_action  AS ENUM ('accepted','edited','rejected');
 CREATE TYPE script_word_relation  AS ENUM ('semantic_equivalent','proper_noun');
 CREATE TYPE task_type             AS ENUM ('recording','review');
@@ -108,10 +107,37 @@ CREATE TABLE speaker_profile (                    -- 1 : 0..1 with app_user
     major         VARCHAR(100)                    -- chuyên ngành: IT | english | business ...
 );
 
+-- Chủ đề (domain) là dữ liệu, không còn là ENUM: Admin tạo, đổi tên, xóa mềm.
+-- code là khóa bất biến và cũng là chữ số thứ 2 của script_id (id_digit) — đổi
+-- code hoặc chữ số sẽ làm lệch toàn bộ mã câu cũ. Chỉ có 9 chữ số nên tối đa
+-- 9 domain, kể cả domain đã xóa mềm (chữ số không tái sử dụng).
+CREATE TABLE domain (
+    code       TEXT PRIMARY KEY,                  -- bất biến, vd. ItTechnology
+    name       TEXT NOT NULL,                     -- đổi được, vd. Công nghệ thông tin
+    id_digit   CHAR(1) NOT NULL UNIQUE CHECK (id_digit BETWEEN '1' AND '9'),
+    is_active  BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX uq_domain_active_name ON domain (lower(name)) WHERE is_active;
+
+CREATE OR REPLACE FUNCTION fn_domain_immutable_columns() RETURNS trigger AS $$ BEGIN
+    IF NEW.code IS DISTINCT FROM OLD.code THEN
+        RAISE EXCEPTION 'domain.code is immutable';
+    END IF;
+    IF NEW.id_digit IS DISTINCT FROM OLD.id_digit THEN
+        RAISE EXCEPTION 'domain.id_digit is immutable';
+    END IF;
+    RETURN NEW;
+END $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_domain_immutable
+    BEFORE UPDATE OF code, id_digit ON domain
+    FOR EACH ROW EXECUTE FUNCTION fn_domain_immutable_columns();
+
 -- Domains a reviewer is qualified to validate (Admin cannot judge every domain).
 CREATE TABLE user_domain (
     user_id     BIGINT NOT NULL REFERENCES app_user(user_id) ON DELETE CASCADE,
-    domain      script_domain NOT NULL,
+    domain      TEXT NOT NULL REFERENCES domain(code),
     assigned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (user_id, domain)
 );
@@ -159,10 +185,11 @@ CREATE TABLE script (
     script_id       VARCHAR(16) PRIMARY KEY,       -- natural key: s_ + 9 legacy digits or 12 new digits
     cs_content      TEXT NOT NULL,                 -- code-switching sentence
     vi_content      TEXT NOT NULL,                 -- pure Vietnamese equivalent
+    semantic_warning TEXT,                         -- AI báo lệch nghĩa; NULL = không có cảnh báo
     status          script_status NOT NULL DEFAULT 'pending_validation',
     word_count      INT NOT NULL DEFAULT 0,
     en_word_count   INT NOT NULL DEFAULT 0,
-    domain          script_domain NOT NULL,
+    domain          TEXT NOT NULL REFERENCES domain(code),
     created_by      BIGINT NOT NULL REFERENCES app_user(user_id),
     import_batch_id BIGINT REFERENCES import_batch(batch_id),  -- NULL = manual entry
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -171,18 +198,15 @@ CREATE TABLE script (
     CONSTRAINT ck_script_id_format  CHECK (script_id ~ '^s_([0-9]{9}|[0-9]{12})$'),
     -- ID digits must stay meaningful (teacher's rule):
     --   digit 1 (pos 3) = number of embedded English words
-    --   digit 2 (pos 4) = domain code (1 IT / 2 education / 3 daily life)
+    --   digit 2 (pos 4) = domain.id_digit (1 IT / 2 education / 3 daily life,
+    --                     new domains get 4..9)
     --   digit 3 (pos 5) = EN-VN relation: 2 if the script has any proper_noun
     --   row in script_word, else 1. The relation is stored per word in
-    --   script_word, so digits 1 and 3 are checked at COMMIT by the deferred
+    --   script_word, so all three digits are checked at COMMIT by the deferred
     --   constraint trigger trg_script_word_consistency (section 5).
     --   digits 4-12 = 9-digit counter serial for new IDs; old IDs keep their
     --   6-digit global serial after digit 3.
     CONSTRAINT ck_script_id_word_digit   CHECK (substr(script_id, 3, 1) = en_word_count::text),
-    CONSTRAINT ck_script_id_domain_digit CHECK (substr(script_id, 4, 1) =
-        CASE domain WHEN 'it_technology' THEN '1'
-                    WHEN 'education'     THEN '2'
-                    WHEN 'daily_life'    THEN '3' END),
     CONSTRAINT ck_script_word_counts CHECK (word_count >= 0
                                         AND en_word_count >= 0
                                         AND en_word_count <= word_count)
@@ -301,7 +325,7 @@ CREATE INDEX idx_script_proposal_queue ON script_proposal (created_at) WHERE sta
 CREATE TABLE wave (
     wave_id   BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     wave_name VARCHAR(255) NOT NULL,
-    domain        script_domain NOT NULL,
+    domain        TEXT NOT NULL REFERENCES domain(code),
     target_qty    INT NOT NULL,
     start_date    DATE NOT NULL,
     end_date      DATE NOT NULL,
@@ -339,7 +363,7 @@ CREATE TABLE task (
     wave_id  BIGINT REFERENCES wave(wave_id) ON DELETE SET NULL,
     created_by   BIGINT NOT NULL REFERENCES app_user(user_id),
     task_type    task_type NOT NULL,
-    domain       script_domain NOT NULL,
+    domain       TEXT NOT NULL REFERENCES domain(code),
     description  TEXT,
     target_qty   INT NOT NULL CHECK (target_qty > 0),
     deadline     TIMESTAMPTZ,
@@ -922,7 +946,7 @@ CREATE TRIGGER trg_task_creator_assigned
 -- The service layer returns a friendly 422 first; this trigger is the safety net.
 CREATE OR REPLACE FUNCTION fn_validate_task_wave_domain() RETURNS trigger AS $$
 DECLARE
-    v_wave_domain script_domain;
+    v_wave_domain TEXT;
 BEGIN
     -- Detached task: any domain is fine.
     IF NEW.wave_id IS NULL THEN
@@ -1093,6 +1117,7 @@ CREATE OR REPLACE FUNCTION fn_script_word_consistency() RETURNS trigger AS $$
 DECLARE
     v_script_id VARCHAR(16);
     v_en_count  INT;
+    v_domain_digit CHAR(1);
     v_has_proper BOOLEAN;
     v_expected_relation CHAR(1);
 BEGIN
@@ -1104,9 +1129,18 @@ BEGIN
         v_script_id := NEW.script_id;
     END IF;
 
-    SELECT en_word_count INTO v_en_count FROM script WHERE script_id = v_script_id;
+    SELECT s.en_word_count, d.id_digit
+      INTO v_en_count, v_domain_digit
+      FROM script s
+      JOIN domain d ON d.code = s.domain
+     WHERE s.script_id = v_script_id;
     IF NOT FOUND THEN
         RETURN NULL;   -- script was deleted (words cascade); nothing to check
+    END IF;
+
+    IF substr(v_script_id, 4, 1) <> v_domain_digit THEN
+        RAISE EXCEPTION 'script %: id digit 2 must be % (domain digit)',
+            v_script_id, v_domain_digit;
     END IF;
 
     IF (SELECT COUNT(*) FROM script_word WHERE script_id = v_script_id) <> v_en_count THEN
@@ -1132,7 +1166,7 @@ CREATE CONSTRAINT TRIGGER trg_script_word_consistency
     FOR EACH ROW EXECUTE FUNCTION fn_script_word_consistency();
 
 CREATE CONSTRAINT TRIGGER trg_script_consistency
-    AFTER INSERT OR UPDATE OF en_word_count ON script
+    AFTER INSERT OR UPDATE OF en_word_count, domain ON script
     DEFERRABLE INITIALLY DEFERRED
     FOR EACH ROW EXECUTE FUNCTION fn_script_word_consistency();
 
@@ -1551,8 +1585,8 @@ CREATE TRIGGER trg_review_majority AFTER INSERT ON review
 CREATE OR REPLACE FUNCTION fn_validate_task_script() RETURNS trigger AS $$
 DECLARE
     v_task_type     task_type;
-    v_task_domain   script_domain;
-    v_script_domain script_domain;
+    v_task_domain   TEXT;
+    v_script_domain TEXT;
     v_script_status script_status;
 BEGIN
     SELECT task_type, domain INTO v_task_type, v_task_domain FROM task WHERE task_id = NEW.task_id;
@@ -1697,11 +1731,11 @@ CREATE TRIGGER trg_audit_task
 -- script_id = s_ + d1(en words) + d2(domain) + d3(relation) + 9-digit serial.
 -- New IDs are 12 digits after s_; old 9-digit IDs remain valid.
 -- Serial is sequential per counter, never random:
---   12 counters = en_word_count 1/2 x 3 domains x 2 relation codes
---   1 fallback counter for en_word_count > 2
+--   12 counters = en_word_count 1/2 x 3 seed domains x 2 relation codes
+--   1 fallback counter for en_word_count > 2 and for domains added later
 CREATE OR REPLACE FUNCTION fn_generate_script_id(
     p_en_word_count INT,            -- 1..9
-    p_domain        script_domain,
+    p_domain        TEXT,           -- domain.code, phải đang active
     p_relation_code INT             -- 1 = direct translation, 2 = proper noun
 ) RETURNS VARCHAR(16) AS $$
 DECLARE
@@ -1715,14 +1749,14 @@ BEGIN
         RAISE EXCEPTION 'relation_code must be 1 (direct translation) or 2 (proper noun)';
     END IF;
 
-    v_domain_digit := CASE p_domain WHEN 'it_technology' THEN '1'
-                                    WHEN 'education'     THEN '2'
-                                    WHEN 'daily_life'    THEN '3' END;
-    IF v_domain_digit IS NULL THEN
-        RAISE EXCEPTION 'unknown script domain %', p_domain;
+    SELECT id_digit INTO v_domain_digit
+      FROM domain
+     WHERE code = p_domain AND is_active;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'unknown or inactive script domain %', p_domain;
     END IF;
 
-    IF p_en_word_count IN (1, 2) THEN
+    IF p_en_word_count IN (1, 2) AND v_domain_digit IN ('1', '2', '3') THEN
         v_serial := nextval(format('script_serial_%s_%s_%s',
             p_en_word_count, v_domain_digit, p_relation_code)::regclass);
     ELSE
@@ -1767,6 +1801,12 @@ END $$ LANGUAGE plpgsql;
 -- ============================================================
 -- 7. SEED DATA
 -- ============================================================
+-- Ba chủ đề gốc giữ nguyên code cũ để payload JSON hiện có vẫn hợp lệ.
+INSERT INTO domain (code, name, id_digit) VALUES
+    ('ItTechnology', 'Công nghệ thông tin', '1'),
+    ('Education',    'Giáo dục',             '2'),
+    ('DailyLife',    'Hội thoại hàng ngày',  '3');
+
 INSERT INTO role (role_name, description) VALUES
     ('speaker',      'Records speech; reviews/flags text before recording'),
     ('reviewer',     'Reviews recordings and text quality'),

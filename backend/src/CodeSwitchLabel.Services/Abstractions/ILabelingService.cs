@@ -23,4 +23,5 @@ public interface ILabelingService
 }
 
 /// <summary>Câu đã gán nhãn và alignment tương ứng, sẵn sàng đưa vào luồng import hiện có.</summary>
-public record LabeledPair(string CsTagged, List<AlignmentItem> Alignment);
+/// <param name="SemanticWarning">LLM báo hai câu lệch nghĩa; null khi khớp hoặc khi gán nhãn bằng luật.</param>
+public record LabeledPair(string CsTagged, List<AlignmentItem> Alignment, string? SemanticWarning = null);

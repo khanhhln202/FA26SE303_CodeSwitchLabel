@@ -65,7 +65,7 @@ public class SpeakerProfile
 public class UserDomain
 {
     public long UserId { get; set; }
-    public ScriptDomain Domain { get; set; }
+    public string Domain { get; set; } = string.Empty;
     public DateTimeOffset AssignedAt { get; set; }
 
     public AppUser User { get; set; } = null!;

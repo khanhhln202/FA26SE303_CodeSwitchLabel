@@ -52,6 +52,7 @@ public sealed class ScriptImportDedupeTests
             Mock.Of<IScriptQueueService>(),
             Mock.Of<IReasonRepository>(),
             Mock.Of<IUserDomainRepository>(),
+            DomainPassThrough(),
             config.Object,
             Mock.Of<ITaskProgressTracker>(),
             Mock.Of<ILabelingService>(),
@@ -128,7 +129,7 @@ public sealed class ScriptImportDedupeTests
             .ReturnsAsync(transaction.Object);
         repo.Setup(r => r.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
         repo.Setup(r => r.GenerateIdAsync(
-                It.IsAny<int>(), It.IsAny<ScriptDomain>(), It.IsAny<ScriptRelation>(),
+                It.IsAny<int>(), It.IsAny<string>(), It.IsAny<ScriptRelation>(),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync("s_111000001");
         repo.Setup(r => r.FindExistingContentsAsync(
@@ -145,6 +146,7 @@ public sealed class ScriptImportDedupeTests
             Mock.Of<IScriptQueueService>(),
             Mock.Of<IReasonRepository>(),
             Mock.Of<IUserDomainRepository>(),
+            DomainPassThrough(),
             config.Object,
             Mock.Of<ITaskProgressTracker>(),
             Mock.Of<ILabelingService>(),
@@ -161,5 +163,14 @@ public sealed class ScriptImportDedupeTests
         Assert.Equal(2, result.Skipped.Count);
         Assert.All(result.Skipped, s => Assert.Equal("duplicate_content", s.Code));
         Assert.Equal("s_111000001", Assert.Single(result.ScriptIds));
+    }
+
+    /// <summary>Chủ đề nào gửi lên cũng giữ nguyên — test này không kiểm danh mục chủ đề.</summary>
+    private static IDomainService DomainPassThrough()
+    {
+        var domains = new Mock<IDomainService>();
+        domains.Setup(d => d.ResolveActiveAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string value, CancellationToken _) => value);
+        return domains.Object;
     }
 }
