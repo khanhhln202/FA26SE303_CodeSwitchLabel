@@ -37,8 +37,8 @@ winget install --id Gyan.FFmpeg -e
 docker compose up -d postgres minio
 ```
 
-Lần đầu, PostgreSQL tự chạy `docs/codeswitchlabel.sql`: 25 bảng thật (+ partition `audit_log_default` = 26 `CREATE TABLE`),
-25 kiểu ENUM, 30 trigger, 7 view, 28 hàm (trong đó có 2 hàm sinh mã) và dữ liệu danh mục. Con số này sinh ra từ chính file lược đồ —
+Lần đầu, PostgreSQL tự chạy `docs/codeswitchlabel.sql`: 27 bảng thật (+ partition `audit_log_default` = 28 `CREATE TABLE`),
+25 kiểu ENUM, 33 trigger, 7 view, 29 hàm (trong đó có 2 hàm sinh mã) và dữ liệu danh mục. Con số này sinh ra từ chính file lược đồ —
 đếm lại sau mỗi lần sửa:
 
 ```powershell
@@ -129,14 +129,28 @@ Ba Reviewer để phủ trường hợp hai phiếu đầu lệch nhau: mỗi b�
 s_ 2 1 1 000000001
    │ │ │ └──── 9 chữ số thứ tự, tăng dần
    │ │ └────── quan hệ Anh–Việt: 1 dịch trực tiếp, 2 danh từ riêng
-   │ └──────── chủ đề: 1 IT, 2 giáo dục, 3 đời sống
+   │ └──────── chủ đề: `id_digit` của bảng `domain` (1..9; seed: 1 IT, 2 giáo dục, 3 đời sống)
    └────────── số từ tiếng Anh trong câu (1..9)
 ```
 
 ID cũ 9 chữ số (`s_211000001`) vẫn hợp lệ và không bị đổi; frontend coi ID là chuỗi mờ.
 
-Ràng buộc CHECK dưới database bắt hai chữ số đầu phải khớp `en_word_count` và `domain`, nên
-**không thể ghi một mã sai ý nghĩa**, kể cả bằng SQL tay.
+Trigger `fn_script_word_consistency` (kèm FK `script.domain → domain.code`) bắt hai chữ số đầu phải
+khớp `en_word_count` và `domain.id_digit`, nên **không thể ghi một mã sai ý nghĩa**, kể cả bằng SQL tay.
+
+### Chủ đề là dữ liệu, không phải ENUM
+
+Bảng `domain` (V29) thay enum `script_domain`: Admin tạo/đổi tên/xóa mềm qua `/api/admin/domains`
+mà không phải deploy lại code. `code` và `id_digit` bất biến (trigger database); chỉ tên hiển thị đổi được.
+
+- Tối đa **9 chủ đề kể cả chủ đề đã xóa mềm**, vì mã câu chỉ có một chữ số cho chủ đề; chữ số không tái sử dụng.
+- Xóa là **xóa mềm**: dữ liệu cũ vẫn mang `code`. Chủ đề đã xóa không chọn được cho câu/đợt/task mới
+  (`422 domain_inactive`), nhưng sửa đợt/task cũ vẫn giữ được chủ đề đó.
+- Không xóa được chủ đề đang được câu/đợt/task/phân quyền dùng (`409 domain_in_use`) hoặc chủ đề hoạt động
+  cuối cùng (`409 domain_last_active`). Tạo trùng tên → `409 domain_name_exists`; quá 9 → `409 domain_limit_reached`;
+  tên phải 2–100 ký tự (`422 invalid_domain_name`).
+- `GET /api/config/topics` trả `{ code, name, isActive }`; `?includeInactive=true` chỉ Admin.
+  Backend nhận `code` hoặc tên (không phân biệt hoa thường/dấu) ở mọi trường `domain`, nhưng nên gửi `code`.
 
 **Mỗi cặp câu cần hai bản ghi âm**, mã suy ra từ mã câu:
 
@@ -173,11 +187,14 @@ Admin nhập input_text.json (hoặc .txt, LLM/luật)  →  script: pending_val
 
 - Mỗi cặp đúng **hai dòng không rỗng**: dòng đầu là câu trộn Việt–Anh, dòng sau là câu thuần Việt; dòng trống bị bỏ qua.
 - Mỗi câu phải kết thúc bằng **dấu chấm**; file tối đa **100 cặp**.
-- Bắt buộc gửi kèm trường form `Domain` (`IT/Technology`, `Education`, `Daily Life`).
+- Bắt buộc gửi kèm trường form `Domain`: dùng `code` lấy từ `GET /api/config/topics` (`ItTechnology`, `Education`, `DailyLife`, hoặc chủ đề Admin tự tạo). Backend khớp `code` hoặc tên, không phân biệt hoa thường/dấu; tên cũ như `IT/Technology` vẫn nhận, nhưng chủ đề đã xóa mềm trả `422 domain_inactive`.
 - Có cấu hình `Llm:Endpoint`/`Model` thì backend gọi LLM OpenAI-compatible (`LabelingService`) để chèn nhãn `[vi]`/`[en]` và sinh `alignment`. Từ ngữ và thứ tự hai câu phải giữ nguyên; LLM sửa từ thì cặp đó bị bỏ qua.
 - Không cấu hình LLM thì backend gán nhãn bằng luật: từ có ký tự ngoài ASCII là tiếng Việt; từ ASCII là tiếng Việt khi là hư từ quen thuộc hoặc có trong từ điển âm tiết Việt không dấu và cũng xuất hiện trong câu thuần Việt. Nghĩa tiếng Việt lấy bằng cách đối chiếu các từ chung của hai câu: đoạn giữa hai từ chung là nghĩa của đoạn tiếng Anh giữa hai mốc đó, nên một từ có thể ứng với nhiều từ (`email` → `thư điện tử`) mà không làm lệch các từ phía sau; đoạn không đối chiếu được thì lấy theo vị trí, hết từ thì để trống cho người duyệt điền. Đây là heuristic, không thay thế bước duyệt nội dung.
 - Cấu hình trong section `Llm`: `Endpoint`, `Model`, `ApiKey` (tuỳ chọn), `TimeoutSeconds` (mặc định 60). Thiếu `Endpoint`/`Model` thì API vẫn chạy và import `.txt` dùng luật.
 - Cặp gán nhãn lỗi được ghi vào `skipped` với `id = pair-N`: LLM lỗi hoặc trả kết quả không đọc được thì lùi về luật; chỉ cặp mà luật cũng lỗi mới bị bỏ với mã `invalid_text_format`/`invalid_language_tags`, các cặp còn lại vẫn nhập bình thường.
+- Khi LLM thấy hai câu **lệch nghĩa**, nó trả `semanticWarning` (backend cắt còn tối đa 500 ký tự) và lưu vào
+  `script.semantic_warning`. Cảnh báo hiện ở chi tiết câu và bản ghi của Speaker/Reviewer, **không có trong DTO danh sách**;
+  sửa nội dung câu thì service xóa cảnh báo cũ. File JSON không gửi trường này.
 
 ## Luật duyệt
 
@@ -217,6 +234,24 @@ vẫn giữ nguyên cho việc điều chỉnh.
 | **Khoá bi quan** | `SELECT ... FOR UPDATE` trên hàng `recording` trong transaction | Hai người không ghi **cùng lúc** |
 | **Kiểm tra lạc quan** | Client gửi `expectedRound` — vòng họ thấy lúc nhận bản ghi | Người đến sau không bị **ghi nhầm vòng**, nhận 409 `round_changed` |
 | **Ràng buộc database** | `UNIQUE(recording_id, review_round)` | Lưới chắn cuối, kể cả khi ghi thẳng bằng SQL |
+
+## Máy duyệt bản ghi (tuỳ chọn)
+
+Bật bằng `ai_review.enabled=true` và cấu hình `Asr:*`. Máy **không phải nút bấm lúc nào cũng được**:
+hai Reviewer duyệt trước; cùng kết quả thì bản ghi chốt ở lượt 2 và máy không tham gia. Chỉ khi hai
+phiếu **lệch nhau** máy mới vào làm **phiếu thứ ba** — gọi `POST /api/recordings/{id}/ai-review`, hoặc
+để `ai_review.auto_enabled=true` cho worker tự nhặt hàng đợi.
+
+- Máy lấy audio, gọi ASR chuyển thành chữ, so với câu phải đọc và tính **WER** (cả bản có dấu lẫn bỏ dấu,
+  lấy số nhỏ hơn). WER ≥ `ai_review.wer_decision_threshold` (mặc định 0.40) → `rejected` với lý do
+  `content_mismatch`; dưới ngưỡng → `approved`. Máy không bao giờ chọn ba lý do còn lại
+  (`background_noise`, `mispronunciation`, `other`).
+- Phiếu máy đi đúng đường của người (`IReviewService.SubmitAsync`), nên chịu đủ ràng buộc: không tự duyệt,
+  không duyệt hai lần; trigger đa số chốt ngay sau phiếu thứ ba.
+- Endpoint: `POST /api/recordings/{id}/ai-review` (TaskManager/Admin), `POST /api/ai-review/run?limit=10`
+  (Admin), `GET /api/ai-review/pending`, `GET /api/recordings/{id}/ai-review` (Reviewer trở lên).
+  Chưa tới lượt máy → `409 ai_review_not_tiebreak` và **không gọi ASR** (không tốn tiền).
+- Tắt mặc định. Thiếu `Asr:Endpoint`/`Model` → `422 asr_not_configured`; tính năng tắt → `422 ai_review_disabled`.
 
 ## Đề xuất câu (yêu cầu 2.5)
 
@@ -318,6 +353,9 @@ Task mới tạo ra đã là `InProgress` — không còn `Draft`/`Open` (TEAM_0
   kết quả trả kèm danh sách task cần giao lại.
 - Không tự khoá, không tự đổi vai của mình, và không bao giờ để mất Admin cuối cùng đang hoạt động.
 - **Người đọc nào cũng có hồ sơ**, kể cả hồ sơ trống: `v_dashboard_summary` đếm số người đọc bằng số hồ sơ.
+- **Hồ sơ có `region`** (`North`/`Central`/`South`, nullable) — vùng miền giọng nói, **độc lập với `province`**
+  vì province là chữ tự do không gom nhóm được. Nhận trong đăng ký, `PUT /api/me/speaker-profile` và trả ở
+  `GET`/chi tiết người dùng của Admin; **không backfill** từ province, hồ sơ cũ để trống.
 
 ## Nhật ký và thống kê
 

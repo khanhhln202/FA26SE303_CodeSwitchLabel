@@ -45,6 +45,11 @@ màn hình nào gọi API nào theo thứ tự nào, cách xử lý đăng nhậ
 > `Accepted` tự động của chính Admin; không còn chờ Reviewer. Admin sửa được cả câu
 > `PendingValidation` lẫn `Validated` (trạng thái giữ nguyên), và xoá cứng được cả hai khi chưa
 > có bản ghi âm. Xem mục 4 (Admin).
+>
+> Cập nhật 14/11/2026 — **V23–V29**: chủ đề thành dữ liệu (`GET /api/config/topics` trả
+> `code/name/isActive`; Admin CRUD `/api/admin/domains`); hồ sơ người đọc thêm `region`;
+> `script.semanticWarning` do LLM gắn khi nhập `.txt`; máy duyệt là **phiếu thứ ba** khi hai
+> phiếu đầu lệch nhau (mặc định tắt). Xem mục 3 (lỗi), 4 (Admin/Reviewer), 7 (enum) và 9 (đã đổi).
 
 ---
 
@@ -348,6 +353,12 @@ Lỗi hệ thống trả 500 với `code: "internal_error"`. Gặp lỗi này th
 | `invalid_file_type` | 422 | File nhập câu không phải `.json` hoặc `.txt` (mở rộng lạ) | Chọn đúng file `.json` theo mẫu hoặc `.txt` đúng định dạng |
 | `invalid_text_format` | 422 hoặc trong `skipped` | File `.txt` có dòng không kết thúc bằng dấu chấm / số dòng lẻ, hoặc một câu đã có nhãn `[vi]`/`[en]` khi backend gán nhãn bằng luật (chỉ cặp đó bị bỏ) | Sửa file: mỗi cặp đúng hai dòng, mỗi câu kết thúc bằng `.`; bỏ nhãn khỏi câu thô |
 | `domain_required` | 422 | File `.txt` mà thiếu trường form `Domain` | Bắt chọn chủ đề trước khi gửi |
+| `domain_name_exists` / `domain_not_found` | 409 / 404 | Tạo trùng tên chủ đề, hoặc sửa/xóa `code` không tồn tại | Tải lại danh sách chủ đề |
+| `domain_limit_reached` | 409 | Đã đủ 9 chủ đề (kể cả đã xóa mềm) | Ẩn nút tạo; báo giới hạn |
+| `domain_in_use` / `domain_last_active` | 409 | Xóa chủ đề đang được dữ liệu dùng, hoặc chủ đề hoạt động cuối cùng | Hiện `title`; gợi ý đổi tên thay vì xóa |
+| `domain_inactive` / `invalid_domain_name` | 422 | Chọn chủ đề đã xóa mềm, hoặc tên ngoài 2–100 ký tự | Chỉ hiện chủ đề `isActive`; validate độ dài tên |
+| `ai_review_disabled` / `asr_not_configured` | 422 | Máy duyệt đang tắt, hoặc chưa cấu hình ASR | Ẩn nút máy duyệt; báo quản trị |
+| `ai_review_not_tiebreak` | 409 | Chưa tới lượt máy (hai phiếu đầu chưa lệch, hoặc bản đã chốt) | Chỉ bật nút cho bản trong `GET /api/ai-review/pending` |
 | `export_scope_required` | 422 | Export dataset mà không gửi `recordingIds`, `speakerIds` hay `waveId` | Bắt chọn ít nhất một phạm vi |
 | `export_no_approved_pairs` | 422 | Phạm vi đã chọn không có cặp nào duyệt đủ cả cs+vi | Báo không có dữ liệu; kiểm tra lại bộ lọc |
 | `email_taken` | 409 | Tự đăng ký Speaker bằng email đã có | Hiện lỗi cạnh ô email |
@@ -393,7 +404,7 @@ Các mã còn lại: `alignment_incomplete`, `alignment_word_missing`, `batch_no
 | Tải lại trang, biết mình là ai | `GET /api/auth/me` |
 | Đổi mật khẩu | `PUT /api/me/password` `{ "currentPassword": "…", "newPassword": "…" }` |
 | Đọc cấu hình (mọi vai) | `GET /api/config`, `GET /api/config/{key}` — ghi vẫn chỉ Admin qua `PUT /api/admin/config/{key}` |
-| Danh sách chủ đề | `GET /api/config/topics` — thay `admin_topic_config_v2` local |
+| Danh sách chủ đề | `GET /api/config/topics` → `[{ "code": "ItTechnology", "name": "Công nghệ thông tin", "isActive": true }]`. `code` bất biến, dùng làm giá trị gửi lên trường `domain`; `name` đổi được. `?includeInactive=true` chỉ Admin (hiện cả chủ đề đã xóa mềm). **Không viết cứng danh sách chủ đề trong FE** |
 
 Đổi mật khẩu thành công trả **200** với body **giống hệt lúc đăng nhập** (`accessToken`, `expiresAt`, `user`):
 
@@ -408,7 +419,7 @@ Các mã còn lại: `alignment_incomplete`, `alignment_word_missing`, `batch_no
 **Duyệt câu trước khi thu (Review Text)**
 
 1. `GET /api/scripts?status=PendingValidation` — danh sách câu chờ duyệt.
-2. `GET /api/scripts/{id}` — chi tiết cặp câu, kèm `alignment` và lịch sử duyệt.
+2. `GET /api/scripts/{id}` — chi tiết cặp câu, kèm `alignment`, lịch sử duyệt và `semanticWarning` (cảnh báo lệch nghĩa do LLM, có thể `null`).
 3. `GET /api/script-error-reasons` — danh sách lý do cho ô chọn khi từ chối. `description` trả về **tiếng Việt**, hiện thẳng ra UI được.
 4. `POST /api/scripts/{id}/review`:
 
@@ -572,11 +583,12 @@ Mỗi dòng của `GET /api/speaker/rounds/{waveId}/leaderboard` mang:
 **Hồ sơ người đọc** — `GET /api/me/speaker-profile` và `PUT /api/me/speaker-profile`:
 
 ```json
-{ "birthYear": 2003, "province": "Đà Nẵng", "englishLevel": 6.5, "occupation": "Student", "major": "IT" }
+{ "birthYear": 2003, "province": "Đà Nẵng", "region": "Central", "englishLevel": 6.5, "occupation": "Student", "gender": "Female", "major": "IT" }
 ```
 
 - `PUT` **ghi đè cả hồ sơ**: trường nào không gửi là bị xoá trắng. Form phải gửi lại đủ mọi trường, kể cả trường không sửa.
-- `englishLevel` theo thang IELTS, từ 0.0 đến 9.0. `occupation` là enum ở mục 7.
+- `englishLevel` theo thang IELTS, từ 0.0 đến 9.0. `occupation`, `region`, `gender` là enum ở mục 7.
+- `region` (vùng miền giọng nói) **nullable và độc lập với `province`**; hồ sơ cũ không được backfill, nên hiển thị "Chưa cập nhật" khi `null`. `registration` cũng nhận `region` trong `speakerProfile`.
 - Tài khoản Speaker mới tạo đã có sẵn hồ sơ **trống**, nên `hasSpeakerProfile` lúc đăng nhập luôn là `true` với Speaker.
   Muốn nhắc người đọc điền hồ sơ thì gọi `GET` rồi xem các trường có đang `null` không.
 - Chỉ Speaker gọi được; vai khác nhận **403**.
@@ -727,6 +739,16 @@ Reviewer cũng dùng được màn hình **duyệt câu** giống Speaker.
 `GET /api/reviewer/recordings/{id}` mở được cả khi task đã `Completed`/`Cancelled` (mình từng được
 giao) — các dòng có `canReview: false`, nộp duyệt vẫn trả 403 `task_not_reviewable`.
 
+**Máy duyệt (tuỳ chọn) — chỉ là phiếu thứ ba khi hai người đầu lệch nhau**
+
+- `GET /api/recordings/{id}/ai-review` — xem máy đã phân bản này chưa (`204` nếu chưa). **Đừng hiện kết
+  quả của máy cho người duyệt trước khi họ bỏ phiếu** — sẽ phá duyệt mù.
+- `POST /api/recordings/{id}/ai-review` (TaskManager/Admin) — cho máy phân một bản đang 1 đạt / 1 không đạt.
+- `GET /api/ai-review/pending` (TaskManager/Admin) — bản đang chờ máy, cũ nhất trước; danh sách rỗng là bình thường.
+- `POST /api/ai-review/run?limit=10` (Admin) — chạy hàng loạt; `limit` là **trần chi phí** vì mỗi bản là một lần gọi ASR.
+- Máy chỉ kết luận `approved`/`rejected` theo WER và chỉ nêu được lý do `content_mismatch`. Mặc định tắt;
+  bật cần `ai_review.enabled=true` và cấu hình `Asr:*` (xem lỗi ở mục 3).
+
 ### Task Manager
 
 **Task có thể độc lập (không thuộc chiến dịch nào), gắn vào chiến dịch sau, hoặc gỡ ra mà không bị xoá.**
@@ -831,6 +853,7 @@ Speaker được thu cùng một cặp. `POST /api/tasks/{id}/items` chỉ bỏ 
 | Nhập kho câu từ file | `POST /api/scripts/import` — multipart. `File` là JSON theo mẫu `docs/Requirement.txt`, hoặc `.txt` (chi tiết bên dưới) kèm trường `Domain`. Câu vào thẳng `Validated` kèm lượt duyệt `Accepted` tự động của chính Admin |
 | Thêm một cặp câu | `POST /api/scripts` — body như phần đóng góp câu. Câu vào thẳng `Validated` kèm một lượt duyệt `Accepted` tự động của chính Admin |
 | Kho câu | `GET /api/scripts` — lọc tuỳ chọn: `status`, `domain`, `keyword`, `page`, `pageSize`. Chi tiết: `GET /api/scripts/{id}` |
+| Quản lý chủ đề | `GET /api/config/topics?includeInactive=true`; `POST /api/admin/domains` `{ "name": "Y tế" }`; `PUT /api/admin/domains/{code}` `{ "name": "…" }`; `DELETE /api/admin/domains/{code}`. Tối đa **9 chủ đề kể cả đã xóa mềm**; `code` và chữ số trong mã câu **không đổi**; xóa là xóa mềm |
 | Sửa nội dung câu | `PUT /api/scripts/{id}` — nhận `PendingValidation` và `Validated`; sửa bao nhiêu lần cũng được, trạng thái giữ nguyên. `409 script_not_pending` nếu câu đã loại/ngừng dùng, `409 script_already_recorded` nếu đã có bản ghi âm |
 | Xoá cứng câu | `DELETE /api/scripts/{id}` — nhận `PendingValidation` và `Validated`; `409 script_not_pending` nếu đã loại/ngừng dùng, `409 script_already_recorded` nếu đã có bản ghi âm |
 | Ngừng dùng câu (xoá mềm) | `POST /api/scripts/{id}/deactivate` — `PendingValidation`/`Validated` → `Deactivated`; chặn nếu đã có bản ghi âm |
@@ -839,6 +862,7 @@ Speaker được thu cùng một cặp. `POST /api/tasks/{id}/items` chỉ bỏ 
 | Xuất ZIP trực tiếp (không cần tạo dataset) | `POST /api/datasets/export` — body `{ "recordingIds": ["r_cs_…"], "speakerIds": [6], "waveId": 2 }`. Gửi `recordingIds` thì **chỉ** xuất đúng các bản đó (bỏ qua `speakerIds`/`waveId`); không gửi thì lọc theo `speakerIds` và/hoặc `waveId`. Bỏ trống cả ba → `422 export_scope_required`. Chỉ gồm bản `Approved`; cặp thiếu cs hoặc vi bị bỏ; phạm vi không có cặp đủ hai bản → `422 export_no_approved_pairs` (cặp thiếu file audio cũng bị bỏ khỏi ZIP) |
 | Bản ghi | `GET /api/recordings` — lọc tuỳ chọn: `status`, `scriptId`, `speakerId`, `page`, `pageSize`. Nghe: `GET /api/recordings/{id}/audio-url` |
 | Cấu hình | `GET /api/config`, `PUT /api/admin/config/{key}` `{ "value": "30" }` |
+| Máy duyệt bản ghi (tuỳ chọn) | `POST /api/recordings/{id}/ai-review` (TaskManager/Admin); `POST /api/ai-review/run?limit=10` (Admin); `GET /api/ai-review/pending`; `GET /api/recordings/{id}/ai-review` (Reviewer trở lên, `204` nếu máy chưa phân) |
 | Danh mục lý do | `GET /api/rejection-reasons?activeOnly=false`, `GET /api/script-error-reasons?activeOnly=false` |
 | Dashboard | `GET /api/admin/dashboard` |
 | Chất lượng người đọc | `GET /api/admin/statistics/speakers` |
@@ -852,9 +876,12 @@ Kết quả nhập file có `imported`, `scriptIds` và `skipped` (kèm lý do t
 
 - Mỗi cặp đúng **hai dòng không rỗng**: dòng đầu là câu trộn Việt–Anh, dòng sau là câu thuần Việt. Dòng trống bị bỏ qua.
 - Mỗi câu phải kết thúc bằng **dấu chấm**; tối đa **100 cặp** mỗi file (`422 invalid_text_format` khi sai, `422 import_too_large` khi vượt).
-- Gửi kèm trường form `Domain`: `IT/Technology`, `Education` hoặc `Daily Life` (cùng danh mục với `GET /api/config/topics`). Thiếu trường này → `422 domain_required`.
+- Gửi kèm trường form `Domain`: dùng `code` từ `GET /api/config/topics` (`ItTechnology`, `Education`, `DailyLife` hoặc chủ đề Admin tạo). Backend khớp `code` hoặc tên, không phân biệt hoa thường/dấu; tên cũ `IT/Technology` vẫn nhận; chủ đề đã xóa mềm → `422 domain_inactive`. Thiếu trường này → `422 domain_required`.
 - Không cần tự gán nhãn trong file. Có cấu hình `Llm:Endpoint`/`Model` thì backend gọi LLM để chèn nhãn `[vi]`/`[en]` và sinh `alignment`; LLM lỗi hoặc trả kết quả không đọc được thì lùi về luật. Luật gán nhãn: từ ASCII là tiếng Việt khi là hư từ quen thuộc hoặc có trong từ điển âm tiết Việt không dấu và cũng xuất hiện trong câu thuần Việt; nghĩa lấy bằng cách đối chiếu các từ chung của hai câu, đoạn giữa hai mốc là nghĩa (có thể nhiều từ, ví dụ `email` → `thư điện tử`); đoạn không đối chiếu được lấy theo vị trí, hết từ thì `target` để trống cho người duyệt điền.
 - Một cặp gán nhãn lỗi vào `skipped` với `id = pair-N`: luật lỗi có mã `invalid_text_format`/`invalid_language_tags`; các cặp còn lại vẫn nhập. File `.txt` cũng đi qua đúng luật import JSON: chống trùng, câu vào thẳng `Validated`.
+- Khi LLM thấy hai câu **lệch nghĩa**, câu có thể kèm `semanticWarning` (tối đa 500 ký tự). Backend lưu vào
+  `script.semantic_warning`; trường này có ở **chi tiết câu** và bản ghi của Speaker/Reviewer, **không có trong
+  DTO danh sách**. Sửa nội dung câu thì cảnh báo bị xóa; giao diện hiện chưa hiển thị.
 
 **Cấu trúc ZIP của `POST /api/datasets/export`** — mỗi cặp một thư mục, ngày theo múi giờ Bangkok:
 
@@ -967,7 +994,6 @@ recorder.onstop = async () => {
 | Enum | Giá trị |
 |---|---|
 | `ScriptStatus` | `PendingValidation`, `Validated`, `Rejected`, `Deactivated` |
-| `ScriptDomain` | `ItTechnology`, `Education`, `DailyLife` |
 | `ScriptRelation` | `DirectTranslation`, `ProperNoun` |
 | `ScriptReviewAction` | `Accepted`, `Edited`, `Rejected` |
 | `SentenceVariant` | `CodeSwitching`, `PureVietnamese` |
@@ -984,6 +1010,11 @@ recorder.onstop = async () => {
 | `UserStatus` | `Active`, `Inactive` (bị khoá), `Suspended` |
 | `WaveStatus` | `Open` (chưa có nhiệm vụ nào), `InProgress` (đang làm), `Completed` (mọi nhiệm vụ xong) — không bấm tay, tự tính từ task |
 | `Occupation` | `Student`, `Employed`, `Other` |
+| `SpeakerRegion` | `North`, `Central`, `South` — nullable, độc lập với `province` |
+| `Gender` | `Male`, `Female`, `Other` |
+
+**`domain` không còn là enum.** Danh sách chủ đề luôn lấy từ `GET /api/config/topics`; `code` là chuỗi bất biến
+(seed: `ItTechnology`, `Education`, `DailyLife`), `name` Admin đổi được, chủ đề mới do Admin tạo.
 
 Mã lý do từ chối và lý do lỗi câu **luôn lấy từ API** (`/api/rejection-reasons`, `/api/script-error-reasons`),
 không viết cứng trong frontend — Admin ẩn hay thêm lý do thì giao diện tự đúng.
@@ -1138,6 +1169,8 @@ Ai đã code theo bản API trước ngày 22/09/2026 thì cần sửa:
 | `description` của lý do bản dịch cứng | Viết lại theo khuôn "vấn đề — cần làm gì" (migration `V4__reason_descriptions_vi.sql`) |
 | `GET /api/reviewer/history/recordings` một dòng = một **lượt duyệt**, chỉ có một câu | Mỗi dòng là một **CẶP** như lịch sử của Speaker: `csText`/`viText` (còn nhãn), `csRecordingId`/`viRecordingId`, `csAudioUrl`/`viAudioUrl` (thật, hết hạn 15 phút), `reviews: [{round, decision, reason}]` — **hiện đủ phiếu sau khi mình đã duyệt, kể cả khi cặp chưa chốt** (`reason` ưu tiên bình luận, trống thì ghép mô tả mã lý do từ chối). `myDecision` gộp cả cặp — có lượt từ chối là `Rejected`; `recordingStatus` là trạng thái của cặp. Phân trang theo **cặp**, `total` là số cặp. `?sort=status` bỏ — nhận `reviewedAt`, `decision`, `scriptId` |
 | `GET /api/reviewer/history/contributions` thiếu người gửi, lý do, cặp từ Anh-Việt | Thêm `alignment` (từ tiếng Anh - nghĩa tiếng Việt), `speakerId`/`speakerName`, và khi lượt là Từ chối thì `reason` (mô tả lỗi) + `comment`. Mỗi câu đề xuất chỉ **một lượt duyệt** nên mỗi câu tối đa một dòng |
+| `ScriptDomain` là enum cố định ba giá trị | Bảng `domain` động: `GET /api/config/topics` trả `code/name/isActive`; Admin CRUD `/api/admin/domains`; tối đa 9 chủ đề kể cả đã xóa mềm. Trường `domain` vẫn là chuỗi, nhưng phải lấy từ API |
+| Hồ sơ người đọc không có vùng miền | Thêm `region` (`North`/`Central`/`South`, nullable, độc lập với `province`) ở `GET/PUT /api/me/speaker-profile`, đăng ký và chi tiết người dùng của Admin |
 
 ## 10. Sinh kiểu TypeScript từ Swagger
 

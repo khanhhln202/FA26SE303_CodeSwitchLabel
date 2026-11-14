@@ -1,5 +1,9 @@
 -- ============================================================
--- V27 — Chủ đề động: bảng domain thay cho ENUM script_domain
+-- V29 — Chủ đề động: bảng domain thay cho ENUM script_domain
+--
+-- (Đổi số từ V27 vì file V27__speaker_region.sql đã dùng số đó trước. DB nào
+-- đã chạy bản này dưới số V27 cũ thì guard bên dưới bỏ qua toàn bộ file;
+-- deploy.sh vẫn ghi nhận V29.)
 --
 -- Admin phải tạo/đổi tên/xóa chủ đề được mà không deploy lại code.
 -- ENUM cố định ba giá trị không làm được việc đó, nên domain thành
@@ -17,8 +21,13 @@
 -- không có đoạn DOWN cung cấp. Trước khi áp trên môi trường thực, PHẢI sao lưu database
 -- và sẵn sàng khôi phục thủ công nếu migration thất bại giữa chừng.
 --
--- Chạy một lần; toàn bộ nằm trong một transaction.
+-- Chạy một lần; toàn bộ nằm trong một transaction. Guard dưới đây dùng
+-- meta-command của psql — cả deploy.sh lẫn lệnh tay trong tài liệu đều chạy qua psql.
 -- ============================================================
+
+-- Database đã có bảng domain tức là migration này đã chạy dưới số V27 cũ: bỏ qua.
+SELECT to_regclass('public.domain') IS NULL AS run_dynamic_domains \gset
+\if :run_dynamic_domains
 
 BEGIN;
 
@@ -331,3 +340,5 @@ GROUP BY
     c.assigned_to;
 
 COMMIT;
+
+\endif
