@@ -12,7 +12,7 @@ Nền tảng web thu thập và kiểm soát chất lượng dữ liệu tiếng
 | **Speaker** | Review Text (duyệt/sửa câu trước khi thu), Record Speech (thu 2 bản cs + vi, nghe lại/thu lại), Contribute Text (đóng góp câu mới), theo dõi tiến độ/lịch sử |
 | **Reviewer** | Nhận task duyệt, nghe và duyệt/từ chối bản ghi (bắt buộc lý do khi từ chối), duyệt câu văn bản trong lô được giao, theo dõi target/deadline/tiến độ |
 | **Task Manager** | Tạo/giao task Speaker & Reviewer (một task giao cho **nhiều người**), chia lô câu văn bản, đặt target & deadline, theo dõi tiến độ |
-| **Admin** | Import/quản lý kho câu (JSON hoặc TXT), quản lý user & vai, quản lý recordings & dataset (xem/lọc/download, xuất ZIP theo bản ghi/Speaker/đợt), dashboard & thống kê, cấu hình hệ thống |
+| **Admin** | Import kho câu (`.txt`; API vẫn nhận JSON), quản lý kho câu & **chủ đề động**, quản lý user & vai, quản lý recordings & dataset (xem/lọc/download, xuất ZIP theo bản ghi/Speaker/đợt), dashboard & thống kê, cấu hình hệ thống, chạy **máy duyệt** khi bật |
 
 Luồng dữ liệu cốt lõi:
 
@@ -45,6 +45,7 @@ FRONTEND (React SPA, Vercel)
 Caddy (TLS Let's Encrypt, prod) → API (ASP.NET Core, :5053 dev / :8080 container)
    │                                ├─→ PostgreSQL 16 (lược đồ docs/codeswitchlabel.sql)
    │                                ├─→ MinIO/S3 (file WAV) + ffmpeg (chuẩn hoá & QC)
+   │                                ├─→ ASR self-host (tuỳ chọn: máy duyệt bản ghi khi hai phiếu đầu lệch nhau)
    │                                └─→ LLM OpenAI-compatible (tuỳ chọn: sinh nghĩa từ khi nhập .txt; không có thì gán nhãn bằng luật)
 ```
 
@@ -75,7 +76,7 @@ FA26SE303_CodeSwitchLabel/
 │   ├── Requirement.txt           # yêu cầu 4 actor + mẫu input_text.json
 │   ├── diagrams/                 # sơ đồ kiến trúc, ERD, trạng thái, luồng nghiệp vụ (Mermaid)
 │   └── demo-test-api.html
-├── migrations/                   # V2..V22 (task độc lập, hàng đợi văn bản, đề xuất câu, quota, phân câu theo người nhận, hàng đợi ghi âm có người nhận, lượt giao tự Completed khi đạt quota, nhiều Speaker dùng chung cặp câu, đổi tên campaign thành wave)
+├── migrations/                   # V2..V29 (task độc lập, hàng đợi văn bản, đề xuất câu, quota, phân câu theo người nhận, hàng đợi ghi âm có người nhận, lượt giao tự Completed khi đạt quota, nhiều Speaker dùng chung cặp câu, đổi tên campaign thành wave, chủ đề động, máy duyệt, vùng miền người đọc, cảnh báo ngữ nghĩa)
 ├── deploy/                       # prod: docker-compose.prod.yml, Caddyfile, deploy.sh, .env.example, README.md
 ├── demo/                         # input_text_demo.json + wav/m4a mẫu + test-them/; demo-live-import.json (7 câu, 3 câu lỗi cố ý) do kịch bản demo tự sinh, .gitignore loại ra
 └── .github/workflows/            # backend.yml (CI build + test), deploy.yml (tự động lên máy chủ)
@@ -97,7 +98,7 @@ Tài liệu chi tiết:
 | Infra | Docker + Docker Compose, Caddy 2 (auto HTTPS), Azure (trial), GitHub Actions |
 | Frontend | React 19 + Vite 8, react-router-dom 7, TanStack Query 5, axios, TailwindCSS 4 + shadcn, lucide-react, sonner, wavesurfer.js, formik + yup, Vercel |
 | Test | xunit.v3 + Moq + Testcontainers.PostgreSql + coverlet, E2E Node 18+ (`fetch`/`FormData`, không cần cài gói) |
-| AI (tuỳ chọn) | LLM OpenAI-compatible (`/chat/completions`) để gán nhãn `[vi]`/`[en]` và sinh nghĩa từ khi nhập `.txt`; không cấu hình thì backend gán nhãn bằng luật |
+| AI (tuỳ chọn) | LLM OpenAI-compatible (`/chat/completions`) để gán nhãn `[vi]`/`[en]` và sinh nghĩa từ khi nhập `.txt`; ASR Whisper self-host (`/v1/audio/transcriptions`) cho máy duyệt bản ghi (WER). Cả hai đều tắt được |
 
 Quy ước API: JSON `camelCase` (trừ `alignment` giữ `snake_case`), enum dạng string, thời gian UTC ISO8601, phân trang `?page&pageSize` (max 100) kèm sắp xếp `?sort=<cột>&dir=asc|desc` (bỏ `sort` là thứ tự mặc định của endpoint, sai tên cột cũng vậy), `204` = hết việc, lỗi nghiệp vụ trả `code + title + traceId`.
 
@@ -172,7 +173,7 @@ Mật khẩu dev ở `backend/src/CodeSwitchLabel.Api/appsettings.Development.js
 | `speaker1@codeswitchlabel.local` | Speaker | 6 |
 | `speaker2@codeswitchlabel.local` | Speaker | 7 |
 
-Cần 3 reviewer vì **mỗi bản ghi cần tối đa 3 lượt duyệt của 3 người khác nhau** — chốt ngay khi một bên đủ 2 phiếu, nên lượt thứ ba chỉ cần khi hai phiếu đầu lệch nhau.
+Cần 3 reviewer vì **mỗi bản ghi cần tối đa 3 lượt duyệt của 3 người khác nhau** — chốt ngay khi một bên đủ 2 phiếu, nên lượt thứ ba chỉ cần khi hai phiếu đầu lệch nhau. Khi bật máy duyệt (`ai_review.enabled` + cấu hình `Asr:*`), máy làm **phiếu thứ ba** thay cho `reviewer3`.
 
 Luồng chính (7 bước):
 
@@ -180,7 +181,7 @@ Luồng chính (7 bước):
 2. `reviewer`: `POST /api/scripts/{id}/review` `{ "action": "Accepted" }` → `Validated`
 3. `GET /api/speaker/scripts/next` → cặp câu kèm cả 2 biến thể
 4. `POST /api/recordings` 2 lần (`CodeSwitching` rồi `PureVietnamese`)
-5. `reviewer`, `reviewer2` mỗi người `POST /api/recordings/{id}/reviews` 1 lần — lượt thứ 2 (đủ 2 phiếu đạt) trả `isFinal = true` và chốt luôn; `reviewer3` chỉ cần khi hai phiếu đầu lệch nhau
+5. `reviewer`, `reviewer2` mỗi người `POST /api/recordings/{id}/reviews` 1 lần — lượt thứ 2 (đủ 2 phiếu đạt) trả `isFinal = true` và chốt luôn; `reviewer3` (hoặc máy, nếu bật) chỉ cần khi hai phiếu đầu lệch nhau
 6. `manager`: tạo task thu âm target 1, tự lấp mục, giao cho `speaker2` → đủ 2 bản đạt thì task tự `Completed`
 7. `admin`: `GET /api/admin/dashboard` xem tổng hợp
 
@@ -191,9 +192,9 @@ Luồng chính (7 bước):
   - **Giữ chỗ bằng `fn_queue_claim_next`** — đọc hàng và ghi chủ nằm trong cùng một transaction, dùng `FOR UPDATE SKIP LOCKED` để hai người không cùng giữ một hàng. Task thu âm giao thẳng qua `task_script` nên nhiều Speaker vẫn nhận cùng câu, mỗi người một dòng.
   - Claim có hạn (`queue.claim_ttl_minutes`, mặc định 30). Người mở câu rồi đóng tab không giữ câu vĩnh viễn.
 - **Duyệt văn bản chỉ MỘT lượt mỗi vòng.** Câu đã chia lô (`text_review.batch_size`, mặc định 100 câu/người) thì chỉ người nhận lô đó được duyệt; câu còn trong hàng đợi chung thì Reviewer đủ chủ đề nào cũng duyệt được. Câu bị đa số từ chối bản ghi vì lý do nội dung quay về chờ duyệt là một **vòng mới**: lượt duyệt cũ không còn tính và câu duyệt lại được.
-- **Mã câu có nghĩa** do DB sinh (`fn_generate_script_id`): `s_211000000001` = 3 chữ số nghĩa (số từ EN + domain + quan hệ Anh–Việt) + 9 chữ số thứ tự. CHECK constraint chặn mã sai ý nghĩa. ID cũ 9 chữ số (`s_211000001`) vẫn hợp lệ; frontend coi ID là chuỗi mờ, đừng cắt theo độ dài.
+- **Mã câu có nghĩa** do DB sinh (`fn_generate_script_id`): `s_211000000001` = 3 chữ số nghĩa (số từ EN + chữ số chủ đề 1–9 lấy từ bảng `domain` + quan hệ Anh–Việt) + 9 chữ số thứ tự. Trigger database kiểm tra mã khớp số từ, chữ số chủ đề và quan hệ, nên không ghi được mã sai ý nghĩa kể cả bằng SQL tay. ID cũ 9 chữ số (`s_211000001`) vẫn hợp lệ; frontend coi ID là chuỗi mờ, đừng cắt theo độ dài.
 - **Mỗi cặp cần 2 bản ghi âm cho mỗi Speaker**: `r_cs_…_u<speakerId>` + `r_vi_…_u<speakerId>` (`_tN` khi thu lại). Nhiều Speaker được đọc cùng một cặp; mỗi người chỉ có tối đa một bản `pending_review`/`approved` cho mỗi cặp + biến thể (`uq_recording_active_variant`), bản của người khác không chặn.
-- **Duyệt mù tối đa 3 lượt của 3 người khác nhau, chốt ngay khi một bên đủ 2 phiếu** bởi trigger `trg_review_majority`. Lượt thứ ba chỉ cần khi hai phiếu đầu lệch nhau; hoà ở số vòng chẵn thì tính là trượt. Từ chối bắt buộc ≥1 lý do; lý do nhóm `content` kéo cặp câu về `pending_validation`. **Trạng thái do DATABASE chốt, code chỉ ghi lượt rồi đọc lại.** Trong vòng duyệt **không có kiểm tra tự động nào** — auto-QC chỉ chạy lúc nộp bản ghi.
+- **Duyệt mù tối đa 3 lượt của 3 người khác nhau, chốt ngay khi một bên đủ 2 phiếu** bởi trigger `trg_review_majority`. Lượt thứ ba chỉ cần khi hai phiếu đầu lệch nhau; hoà ở số vòng chẵn thì tính là trượt. Từ chối bắt buộc ≥1 lý do; lý do nhóm `content` kéo cặp câu về `pending_validation`. **Trạng thái do DATABASE chốt, code chỉ ghi lượt rồi đọc lại.** Auto-QC chỉ chạy lúc nộp bản ghi. Trong vòng duyệt, máy chỉ tham gia khi bật `ai_review.enabled`: lúc đó máy là **phiếu thứ ba** nếu hai phiếu đầu lệch nhau, không phải lượt kiểm tra luôn chạy.
 - **Đề xuất câu (yêu cầu 2.5)**: Speaker báo lỗi (kèm lý do lỗi) hoặc gửi bản sửa cho một câu đã duyệt nội dung nhưng **chưa có bản ghi âm** — đề xuất vào thẳng hàng chờ Reviewer. Trong lúc chờ, câu **bị rút khỏi hàng đợi ghi âm** (`dropped`) nên không ai thu nhầm nội dung cũ; Reviewer chốt xong (duyệt kèm bản chốt, hoặc từ chối kèm lý do) câu **tự quay lại hàng đợi ghi âm**. Mỗi câu tối đa một đề xuất chờ; duyệt đề xuất sửa ghi thêm một lượt `Edited` vào lịch sử câu. Ba bất biến này do trigger database giữ (`fn_script_proposal_guard` / `_sync` / `_close_on_script`), không chỉ ở service.
 - **Task**: `InProgress → Completed (+Cancelled)`, tự tính lại từ số liệu thật. Task thu âm đếm theo cặp (cả cs+vi đạt mới tính), task duyệt đếm theo bản ghi. Bản ghi **chờ duyệt** của một đợt **tự vào hàng chờ mọi task duyệt chưa huỷ của đợt** ngay lúc Speaker nộp (kể cả task đã đủ chỉ tiêu) — Reviewer được giao việc từ lúc tạo đợt vẫn có việc ngay, Task Manager không phải "Thêm mục" lần nữa.
 - **Một task giao cho NHIỀU người.** `task.target_qty` là chỉ tiêu của **cả nhóm**, không nhân theo số người; mỗi lượt giao giữ **quota riêng** trong `task_assignment.target_qty`, tổng quota bằng đúng chỉ tiêu task. Giao không kèm quota thì backend chia phần nguyên + dư (100 cho 3 người = 34/33/33); sửa cả bảng phân công bằng `PUT /api/tasks/{id}/assignments`. Mỗi người thấy **tiến độ của chính mình** (`myProgress`, tính trên quota của mình) lẫn của cả nhóm (`teamProgress`). Ràng buộc còn lại: cùng một người không được nhận trùng một task.
@@ -201,7 +202,7 @@ Luồng chính (7 bước):
 - **Có thể giao người nhận ngay khi tạo task** bằng `assigneeUserIds` trong `POST /api/tasks`. Với task thu âm, backend lấy các cặp câu `Validated` theo chủ đề mà từng Speaker chưa có bản chờ duyệt/đạt, tối đa quota; kho ít hơn chỉ tiêu thì vẫn tạo task, mỗi người nhận tối đa số câu còn thu được. Nhiều Speaker có thể nhận cùng một cặp (mỗi người một dòng `task_script` và một bản ghi riêng); một Speaker không nhận trùng cặp trong cùng task. Task duyệt chỉ tạo phân công Reviewer.
 - **Chỉ tiêu trên trang chủ Speaker là của riêng người đọc.** `target` của `GET /api/speaker/rounds/current` và `targetQty` trong bảng xếp hạng là tổng quota các lượt giao trong đợt, **không phải** `wave.target_qty`; số đã nộp vẫn là số thật và có thể vượt mốc.
 - **Chỉ tiêu tụt thì task tự mở lại.** Bản ghi bị từ chối → mục câu lùi `Completed → Pending`, mục duyệt `Reviewed → Skipped`; `TaskStateMachine` tính lại và kéo task rời `Completed`. Trước đây chỉ tiêu không bao giờ tụt nên task treo ở "Hoàn thành" dù người nhận chưa làm đủ.
-- **Không dùng EF migration** — sửa lược đồ thì sửa `docs/codeswitchlabel.sql` trước, rồi sửa `DbContext` cho khớp. Migration triển khai mới nhất là V22 (đổi tên campaign thành wave trong bảng, cột, enum, view, hàm, trigger, constraint, index và sequence). V21 cho phép nhiều Speaker dùng chung cặp câu: khoá `task_script_id`, recording ID 64 ký tự có `_u<speakerId>`, bỏ trigger một người đọc, hàng đợi phát theo từng Speaker. Database cũ vẫn cần V14/V15 trước V17, rồi V21 và V22 theo thứ tự.
+- **Không dùng EF migration** - sửa lược đồ thì sửa `docs/codeswitchlabel.sql` trước, rồi sửa `DbContext` cho khớp. Migration triển khai mới nhất là V29 (chủ đề động: bảng `domain` thay enum `script_domain`, **một chiều** - sao lưu trước khi áp); V28 thêm `script.semantic_warning`, V27 thêm `speaker_profile.region`, V24–V26 thêm bảng `ai_review`. V22 đổi tên campaign thành wave trong bảng, cột, enum, view, hàm, trigger, constraint, index và sequence. V21 cho phép nhiều Speaker dùng chung cặp câu: khoá `task_script_id`, recording ID 64 ký tự có `_u<speakerId>`, bỏ trigger một người đọc, hàng đợi phát theo từng Speaker. Database cũ vẫn cần V14/V15 trước V17, rồi V21–V29 theo thứ tự.
 
 ## Cấu hình (Configuration)
 
@@ -210,7 +211,7 @@ Luồng chính (7 bước):
 | `backend/src/CodeSwitchLabel.Api/appsettings.json` + `appsettings.Development.json` | connection string, JWT (480 phút dev), CORS (5173, 3000), `Seed:DefaultPassword` |
 | `Llm` (cùng file appsettings hoặc biến môi trường `Llm__*`) | `Endpoint`, `ApiKey`, `Model`, `TimeoutSeconds` cho bước gán nhãn `.txt`; để trống `Endpoint`/`Model` thì API vẫn chạy và import `.txt` chuyển sang gán nhãn bằng luật |
 | `FRONTEND/.env.example` → `.env.local` | `VITE_API_BASE_URL` |
-| `deploy/.env.example` → `deploy/.env` | `API_DOMAIN`, `FILES_DOMAIN`, `CADDYFILE`, `FE_ORIGIN`, `FE_ORIGIN_PREVIEW`, `FE_ORIGIN_LOCAL`, `POSTGRES_PASSWORD`, `MINIO_*`, `JWT_KEY` (base64 48), `JWT_EXPIRY_MINUTES`, `SWAGGER_ENABLED`, `SEED_PASSWORD` |
+| `deploy/.env.example` → `deploy/.env` | `API_DOMAIN`, `FILES_DOMAIN`, `CADDYFILE`, `FE_ORIGIN`, `FE_ORIGIN_PREVIEW`, `FE_ORIGIN_LOCAL`, `POSTGRES_PASSWORD`, `MINIO_*`, `JWT_KEY` (base64 48), `JWT_EXPIRY_MINUTES`, `SWAGGER_ENABLED`, `SEED_PASSWORD`, `LLM_*` (tuỳ chọn), `ASR_*` (tuỳ chọn) |
 
 Lưu ý `ObjectStorage:ServiceUrl` (API gọi MinIO trong mạng Docker, `http://minio:9000`) vs `PublicUrl` (trình duyệt mở, `http://localhost:9000` dev / `https://files.*` prod) — link nghe tạm 15 phút phải ký đúng địa chỉ trình duyệt dùng.
 
@@ -235,7 +236,7 @@ docker exec csl-postgres psql -U csl -d codeswitchlabel -c "select changed_at, u
 
 - Swagger là nguồn sự thật khi backend chạy: `http://localhost:5053` (dev) / `https://api.<domain>` (prod). Export: `curl -o swagger.json http://localhost:5053/swagger/v1/swagger.json`
 - `docs/FE-INTEGRATION.md`: auth, format lỗi (`401/403` rỗng, `400` validation `errors`, nghiệp vụ `code+title+traceId`), recording/review/tasks/enum
-- 13 controller: `Auth, Scripts, Recordings, Reviews, ScriptQueue, Speaker, Tasks, Waves, Datasets, Users, Admin, Config, Proposals` — xem chi tiết trong [`backend/README.md`](backend/README.md). Thêm controller thì đếm lại: `ls backend/src/CodeSwitchLabel.Api/Controllers/*.cs | wc -l`
+- 15 controller: `Auth, Scripts, Recordings, Reviews, ScriptQueue, Speaker, Tasks, Waves, Datasets, Users, Admin, AiReview, Config, Domains, Proposals` - xem chi tiết trong [`backend/README.md`](backend/README.md). Thêm controller thì đếm lại: `ls backend/src/CodeSwitchLabel.Api/Controllers/*.cs | wc -l`
 
 ## Deploy
 
@@ -250,7 +251,7 @@ docker compose -f deploy/docker-compose.prod.yml logs -f api
 
 ## Giới hạn đã biết (Known limitations)
 
-- **Ba lượt duyệt đều là của người**, chốt ngay khi một bên đủ đa số (2/3); **không có phiếu của hệ thống**. Một thời có dự định thêm lượt kiểm tra tự động ở vòng duyệt nhưng đã bỏ: auto-QC chạy lúc nộp và bản trượt thì `qc_failed` — không bao giờ tới vòng duyệt, nên lượt đó không bao giờ có tác dụng. `review.rounds_required` giữ bằng **3**.
+- **Mặc định ba lượt duyệt là của người**, chốt ngay khi một bên đủ đa số (2/3). Khi bật **máy duyệt** (`ai_review.enabled` + `Asr:*`), máy làm **phiếu thứ ba** nếu hai phiếu đầu lệch nhau: chấm WER giữa bản ghi và câu phải đọc, chỉ kết luận `approved`/`rejected` và chỉ nêu được lý do `content_mismatch`. Auto-QC vẫn chạy lúc nộp; bản trượt `qc_failed` không tới vòng duyệt. `review.rounds_required` giữ bằng **3**.
 - **Ngưỡng thời lượng 1–30s là đề xuất của nhóm backend**, chưa được duyệt chính thức; hệ thống chưa đo khoảng lặng đầu/cuối.
 - **Nhập `.txt` không có LLM thì nghĩa từ là heuristic.** Backend gán nhãn `[vi]`/`[en]` bằng luật (từ ASCII là tiếng Việt khi là hư từ quen thuộc hoặc có trong từ điển âm tiết Việt không dấu và cũng xuất hiện trong câu thuần Việt), rồi đối chiếu các từ chung của hai câu để lấy đoạn nghĩa tương ứng — có thể nhiều từ (`email` → `thư điện tử`) và không làm lệch các từ phía sau. Đoạn không đối chiếu được thì lấy theo vị trí; hết từ thì nghĩa để trống cho người duyệt điền. Có `Llm` thì dùng LLM như cũ; LLM lỗi hoặc trả kết quả không đọc được thì lùi về luật, chỉ cặp mà luật cũng lỗi mới bị bỏ qua kèm mã `invalid_text_format`/`invalid_language_tags`.
 - **Xuất ZIP trực tiếp chỉ gồm cặp đã duyệt đủ cả cs và vi.** Chọn `recordingIds` mà thiếu một bản của cặp thì cặp đó bị bỏ; không còn cặp nào thì trả `422 export_no_approved_pairs`.
@@ -263,7 +264,7 @@ docker compose -f deploy/docker-compose.prod.yml logs -f api
 
 Ba lỗi cũ đã sửa: giao task giờ gửi `{ userIds: [...] }` và hiện lỗi thật, dashboard đọc `assignees[]` khi đếm "Đã phân công", màn Thu âm đọc `myProgress`. Màn Reviewer dùng API thật qua `services/reviewerApi.js`; chỉ `Profile` còn đọc mock trong `FRONTEND/src/mocks/reviewer/`.
 
-**Ba nút xử lý của yêu cầu 2.4 vẫn chưa có giao diện** (API đã có: `/reviews`, `/reject-audio`, `/discard-pair`) — đây là phần còn thiếu chính; mock `Profile` không liên quan. Ngoài ra màn Admin TextData mới gửi file JSON (`File`), chưa có ô `Domain`/chọn `.txt` dù API đã nhận; Admin Recordings đã xuất ZIP theo các cặp đã chọn qua `recordingIds`. Chi tiết hợp đồng: [`docs/FE-INTEGRATION.md`](docs/FE-INTEGRATION.md).
+**Ba nút xử lý của yêu cầu 2.4 vẫn chưa có giao diện** (API đã có: `/reviews`, `/reject-audio`, `/discard-pair`) — đây là phần còn thiếu chính; mock `Profile` không liên quan. Màn Admin TextData đã nhập `.txt` kèm chọn chủ đề động, lọc theo chủ đề và sửa cặp câu; Admin Topic Config gọi API tạo/đổi tên/xóa chủ đề; Admin Recordings đã lọc theo người đọc/thời gian và xuất ZIP theo `recordingIds`. Còn thiếu: ô `region` trong hồ sơ, hiển thị `semanticWarning`, và giao diện chạy máy duyệt. Chi tiết hợp đồng: [`docs/FE-INTEGRATION.md`](docs/FE-INTEGRATION.md).
 
 ## Đóng góp (Contributing)
 

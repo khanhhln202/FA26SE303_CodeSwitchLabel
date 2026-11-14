@@ -165,6 +165,25 @@ Kiểm tra container đã nhận cấu hình:
 docker exec csl-api printenv Llm__Model
 ```
 
+### Bật máy duyệt bản ghi (tuỳ chọn)
+
+Service `asr` (faster-whisper, CPU int8) nằm sẵn trong `deploy/docker-compose.prod.yml`; `deploy/.env.example`
+đã đặt `ASR_ENDPOINT=http://asr:8000/v1` và `ASR_MODEL=deepdml/faster-whisper-large-v3-turbo-ct2`. Máy chỉ là
+**phiếu thứ ba** khi hai Reviewer đầu lệch nhau, và **tắt mặc định**. Bật trong `system_config`:
+
+```bash
+docker exec csl-postgres psql -U csl -d codeswitchlabel -c \
+  "UPDATE system_config SET config_value='true' WHERE config_key='ai_review.enabled';"
+# tuỳ chọn: worker tự nhặt hàng đợi thay vì gọi POST /api/recordings/{id}/ai-review
+docker exec csl-postgres psql -U csl -d codeswitchlabel -c \
+  "UPDATE system_config SET config_value='true' WHERE config_key='ai_review.auto_enabled';"
+```
+
+- `ASR_LANGUAGE` cố ý để trống: ép `vi` làm mô hình phiên âm từ tiếng Anh thành chữ Việt gần âm, WER sai.
+- Model bị nhả khỏi RAM sau `ASR_MODEL_TTL` giây không dùng; lần gọi đầu sau quãng nghỉ chậm ~60 giây,
+  nên `ASR_TIMEOUT_SECONDS` để 180 chứ không phải 120.
+- Thiếu `Asr:Endpoint`/`Model` → endpoint máy duyệt trả `422 asr_not_configured`; API vẫn chạy bình thường.
+
 ## Nghiệm thu bản deploy
 
 **Lần chạy đầu tiên** (database vừa tạo, chưa có dữ liệu thật) thì nghiệm thu bằng cả bộ kiểm thử
@@ -299,6 +318,14 @@ mục gốc của repo trên máy chủ. Script làm theo đúng thứ tự này
 
 V22 đổi tên tại chỗ các bảng, cột, enum, view, hàm và trigger cũ sang Wave. Dữ liệu sẵn có được giữ
 nguyên; client phải dùng route `/api/waves` và các trường JSON mang tên Wave.
+
+V23 cho Admin duyệt mọi chủ đề; V24–V26 thêm bảng `ai_review` và máy duyệt (mặc định tắt);
+V27 thêm vùng miền người đọc; V28 thêm `script.semantic_warning`; **V29** (từng đánh số V27, đổi để
+không trùng `V27__speaker_region`) đổi enum `script_domain` thành bảng `domain` — migration **một chiều**,
+`deploy.sh` đã dừng API và sao lưu lần nữa trước khi áp.
+
+V29 có guard: database nào đã chạy bản chủ đề động dưới số V27 cũ (bảng `domain` đã tồn tại) thì file
+tự bỏ qua, `deploy.sh` vẫn ghi nhận V29 — không có lần chạy nào bị kẹt vì trùng số.
 
 **Bảng `schema_migration`** là sổ ghi những migration đã chạy, do script tự tạo ở bước 5. Nhờ đó
 "migration nào đã áp rồi" trả lời bằng truy vấn thay vì đọc lại tài liệu:
