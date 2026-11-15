@@ -168,7 +168,7 @@ public sealed class DomainManagementTests(DatabaseFixture fixture) : ApiTestBase
     }
 
     [Fact]
-    public async Task XoaChuDeDangDuocSuDung_Tra409DomainInUse()
+    public async Task XoaChuDeDaDuocSuDung_VanXoaMem_CauCuGiuCode()
     {
         var admin = await GetAdminTokenAsync();
         var name = $"Dùng thử {Guid.NewGuid():N}";
@@ -179,7 +179,6 @@ public sealed class DomainManagementTests(DatabaseFixture fixture) : ApiTestBase
             await createDomain.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         var code = domainDoc.RootElement.GetProperty("code").GetString()!;
 
-        // Tạo câu dùng chủ đề này
         var script = await PostAsync("/api/scripts", new
         {
             csContent = $"[vi]Tôi cần [en]meeting [vi]gấp {Guid.NewGuid():N}",
@@ -191,13 +190,19 @@ public sealed class DomainManagementTests(DatabaseFixture fixture) : ApiTestBase
             }
         }, admin);
         Assert.Equal(HttpStatusCode.Created, script.StatusCode);
+        using var scriptDoc = JsonDocument.Parse(
+            await script.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var scriptId = scriptDoc.RootElement.GetProperty("scriptId").GetString()!;
 
-        // Xóa chủ đề đang dùng phải bị chặn
+        // Chủ đề đã dùng vẫn xóa mềm được; câu cũ giữ nguyên code.
         var delete = await DeleteAsync($"/api/admin/domains/{code}", admin);
-        Assert.Equal(HttpStatusCode.Conflict, delete.StatusCode);
-        using var delDoc = JsonDocument.Parse(
-            await delete.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
-        Assert.Equal("domain_in_use", delDoc.RootElement.GetProperty("code").GetString());
+        Assert.Equal(HttpStatusCode.NoContent, delete.StatusCode);
+
+        var detail = await GetAsync($"/api/scripts/{scriptId}", admin);
+        Assert.Equal(HttpStatusCode.OK, detail.StatusCode);
+        using var detailDoc = JsonDocument.Parse(
+            await detail.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(code, detailDoc.RootElement.GetProperty("domain").GetString());
     }
 
     [Fact]

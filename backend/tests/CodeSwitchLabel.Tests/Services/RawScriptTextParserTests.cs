@@ -32,6 +32,19 @@ public sealed class RawScriptTextParserTests
         Assert.Equal("Máy chủ bị crash lúc nửa đêm.", pairs[1].Cs);
     }
 
+    [Theory]
+    [InlineData("Một câu!", "Một câu!")]
+    [InlineData("Một câu?", "Một câu?")]
+    public async Task KetThucBangChamThanHoacDauHoi_VanNhan(string cs, string expected)
+    {
+        using var stream = Of($"{cs}\nHai câu.");
+
+        var pairs = await RawScriptTextParser.ParseAsync(
+            stream, TestContext.Current.CancellationToken);
+
+        Assert.Equal(expected, Assert.Single(pairs).Cs);
+    }
+
     [Fact]
     public async Task ThieuDongLe_ThiBaoLoi()
     {

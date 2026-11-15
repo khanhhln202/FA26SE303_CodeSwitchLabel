@@ -18,11 +18,14 @@ public interface IDomainService
 
     /// <summary>
     /// Nhận code hoặc tên (bỏ dấu, không phân biệt hoa thường) và trả code chuẩn.
-    /// Chủ đề đã xóa mềm bị từ chối — dùng cho mọi chỗ tạo mới.
+    /// Chủ đề đã xóa mềm bị từ chối trừ khi mã của nó nằm trong
+    /// <paramref name="allowInactiveCodes"/>.
     /// </summary>
-    /// <param name="allowInactive">
-    /// Chỉ để true trên các đường dẫn cập nhật dữ liệu cũ (sửa đợt/câu) khi chủ đề
-    /// đã bị xóa mềm, để không chặn thao tác trên dữ liệu đang tồn tại.
+    /// <param name="allowInactiveCodes">
+    /// Mã các chủ đề đang gắn với dữ liệu cũ (đợt/task hiện tại, hoặc chủ đề đã gán cho
+    /// Reviewer). Chỉ những mã này được phép inactive; mọi giá trị khác vẫn phải đang hoạt động.
     /// </param>
-    Task<string> ResolveActiveAsync(string codeOrName, CancellationToken ct = default, bool allowInactive = false);
+    Task<string> ResolveActiveAsync(
+        string codeOrName, CancellationToken ct = default,
+        IReadOnlyCollection<string>? allowInactiveCodes = null);
 }
