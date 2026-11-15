@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Send, Check, Trash2, ArrowRight } from 'lucide-react';
+import { Send, Check, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { contributeScriptApi } from '../../../services/speakerApi';
@@ -10,7 +10,6 @@ import ErrorState from '../../../components/ErrorState/ErrorState';
 import { CONTRIBUTE_SCRIPT_API, GET_SPEAKER_CONTRIBUTION_HISTORY_API, GET_SPEAKER_STATS_API, GET_TOPICS_API } from '../../../utils/queryKey';
 import {
   SPEAKER_ACCENT_ACTIVE_ICON as ACCENT, // xanh lá thương hiệu
-  AUDIO_PRIMARY, // màu phần tiếng Anh
   SUCCESS, WARNING,
   CHIP_SUCCESS_TEXT,
   CHIP_DANGER_BG, CHIP_DANGER_BORDER, CHIP_DANGER_TEXT,
@@ -19,12 +18,7 @@ import {
 } from '../../../constants/theme';
 
 // Màn hình cao >= 900px dùng biến thể [@media(min-height:900px)] để giãn ô nhập/khoảng cách; màn thấp (laptop 768px) giữ bản gọn vừa 1 màn hình
-// Chủ đề lấy từ GET /api/config/topics; số từ tiếng Anh vẫn chọn ở đây (backend không có API riêng)
-const WORD_COUNT_OPTIONS = [1, 2, 3];
-// Số ô đối chiếu giữ chỗ sẵn = số từ lớn nhất có thể chọn, để đổi lựa chọn không làm giãn layout
-const MAX_PAIRS = Math.max(...WORD_COUNT_OPTIONS);
-
-const emptyPairs = () => Array.from({ length: MAX_PAIRS }, () => ({ source: '', target: '' }));
+// Chủ đề lấy từ GET /api/config/topics. Gửi cặp câu thường (csRaw / viRaw) - backend tự gắn nhãn [vi]/[en]
 
 /** 1 tiêu chí - 3 trạng thái: chưa gõ (○ xám), đạt (✓ xanh), đã gõ nhưng chưa đạt (! đỏ). */
 function RuleItem({ ok, touched, label }) {
@@ -80,7 +74,7 @@ function RadioGroup({ label, options, value, onChange, renderLabel = (o) => o })
   return (
     <div role="radiogroup" aria-label={label} className="min-w-0">
       <p className="type-label mb-1.5" style={{ color: TEXT_HEADING }}>{label}</p>
-      <div className="flex flex-col gap-1 [@media(min-height:900px)]:gap-1.5">
+      <div className="grid grid-cols-1 sm:grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-1.5">
         {options.map((o) => (
           <RadioOption key={o} selected={value === o} label={renderLabel(o)} onClick={() => onChange(o)} />
         ))}
@@ -108,33 +102,21 @@ export default function ContributeText() {
   // Chưa chọn thì mặc định chủ đề đầu tiên trong danh sách
   const [selectedTopic, setSelectedTopic] = useState(null);
   const category = selectedTopic ?? topics[0]?.code;
-  const [wordCount, setWordCount] = useState(2);
   const [csTranscript, setCsTranscript] = useState('');
   const [viEquivalent, setViEquivalent] = useState('');
-  // Luôn giữ mảng MAX_PAIRS phần tử, chỉ dùng slice(0, wordCount) khi render/gửi - tránh phải resize mảng khi đổi wordCount
-  const [pairs, setPairs] = useState(emptyPairs);
-
-  const updatePair = (index, field, value) => {
-    setPairs((prev) => prev.map((p, i) => (i === index ? { ...p, [field]: value } : p)));
-  };
-
-  const cs = useMemo(() => evaluateSentence(csTranscript, true), [csTranscript]);
-  const vi = useMemo(() => evaluateSentence(viEquivalent, false), [viEquivalent]);
-  const activePairs = pairs.slice(0, wordCount);
-  const pairsOk = activePairs.every((p) => p.source.trim() && p.target.trim());
-  const pairsTouched = activePairs.some((p) => p.source || p.target);
+  const cs = useMemo(() => evaluateSentence(csTranscript), [csTranscript]);
+  const vi = useMemo(() => evaluateSentence(viEquivalent), [viEquivalent]);
 
   const sentenceRules = [...cs.rules, ...vi.rules];
-  const totalRules = sentenceRules.length + 1;
-  const passedCount = sentenceRules.filter((r) => r.ok).length + (pairsOk ? 1 : 0);
+  const totalRules = sentenceRules.length;
+  const passedCount = sentenceRules.filter((r) => r.ok).length;
   // Chưa tải được chủ đề thì chưa gửi được (không có domain để gửi)
   const allValid = passedCount === totalRules && Boolean(category);
-  const hasContent = csTranscript || viEquivalent || pairs.some((pair) => pair.source || pair.target);
+  const hasContent = csTranscript || viEquivalent;
 
   const resetForm = () => {
     setCsTranscript('');
     setViEquivalent('');
-    setPairs(emptyPairs());
   };
 
   // Mutation gửi câu đóng góp
@@ -154,18 +136,12 @@ export default function ContributeText() {
 
   const handleSubmit = () => {
     if (!allValid || isSubmitting) return;
+    // Cặp câu thô: backend tự gắn nhãn và bỏ qua alignment
     contributeScript({
-      csContent: csTranscript.trim(),
-      viContent: viEquivalent.trim(),
+      csRaw: csTranscript.trim(),
+      viRaw: viEquivalent.trim(),
       domain: category,
       relation: 'DirectTranslation',
-      alignment: activePairs.map((p) => ({
-        source: p.source.trim(),
-        source_lang: 'en',
-        target: p.target.trim(),
-        target_lang: 'vi',
-        relation: 'semantic_equivalent',
-      })),
     });
   };
 
@@ -209,18 +185,15 @@ export default function ContributeText() {
 
       <div>
         <p className="type-ui" style={{ color: TEXT_BODY }}>
-          Viết câu tiếng Việt có xen từ tiếng Anh, gắn thẻ{' '}
-          <span className="font-mono font-label" style={{ color: TEXT_HEADING }}>[vi]</span> /{' '}
-          <span className="font-mono font-label" style={{ color: TEXT_HEADING }}>[en]</span> trước mỗi đoạn,
-          kèm câu tiếng Việt tương đương và nghĩa của từng từ tiếng Anh.
+          Viết một câu tiếng Việt có xen từ tiếng Anh và câu tiếng Việt tương đương. Không cần gắn thẻ, hệ thống tự gắn.
         </p>
       </div>
 
-      {/* Form dọc: Chủ đề | Số từ → 2 câu → Đối chiếu từ */}
+      {/* Form dọc: Chủ đề → 2 câu */}
       <div className="rounded-2xl overflow-hidden" style={{ background: '#FFFFFF', border: `1px solid ${BORDER_LIGHT}`, boxShadow: '0 1px 3px rgba(16,17,20,0.04)' }}>
 
-        {/* Chủ đề | Số từ tiếng Anh - 2 nhóm cạnh nhau, mỗi nhóm xếp dọc */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-5 px-4 sm:px-5 py-2 [@media(min-height:900px)]:py-3.5 border-b" style={{ borderColor: BORDER_LIGHT }}>
+        {/* Chủ đề */}
+        <div className="px-4 sm:px-5 py-2 [@media(min-height:900px)]:py-3.5 border-b" style={{ borderColor: BORDER_LIGHT }}>
           {isLoadingTopics ? (
             <Loading text="Đang tải chủ đề..." className="py-4" />
           ) : isTopicsError ? (
@@ -234,65 +207,13 @@ export default function ContributeText() {
               renderLabel={topicName}
             />
           )}
-          {/* Số từ tiếng Anh - quyết định số cặp đối chiếu bên dưới */}
-          <RadioGroup
-            label="Số từ tiếng Anh trong câu"
-            options={WORD_COUNT_OPTIONS}
-            value={wordCount}
-            onChange={setWordCount}
-            renderLabel={(n) => `${n} từ tiếng Anh`}
-          />
         </div>
 
-        <div className="px-4 sm:px-5 py-2 space-y-2 [@media(min-height:900px)]:py-3.5 [@media(min-height:900px)]:space-y-3 border-b" style={{ borderColor: BORDER_LIGHT }}>
+        <div className="px-4 sm:px-5 py-2 space-y-2 [@media(min-height:900px)]:py-3.5 [@media(min-height:900px)]:space-y-3">
           {sentenceField('contribution-cs', 'Câu Việt-Anh', csTranscript, setCsTranscript,
-            'Ví dụ: [vi]Bạn gửi file này qua [en]email [vi]giúp mình nhé.', cs)}
+            'Ví dụ: Bạn gửi file này qua email giúp mình nhé.', cs)}
           {sentenceField('contribution-vi', 'Câu tiếng Việt tương đương', viEquivalent, setViEquivalent,
-            'Ví dụ: [vi]Bạn gửi file này qua thư điện tử giúp mình nhé.', vi)}
-        </div>
-
-        {/* Các cặp từ đối chiếu Anh-Việt - luôn giữ chỗ đủ MAX_PAIRS dòng; dòng vượt quá wordCount bị ẩn nhưng vẫn chiếm chỗ */}
-        <div className="px-4 sm:px-5 py-2 [@media(min-height:900px)]:py-3.5">
-          <div className="flex items-baseline justify-between mb-1.5">
-            <p className="type-label" style={{ color: TEXT_HEADING }}>
-              Nghĩa tiếng Việt của {wordCount === 1 ? 'từ' : 'các từ'} tiếng Anh
-            </p>
-            <RuleItem ok={pairsOk} touched={pairsTouched} label={`Điền đủ ${wordCount} cặp`} />
-          </div>
-          <div className="space-y-1.5 [@media(min-height:900px)]:space-y-2">
-            {pairs.map((pair, i) => {
-              const active = i < wordCount;
-              return (
-                <div key={i} className={`flex items-center gap-2 ${active ? '' : 'invisible'}`} aria-hidden={!active}>
-                  <input
-                    type="text"
-                    aria-label={`Từ tiếng Anh ${i + 1}`}
-                    value={pair.source}
-                    disabled={!active}
-                    onChange={(e) => updatePair(i, 'source', e.target.value)}
-                    placeholder="từ tiếng Anh"
-                    className="min-w-0 flex-1 px-3 py-1.5 text-ui font-mono font-label rounded-lg outline-none transition-all"
-                    style={{ ...fieldStyle, color: AUDIO_PRIMARY }}
-                    onFocus={focusField}
-                    onBlur={blurField}
-                  />
-                  <ArrowRight className="w-4 h-4 shrink-0" style={{ color: TEXT_FAINT }} />
-                  <input
-                    type="text"
-                    aria-label={`Nghĩa tiếng Việt ${i + 1}`}
-                    value={pair.target}
-                    disabled={!active}
-                    onChange={(e) => updatePair(i, 'target', e.target.value)}
-                    placeholder="nghĩa tiếng Việt"
-                    className="min-w-0 flex-1 px-3 py-1.5 text-ui font-label rounded-lg outline-none transition-all"
-                    style={fieldStyle}
-                    onFocus={focusField}
-                    onBlur={blurField}
-                  />
-                </div>
-              );
-            })}
-          </div>
+            'Ví dụ: Bạn gửi tệp này qua thư điện tử giúp mình nhé.', vi)}
         </div>
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-5 py-2 [@media(min-height:900px)]:py-3 border-t" style={{ background: SURFACE_PAGE, borderColor: BORDER_LIGHT }}>

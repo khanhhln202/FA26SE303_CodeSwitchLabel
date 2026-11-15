@@ -21,6 +21,7 @@ import {
 import Loading from "../../../../components/Loading/Loading";
 import ErrorState from "../../../../components/ErrorState/ErrorState";
 import EmptyState from "../../../../components/EmptyState/EmptyState";
+import AiReviewVerdict from "../../../../components/AiReview/AiReviewVerdict";
 import { getAllSpeakerRecordingHistoryApi, getSpeakerStatsApi } from "../../../../services/speakerApi";
 import { GET_SPEAKER_RECORDING_HISTORY_API, GET_SPEAKER_STATS_API } from "../../../../utils/queryKey";
 
@@ -575,20 +576,29 @@ export default function RecordingHistory() {
                       const c = isReject ? "#C63B3B" : isApprove ? "#3FA66B" : "#A85E12";
                       const rowBg = isReject ? "#FDEAEA" : isApprove ? "#EAF7EF" : "#FFF1DE";
                       const rowBorder = isReject ? "#F3C9C9" : isApprove ? "rgba(63,166,107,0.2)" : "#F5DFC0";
-                      // Lý do của các câu trong lượt (bỏ trùng); không có lý do thì chỉ hiện kết quả
-                      const reasons = [...new Set(r.reviews.map((rv) => rv.reason).filter(Boolean))];
+                      // Lý do của các câu trong lượt (bỏ trùng); không có lý do thì chỉ hiện kết quả.
+                      // Lý do phiếu máy ("[Máy duyệt] ...") không hiện ở đây - khung AI bên dưới đã trình bày lại.
+                      const reasons = [...new Set(r.reviews.map((rv) => rv.reason).filter((x) => x && !x.startsWith("[Máy duyệt]")))];
                       return (
                         <div key={r.round} className="flex gap-2.5 px-3 py-2.5 rounded-xl border" style={{ background: rowBg, borderColor: rowBorder }}>
                           <span className="w-6 h-6 rounded-full text-white text-caption font-label flex items-center justify-center flex-shrink-0" style={{ background: c }}>
                             R{i + 1}
                           </span>
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1">
                             <p className="text-meta font-label" style={{ color: isApprove ? "#1F5C3F" : c }}>
                               {isReject ? "Từ chối" : isApprove ? "Đã duyệt" : "Đang duyệt"}
                             </p>
                             {reasons.map((reason) => (
                               <p key={reason} className="text-meta text-[#6E7078] mt-0.5">{reason}</p>
                             ))}
+                            {/* Máy chỉ vào ở lượt 3 khi hai người lệch nhau: có phán thì hiện bằng chứng, không thì thôi */}
+                            {r.round >= 3 && (
+                              <AiReviewVerdict
+                                csRecordingId={detailItem.csRecordingId}
+                                viRecordingId={detailItem.viRecordingId}
+                                fallbackReviews={r.reviews}
+                              />
+                            )}
                           </div>
                         </div>
                       );

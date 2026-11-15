@@ -1,10 +1,8 @@
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Mic, Trophy, CircleCheck } from 'lucide-react';
-import CodeSwitchText from '../../../components/CodeSwitchText/CodeSwitchText';
 import Loading from '../../../components/Loading/Loading';
 import ErrorState from '../../../components/ErrorState/ErrorState';
-import { stripTags } from '../../../utils/codeSwitch';
 import {
   SURFACE_CARD,
   HOME_ACCENT, HOME_ACCENT_HOVER, HOME_ACCENT_SOFT_BG, HOME_ACCENT_SOFT_BORDER,
@@ -13,7 +11,6 @@ import {
   HOME_HERO_BG, HOME_HERO_TEXT, HOME_HERO_TEXT_MUTED, HOME_HERO_TEXT_SOFT,
   HOME_HERO_GLASS_BG, HOME_HERO_GLASS_BORDER, HOME_HERO_TRACK, HOME_HERO_TICK,
   HOME_MINT, HOME_PROGRESS_APPROVED, HOME_PROGRESS_PENDING,
-  HOME_URGENT_TEXT, HOME_URGENT_BG,
   HOME_MEDAL_GOLD_BG, HOME_MEDAL_GOLD_TEXT,
   HOME_MEDAL_SILVER_BG, HOME_MEDAL_SILVER_TEXT,
   HOME_MEDAL_BRONZE_BG, HOME_MEDAL_BRONZE_TEXT,
@@ -22,12 +19,10 @@ import {
 import {
   getSpeakerCurrentRoundApi,
   getRoundLeaderboardApi,
-  getSpeakerRejectedRecordingsApi,
 } from '../../../services/speakerApi';
 import {
   GET_SPEAKER_CURRENT_ROUND_API,
   GET_ROUND_LEADERBOARD_API,
-  GET_SPEAKER_REJECTED_RECORDINGS_API,
 } from '../../../utils/queryKey';
 
 // Huy hiệu top 3 theo hạng (màu lấy từ theme)
@@ -48,14 +43,14 @@ const ROUND_STATUS_TEXT = {
   Cancelled: 'đã huỷ',
 };
 
-// Bảng xếp hạng và "Cần ghi lại" luôn giữ đúng 5 ô - ít dữ liệu thì ô trống, khối không co lại
+// Bảng xếp hạng luôn giữ đúng 5 ô - ít dữ liệu thì ô trống, khối không co lại
 const LIST_SLOTS = 5;
 
 const cardStyle = { background: SURFACE_CARD, border: `1px solid ${HOME_BORDER}` };
 
 /**
  * Trang chủ Speaker - vừa 1 màn hình (laptop 1366×768 trở lên).
- * Hàng trên = đợt đang chạy (trải hết chiều ngang), hàng dưới = bảng xếp hạng + câu cần ghi lại.
+ * Hàng trên = đợt đang chạy (trải hết chiều ngang), hàng dưới = bảng xếp hạng (trải hết chiều ngang).
  * Màn hẹp (< lg) xếp chồng 1 cột và cuộn bình thường.
  */
 export default function SpeakerDashboard() {
@@ -73,20 +68,13 @@ export default function SpeakerDashboard() {
     enabled: Boolean(round?.waveId),
   });
 
-  // Call API lấy bản ghi bị từ chối cần ghi lại (tối đa 5)
-  const { data: rejected = [] } = useQuery({
-    queryKey: [GET_SPEAKER_REJECTED_RECORDINGS_API],
-    queryFn: () => getSpeakerRejectedRecordingsApi({ limit: LIST_SLOTS }),
-  });
-
   if (isLoading) return <Loading />;
   if (isError) return <ErrorState message={error.message} onRetry={refetch} />;
 
   return (
-    <div className="lg:h-full grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:grid-rows-[auto_minmax(0,1fr)] text-left font-sans">
+    <div className="lg:h-full grid gap-4 lg:grid-rows-[auto_minmax(0,1fr)] text-left font-sans">
       <CurrentRoundCard round={round} />
       <Leaderboard rows={round ? leaderboard?.items ?? [] : []} hasRound={Boolean(round)} />
-      <RejectedList items={rejected} />
     </div>
   );
 }
@@ -98,7 +86,7 @@ function CurrentRoundCard({ round }) {
 
   if (!round) {
     return (
-      <section className="lg:col-span-2 rounded-[20px] p-5 lg:px-6" style={{ background: HOME_HERO_BG }}>
+      <section className="rounded-[20px] p-5 lg:px-6" style={{ background: HOME_HERO_BG }}>
         <div>
           <p className="type-section" style={{ color: HOME_HERO_TEXT }}>Bạn chưa tham gia đợt nào</p>
           <p className="type-body mt-1" style={{ color: HOME_HERO_TEXT_SOFT }}>Khi có đợt mới, bạn sẽ được phân công ghi âm tại đây.</p>
@@ -112,7 +100,7 @@ function CurrentRoundCard({ round }) {
   const pendingPct = Math.min(100 - approvedPct, Math.round((round.pending / target) * 100));
 
   return (
-    <section className="lg:col-span-2 rounded-[20px] p-5 lg:px-6 flex flex-col justify-between gap-5" style={{ background: HOME_HERO_BG }}>
+    <section className="rounded-[20px] p-5 lg:px-6 flex flex-col justify-between gap-5" style={{ background: HOME_HERO_BG }}>
       <div className="flex flex-col sm:flex-row sm:justify-between gap-4">
         <div>
           <p className="flex items-center gap-2 text-meta font-label" style={{ color: HOME_HERO_TEXT_SOFT }}>
@@ -249,68 +237,6 @@ function Leaderboard({ rows, hasRound }) {
 
       {footer && (
         <p className="type-meta px-[18px] py-2.5" style={{ color: HOME_TEXT_BODY, borderTop: `1px solid ${HOME_BORDER}` }}>{footer}</p>
-      )}
-    </section>
-  );
-}
-
-/* ─────────────────────────── Cần ghi lại ─────────────────────────── */
-
-function RejectedList({ items }) {
-  const navigate = useNavigate();
-  const slots = [...items.slice(0, LIST_SLOTS), ...Array(Math.max(0, LIST_SLOTS - items.length)).fill(null)];
-
-  return (
-    <section className="rounded-[20px] flex flex-col min-h-0" style={cardStyle}>
-      <div className="flex items-center justify-between px-[18px] pt-3.5 pb-2">
-        <h3 className="type-card-title flex items-center gap-2" style={{ color: HOME_TEXT_HEADING }}>
-          Cần ghi lại
-          {items.length > 0 && (
-            <span className="px-2 rounded-full type-caption tabular-nums" style={{ background: HOME_URGENT_BG, color: HOME_URGENT_TEXT }}>{items.length}</span>
-          )}
-        </h3>
-        <button onClick={() => navigate('/speaker/recording-history')} className="text-meta font-emphasis cursor-pointer hover:underline" style={{ color: HOME_ACCENT }}>
-          Xem tất cả
-        </button>
-      </div>
-
-      {items.length === 0 ? (
-        <div className="flex-1 min-h-[120px] flex flex-col items-center justify-center gap-1.5 type-meta" style={{ color: HOME_TEXT_FAINT }}>
-          <CircleCheck className="w-5 h-5" style={{ color: HOME_ACCENT }} />
-          Không có câu nào cần ghi lại
-        </div>
-      ) : (
-        <div className="flex-1 min-h-0 flex flex-col px-2 pb-2">
-          {slots.map((item, i) => {
-            if (!item) {
-              return <div key={`empty-${i}`} className="flex-1 min-h-[52px]" style={i > 0 ? { borderTop: `1px dashed ${HOME_BORDER}` } : undefined} />;
-            }
-            return (
-              <div
-                key={item.recordingId}
-                className="flex-1 min-h-[52px] flex items-center gap-2.5 px-2.5"
-                style={i > 0 ? { borderTop: `1px dashed ${HOME_BORDER}` } : undefined}
-              >
-                <div className="flex-1 min-w-0">
-                  {/* API trả 1 câu (transcript = câu Việt-Anh có nhãn) cho mỗi bản ghi bị từ chối */}
-                  <p className="type-ui truncate" style={{ color: HOME_TEXT_HEADING }} title={stripTags(item.transcript ?? '')}>
-                    <CodeSwitchText transcript={item.transcript ?? ''} accent={HOME_ACCENT_HOVER} />
-                  </p>
-                  <p className="text-caption font-regular mt-0.5" style={{ color: HOME_URGENT_TEXT }}>{item.reason ?? 'Bị từ chối'}</p>
-                </div>
-                {/* Mở trang Ghi âm ở chế độ ghi lại đúng bản bị từ chối */}
-                <button
-                  onClick={() => navigate(`/speaker/record-speech?rerecord=${item.recordingId}`)}
-                  aria-label="Ghi lại"
-                  className="w-8 h-8 rounded-[10px] shrink-0 flex items-center justify-center cursor-pointer transition-colors bg-[var(--soft)] hover:bg-[var(--soft-border)]"
-                  style={{ '--soft': HOME_ACCENT_SOFT_BG, '--soft-border': HOME_ACCENT_SOFT_BORDER, color: HOME_ACCENT_HOVER }}
-                >
-                  <Mic className="w-4 h-4" />
-                </button>
-              </div>
-            );
-          })}
-        </div>
       )}
     </section>
   );

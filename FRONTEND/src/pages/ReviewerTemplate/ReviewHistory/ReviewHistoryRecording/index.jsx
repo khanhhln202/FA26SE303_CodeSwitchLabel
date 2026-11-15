@@ -19,6 +19,7 @@ import {
 } from "../../../../constants/theme";
 import Loading from "../../../../components/Loading/Loading";
 import ErrorState from "../../../../components/ErrorState/ErrorState";
+import AiReviewVerdict from "../../../../components/AiReview/AiReviewVerdict";
 import { getReviewerProgressApi, getReviewerRecordingHistoryApi } from "../../../../services/reviewerApi";
 import { GET_REVIEWER_PROGRESS_API, GET_REVIEWER_RECORDING_HISTORY_API } from "../../../../utils/queryKey";
 
@@ -572,13 +573,17 @@ export default function ReviewHistoryRecording() {
                           <span className="w-6 h-6 rounded-full text-white text-caption font-label flex items-center justify-center flex-shrink-0" style={{ background: c }}>
                             R{r.round}
                           </span>
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1">
                             <p className="text-meta font-label" style={{ color: isApprove ? "#1F5C3F" : c }}>
                               {isReject ? "Từ chối" : isApprove ? "Đã duyệt" : "Chưa đánh giá"}
                             </p>
                             {reasons.map((reason) => (
                               <p key={reason} className="text-meta text-[#6E7078] mt-0.5">{reason}</p>
                             ))}
+                            {/* Máy chỉ vào ở lượt 3 khi hai người lệch nhau: có phán thì hiện bằng chứng, không thì thôi */}
+                            {r.round >= 3 && (
+                              <AiReviewVerdict csRecordingId={detailItem.csRecordingId} viRecordingId={detailItem.viRecordingId} />
+                            )}
                           </div>
                         </div>
                       );
