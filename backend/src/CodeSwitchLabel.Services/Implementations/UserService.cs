@@ -279,10 +279,13 @@ public class UserService(
                 "Chỉ Reviewer mới được phân chủ đề duyệt nội dung.");
         }
 
+        // Chủ đề đã gán trước đó vẫn giữ được sau khi bị xóa mềm; chỉ chặn gán mới.
+        var current = await domains.GetDomainsAsync(userId, ct);
         var resolved = new List<string>();
         foreach (var item in items.Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            resolved.Add(await domainService.ResolveActiveAsync(item, ct));
+            resolved.Add(await domainService.ResolveActiveAsync(
+                item, ct, allowInactiveCodes: current));
         }
 
         await domains.ReplaceAsync(userId, resolved, ct);

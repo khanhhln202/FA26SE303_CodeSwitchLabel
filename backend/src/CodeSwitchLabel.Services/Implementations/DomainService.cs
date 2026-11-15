@@ -151,38 +151,30 @@ public class DomainService(CodeSwitchLabelDbContext db) : IDomainService
                 "Không xóa chủ đề cuối cùng — hệ thống phải còn ít nhất một chủ đề.");
         }
 
-        // Không xóa chủ đề đang được tham chiếu bởi dữ liệu hiện có — ngăn
-        // các đợt/câu/nhiệm vụ đang dùng bị "khóa" không sửa được sau này.
-        var inUse = await db.Scripts.AnyAsync(s => s.Domain == code, ct)
-            || await db.Waves.AnyAsync(w => w.Domain == code, ct)
-            || await db.WorkTasks.AnyAsync(t => t.Domain == code, ct)
-            || await db.UserDomains.AnyAsync(u => u.Domain == code, ct);
-
-        if (inUse)
-        {
-            throw new ConflictException(
-                "domain_in_use",
-                "Không xóa chủ đề vì đang được dùng bởi câu/đợt/nhiệm vụ hoặc phân quyền người dùng.");
-        }
-
         domain.IsActive = false;
         await db.SaveChangesAsync(ct);
     }
 
     /// <summary>
     /// Nhận code hoặc tên (bỏ dấu, không phân biệt hoa thường) và trả code chuẩn.
-    /// <paramref name="allowInactive"/> chỉ dùng cho các đường dẫn cập nhật dữ liệu cũ
-    /// (ví dụ sửa đợt/câu mà chủ đề đã bị xóa mềm) — mọi đường dẫn tạo mới để mặc định false.
-    /// Chủ đề đã xóa mềm bị từ chối khi <paramref name="allowInactive"/> là false.
+    /// <paramref name="allowInactiveCodes"/> chỉ dùng cho các đường dẫn cập nhật dữ liệu cũ
+    /// (ví dụ sửa đợt/task mà chủ đề đã bị xóa mềm, hoặc giữ chủ đề đã gán cho Reviewer).
+    /// Chủ đề đã xóa mềm bị từ chối khi mã của nó không nằm trong danh sách này.
     /// </summary>
     public async Task<string> ResolveActiveAsync(string codeOrName, CancellationToken ct = default,
-        bool allowInactive = false)
+        IReadOnlyCollection<string>? allowInactiveCodes = null)
     {
         var value = (codeOrName ?? string.Empty).Trim();
         var all = await GetAllAsync(ct);
         var key = DomainCodeGenerator.MatchKey(value);
 
-        var domain = all.FirstOrDefault(d => DomainCodeGenerator.MatchKey(d.Code) == key)
+        // Mã chính xác luôn thắng để đường sửa dữ liệu cũ giữ được mã đã xóa. Nếu không,
+        // ưu tiên chủ đề đang hoạt động để tên trùng với chủ đề đã xóa vẫn trỏ về bản mới.
+        var domain =
+            all.FirstOrDefault(d => string.Equals(d.Code, value, StringComparison.OrdinalIgnoreCase))
+            ?? all.FirstOrDefault(d => d.IsActive && DomainCodeGenerator.MatchKey(d.Code) == key)
+            ?? all.FirstOrDefault(d => d.IsActive && DomainCodeGenerator.MatchKey(d.Name) == key)
+            ?? all.FirstOrDefault(d => DomainCodeGenerator.MatchKey(d.Code) == key)
             ?? all.FirstOrDefault(d => DomainCodeGenerator.MatchKey(d.Name) == key);
 
         if (domain is null)
@@ -199,7 +191,9 @@ public class DomainService(CodeSwitchLabelDbContext db) : IDomainService
                 "unknown_domain", @$"Chủ đề ""{value}"" không tồn tại. Chủ đề hiện có: {listed}.");
         }
 
-        if (!domain.IsActive && !allowInactive)
+        if (!domain.IsActive
+            && (allowInactiveCodes is null
+                || !allowInactiveCodes.Contains(domain.Code, StringComparer.OrdinalIgnoreCase)))
         {
             throw new UnprocessableException(
                 "domain_inactive", @$"Chủ đề ""{domain.Name}"" đã bị xóa; chọn chủ đề khác.");

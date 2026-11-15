@@ -7,7 +7,8 @@ internal record RawScriptPair(string Cs, string Vi);
 
 /// <summary>
 /// Đọc file .txt: mỗi cặp đúng hai dòng không rỗng, dòng chẵn là câu trộn, dòng lẻ là câu thuần Việt.
-/// Dòng trống bị bỏ qua. Mỗi câu phải kết thúc bằng dấu chấm để phát hiện file bị cắt giữa câu.
+/// Dòng trống bị bỏ qua. Mỗi câu phải kết thúc bằng dấu chấm, chấm than hoặc dấu hỏi
+/// để phát hiện file bị cắt giữa câu.
 /// </summary>
 internal static class RawScriptTextParser
 {
@@ -27,11 +28,11 @@ internal static class RawScriptTextParser
             var line = rawLines[i].Trim();
             if (line.Length == 0) continue;
 
-            if (line.Length < 2 || !line.EndsWith('.'))
+            if (line.Length < 2 || line[^1] is not ('.' or '!' or '?'))
             {
                 throw new UnprocessableException(
                     "invalid_text_format",
-                    $"Dòng {i + 1} phải là một câu hoàn chỉnh kết thúc bằng dấu chấm.");
+                    $"Dòng {i + 1} phải là một câu hoàn chỉnh kết thúc bằng dấu chấm, chấm than hoặc dấu hỏi.");
             }
 
             lines.Add((i + 1, line));

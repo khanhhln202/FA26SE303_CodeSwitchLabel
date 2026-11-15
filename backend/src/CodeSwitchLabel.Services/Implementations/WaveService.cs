@@ -103,9 +103,10 @@ public class WaveService(
         if (request.WaveName is not null) wave.WaveName = request.WaveName.Trim();
         if (request.Domain is not null)
         {
-            // Chủ đề của đợt có thể đã bị Admin xóa mềm sau khi đợt tạo — vẫn cho sửa
-            // tên/ngày/khá coefficients của đợt mà không bắt phải đổi chủ đề.
-            wave.Domain = await domains.ResolveActiveAsync(request.Domain, ct, allowInactive: true);
+            // Chủ đề hiện tại của đợt có thể đã bị Admin xóa mềm — vẫn cho giữ nguyên nó
+            // khi sửa, nhưng không cho đổi sang một chủ đề đã xóa khác.
+            wave.Domain = await domains.ResolveActiveAsync(
+                request.Domain, ct, allowInactiveCodes: [wave.Domain]);
         }
 
         // UpdateWaveRequest không còn trường `status`. Trạng thái đợt là hàm

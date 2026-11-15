@@ -210,7 +210,9 @@ public class TaskService(
             }
         }
 
-        var taskDomain = requestedDomain ?? (wave != null ? wave.Domain : "ItTechnology");
+        // Không gửi domain cũng phải kiểm tra active: không tạo task mới trên chủ đề đã xóa.
+        var taskDomain = requestedDomain
+            ?? await domains.ResolveActiveAsync(wave?.Domain ?? "ItTechnology", ct);
 
         // Task thu âm: lấy danh sách câu RIÊNG cho từng Speaker. Hai Speaker được nhận
         // cùng một câu, nên kho câu ít hơn chỉ tiêu vẫn tạo task — mỗi người chỉ nhận
@@ -519,7 +521,9 @@ public class TaskService(
         // Cập nhật chủ đề (nếu task đang gắn chiến dịch thì phải khớp chủ đề chiến dịch)
         if (request.Domain is not null)
         {
-            var newDomain = await domains.ResolveActiveAsync(request.Domain, ct, allowInactive: true);
+            // Chỉ giữ được chủ đề hiện tại nếu nó đã bị xóa mềm; đổi sang chủ đề khác phải còn hoạt động.
+            var newDomain = await domains.ResolveActiveAsync(
+                request.Domain, ct, allowInactiveCodes: [task.Domain]);
             if (task.WaveId.HasValue)
             {
                 var wave = await waves.GetAsync(task.WaveId.Value, ct);

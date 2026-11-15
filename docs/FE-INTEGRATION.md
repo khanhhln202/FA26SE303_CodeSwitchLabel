@@ -351,11 +351,11 @@ Lỗi hệ thống trả 500 với `code: "internal_error"`. Gặp lỗi này th
 | `not_a_review_task` / `text_review_not_assigned` | 422 / 403 | Chia lô câu cho task không phải task duyệt, hoặc duyệt câu chưa được giao cho mình | Tải lại danh sách lô được giao |
 | `text_review_already_done` | 409 | Câu đã có người duyệt nội dung rồi | Bỏ câu khỏi danh sách, tải lại |
 | `invalid_file_type` | 422 | File nhập câu không phải `.json` hoặc `.txt` (mở rộng lạ) | Chọn đúng file `.json` theo mẫu hoặc `.txt` đúng định dạng |
-| `invalid_text_format` | 422 hoặc trong `skipped` | File `.txt` có dòng không kết thúc bằng dấu chấm / số dòng lẻ, hoặc một câu đã có nhãn `[vi]`/`[en]` khi backend gán nhãn bằng luật (chỉ cặp đó bị bỏ) | Sửa file: mỗi cặp đúng hai dòng, mỗi câu kết thúc bằng `.`; bỏ nhãn khỏi câu thô |
+| `invalid_text_format` | 422 hoặc trong `skipped` | File `.txt` có dòng không kết thúc bằng dấu câu (`.`/`!`/`?`) / số dòng lẻ, hoặc một câu đã có nhãn `[vi]`/`[en]` khi backend gán nhãn bằng luật (chỉ cặp đó bị bỏ) | Sửa file: mỗi cặp đúng hai dòng, mỗi câu kết thúc bằng `.`, `!` hoặc `?`; bỏ nhãn khỏi câu thô |
 | `domain_required` | 422 | File `.txt` mà thiếu trường form `Domain` | Bắt chọn chủ đề trước khi gửi |
 | `domain_name_exists` / `domain_not_found` | 409 / 404 | Tạo trùng tên chủ đề, hoặc sửa/xóa `code` không tồn tại | Tải lại danh sách chủ đề |
 | `domain_limit_reached` | 409 | Đã đủ 9 chủ đề (kể cả đã xóa mềm) | Ẩn nút tạo; báo giới hạn |
-| `domain_in_use` / `domain_last_active` | 409 | Xóa chủ đề đang được dữ liệu dùng, hoặc chủ đề hoạt động cuối cùng | Hiện `title`; gợi ý đổi tên thay vì xóa |
+| `domain_last_active` | 409 | Xóa chủ đề hoạt động cuối cùng | Hiện `title`; gợi ý đổi tên thay vì xóa |
 | `domain_inactive` / `invalid_domain_name` | 422 | Chọn chủ đề đã xóa mềm, hoặc tên ngoài 2–100 ký tự | Chỉ hiện chủ đề `isActive`; validate độ dài tên |
 | `ai_review_disabled` / `asr_not_configured` | 422 | Máy duyệt đang tắt, hoặc chưa cấu hình ASR | Ẩn nút máy duyệt; báo quản trị |
 | `ai_review_not_tiebreak` | 409 | Chưa tới lượt máy (hai phiếu đầu chưa lệch, hoặc bản đã chốt) | Chỉ bật nút cho bản trong `GET /api/ai-review/pending` |
@@ -719,7 +719,8 @@ Ngoài cách nhận từng bản bằng `next`, Reviewer mở được cả task
 
 **Chủ đề mình duyệt được** — `GET /api/me/domains` trả danh sách chủ đề Admin đã phân cho mình. Câu thuộc chủ đề
 ngoài danh sách này thì lượt duyệt của mình không chốt được câu (**422 `reviewer_domain_required`**), nên màn hình
-duyệt câu nên lọc theo đúng các chủ đề này.
+duyệt câu nên lọc theo đúng các chủ đề này. Chủ đề đã bị xóa mềm vẫn nằm trong danh sách nếu đã phân từ trước;
+danh sách này có thể chứa `code` không còn trong `GET /api/config/topics`.
 
 **Tiến độ** — `GET /api/reviewer/progress`, trả `activeTasks` kèm `taskId` để gọi danh sách ở trên.
 Reviewer cũng dùng được màn hình **duyệt câu** giống Speaker.
@@ -875,7 +876,7 @@ Kết quả nhập file có `imported`, `scriptIds` và `skipped` (kèm lý do t
 **Nhập `.txt`** — cùng endpoint, khác định dạng:
 
 - Mỗi cặp đúng **hai dòng không rỗng**: dòng đầu là câu trộn Việt–Anh, dòng sau là câu thuần Việt. Dòng trống bị bỏ qua.
-- Mỗi câu phải kết thúc bằng **dấu chấm**; tối đa **100 cặp** mỗi file (`422 invalid_text_format` khi sai, `422 import_too_large` khi vượt).
+- Mỗi câu phải kết thúc bằng **dấu chấm, chấm than hoặc dấu hỏi**; tối đa **100 cặp** mỗi file (`422 invalid_text_format` khi sai, `422 import_too_large` khi vượt).
 - Gửi kèm trường form `Domain`: dùng `code` từ `GET /api/config/topics` (`ItTechnology`, `Education`, `DailyLife` hoặc chủ đề Admin tạo). Backend khớp `code` hoặc tên, không phân biệt hoa thường/dấu; tên cũ `IT/Technology` vẫn nhận; chủ đề đã xóa mềm → `422 domain_inactive`. Thiếu trường này → `422 domain_required`.
 - Không cần tự gán nhãn trong file. Có cấu hình `Llm:Endpoint`/`Model` thì backend gọi LLM để chèn nhãn `[vi]`/`[en]` và sinh `alignment`; LLM lỗi hoặc trả kết quả không đọc được thì lùi về luật. Luật gán nhãn: từ ASCII là tiếng Việt khi là hư từ quen thuộc hoặc có trong từ điển âm tiết Việt không dấu và cũng xuất hiện trong câu thuần Việt; nghĩa lấy bằng cách đối chiếu các từ chung của hai câu, đoạn giữa hai mốc là nghĩa (có thể nhiều từ, ví dụ `email` → `thư điện tử`); đoạn không đối chiếu được lấy theo vị trí, hết từ thì `target` để trống cho người duyệt điền.
 - Một cặp gán nhãn lỗi vào `skipped` với `id = pair-N`: luật lỗi có mã `invalid_text_format`/`invalid_language_tags`; các cặp còn lại vẫn nhập. File `.txt` cũng đi qua đúng luật import JSON: chống trùng, câu vào thẳng `Validated`.
@@ -926,8 +927,8 @@ speaker_{speakerId}_{yyyy-MM-dd_HHmmss}/
 | Đổi vai | `PUT /api/users/{id}/role` `{ "role": "Reviewer" }` |
 | Khoá, mở khoá | `POST /api/users/{id}/lock`, `POST /api/users/{id}/unlock` |
 | Cấp lại mật khẩu | `POST /api/users/{id}/reset-password` |
-| Xem chủ đề duyệt | `GET /api/users/{id}/domains` → `["ItTechnology","Education"]` |
-| Phân chủ đề duyệt | `PUT /api/users/{id}/domains` `{ "domains": ["ItTechnology","Education"] }` — **đặt lại toàn bộ**, chủ đề không gửi lên thì bị gỡ; gửi `[]` để thu hết |
+| Xem chủ đề duyệt | `GET /api/users/{id}/domains` → `["ItTechnology","Education"]` — có thể chứa chủ đề đã xóa mềm nếu đã phân từ trước |
+| Phân chủ đề duyệt | `PUT /api/users/{id}/domains` `{ "domains": ["ItTechnology","Education"] }` — **đặt lại toàn bộ**, chủ đề không gửi lên thì bị gỡ; gửi `[]` để thu hết; chủ đề đã xóa chỉ giữ được nếu đang có sẵn, gán mới trả `422 domain_inactive` |
 
 - **Mật khẩu tạm chỉ hiện đúng một lần.** Tạo tài khoản và cấp lại mật khẩu đều trả `temporaryPassword`; database chỉ lưu
   bản băm nên đóng hộp thoại là mất. Hiện kèm nút sao chép và nhắc Admin chép lại. Mật khẩu tạm dài 12 ký tự và không có

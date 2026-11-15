@@ -145,12 +145,14 @@ mà không phải deploy lại code. `code` và `id_digit` bất biến (trigger
 
 - Tối đa **9 chủ đề kể cả chủ đề đã xóa mềm**, vì mã câu chỉ có một chữ số cho chủ đề; chữ số không tái sử dụng.
 - Xóa là **xóa mềm**: dữ liệu cũ vẫn mang `code`. Chủ đề đã xóa không chọn được cho câu/đợt/task mới
-  (`422 domain_inactive`), nhưng sửa đợt/task cũ vẫn giữ được chủ đề đó.
-- Không xóa được chủ đề đang được câu/đợt/task/phân quyền dùng (`409 domain_in_use`) hoặc chủ đề hoạt động
-  cuối cùng (`409 domain_last_active`). Tạo trùng tên → `409 domain_name_exists`; quá 9 → `409 domain_limit_reached`;
+  hay gán mới cho Reviewer (`422 domain_inactive`), nhưng sửa đợt/task cũ vẫn giữ được chủ đề đó và
+  Reviewer đã được gán từ trước vẫn giữ nguyên chủ đề đó.
+- Không xóa được chủ đề hoạt động cuối cùng (`409 domain_last_active`). Xóa chủ đề đã dùng vẫn là xóa mềm;
+  câu/đợt/task cũ giữ nguyên code. Tạo trùng tên → `409 domain_name_exists`; quá 9 → `409 domain_limit_reached`;
   tên phải 2–100 ký tự (`422 invalid_domain_name`).
 - `GET /api/config/topics` trả `{ code, name, isActive }`; `?includeInactive=true` chỉ Admin.
   Backend nhận `code` hoặc tên (không phân biệt hoa thường/dấu) ở mọi trường `domain`, nhưng nên gửi `code`.
+  Mã chính xác được ưu tiên; nếu chỉ có tên thì chủ đề đang hoạt động thắng chủ đề đã xóa cùng tên.
 
 **Mỗi cặp câu cần hai bản ghi âm**, mã suy ra từ mã câu:
 
@@ -186,7 +188,7 @@ Admin nhập input_text.json (hoặc .txt, LLM/luật)  →  script: pending_val
 `POST /api/scripts/import` nhận thêm file `.txt` bên cạnh JSON:
 
 - Mỗi cặp đúng **hai dòng không rỗng**: dòng đầu là câu trộn Việt–Anh, dòng sau là câu thuần Việt; dòng trống bị bỏ qua.
-- Mỗi câu phải kết thúc bằng **dấu chấm**; file tối đa **100 cặp**.
+- Mỗi câu phải kết thúc bằng **dấu chấm, chấm than hoặc dấu hỏi**; file tối đa **100 cặp**.
 - Bắt buộc gửi kèm trường form `Domain`: dùng `code` lấy từ `GET /api/config/topics` (`ItTechnology`, `Education`, `DailyLife`, hoặc chủ đề Admin tự tạo). Backend khớp `code` hoặc tên, không phân biệt hoa thường/dấu; tên cũ như `IT/Technology` vẫn nhận, nhưng chủ đề đã xóa mềm trả `422 domain_inactive`.
 - Có cấu hình `Llm:Endpoint`/`Model` thì backend gọi LLM OpenAI-compatible (`LabelingService`) để chèn nhãn `[vi]`/`[en]` và sinh `alignment`. Từ ngữ và thứ tự hai câu phải giữ nguyên; LLM sửa từ thì cặp đó bị bỏ qua.
 - Không cấu hình LLM thì backend gán nhãn bằng luật: từ có ký tự ngoài ASCII là tiếng Việt; từ ASCII là tiếng Việt khi là hư từ quen thuộc hoặc có trong từ điển âm tiết Việt không dấu và cũng xuất hiện trong câu thuần Việt. Nghĩa tiếng Việt lấy bằng cách đối chiếu các từ chung của hai câu: đoạn giữa hai từ chung là nghĩa của đoạn tiếng Anh giữa hai mốc đó, nên một từ có thể ứng với nhiều từ (`email` → `thư điện tử`) mà không làm lệch các từ phía sau; đoạn không đối chiếu được thì lấy theo vị trí, hết từ thì để trống cho người duyệt điền. Đây là heuristic, không thay thế bước duyệt nội dung.
