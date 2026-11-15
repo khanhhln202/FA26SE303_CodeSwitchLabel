@@ -91,15 +91,15 @@ public static class TestDataBuilders
     public sealed class WaveBuilder
     {
         private string _name = $"Wave {Guid.NewGuid():N}";
-        private ScriptDomain _domain = ScriptDomain.ItTechnology; // TEAM_003
-        private int _targetQty = 100;
+        private string _domain = "ItTechnology"; // TEAM_003
+        private int _targetQty = 2000;
         private DateOnly _startDate = DateOnly.FromDateTime(DateTime.Today);
         private DateOnly _endDate = DateOnly.FromDateTime(DateTime.Today.AddDays(30));
         private WaveStatus _status = WaveStatus.Open;
         private long _createdBy = 1;
 
         public WaveBuilder WithName(string name) { _name = name; return this; }
-        public WaveBuilder WithDomain(ScriptDomain domain) { _domain = domain; return this; }
+        public WaveBuilder WithDomain(string domain) { _domain = domain; return this; }
         public WaveBuilder WithTargetQty(int qty) { _targetQty = qty; return this; }
         public WaveBuilder WithDates(DateOnly start, DateOnly end) { _startDate = start; _endDate = end; return this; }
         public WaveBuilder WithStatus(WaveStatus status) { _status = status; return this; }
@@ -124,14 +124,14 @@ public static class TestDataBuilders
     {
         private long _waveId = 1;
         private TaskType _type = TaskType.Recording;
-        private ScriptDomain _domain = ScriptDomain.ItTechnology; // TEAM_003
+        private string _domain = "ItTechnology"; // TEAM_003
         private int _targetQty = 50;
         private DateTimeOffset? _deadline = DateTimeOffset.UtcNow.AddDays(7);
         private WorkTaskStatus _status = WorkTaskStatus.InProgress;
 
         public TaskBuilder WithWaveId(long id) { _waveId = id; return this; }
         public TaskBuilder WithType(TaskType type) { _type = type; return this; }
-        public TaskBuilder WithDomain(ScriptDomain domain) { _domain = domain; return this; }
+        public TaskBuilder WithDomain(string domain) { _domain = domain; return this; }
         public TaskBuilder WithTargetQty(int qty) { _targetQty = qty; return this; }
         public TaskBuilder WithDeadline(DateTimeOffset? date) { _deadline = date; return this; }
         public TaskBuilder WithStatus(WorkTaskStatus status) { _status = status; return this; }
@@ -154,7 +154,7 @@ public static class TestDataBuilders
     {
         private string _csContent = "[vi]Test [en]hello [vi]world";
         private string _viContent = "[vi]Test chào thế giới";
-        private ScriptDomain _domain = ScriptDomain.ItTechnology;
+        private string _domain = "ItTechnology";
         private int _enWordCount = 1;
         private ScriptStatus _status = ScriptStatus.PendingValidation;
         private long _createdBy = 1;
@@ -162,7 +162,7 @@ public static class TestDataBuilders
 
         public ScriptBuilder WithCsContent(string content) { _csContent = content; return this; }
         public ScriptBuilder WithViContent(string content) { _viContent = content; return this; }
-        public ScriptBuilder WithDomain(ScriptDomain domain) { _domain = domain; return this; }
+        public ScriptBuilder WithDomain(string domain) { _domain = domain; return this; }
         public ScriptBuilder WithEnWordCount(int count) { _enWordCount = count; return this; }
         public ScriptBuilder WithStatus(ScriptStatus status) { _status = status; return this; }
         public ScriptBuilder WithCreatedBy(long userId) { _createdBy = userId; return this; }
@@ -175,7 +175,7 @@ public static class TestDataBuilders
         public async Task<Script> BuildAsync(CodeSwitchLabelDbContext db)
         {
             var scriptId = await db.Database
-                .SqlQuery<string>($"""SELECT fn_generate_script_id({_enWordCount}, CAST('{SnakeCaseNaming.ToSnakeCase(_domain.ToString())}' AS script_domain), 1) AS "Value" """)
+                .SqlQuery<string>($"""SELECT fn_generate_script_id({_enWordCount}, {_domain}, 1) AS "Value" """)
                 .SingleAsync(TestContext.Current.CancellationToken);
 
             var script = new Script

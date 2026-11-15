@@ -37,7 +37,7 @@ public sealed class ScriptReReviewTests : IntegrationTestBase
         return CreateScriptAsync(
             $"[vi]Em nên [en]scan [vi]tài liệu mã {token} này.",
             $"[vi]Em nên quét tài liệu mã {token} này.",
-            ScriptDomain.ItTechnology,
+            "ItTechnology",
             SpeakerUserId);
     }
 
@@ -141,5 +141,18 @@ public sealed class ScriptReReviewTests : IntegrationTestBase
         var soLuot = await Db.ScriptReviews.AsNoTracking()
             .CountAsync(r => r.ScriptId == script.ScriptId, TestContext.Current.CancellationToken);
         Assert.Equal(1, soLuot);
+    }
+
+    /// <summary>Admin không có domain vẫn duyệt được mọi chủ đề (triggers + service cho phép).</summary>
+    [Fact]
+    public async Task AdminKhongCoDomain_DuyetDuocCauBatKyDomain()
+    {
+        // AdminUserId là admin@test.local — KHÔNG có dòng user_domain nào (xem IntegrationTestBase).
+        var script = await CreatePendingScriptAsync();
+
+        var ketQua = await ScriptService.ReviewAsync(
+            script.ScriptId, AdminUserId, Accept(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(ScriptStatus.Validated, ketQua.Status);
     }
 }

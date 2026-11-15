@@ -34,7 +34,7 @@ public sealed class ReviewerHistoryTests : IntegrationTestBase
         var speaker = await CreateUserAsync(NewUniqueEmail("hist"), RoleName.Speaker, fullName: "Người đọc một cặp");
         var script = await CreateScriptAsync(
             "[vi]Mai [en]deploy [vi]bản mới nhé.", "[vi]Mai triển khai bản mới nhé.",
-            ScriptDomain.ItTechnology, AdminUserId);
+            "ItTechnology", AdminUserId);
 
         var cs = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching, 4.5m);
         var vi = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.PureVietnamese, 3.5m);
@@ -84,7 +84,7 @@ public sealed class ReviewerHistoryTests : IntegrationTestBase
 
         var script = await CreateScriptAsync(
             "[vi]Cho tôi [en]check lại nhé.", "[vi]Cho tôi kiểm tra lại nhé.",
-            ScriptDomain.DailyLife, AdminUserId);
+            "DailyLife", AdminUserId);
 
         var cs = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
         var vi = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.PureVietnamese);
@@ -163,7 +163,7 @@ public sealed class ReviewerHistoryTests : IntegrationTestBase
 
         var script = await CreateScriptAsync(
             "[vi]Nhớ [en]backup [vi]dữ liệu trước nhé.", "[vi]Nhớ sao lưu dữ liệu trước nhé.",
-            ScriptDomain.ItTechnology, AdminUserId);
+            "ItTechnology", AdminUserId);
 
         var cs = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
 
@@ -205,7 +205,7 @@ public sealed class ReviewerHistoryTests : IntegrationTestBase
         {
             var script = await CreateScriptAsync(
                 $"[vi]Cap [en]duyet {token} so {i}", $"[vi]Cặp duyệt {token} số {i}",
-                ScriptDomain.ItTechnology, AdminUserId);
+                "ItTechnology", AdminUserId);
 
             var cs = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
             var vi = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.PureVietnamese);
@@ -262,7 +262,7 @@ public sealed class ReviewerHistoryTests : IntegrationTestBase
         // Câu tôi duyệt ĐẠT, kèm cặp từ Anh-Việt để alignment có dữ liệu.
         var script = await CreateScriptAsync(
             "[vi]Tôi sẽ [en]deploy [vi]tối nay.", "[vi]Tôi sẽ triển khai tối nay.",
-            ScriptDomain.ItTechnology, speaker.UserId);
+            "ItTechnology", speaker.UserId);
         Db.ScriptWords.Add(new ScriptWord
         {
             ScriptId = script.ScriptId,
@@ -283,7 +283,7 @@ public sealed class ReviewerHistoryTests : IntegrationTestBase
         // Câu tôi duyệt TỪ CHỐI kèm lý do lỗi.
         var rejected = await CreateScriptAsync(
             "[vi]Câu này [en]sai nghĩa rồi.", "[vi]Câu này sai nghĩa rồi.",
-            ScriptDomain.Education, speaker.UserId);
+            "Education", speaker.UserId);
         var grammar = await Db.ScriptErrorReasons.FirstAsync(r => r.ReasonCode == "grammar", ct);
         Db.ScriptReviews.Add(new ScriptReview
         {
@@ -343,7 +343,7 @@ public sealed class ReviewerHistoryTests : IntegrationTestBase
         var script = await CreateScriptAsync(
             "[vi]Tối nay bên kỹ thuật sẽ [en]update [vi]máy chủ.",
             "[vi]Tối nay bên kỹ thuật sẽ cập nhật máy chủ.",
-            ScriptDomain.ItTechnology, AdminUserId);
+            "ItTechnology", AdminUserId);
 
         var cs = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
         var vi = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.PureVietnamese);

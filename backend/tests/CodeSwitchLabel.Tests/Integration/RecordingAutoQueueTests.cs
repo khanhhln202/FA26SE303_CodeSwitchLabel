@@ -50,7 +50,7 @@ public sealed class RecordingAutoQueueTests(DatabaseFixture fixture) : Integrati
 
         var script = await CreateValidatedScriptAsync(
             $"[vi]Em [en]thu{Guid.NewGuid():N} [vi]hàng đợi", "[vi]Em thu hàng đợi",
-            ScriptDomain.ItTechnology, speaker.UserId);
+            "ItTechnology", speaker.UserId);
 
         Db.TaskScripts.Add(new TaskScript
         {
@@ -172,6 +172,7 @@ public sealed class RecordingAutoQueueTests(DatabaseFixture fixture) : Integrati
         {
             WaveId = null,
             TaskType = TaskType.Recording,
+            Domain = "ItTechnology",
             TargetQty = 5,
             Deadline = DateTimeOffset.UtcNow.AddDays(10),
             Status = WorkTaskStatus.InProgress,
@@ -183,7 +184,7 @@ public sealed class RecordingAutoQueueTests(DatabaseFixture fixture) : Integrati
 
         var script = await CreateValidatedScriptAsync(
             $"[vi]Em [en]ngoai{Guid.NewGuid():N} [vi]đợt", "[vi]Em ngoài đợt",
-            ScriptDomain.ItTechnology, speaker.UserId);
+            "ItTechnology", speaker.UserId);
 
         Db.TaskScripts.Add(new TaskScript
         {

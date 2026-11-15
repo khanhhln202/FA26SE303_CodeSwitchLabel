@@ -26,6 +26,7 @@ public sealed class TaskServiceAutoFillTests
             Mock.Of<IWaveRepository>(),
             Mock.Of<IScriptQueueRepository>(),
             tracker.Object,
+            Mock.Of<IDomainService>(),
             config.Object,
             TimeProvider.System);
         var task = new WorkTask { TaskId = 7, TaskType = TaskType.Review, Status = WorkTaskStatus.InProgress };
@@ -53,7 +54,7 @@ public sealed class TaskServiceAutoFillTests
         tasks.Setup(t => t.AddRecordingItems(It.IsAny<IEnumerable<TaskRecording>>()));
         tasks.Setup(t => t.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
         tasks.Setup(t => t.GetRowAsync(7, It.IsAny<CancellationToken>())).ReturnsAsync(new TaskRow(
-            7, null, null, TaskType.Review, ScriptDomain.ItTechnology, null, WorkTaskStatus.InProgress, 1,
+            7, null, null, TaskType.Review, "ItTechnology", null, WorkTaskStatus.InProgress, 1,
             null, DateTimeOffset.UtcNow, [], 0, 0, 0, 0, 0));
         tasks.Setup(t => t.GetAssignmentHistoryAsync(7, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<TaskAssignment>());

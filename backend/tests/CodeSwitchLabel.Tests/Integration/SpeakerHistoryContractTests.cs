@@ -50,11 +50,11 @@ public sealed class SpeakerHistoryContractTests(DatabaseFixture fixture) : Integ
 
         var daXuLy = await CreateScriptAsync(
             $"[vi]Em nên [en]scan{dau} [vi]tài liệu này.", $"[vi]Em nên quét tài liệu này {dau}.",
-            ScriptDomain.ItTechnology, speaker.UserId);
+            "ItTechnology", speaker.UserId);
 
         var conCho = await CreateScriptAsync(
             $"[vi]Mình gửi [en]email{dau} [vi]cho khách nhé.", $"[vi]Mình gửi thư cho khách nhé {dau}.",
-            ScriptDomain.ItTechnology, speaker.UserId);
+            "ItTechnology", speaker.UserId);
 
         Db.ScriptReviews.Add(new ScriptReview
         {
@@ -100,7 +100,7 @@ public sealed class SpeakerHistoryContractTests(DatabaseFixture fixture) : Integ
 
         var script = await CreateScriptAsync(
             $"[vi]Chiều nay họp [en]online{dau} [vi]nhé.", $"[vi]Chiều nay họp trực tuyến nhé {dau}.",
-            ScriptDomain.ItTechnology, speaker.UserId);
+            "ItTechnology", speaker.UserId);
 
         Db.ScriptReviews.Add(new ScriptReview
         {
@@ -150,15 +150,15 @@ public sealed class SpeakerHistoryContractTests(DatabaseFixture fixture) : Integ
 
         var cauBiTuChoi = await CreateValidatedScriptAsync(
             $"[vi]Anh gửi em cái [en]link{dau} [vi]nhé.", $"[vi]Anh gửi em cái đường dẫn nhé {dau}.",
-            ScriptDomain.ItTechnology, toi.UserId);
+            "ItTechnology", toi.UserId);
 
         var cauConCho = await CreateValidatedScriptAsync(
             $"[vi]Em [en]deploy{dau} [vi]xong rồi.", $"[vi]Em triển khai xong rồi {dau}.",
-            ScriptDomain.ItTechnology, toi.UserId);
+            "ItTechnology", toi.UserId);
 
         var cauNguoiKhac = await CreateValidatedScriptAsync(
             $"[vi]Chị đặt [en]meeting{dau} [vi]giúp em.", $"[vi]Chị đặt buổi họp giúp em {dau}.",
-            ScriptDomain.ItTechnology, nguoiKhac.UserId);
+            "ItTechnology", nguoiKhac.UserId);
 
         // Đề xuất đầu: báo lỗi, bị Reviewer từ chối.
         var daTuChoi = await ProposalService.CreateAsync(cauBiTuChoi.ScriptId, toi.UserId, new CreateProposalRequest
@@ -416,6 +416,7 @@ public sealed class SpeakerHistoryContractTests(DatabaseFixture fixture) : Integ
         {
             WaveId = null,
             TaskType = TaskType.Recording,
+            Domain = "ItTechnology",
             TargetQty = 2,
             Deadline = DateTimeOffset.UtcNow.AddDays(1),
             Status = WorkTaskStatus.InProgress,
@@ -509,7 +510,7 @@ public sealed class SpeakerHistoryContractTests(DatabaseFixture fixture) : Integ
         {
             var script = await CreateValidatedScriptAsync(
                 $"[vi]Em [en]{nhan}{i} [vi]đọc câu này.", $"[vi]Em đọc câu này {nhan}{i}.",
-                ScriptDomain.ItTechnology, speakerId);
+                "ItTechnology", speakerId);
 
             var recording = await CreateRecordingAsync(
                 script.ScriptId, speakerId, SentenceVariant.CodeSwitching);

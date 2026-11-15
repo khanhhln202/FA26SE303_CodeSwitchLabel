@@ -9,7 +9,7 @@ public interface IScriptRepository
 {
     /// <summary><paramref name="sort"/> rỗng (Field = null) là thứ tự mặc định.</summary>
     Task<(IReadOnlyList<Script> Items, int Total)> SearchAsync(
-        ScriptStatus? status, ScriptDomain? domain, string? keyword,
+        ScriptStatus? status, string? domain, string? keyword,
         int page, int pageSize, SortSpec<ScriptSortField> sort, CancellationToken ct = default);
 
     Task<Script?> GetAsync(string id, CancellationToken ct = default);
@@ -66,7 +66,7 @@ public interface IScriptRepository
 
     /// <summary>Gọi hàm fn_generate_script_id của database để lấy mã đúng chuẩn s_ + 9 hoặc 12 chữ số.</summary>
     Task<string> GenerateIdAsync(
-        int enWordCount, ScriptDomain domain, ScriptRelation relation, CancellationToken ct = default);
+        int enWordCount, string domain, ScriptRelation relation, CancellationToken ct = default);
 
     Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction> BeginTransactionAsync(
         CancellationToken ct = default);
@@ -74,10 +74,20 @@ public interface IScriptRepository
     void Add(Script script);
     void AddReview(ScriptReview review);
     void AddBatch(ImportBatch batch);
+    void UpdateBatch(ImportBatch batch);
     void RemoveBatch(ImportBatch batch);
     void Remove(Script script);
     void AddWords(IEnumerable<ScriptWord> words);
     void RemoveWords(IEnumerable<ScriptWord> words);
+
+    /// <summary>
+    /// Ghi lượt duyệt Accepted của người nhập cho từng câu rồi chốt Validated.
+    /// Tách hai lần lưu vì trigger trg_script_validated_domain đòi lượt duyệt nằm sẵn
+    /// trong database trước khi status đổi.
+    /// </summary>
+    Task AutoValidateAsync(
+        IReadOnlyList<string> scriptIds, long reviewerId, DateTimeOffset reviewedAt,
+        CancellationToken ct = default);
 
     /// <summary>
     /// Xoá các bảng con của câu không có ON DELETE CASCADE: script_review, script_proposal
@@ -93,13 +103,13 @@ public interface IScriptRepository
 public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
 {
     public async Task<(IReadOnlyList<Script> Items, int Total)> SearchAsync(
-        ScriptStatus? status, ScriptDomain? domain, string? keyword,
+        ScriptStatus? status, string? domain, string? keyword,
         int page, int pageSize, SortSpec<ScriptSortField> sort, CancellationToken ct = default)
     {
         var query = db.Scripts.AsNoTracking();
 
         if (status.HasValue) query = query.Where(s => s.Status == status.Value);
-        if (domain.HasValue) query = query.Where(s => s.Domain == domain.Value);
+        if (domain is not null) query = query.Where(s => s.Domain == domain);
 
         if (!string.IsNullOrWhiteSpace(keyword))
         {
@@ -143,10 +153,21 @@ public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
     }
 
     public Task<Script?> GetAsync(string id, CancellationToken ct = default) =>
-        db.Scripts.AsNoTracking().FirstOrDefaultAsync(s => s.ScriptId == id, ct);
+        db.Scripts.AsNoTracking()
+            .Include(s => s.Words.OrderBy(w => w.WordPosition))
+            .FirstOrDefaultAsync(s => s.ScriptId == id, ct);
 
-    public Task<Script?> GetForUpdateAsync(string id, CancellationToken ct = default) =>
-        db.Scripts.Include(s => s.Words).FirstOrDefaultAsync(s => s.ScriptId == id, ct);
+    public async Task<Script?> GetForUpdateAsync(string id, CancellationToken ct = default)
+    {
+        // SQL thô vì LINQ không diễn đạt được FOR UPDATE (cùng cách ReviewRepository).
+        // Câu lệnh chỉ có tác dụng khoá khi caller đang ở trong một transaction.
+        var rows = await db.Scripts
+            .FromSqlInterpolated($"SELECT * FROM script WHERE script_id = {id} FOR UPDATE")
+            .Include(s => s.Words)
+            .ToListAsync(ct);
+
+        return rows.FirstOrDefault();
+    }
 
     public Task<Script?> GetWithReviewsAsync(string id, CancellationToken ct = default) =>
         db.Scripts
@@ -256,26 +277,45 @@ public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
                  r.Status != RecordingStatus.Rejected, ct);
 
     public async Task<string> GenerateIdAsync(
-        int enWordCount, ScriptDomain domain, ScriptRelation relation, CancellationToken ct = default)
+        int enWordCount, string domain, ScriptRelation relation, CancellationToken ct = default)
     {
         // Số thứ tự nằm trong một sequence của database, nên phải để database sinh mã.
-        // Ép kiểu tường minh sang script_domain để PostgreSQL chọn đúng hàm.
-        var domainName = SnakeCaseNaming.ToSnakeCase(domain.ToString());
-
         return await db.Database
             .SqlQuery<string>(
-                $"""SELECT fn_generate_script_id({enWordCount}, CAST({domainName} AS script_domain), {(int)relation}) AS "Value" """)
+                $"""SELECT fn_generate_script_id({enWordCount}, {domain}, {(int)relation}) AS "Value" """)
             .SingleAsync(ct);
     }
 
     public void Add(Script script) => db.Scripts.Add(script);
     public void AddReview(ScriptReview review) => db.ScriptReviews.Add(review);
     public void AddBatch(ImportBatch batch) => db.ImportBatches.Add(batch);
+    public void UpdateBatch(ImportBatch batch) => db.ImportBatches.Update(batch);
     public void RemoveBatch(ImportBatch batch) => db.ImportBatches.Remove(batch);
     public void Remove(Script script) => db.Scripts.Remove(script);
     public void AddWords(IEnumerable<ScriptWord> words) => db.ScriptWords.AddRange(words);
     public void RemoveWords(IEnumerable<ScriptWord> words) => db.ScriptWords.RemoveRange(words);
     public void ClearTracked() => db.ChangeTracker.Clear();
+
+    public async Task AutoValidateAsync(
+        IReadOnlyList<string> scriptIds, long reviewerId, DateTimeOffset reviewedAt,
+        CancellationToken ct = default)
+    {
+        if (scriptIds.Count == 0) return;
+
+        db.ScriptReviews.AddRange(scriptIds.Select(id => new ScriptReview
+        {
+            ScriptId = id,
+            UserId = reviewerId,
+            Action = ScriptReviewAction.Accepted,
+            Comment = "Tự động duyệt khi Admin nhập câu.",
+            ReviewedAt = reviewedAt
+        }));
+        await db.SaveChangesAsync(ct);
+
+        await db.Scripts
+            .Where(s => scriptIds.Contains(s.ScriptId) && s.Status == ScriptStatus.PendingValidation)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, ScriptStatus.Validated), ct);
+    }
 
     public async Task DeleteRelatedAsync(string scriptId, CancellationToken ct = default)
     {

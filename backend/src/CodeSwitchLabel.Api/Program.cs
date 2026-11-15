@@ -2,6 +2,7 @@ using System.Net;
 using System.Reflection;
 using System.Text;
 using System.Text.Json.Serialization;
+using CodeSwitchLabel.Api.BackgroundJobs;
 using CodeSwitchLabel.Api.Infrastructure;
 using CodeSwitchLabel.Repositories.Persistence;
 using CodeSwitchLabel.Repositories.Storage;
@@ -50,6 +51,10 @@ builder.Services
 // Endpoint LLM có thể để trống: API vẫn chạy, import .txt chuyển sang gán nhãn bằng luật.
 builder.Services.Configure<LlmOptions>(
     builder.Configuration.GetSection(LlmOptions.SectionName));
+
+// Endpoint ASR cũng vậy: để trống thì API vẫn chạy, chỉ máy duyệt báo `asr_not_configured`.
+builder.Services.Configure<AsrOptions>(
+    builder.Configuration.GetSection(AsrOptions.SectionName));
 
 // ---------------------------------------------------------------- dịch vụ
 
@@ -106,6 +111,11 @@ builder.Services
         // và frontend không phải giữ một bảng tra số sang tên.
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
+
+// Tự gọi máy duyệt cho các bản ghi đang ở thế hai người duyệt lệch nhau. Đăng ký luôn,
+// nhưng nó chỉ thật sự làm gì khi ai_review.auto_enabled = true trong cấu hình hệ thống —
+// nên deploy bản này KHÔNG tự đổi hành vi của máy chủ.
+builder.Services.AddHostedService<AiReviewWorker>();
 
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();

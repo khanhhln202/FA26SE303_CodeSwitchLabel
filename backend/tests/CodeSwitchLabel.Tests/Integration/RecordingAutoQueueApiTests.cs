@@ -49,10 +49,8 @@ public sealed class RecordingAutoQueueApiTests : ApiTestBase
         var speaker = await GetSpeakerTokenAsync();
         var reviewer = await GetReviewerTokenAsync();
 
-        // 1) Cặp câu mới + duyệt nội dung để thu âm được.
+        // 1) Cặp câu mới: Admin nhập xong là Sẵn sàng, thu âm được ngay.
         var scriptId = await ImportOneScriptAsync(admin);
-        var reviewScript = await PostAsync($"/api/scripts/{scriptId}/review", new { action = "Accepted" }, reviewer);
-        Assert.Equal(HttpStatusCode.OK, reviewScript.StatusCode);
 
         // 2) Đợt X giao cho manager; đợt Y khác để kiểm chốt "chỉ trong đợt".
         var managerId = await GetUserIdAsync(manager);

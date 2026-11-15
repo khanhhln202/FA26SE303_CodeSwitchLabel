@@ -9,10 +9,10 @@ namespace CodeSwitchLabel.Tests.Integration;
 /// <summary>
 /// Hai đường mới theo yêu cầu của đội frontend:
 ///
-///   PUT  /api/scripts/{id}      Admin sửa câu ĐANG CHỜ DUYỆT, sửa bao nhiêu lần cũng được.
+///   PUT  /api/scripts/{id}      Admin sửa câu CHỜ DUYỆT hoặc ĐÃ SẴN SÀNG, sửa bao nhiêu lần cũng được.
 ///   POST /api/scripts/contribute Speaker và Reviewer đóng góp câu mới, dùng chung một đường.
 ///
-/// Điểm cần giữ: sửa qua PUT KHÔNG ghi lượt duyệt, nên câu ở nguyên Chờ duyệt. Đó là khác biệt
+/// Điểm cần giữ: sửa qua PUT KHÔNG ghi lượt duyệt và KHÔNG đổi trạng thái. Đó là khác biệt
 /// duy nhất so với `action: Edited` của luồng duyệt — đường đó sửa xong là chốt luôn, và chốt rồi
 /// thì không sửa tiếp được. Trước khi có PUT, Admin dọn kho câu chỉ sửa được đúng một lần.
 /// </summary>
@@ -41,17 +41,18 @@ public sealed class ScriptUpdatePendingTests(DatabaseFixture fixture) : ApiTestB
         Assert.Contains("buổi tối", await LayTruongAsync(lan3, "csContent"), StringComparison.Ordinal);
     }
 
-    /// <summary>Câu đã duyệt thì khoá — đúng yêu cầu "chuyển sang Sẵn sàng rồi thì không đổi nữa".</summary>
+    /// <summary>Admin sửa câu đã sẵn sàng: nội dung đổi, trạng thái vẫn Sẵn sàng, không phải duyệt lại.</summary>
     [Fact]
-    public async Task SuaCauDaDuyet_TraVe409()
+    public async Task Admin_SuaCauDaDuyet_ThanhCong_VanGiuValidated()
     {
         var admin = await GetAdminTokenAsync();
-        var daDuyet = await LayMotCauDaDuyetAsync(admin);
+        var daDuyet = await TaoCauDaDuyetAsync(admin);
 
         var response = await PutAsync($"/api/scripts/{daDuyet}", NoiDung("đã duyệt rồi"), admin);
 
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-        Assert.Equal("script_not_pending", await LayTruongAsync(response, "code"));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("Validated", await LayTruongAsync(response, "status"));
+        Assert.Contains("đã duyệt rồi", await LayTruongAsync(response, "csContent"), StringComparison.Ordinal);
     }
 
     /// <summary>Số từ tiếng Anh nằm trong mã câu nên không đổi được, kể cả khi câu còn chờ duyệt.</summary>
@@ -184,16 +185,13 @@ public sealed class ScriptUpdatePendingTests(DatabaseFixture fixture) : ApiTestB
         return await LayTruongAsync(response, "scriptId");
     }
 
-    private async Task<string> LayMotCauDaDuyetAsync(string adminToken)
+    /// <summary>Câu Admin tạo tay vào thẳng Validated và chưa có bản ghi âm nên sửa/xoá được.</summary>
+    private async Task<string> TaoCauDaDuyetAsync(string adminToken)
     {
-        using var client = CreateAuthenticatedClient(adminToken);
-        var trang = await client.GetFromJsonAsync<JsonElement>(
-            "/api/scripts?status=Validated&pageSize=1", JsonOptions, TestContext.Current.CancellationToken);
+        var response = await PostAsync("/api/scripts", CauMoi(), adminToken);
 
-        var items = trang.GetProperty("items");
-        Assert.True(items.GetArrayLength() > 0, "Dữ liệu mẫu phải có ít nhất một câu đã duyệt.");
-
-        return items[0].GetProperty("scriptId").GetString()!;
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return await LayTruongAsync(response, "scriptId");
     }
 
     private static async Task<string> LayTruongAsync(HttpResponseMessage response, string ten)

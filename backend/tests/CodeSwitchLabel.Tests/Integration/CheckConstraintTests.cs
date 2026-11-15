@@ -53,6 +53,7 @@ public class CheckConstraintTests : IntegrationTestBase
             var wave = new Wave
             {
                 WaveName = "Invalid Wave",
+                Domain = "ItTechnology",
                 TargetQty = 1000, // Below minimum 2000
                 StartDate = DateOnly.FromDateTime(DateTime.Today),
                 EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(30)),
@@ -74,6 +75,7 @@ public class CheckConstraintTests : IntegrationTestBase
             var wave = new Wave
             {
                 WaveName = "Invalid Wave",
+                Domain = "ItTechnology",
                 TargetQty = 6000, // Above maximum 5000
                 StartDate = DateOnly.FromDateTime(DateTime.Today),
                 EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(30)),
@@ -95,6 +97,7 @@ public class CheckConstraintTests : IntegrationTestBase
             var wave = new Wave
             {
                 WaveName = "Invalid Wave",
+                Domain = "ItTechnology",
                 TargetQty = 2000,
                 StartDate = DateOnly.FromDateTime(DateTime.Today.AddDays(10)),
                 EndDate = DateOnly.FromDateTime(DateTime.Today), // Before start
@@ -123,7 +126,7 @@ public class CheckConstraintTests : IntegrationTestBase
                 Status = ScriptStatus.PendingValidation,
                 WordCount = 3,
                 EnWordCount = 1,
-                Domain = ScriptDomain.ItTechnology,
+                Domain = "ItTechnology",
                 CreatedBy = AdminUserId,
                 CreatedAt = DateTimeOffset.UtcNow,
                 UpdatedAt = DateTimeOffset.UtcNow
@@ -147,7 +150,7 @@ public class CheckConstraintTests : IntegrationTestBase
                 Status = ScriptStatus.PendingValidation,
                 WordCount = 2,
                 EnWordCount = 3, // Exceeds word_count
-                Domain = ScriptDomain.ItTechnology,
+                Domain = "ItTechnology",
                 CreatedBy = AdminUserId,
                 CreatedAt = DateTimeOffset.UtcNow,
                 UpdatedAt = DateTimeOffset.UtcNow
@@ -171,7 +174,7 @@ public class CheckConstraintTests : IntegrationTestBase
                 Status = ScriptStatus.PendingValidation,
                 WordCount = -1, // Negative
                 EnWordCount = 1,
-                Domain = ScriptDomain.ItTechnology,
+                Domain = "ItTechnology",
                 CreatedBy = AdminUserId,
                 CreatedAt = DateTimeOffset.UtcNow,
                 UpdatedAt = DateTimeOffset.UtcNow
@@ -192,7 +195,7 @@ public class CheckConstraintTests : IntegrationTestBase
             var script = await CreateScriptAsync(
                 "[vi]Test [en]script",
                 "[vi]Test script",
-                ScriptDomain.ItTechnology,
+                "ItTechnology",
                 AdminUserId);
 
             var recording = new Recording
@@ -221,7 +224,7 @@ public class CheckConstraintTests : IntegrationTestBase
             var script = await CreateScriptAsync(
                 "[vi]Test [en]script",
                 "[vi]Test script",
-                ScriptDomain.ItTechnology,
+                "ItTechnology",
                 AdminUserId);
 
             // recording_id says 'cs' (code_switching) but variant is PureVietnamese
@@ -251,7 +254,7 @@ public class CheckConstraintTests : IntegrationTestBase
             var script = await CreateScriptAsync(
                 "[vi]Test [en]script",
                 "[vi]Test script",
-                ScriptDomain.ItTechnology,
+                "ItTechnology",
                 AdminUserId);
 
             var recording = new Recording
@@ -345,6 +348,7 @@ public class CheckConstraintTests : IntegrationTestBase
             {
                 WaveId = WaveId,
                 TaskType = TaskType.Recording,
+                Domain = "ItTechnology",
                 TargetQty = 0, // Must be > 0
                 Status = WorkTaskStatus.InProgress,
                 CreatedBy = ManagerUserId,
@@ -370,7 +374,7 @@ public class CheckConstraintTests : IntegrationTestBase
             var script = await CreateScriptAsync(
                 "[vi]Test [en]script",
                 "[vi]Test script",
-                ScriptDomain.ItTechnology,
+                "ItTechnology",
                 AdminUserId);
             var recording = await CreateRecordingAsync(script.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching);
             Db.Reviews.Add(new Review

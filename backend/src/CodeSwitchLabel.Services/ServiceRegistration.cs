@@ -73,6 +73,11 @@ public static class ServiceRegistration
         services.AddSingleton(_ => new HttpClient { Timeout = Timeout.InfiniteTimeSpan });
         services.AddScoped<ILabelingService, LabelingService>();
 
+        // Máy duyệt bản ghi: dùng chung HttpClient ở trên, timeout cũng đặt theo từng request.
+        services.AddScoped<IAsrClient, WhisperAsrClient>();
+        services.AddScoped<IAiReviewRepository, AiReviewRepository>();
+        services.AddScoped<IAiReviewService, AiReviewService>();
+
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IScriptRepository, ScriptRepository>();
         services.AddScoped<IScriptQueueRepository, ScriptQueueRepository>();
@@ -103,10 +108,12 @@ public static class ServiceRegistration
         services.AddScoped<IWaveService, WaveService>();
 
         services.AddScoped<ISystemConfigService, SystemConfigService>();
+        services.AddScoped<IDomainService, DomainService>();
         services.AddScoped<IReasonService, ReasonService>();
         services.AddScoped<IStatisticsService, StatisticsService>();
         services.AddScoped<ISpeakerRoundsService, SpeakerRoundsService>();
         services.AddScoped<IReviewerStatsService, ReviewerStatsService>();
+        services.AddScoped<IAdminRecordingService, AdminRecordingService>();
         services.AddScoped<IDatasetService, DatasetService>();
 
         return services;
@@ -122,10 +129,10 @@ public static class ServiceRegistration
         (typeof(UserStatus), "user_status"),
         (typeof(Occupation), "occupation"),
         (typeof(Gender), "gender"),
+        (typeof(SpeakerRegion), "speaker_region"),
         (typeof(ConfigValueType), "config_value_type"),
         (typeof(AuditAction), "audit_action"),
         (typeof(ScriptStatus), "script_status"),
-        (typeof(ScriptDomain), "script_domain"),
         (typeof(ScriptReviewAction), "script_review_action"),
         (typeof(ScriptWordRelation), "script_word_relation"),
         (typeof(TaskType), "task_type"),

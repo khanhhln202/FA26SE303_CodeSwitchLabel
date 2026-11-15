@@ -485,7 +485,7 @@ private async Task SeedTestDataAsync()
             reviewer = await db.AppUsers.FirstAsync(u => u.Email == "reviewer@test.local", TestContext.Current.CancellationToken);
             speaker = await db.AppUsers.FirstAsync(u => u.Email == "speaker@test.local", TestContext.Current.CancellationToken);
 
-            foreach (var domain in Enum.GetValues<ScriptDomain>())
+            foreach (var domain in new[] { "ItTechnology", "Education", "DailyLife" })
             {
                 var exists = await db.UserDomains.AnyAsync(d => d.UserId == reviewer.UserId && d.Domain == domain, TestContext.Current.CancellationToken);
                 if (!exists)
@@ -507,7 +507,7 @@ private async Task SeedTestDataAsync()
 
             foreach (var userId in prodReviewers)
             {
-                foreach (var domain in Enum.GetValues<ScriptDomain>())
+                foreach (var domain in new[] { "ItTechnology", "Education", "DailyLife" })
                 {
                     var exists = await db.UserDomains.AnyAsync(d => d.UserId == userId && d.Domain == domain, TestContext.Current.CancellationToken);
                     if (!exists)
@@ -528,6 +528,7 @@ private async Task SeedTestDataAsync()
                 wave = new Wave
                 {
                     WaveName = "Test Wave",
+                    Domain = "ItTechnology",
                     TargetQty = 2000,
                     StartDate = DateOnly.FromDateTime(DateTime.Today),
                     EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(30)),

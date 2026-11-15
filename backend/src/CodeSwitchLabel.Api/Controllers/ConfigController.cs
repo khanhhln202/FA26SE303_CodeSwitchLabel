@@ -1,9 +1,9 @@
 using CodeSwitchLabel.Api.Infrastructure;
-using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Dtos;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace CodeSwitchLabel.Api.Controllers;
 
@@ -16,7 +16,9 @@ namespace CodeSwitchLabel.Api.Controllers;
 [Route("api/config")]
 [Tags(ApiTags.SystemConfiguration)]
 [Authorize]
-public class ConfigController(ISystemConfigService configService) : ControllerBase
+public class ConfigController(
+    ISystemConfigService configService,
+    IDomainService domainService) : ControllerBase
 {
     /// <summary>Toàn bộ tham số hệ thống (đọc).</summary>
     [HttpGet]
@@ -31,17 +33,23 @@ public class ConfigController(ISystemConfigService configService) : ControllerBa
     public async Task<ActionResult<SystemConfigDto>> Get(string key, CancellationToken ct)
         => Ok(await configService.GetAsync(key, ct));
 
-    /// <summary>Danh sách chủ đề (domain) cố định của hệ thống.</summary>
-    /// <remarks>FE dùng cho ô chọn chủ đề, thay cho `admin_topic_config_v2` local.</remarks>
+    /// <summary>Danh sách chủ đề (domain) đang dùng.</summary>
+    /// <remarks>
+    /// FE dùng cho ô chọn chủ đề, thay cho `admin_topic_config_v2` local.
+    /// `includeInactive=true` (màn Admin) trả cả chủ đề đã xóa mềm để hiển thị dữ liệu cũ.
+    /// </remarks>
     [HttpGet("topics")]
     [ProducesResponseType(typeof(IEnumerable<TopicDto>), StatusCodes.Status200OK)]
-    public ActionResult<IEnumerable<TopicDto>> Topics()
-        => Ok(new[]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<IEnumerable<TopicDto>>> Topics(
+        [FromQuery] bool includeInactive, CancellationToken ct)
+    {
+        // Danh sách chủ đề đã xóa mềm chỉ dành cho màn Admin.
+        if (includeInactive && !User.IsInRole("Admin"))
         {
-            new TopicDto(nameof(ScriptDomain.ItTechnology), "Công nghệ thông tin"),
-            new TopicDto(nameof(ScriptDomain.Education), "Giáo dục"),
-            new TopicDto(nameof(ScriptDomain.DailyLife), "Hội thoại hàng ngày"),
-        });
-}
+            return Forbid();
+        }
 
-public record TopicDto(string Code, string Name);
+        return Ok(await domainService.ListAsync(includeInactive, ct));
+    }
+}

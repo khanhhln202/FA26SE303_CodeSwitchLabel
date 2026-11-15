@@ -60,7 +60,7 @@ public interface IScriptQueueRepository
 
     /// <summary>Câu đang chờ duyệt nội dung, cũ nhất trước, kèm người đóng góp.</summary>
     Task<(IReadOnlyList<PendingContributionRow> Items, int Total)> ListPendingContributionsAsync(
-        ScriptDomain? domain, int page, int pageSize, CancellationToken ct = default);
+        string? domain, int page, int pageSize, CancellationToken ct = default);
 }
 
 public record QueueClaimDto(string ScriptId, long QueueId, DateTimeOffset EnqueuedAt, DateTimeOffset ClaimExpiresAt);
@@ -72,7 +72,7 @@ public record QueueStatsDto(int Queued, int Claimed);
 /// <paramref name="TaskId"/> null nghĩa là câu còn trong hàng đợi chung, ai cũng duyệt được.
 /// </summary>
 public record PendingContributionRow(
-    string ScriptId, string CsContent, string ViContent, ScriptDomain Domain,
+    string ScriptId, string CsContent, string ViContent, string Domain,
     DateTimeOffset CreatedAt, long ContributorId, string ContributorName, long? TaskId);
 
 public class ScriptQueueRepository(CodeSwitchLabelDbContext db) : IScriptQueueRepository
@@ -170,7 +170,7 @@ public class ScriptQueueRepository(CodeSwitchLabelDbContext db) : IScriptQueueRe
     }
 
     public async Task<(IReadOnlyList<PendingContributionRow> Items, int Total)> ListPendingContributionsAsync(
-        ScriptDomain? domain, int page, int pageSize, CancellationToken ct = default)
+        string? domain, int page, int pageSize, CancellationToken ct = default)
     {
         var scripts = db.Scripts.AsNoTracking()
             .Where(s => s.Status == ScriptStatus.PendingValidation);

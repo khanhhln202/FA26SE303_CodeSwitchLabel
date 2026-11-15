@@ -17,6 +17,34 @@ namespace CodeSwitchLabel.Services.Common;
 internal static class ScriptPairRules
 {
     /// <summary>
+    /// Chuẩn hóa dấu câu của một câu: bỏ hết `,` `!` `?`, gộp khoảng trắng, và để
+    /// đúng một dấu `.` ở cuối. Giữ nguyên nhãn [vi]/[en] và chữ trong câu; không
+    /// đụng dấu chấm ở giữa (câu đơn, tránh cắt nhầm chữ viết tắt).
+    /// </summary>
+    public static string NormalizePunctuation(string value)
+    {
+        var sb = new System.Text.StringBuilder(value.Length);
+        var pendingSpace = false;
+
+        foreach (var c in value)
+        {
+            if (c is ',' or '!' or '?') continue;
+
+            if (char.IsWhiteSpace(c))
+            {
+                pendingSpace = true;
+                continue;
+            }
+
+            if (pendingSpace && sb.Length > 0) sb.Append(' ');
+            pendingSpace = false;
+            sb.Append(c);
+        }
+
+        return sb.ToString().TrimEnd('.', ' ') + ".";
+    }
+
+    /// <summary>
     /// Kiểm tra một cặp câu. Trả về tổng số từ của câu chen tiếng Anh và số từ tiếng Anh trong đó.
     /// </summary>
     public static (int WordCount, int EnWordCount) ValidatePair(string cs, string ve)
@@ -154,6 +182,9 @@ internal static class ScriptPairRules
                 "Sửa sẽ làm transcript của bản ghi cũ không còn khớp với âm thanh.");
         }
 
+        cs = NormalizePunctuation(cs);
+        ve = NormalizePunctuation(ve);
+
         var (wordCount, enWordCount) = ValidatePair(cs, ve);
 
         if (enWordCount != script.EnWordCount)
@@ -180,14 +211,14 @@ internal static class ScriptPairRules
             }
         }
 
-        return new EditPlan(wordCount, words);
+        return new EditPlan(wordCount, words, cs, ve);
     }
 
     /// <summary>
     /// Ghi nội dung mới đè lên cặp câu. Lược đồ không lưu phiên bản cũ, nên chỉ cho sửa khi
     /// chưa có bản ghi âm nào. Số từ tiếng Anh cũng không được đổi: nó nằm trong mã script.
     /// </summary>
-    public static void ApplyEdit(IScriptRepository repository, Script script, string cs, string ve, EditPlan plan)
+    public static void ApplyEdit(IScriptRepository repository, Script script, EditPlan plan)
     {
         if (plan.Words is not null)
         {
@@ -196,11 +227,12 @@ internal static class ScriptPairRules
             repository.AddWords(plan.Words);
         }
 
-        script.CsContent = cs;
-        script.ViContent = ve;
+        script.CsContent = plan.Cs;
+        script.ViContent = plan.Vi;
         script.WordCount = plan.WordCount;
+        script.SemanticWarning = null;
     }
 }
 
 /// <summary>Kết quả kiểm tra bản sửa, tính một lần rồi đưa sang <see cref="ScriptPairRules.ApplyEdit"/> dùng lại.</summary>
-internal record EditPlan(int WordCount, List<ScriptWord>? Words);
+internal record EditPlan(int WordCount, List<ScriptWord>? Words, string Cs, string Vi);

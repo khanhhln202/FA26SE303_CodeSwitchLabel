@@ -347,16 +347,7 @@ public class SpeakerRoundsService(
                 await SignAsync(cs, ct),
                 await SignAsync(vi, ct),
                 cs?.DurationSec ?? vi?.DurationSec ?? 0,
-                // Trạng thái của cặp: có bản bị từ chối thì cặp đó từ chối; đủ cả hai bản
-                // đạt thì mới là đạt; trượt QC hết thì báo lỗi chất lượng; còn lại là đang
-                // chờ (thiếu bản, hoặc đã nộp chưa có kết quả).
-                takes.Any(r => r.Status == RecordingStatus.Rejected)
-                    ? RecordingStatus.Rejected
-                    : cs?.Status == RecordingStatus.Approved && vi?.Status == RecordingStatus.Approved
-                        ? RecordingStatus.Approved
-                        : takes.Length > 0 && takes.All(r => r.Status == RecordingStatus.QcFailed)
-                            ? RecordingStatus.QcFailed
-                            : RecordingStatus.PendingReview,
+                ReviewRules.PairOutcome(cs?.Status, vi?.Status),
                 takes.Max(r => r.RecordedAt),
                 // Hiện lượt duyệt NGAY, không chờ bản ghi chốt: người đọc cần biết đã có ai
                 // xem bản của mình chưa. Trước đây chỉ hiện khi đã chốt nên bản đang ở 1/3
@@ -415,7 +406,7 @@ public class SpeakerRoundsService(
 
         // Lọc theo tên category tiếng Việt của FE (giữ tương thích mock).
         var domain = ParseCategory(query.Category);
-        if (domain.HasValue) q = q.Where(s => s.Domain == domain.Value);
+        if (domain is not null) q = q.Where(s => s.Domain == domain);
 
         var total = await q.CountAsync(ct);
 
@@ -616,20 +607,22 @@ public class SpeakerRoundsService(
         return top is null ? null : DomainName(top.Domain);
     }
 
-    private static string DomainName(ScriptDomain domain) => domain switch
+    private static string DomainName(string domain) => domain switch
     {
-        ScriptDomain.ItTechnology => "Công nghệ thông tin",
-        ScriptDomain.Education => "Giáo dục",
-        _ => "Hội thoại hàng ngày",
+        "ItTechnology" => "Công nghệ thông tin",
+        "Education" => "Giáo dục",
+        "DailyLife" => "Hội thoại hàng ngày",
+        // Chủ đề tự tạo: dùng code làm nhãn cho tới khi FE đọc tên từ /api/config/topics.
+        _ => domain,
     };
 
-    private static ScriptDomain? ParseCategory(string? category)
+    private static string? ParseCategory(string? category)
     {
         if (string.IsNullOrWhiteSpace(category)) return null;
         var c = category.Trim().ToLowerInvariant();
-        if (c.Contains("công nghệ") || c.Contains("information") || c.Contains("it")) return ScriptDomain.ItTechnology;
-        if (c.Contains("giáo dục") || c.Contains("education")) return ScriptDomain.Education;
-        if (c.Contains("hàng ngày") || c.Contains("daily") || c.Contains("hội thoại")) return ScriptDomain.DailyLife;
+        if (c.Contains("công nghệ") || c.Contains("information") || c.Contains("it")) return "ItTechnology";
+        if (c.Contains("giáo dục") || c.Contains("education")) return "Education";
+        if (c.Contains("hàng ngày") || c.Contains("daily") || c.Contains("hội thoại")) return "DailyLife";
         return null;
     }
 

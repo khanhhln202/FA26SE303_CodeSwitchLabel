@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { toast } from "sonner";
-import { Search, Download, CheckCircle2, XCircle, Filter, Clock, X, AlertCircle, Loader2 } from "lucide-react";
+import { Search, Download, CheckCircle2, XCircle, Filter, Clock, X, Loader2 } from "lucide-react";
 import Pagination from "../../../components/Pagination/Pagination";
 import WaveformInline from "../../../components/AudioPlayer/WaveformInline";
 import {
@@ -17,9 +17,30 @@ import {
   AUDIO_PRIMARY
 } from "../../../constants/theme";
 import { adminService } from "../../../services/adminService";
-import { getScriptDetailApi } from "../../../services/scriptApi";
 import { parseCodeSwitch } from "../../../utils/codeSwitch";
-import { httpClient } from "../../../utils/setting";
+
+// "2026-10-13T08:27:10Z" -> ["13/10/2026", "15:27"] (giờ máy người dùng)
+function splitDateTime(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const pad = (n) => String(n).padStart(2, "0");
+  return [`${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`, `${pad(d.getHours())}:${pad(d.getMinutes())}`];
+}
+
+// Lấy thời gian gần nhất reviewer duyệt cặp câu text và bản ghi âm
+function getLatestReviewedAt(pair) {
+  const reviewTimes = (pair.reviews || [])
+    .map((rev) => rev?.reviewedAt || rev?.createdAt || rev?.updatedAt)
+    .filter(Boolean)
+    .map((ts) => new Date(ts).getTime())
+    .filter((t) => !Number.isNaN(t));
+
+  if (reviewTimes.length > 0) {
+    return new Date(Math.max(...reviewTimes)).toISOString();
+  }
+  return pair.reviewedAt || pair.recordedAt || null;
+}
 
 // Style trạng thái đồng bộ 100% với giao diện Reviewer RecordingHistory
 const STATUS_STYLE = {
@@ -27,7 +48,6 @@ const STATUS_STYLE = {
   Rejected: { bg: "#FDEAEA", border: "#F3C9C9", text: "#C63B3B", accent: "#C63B3B", icon: XCircle, label: "Từ chối" },
   Pending: { bg: "#FFF1DE", border: "#F5DFC0", text: "#A85E12", accent: "#A85E12", icon: Clock, label: "Chờ" },
   PendingReview: { bg: "#FFF1DE", border: "#F5DFC0", text: "#A85E12", accent: "#A85E12", icon: Clock, label: "Chờ" },
-  QcFailed: { bg: "#F0EEE6", border: "#E5E2D8", text: "#6E7078", accent: "#6E7078", icon: AlertCircle, label: "Lỗi chất lượng" },
 };
 const styleOf = (status) => STATUS_STYLE[status] ?? STATUS_STYLE.Pending;
 
@@ -37,7 +57,8 @@ const parseBeRecordingStatus = (statusFromBe) => {
     const str = String(statusFromBe).trim().toLowerCase();
     if (["approved", "accepted", "1"].includes(str)) return "Approved";
     if (["rejected", "discarded", "2"].includes(str)) return "Rejected";
-    if (["pending", "pendingreview", "qcfailed", "0", "3"].includes(str)) return "Pending";
+    if (str === "qcfailed") return "QcFailed";
+    if (["pending", "pendingreview", "0", "3"].includes(str)) return "Pending";
   }
   return "Pending";
 };
@@ -82,246 +103,44 @@ export default function AdminRecordings() {
   const [recordings, setRecordings] = useState([]);
   const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [speakerFilter, setSpeakerFilter] = useState("all");
+  const [timeFilter, setTimeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
 
   const [selectedReviewersList, setSelectedReviewersList] = useState(null);
-  const [userMapState, setUserMapState] = useState({});
 
   // STATE PHỤC VỤ CHỨC NĂNG CHỌN TẢI DATASET (CHECKBOX MODE)
   const [isSelectMode, setIsSelectMode] = useState(false);
   const [selectedPairIds, setSelectedPairIds] = useState([]);
   const [isExporting, setIsExporting] = useState(false);
 
-  // TẢI VÀ GỘP CẶP DỮ LIỆU ĐỒNG BỘ CHUẨN XÁC THEO LUỒNG ADMIN
+  // Tải cặp bản ghi từ BE: trạng thái cặp đã được BE chốt, FE không tự gộp nữa.
   const fetchRecordings = async () => {
     try {
-      // 1. Tải danh sách User & Speaker để lấy thông tin Email
-      const [usersRes, speakersRes] = await Promise.all([
-        adminService.getUsers({ page: 1, pageSize: 500 }).catch(() => ({ items: [] })),
-        httpClient.get("/api/users/speakers", { params: { page: 1, pageSize: 500 } }).then(r => r.data).catch(() => ({ items: [] }))
-      ]);
-
-      const userItems = usersRes.items || usersRes || [];
-      const speakerItems = speakersRes.items || speakersRes || [];
-
-      const userMap = {};
-      const userDetailMap = {};
-
-      // Map dữ liệu từ danh sách User tổng
-      userItems.forEach((u) => {
-        const uId = u.userId || u.id;
-        userMap[uId] = u.fullName || u.name;
-        userDetailMap[uId] = {
-          name: u.fullName || u.name || `User #${uId}`,
-          email: u.email || "Chưa có email"
-        };
-      });
-
-      // Map đè thông tin chi tiết từ API Speaker
-      speakerItems.forEach((s) => {
-        const sId = s.userId || s.id || s.speakerId;
-        if (sId) {
-          if (s.fullName || s.name) userMap[sId] = s.fullName || s.name;
-          userDetailMap[sId] = {
-            name: s.fullName || s.name || userDetailMap[sId]?.name || `User #${sId}`,
-            email: s.email || userDetailMap[sId]?.email || "Chưa có email"
-          };
-        }
-      });
-
-      setUserMapState(userMap);
-
-      // 2. Tải tất cả bản ghi âm từ Admin API
-      let allItems = [];
+      let allPairs = [];
       let page = 1;
       let totalPages = 1;
       do {
-        const recRes = await adminService.getRecordings({ page, pageSize: 100 });
-        const items = recRes.items || recRes || [];
-        allItems = [...allItems, ...items];
-        totalPages = recRes.totalPages || 1;
+        const res = await adminService.getAdminRecordingPairs({ page, pageSize: 100 });
+        allPairs = [...allPairs, ...(res.items || [])];
+        totalPages = res.totalPages || 1;
         page++;
       } while (page <= totalPages);
 
-      // 3. Lấy chi tiết Script Text (CS & VI Content) theo danh sách scriptId
-      const scriptIds = [...new Set(allItems.map(r => r.scriptId || r.textId).filter(Boolean))];
-      const scriptMap = {};
-
-      await Promise.all(
-        scriptIds.map(async (sId) => {
-          try {
-            const detail = await getScriptDetailApi(sId);
-            if (detail) {
-              scriptMap[sId] = {
-                csContent: detail.csContent || "",
-                viContent: detail.viContent || ""
-              };
-            }
-          } catch (e) {
-            console.error("Lỗi lấy chi tiết câu:", sId, e);
-          }
-        })
+      setRecordings(
+        allPairs
+          .map((pair) => ({
+            ...pair,
+            status: parseBeRecordingStatus(pair.status),
+            rawIds: pair.rawIds || [],
+            reviews: pair.reviews || [],
+            latestReviewedAt: getLatestReviewedAt(pair),
+          }))
+          .filter((pair) => pair.status !== "QcFailed")
       );
 
-      // 4. Tải Audio URL & Lượt Reviewer của từng bản thu
-      const rawRecordings = await Promise.all(
-        allItems.map(async (r) => {
-          const recId = r.recordingId || r.id;
-          const sId = r.scriptId || r.textId;
-          const scriptInfo = scriptMap[sId] || {};
-
-          let audioUrl = r.audioUrl || r.fileUrl || r.cloudLink || "";
-          if (recId && !audioUrl) {
-            try {
-              const audioRes = await adminService.getAudioUrl(recId);
-              if (audioRes?.url) audioUrl = audioRes.url;
-            } catch (e) {
-              console.warn("Không lấy được Audio URL:", recId, e);
-            }
-          }
-
-          let reviews = [];
-          try {
-            const revsRes = await adminService.getRecordingReviews(recId);
-            if (Array.isArray(revsRes)) {
-              reviews = revsRes;
-            }
-          } catch (e) {
-            console.warn("Lỗi tải reviews:", recId, e);
-          }
-
-          const variantRaw = r.sentenceVariant !== undefined ? r.sentenceVariant : r.variant;
-          const variantStr = String(variantRaw || r.language || r.type || "").toLowerCase();
-
-          const isCs = variantStr.includes("codeswitching") || variantStr === "1" || variantStr.includes("cs") || variantStr.includes("vi-en");
-          const isVi = variantStr.includes("purevietnamese") || variantStr === "2" || (variantStr.includes("vi") && !variantStr.includes("vi-en"));
-
-          const spkInfo = userDetailMap[r.speakerId] || {};
-
-          return {
-            recId,
-            scriptId: sId || "N/A",
-            speakerId: r.speakerId,
-            speaker: spkInfo.name || (r.speakerId ? `User #${r.speakerId}` : "Chưa xác định"),
-            speakerEmail: spkInfo.email || r.speakerEmail || r.email || "N/A",
-            csText: scriptInfo.csContent || r.csContent || r.scriptText || r.content || "",
-            viText: scriptInfo.viContent || r.viContent || r.contentVietnamese || "",
-            topic: r.domain || r.topic || "Công nghệ thông tin",
-            taskId: r.taskId || r.taskTitle || "Thu âm 20",
-            isCs,
-            isVi,
-            audioUrl,
-            durationSec: r.durationSec || 0,
-            status: parseBeRecordingStatus(r.recordingStatus || r.status),
-            reviews,
-            createdAt: r.createdAt || r.recordedAt || ""
-          };
-        })
-      );
-
-      // 5. GỘP CẶP CHUẨN XÁC THEO SCRIPT + SPEAKER + TASK
-      const groupedMap = new Map();
-
-      rawRecordings.forEach((rec) => {
-        const groupKey = `${rec.scriptId}_${rec.speakerId}_${rec.taskId}`;
-
-        if (!groupedMap.has(groupKey)) {
-          groupedMap.set(groupKey, {
-            id: groupKey,
-            rawIds: [],
-            scriptId: rec.scriptId,
-            csText: rec.csText,
-            viText: rec.viText,
-            topic: rec.topic,
-            speaker: rec.speaker,
-            speakerId: rec.speakerId,
-            speakerEmail: rec.speakerEmail,
-            csAudioUrl: "",
-            viAudioUrl: "",
-            durationSec: rec.durationSec,
-            rawStatuses: [],
-            reviews: [],
-            viRecordingId: null,
-            csRecordingId: null,
-            createdAt: rec.createdAt
-          });
-        }
-
-        const group = groupedMap.get(groupKey);
-        if (!group.rawIds.includes(rec.recId)) {
-          group.rawIds.push(rec.recId);
-        }
-
-        if (rec.isCs) {
-          if (rec.audioUrl) group.csAudioUrl = rec.audioUrl;
-          group.csRecordingId = rec.recId;
-        } else if (rec.isVi) {
-          if (rec.audioUrl) group.viAudioUrl = rec.audioUrl;
-          group.viRecordingId = rec.recId;
-        } else if (!group.csAudioUrl && rec.audioUrl) {
-          group.csAudioUrl = rec.audioUrl;
-        }
-
-        group.rawStatuses.push(rec.status);
-        if (Array.isArray(rec.reviews) && rec.reviews.length > 0) {
-          rec.reviews.forEach(rv => group.reviews.push({ ...rv, recId: rec.recId }));
-        }
-      });
-
-      // 6. XỬ LÝ TRẠNG THÁI KẾT QUẢ KHI DUYỆT
-      const pairedRecordings = Array.from(groupedMap.values()).map((pair) => {
-        let finalStatus = "Pending";
-        const reviewsList = pair.reviews;
-
-        if (reviewsList.length > 0) {
-          const approveVotes = reviewsList.filter(r => r.decision === "Approved" || String(r.status).toLowerCase().includes("approved")).length;
-          const rejectVotes = reviewsList.filter(r => r.decision === "Rejected" || String(r.status).toLowerCase().includes("rejected")).length;
-
-          if (approveVotes >= 2) {
-            finalStatus = "Approved";
-          } else if (rejectVotes >= 2) {
-            finalStatus = "Rejected";
-          } else if (pair.rawStatuses.includes("Approved")) {
-            finalStatus = "Approved";
-          } else if (pair.rawStatuses.includes("Rejected")) {
-            finalStatus = "Rejected";
-          }
-        } else {
-          if (pair.rawStatuses.every(s => s === "Approved")) {
-            finalStatus = "Approved";
-          } else if (pair.rawStatuses.some(s => s === "Rejected")) {
-            finalStatus = "Rejected";
-          }
-        }
-
-        return {
-          id: pair.id,
-          rawId: pair.rawIds[0] || pair.id,
-          rawIds: pair.rawIds,
-          scriptId: pair.scriptId,
-          csText: pair.csText,
-          viText: pair.viText,
-          topic: pair.topic,
-          speaker: pair.speaker,
-          speakerId: pair.speakerId,
-          speakerEmail: pair.speakerEmail,
-          csAudioUrl: pair.csAudioUrl,
-          viAudioUrl: pair.viAudioUrl,
-          durationSec: pair.durationSec,
-          status: finalStatus,
-          reviews: pair.reviews,
-          csRecordingId: pair.csRecordingId,
-          viRecordingId: pair.viRecordingId,
-          createdAt: pair.createdAt
-        };
-      });
-
-      // Sắp xếp giảm dần theo thời gian tạo
-      pairedRecordings.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
-
-      setRecordings(pairedRecordings);
     } catch (err) {
       console.error("Lỗi lấy danh sách bản thu âm:", err);
       toast.error("Không thể tải danh sách bản thu âm!");
@@ -332,49 +151,25 @@ export default function AdminRecordings() {
     fetchRecordings();
   }, []);
 
-  const handleOpenReviewersModal = async (recording) => {
+  // Tự động lấy danh sách tên Speaker duy nhất từ dữ liệu (có speaker mới tự động cập nhật)
+  const speakerOptions = useMemo(() => {
+    const uniqueSpeakers = new Set();
+    recordings.forEach((r) => {
+      if (r.speaker && String(r.speaker).trim()) {
+        uniqueSpeakers.add(String(r.speaker).trim());
+      }
+    });
+    return Array.from(uniqueSpeakers).sort((a, b) => a.localeCompare(b, "vi"));
+  }, [recordings]);
+
+  // Lượt duyệt đã có sẵn trong cặp do BE trả về, không gọi thêm API.
+  const handleOpenReviewersModal = (recording) => {
     setSelectedReviewersList({
       ...recording,
       csText: recording.csText || "Đang tải nội dung câu...",
       viText: recording.viText || "",
       reviews: recording.reviews || []
     });
-
-    try {
-      const rawIdsToFetch = Array.isArray(recording.rawIds) && recording.rawIds.length > 0 
-        ? recording.rawIds 
-        : [recording.rawId];
-
-      const allReviewsResponses = await Promise.all(
-        rawIdsToFetch.map(rId => adminService.getRecordingReviews(rId).catch(() => []))
-      );
-
-      let combinedRawReviews = [];
-      allReviewsResponses.forEach((res, index) => {
-        if (Array.isArray(res)) {
-          const matchedRecId = rawIdsToFetch[index];
-          res.forEach(r => combinedRawReviews.push({ ...r, recordingId: r.recordingId || matchedRecId }));
-        }
-      });
-
-      if (combinedRawReviews.length > 0) {
-        const formattedReviews = combinedRawReviews.map((r, i) => ({
-          round: r.round || r.reviewRound || (i + 1),
-          decision: r.decision || (String(r.status).toLowerCase().includes("approved") ? "Approved" : "Rejected"),
-          reason: (r.reasons && r.reasons.length > 0 ? r.reasons.map(rs => rs.description || rs.code).join(" • ") : r.reason) || r.comment || "",
-          recordingId: r.recordingId,
-          reviewerId: r.reviewerId,
-          reviewerName: userMapState[r.reviewerId] || `Reviewer #${r.reviewerId}`
-        }));
-
-        setSelectedReviewersList(prev => ({
-          ...prev,
-          reviews: formattedReviews
-        }));
-      }
-    } catch (err) {
-      console.error("Lỗi lấy thông tin kiểm duyệt:", err);
-    }
   };
 
   const handleSearch = () => {
@@ -390,10 +185,29 @@ export default function AdminRecordings() {
 
   const filteredRecordings = useMemo(() => {
     const keywords = searchTerm.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const DAY_MS = 24 * 60 * 60 * 1000;
 
     return recordings.filter((r) => {
+      if (r.status === "QcFailed") return false;
       const matchStatus = statusFilter === "all" || r.status === statusFilter;
       if (!matchStatus) return false;
+
+      const matchSpeaker = speakerFilter === "all" || (r.speaker && String(r.speaker).trim() === speakerFilter);
+      if (!matchSpeaker) return false;
+
+      if (timeFilter !== "all") {
+        if (!r.latestReviewedAt) return false;
+        const reviewedTime = new Date(r.latestReviewedAt).getTime();
+        if (Number.isNaN(reviewedTime)) return false;
+
+        if (timeFilter === "today" && reviewedTime < startOfToday) return false;
+        if (timeFilter === "3days" && reviewedTime < now.getTime() - 3 * DAY_MS) return false;
+        if (timeFilter === "7days" && reviewedTime < now.getTime() - 7 * DAY_MS) return false;
+        if (timeFilter === "30days" && reviewedTime < now.getTime() - 30 * DAY_MS) return false;
+        if (timeFilter === "3months" && reviewedTime < now.getTime() - 90 * DAY_MS) return false;
+      }
 
       if (keywords.length === 0) return true;
 
@@ -411,7 +225,7 @@ export default function AdminRecordings() {
 
       return keywords.every((kw) => combinedSearchableText.includes(kw));
     });
-  }, [recordings, searchTerm, statusFilter]);
+  }, [recordings, searchTerm, statusFilter, speakerFilter, timeFilter]);
 
   const totalPages = Math.ceil(filteredRecordings.length / pageSize) || 1;
   const paginatedRecordings = useMemo(() => {
@@ -510,6 +324,54 @@ export default function AdminRecordings() {
             <div className="flex items-center gap-2">
               <Filter className="w-4 h-4 text-[#6E7078] dark:text-gray-400 shrink-0" />
               <select
+                value={speakerFilter}
+                onChange={(e) => {
+                  setSpeakerFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-[165px] px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
+                onFocus={(e) => {
+                  e.target.style.borderColor = ADMIN_ACCENT;
+                  e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = '';
+                  e.target.style.boxShadow = 'none';
+                }}
+              >
+                <option value="all" className="bg-white dark:bg-[#25272E]">Tất cả speaker</option>
+                {speakerOptions.map((sp) => (
+                  <option key={sp} value={sp} className="bg-white dark:bg-[#25272E]">
+                    {sp}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                value={timeFilter}
+                onChange={(e) => {
+                  setTimeFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-[175px] px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
+                onFocus={(e) => {
+                  e.target.style.borderColor = ADMIN_ACCENT;
+                  e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = '';
+                  e.target.style.boxShadow = 'none';
+                }}
+              >
+                <option value="all" className="bg-white dark:bg-[#25272E]">Từ trước đến nay</option>
+                <option value="today" className="bg-white dark:bg-[#25272E]">Hôm nay</option>
+                <option value="3days" className="bg-white dark:bg-[#25272E]">3 ngày gần đây</option>
+                <option value="7days" className="bg-white dark:bg-[#25272E]">7 ngày gần đây</option>
+                <option value="30days" className="bg-white dark:bg-[#25272E]">1 tháng gần đây</option>
+                <option value="3months" className="bg-white dark:bg-[#25272E]">3 tháng gần đây</option>
+              </select>
+
+              <select
                 value={statusFilter}
                 onChange={(e) => {
                   setStatusFilter(e.target.value);
@@ -538,7 +400,7 @@ export default function AdminRecordings() {
                 <button
                   onClick={() => setIsSelectMode(true)}
                   style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 8px 20px ${ADMIN_ACCENT}33` }}
-                  className="px-4 py-2 text-white rounded-xl type-button flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.97] transition-all duration-200 cursor-pointer whitespace-nowrap font-bold"
+                  className="px-3.5 py-2 text-white rounded-xl type-button flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer whitespace-nowrap"
                 >
                   <Download className="w-4 h-4 transition-transform duration-200 group-hover:translate-y-0.5" />
                   <span>Tải dataset</span>
@@ -578,7 +440,7 @@ export default function AdminRecordings() {
             <thead>
               <tr className="bg-[#F7F5EF] dark:bg-[#25272E] type-label text-[#9A9CA3] dark:text-gray-400 border-b border-[#E5E2D8] dark:border-gray-800 h-8">
                 <th className="w-[60px] px-2 text-center font-label">STT</th>
-                <th className="w-[160px] px-2 font-label">Speaker</th>
+                <th className="w-[160px] px-2 font-label">Speaker / Thời gian</th>
                 <th className="w-[240px] px-2 font-label">Email</th>
                 <th className="px-4 text-left font-label">Nội dung</th>
                 <th className="w-[250px] px-2 font-label">Đoạn ghi âm</th>
@@ -601,6 +463,7 @@ export default function AdminRecordings() {
                     
                     const stStyle = styleOf(status);
                     const StatusIcon = stStyle.icon;
+                    const dateTimeParts = splitDateTime(r.latestReviewedAt);
 
                     return (
                       <tr key={r.id} className="hover:bg-[#F7F5EF]/70 dark:hover:bg-[#25272E]/50 transition-colors duration-150 h-14">
@@ -609,9 +472,16 @@ export default function AdminRecordings() {
                           {stt}
                         </td>
 
-                        {/* 2. SPEAKER (NẰM CẠNH STT) */}
-                        <td className="px-2 font-bold text-[#16171C] dark:text-gray-100 align-middle whitespace-nowrap truncate" title={r.speaker}>
-                          {r.speaker}
+                        {/* 2. SPEAKER / THỜI GIAN (NẰM CẠNH STT) */}
+                        <td className="px-2 align-middle whitespace-nowrap" title={r.speaker}>
+                          <p className="font-bold text-[#16171C] dark:text-gray-100 truncate">
+                            {r.speaker}
+                          </p>
+                          {dateTimeParts && (
+                            <p className="mt-0.5 type-meta text-[#9A9CA3] dark:text-gray-400">
+                              {dateTimeParts[0]} - {dateTimeParts[1]}
+                            </p>
+                          )}
                         </td>
 
                         {/* 3. EMAIL HIỂN THỊ ĐẦY ĐỦ (NẰM CẠNH SPEAKER) */}
@@ -700,7 +570,7 @@ export default function AdminRecordings() {
 
                   {Array.from({ length: emptyRowsCount }).map((_, idx) => (
                     <tr key={`empty-${idx}`} className="border-b border-transparent">
-                      <td colSpan={isSelectMode ? 7 : 6} className="py-0.5">&nbsp;</td>
+                      <td colSpan={isSelectMode ? 7 : 6} className="py-0.5"> </td>
                     </tr>
                   ))}
                 </>

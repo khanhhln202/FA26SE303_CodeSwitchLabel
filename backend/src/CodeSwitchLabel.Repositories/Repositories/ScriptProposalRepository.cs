@@ -32,7 +32,7 @@ public interface IScriptProposalRepository
 
     /// <summary>Hàng chờ Reviewer: chỉ đề xuất Pending, mặc định cũ nhất trước (FIFO).</summary>
     Task<(IReadOnlyList<ScriptProposal> Items, int Total)> ListPendingAsync(
-        ProposalKind? kind, ScriptDomain? domain, string? keyword,
+        ProposalKind? kind, string? domain, string? keyword,
         int page, int pageSize, SortSpec<ProposalSortField> sort, CancellationToken ct = default);
 
     /// <summary>
@@ -72,7 +72,7 @@ public class ScriptProposalRepository(CodeSwitchLabelDbContext db) : IScriptProp
             p => p.ScriptId == scriptId && p.Status == ProposalStatus.Pending, ct);
 
     public async Task<(IReadOnlyList<ScriptProposal> Items, int Total)> ListPendingAsync(
-        ProposalKind? kind, ScriptDomain? domain, string? keyword,
+        ProposalKind? kind, string? domain, string? keyword,
         int page, int pageSize, SortSpec<ProposalSortField> sort, CancellationToken ct = default)
     {
         var query = db.ScriptProposals.AsNoTracking()
@@ -82,7 +82,7 @@ public class ScriptProposalRepository(CodeSwitchLabelDbContext db) : IScriptProp
             .Where(p => p.Status == ProposalStatus.Pending);
 
         if (kind.HasValue) query = query.Where(p => p.Kind == kind.Value);
-        if (domain.HasValue) query = query.Where(p => p.Script.Domain == domain.Value);
+        if (domain is not null) query = query.Where(p => p.Script.Domain == domain);
 
         if (!string.IsNullOrWhiteSpace(keyword))
         {

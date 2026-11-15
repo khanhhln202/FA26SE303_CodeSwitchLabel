@@ -11,6 +11,28 @@ namespace CodeSwitchLabel.Tests.Services;
 public sealed class RuleBasedLabelerTests
 {
     [Fact]
+    public void GanNhan_CauKhongDau_VanNhanRaTiengViet()
+    {
+        var result = RuleBasedLabeler.Label(
+            "Em nho upload tai lieu truoc deadline nhe.",
+            "Em nhớ đăng tài liệu trước hạn chót nhé.");
+
+        Assert.Equal(
+            "[vi]Em nho [en]upload [vi]tai lieu truoc [en]deadline [vi]nhe.",
+            result.CsTagged);
+    }
+
+    [Fact]
+    public void GanNhan_TuAnhTrungAmTietViet_KhongBiNhanSai()
+    {
+        var result = RuleBasedLabeler.Label(
+            "The deadline la ngay mai.",
+            "Hạn chót là ngày mai.");
+
+        Assert.Equal("[en]The deadline [vi]la ngay mai.", result.CsTagged);
+    }
+
+    [Fact]
     public void GanNhan_NghiaNamGiuaHaiTuChung_CoTheNhieuTu()
     {
         var result = RuleBasedLabeler.Label(

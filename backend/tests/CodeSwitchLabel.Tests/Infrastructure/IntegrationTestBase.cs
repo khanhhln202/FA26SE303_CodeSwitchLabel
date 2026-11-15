@@ -214,7 +214,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         reviewer = await Db.AppUsers.FirstAsync(u => u.Email == "reviewer@test.local", TestContext.Current.CancellationToken);
         speaker = await Db.AppUsers.FirstAsync(u => u.Email == "speaker@test.local", TestContext.Current.CancellationToken);
 
-        foreach (var domain in Enum.GetValues<ScriptDomain>())
+        foreach (var domain in new[] { "ItTechnology", "Education", "DailyLife" })
         {
             var exists = await Db.UserDomains.AnyAsync(d => d.UserId == reviewer.UserId && d.Domain == domain, TestContext.Current.CancellationToken);
             if (!exists)
@@ -234,6 +234,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
             wave = new Wave
             {
                 WaveName = "Test Wave",
+                Domain = "ItTechnology",
                 TargetQty = 2000,
                 StartDate = DateOnly.FromDateTime(DateTime.Today),
                 EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(30)),
@@ -365,6 +366,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         var wave = new Wave
         {
             WaveName = name,
+            Domain = "ItTechnology",
             TargetQty = targetQty,
             StartDate = startDate,
             EndDate = endDate,
@@ -390,6 +392,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         {
             WaveId = waveId,
             TaskType = type,
+            Domain = "ItTechnology",
             TargetQty = targetQty,
             Deadline = deadline,
             Status = status,
@@ -405,7 +408,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
     protected async Task<Script> CreateScriptAsync(
         string csContent,
         string viContent,
-        ScriptDomain domain,
+        string domain,
         long createdBy,
         int enWordCount = 1,
         ScriptStatus status = ScriptStatus.PendingValidation,
@@ -440,7 +443,7 @@ public abstract class IntegrationTestBase : IAsyncLifetime
     protected async Task<Script> CreateValidatedScriptAsync(
         string csContent,
         string viContent,
-        ScriptDomain domain,
+        string domain,
         long createdBy,
         int enWordCount = 1)
     {

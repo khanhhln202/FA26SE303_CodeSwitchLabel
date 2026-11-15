@@ -226,13 +226,7 @@ public class ReviewerStatsService(
                 : recording.Status;
             var csStatus = cs is null ? (RecordingStatus?)null : statusOf(cs);
             var viStatus = vi is null ? (RecordingStatus?)null : statusOf(vi);
-            var pairStatus = both.Any(r => statusOf(r) == RecordingStatus.Rejected)
-                ? RecordingStatus.Rejected
-                : csStatus == RecordingStatus.Approved && viStatus == RecordingStatus.Approved
-                    ? RecordingStatus.Approved
-                    : both.Length > 0 && both.All(r => statusOf(r) == RecordingStatus.QcFailed)
-                        ? RecordingStatus.QcFailed
-                        : RecordingStatus.PendingReview;
+            var pairStatus = ReviewRules.PairOutcome(csStatus, viStatus);
 
             items.Add(new ReviewerHistoryItemDto(
                 pair.ScriptId,
@@ -302,7 +296,7 @@ public class ReviewerStatsService(
         }
 
         var domain = ParseCategory(query.Category);
-        if (domain.HasValue) q = q.Where(r => r.Script.Domain == domain.Value);
+        if (domain is not null) q = q.Where(r => r.Script.Domain == domain);
 
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
@@ -391,20 +385,22 @@ public class ReviewerStatsService(
         _ => "Khác",
     };
 
-    private static string DomainName(ScriptDomain domain) => domain switch
+    private static string DomainName(string domain) => domain switch
     {
-        ScriptDomain.ItTechnology => "Công nghệ thông tin",
-        ScriptDomain.Education => "Giáo dục",
-        _ => "Hội thoại hàng ngày",
+        "ItTechnology" => "Công nghệ thông tin",
+        "Education" => "Giáo dục",
+        "DailyLife" => "Hội thoại hàng ngày",
+        // Chủ đề tự tạo: dùng code làm nhãn cho tới khi FE đọc tên từ /api/config/topics.
+        _ => domain,
     };
 
-    private static ScriptDomain? ParseCategory(string? category)
+    private static string? ParseCategory(string? category)
     {
         if (string.IsNullOrWhiteSpace(category)) return null;
         var c = category.Trim().ToLowerInvariant();
-        if (c.Contains("công nghệ") || c.Contains("information") || c.Contains("it")) return ScriptDomain.ItTechnology;
-        if (c.Contains("giáo dục") || c.Contains("education")) return ScriptDomain.Education;
-        if (c.Contains("hàng ngày") || c.Contains("daily") || c.Contains("hội thoại")) return ScriptDomain.DailyLife;
+        if (c.Contains("công nghệ") || c.Contains("information") || c.Contains("it")) return "ItTechnology";
+        if (c.Contains("giáo dục") || c.Contains("education")) return "Education";
+        if (c.Contains("hàng ngày") || c.Contains("daily") || c.Contains("hội thoại")) return "DailyLife";
         return null;
     }
 }

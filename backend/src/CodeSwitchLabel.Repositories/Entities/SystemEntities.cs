@@ -51,6 +51,28 @@ public static class ConfigKeys
 
     /// <summary>lô câu văn bản mặc định Task Manager giao cho mỗi người duyệt.</summary>
     public const string TextReviewBatchSize = "text_review.batch_size";
+
+    /// <summary>Bật tính năng máy duyệt bản ghi. Tắt thì endpoint trả ai_review_disabled.</summary>
+    public const string AiReviewEnabled = "ai_review.enabled";
+
+    /// <summary>
+    /// Cho tiến trình nền tự quét các bản ghi đang hoà 1–1 rồi gọi máy duyệt, thay vì chờ
+    /// người bấm. Vẫn cần <see cref="AiReviewEnabled"/> bật thì máy mới phán được.
+    /// </summary>
+    public const string AiReviewAutoEnabled = "ai_review.auto_enabled";
+
+    /// <summary>Nghỉ bao lâu giữa hai lượt quét của tiến trình nền, tính bằng giây.</summary>
+    public const string AiReviewAutoIntervalSeconds = "ai_review.auto_interval_seconds";
+
+    /// <summary>Tối đa bao nhiêu bản ghi mỗi lượt quét. Xử lý tuần tự, không song song.</summary>
+    public const string AiReviewAutoBatchSize = "ai_review.auto_batch_size";
+
+    /// <summary>
+    /// Ranh giới DUY NHẤT của máy duyệt: WER dưới mức này thì bỏ phiếu đạt, từ mức này
+    /// trở lên thì từ chối. Máy là người phá thế nên luôn phải chọn một bên — không có
+    /// vùng bỏ quyền, nên chỉ cần một ngưỡng.
+    /// </summary>
+    public const string AiReviewWerDecisionThreshold = "ai_review.wer_decision_threshold";
 }
 
 /// <summary>
@@ -157,7 +179,7 @@ public class WaveProgress
     public string WaveName { get; set; } = string.Empty;
 
     /// <summary>Chủ đề của đợt; mọi task gắn vào đều phải cùng chủ đề.</summary>
-    public ScriptDomain Domain { get; set; }
+    public string Domain { get; set; } = string.Empty;
 
     public int WaveTargetQty { get; set; }
     public DateOnly StartDate { get; set; }

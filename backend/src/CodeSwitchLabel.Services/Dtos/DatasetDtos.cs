@@ -65,4 +65,10 @@ public record ExportSpeakerDataRequest
     public List<string> RecordingIds { get; init; } = [];
     public List<long> SpeakerIds { get; init; } = [];
     public long? WaveId { get; init; }
+
+    /// <summary>Ngày bắt đầu (giờ Việt Nam), tính theo mốc duyệt muộn nhất của cặp.</summary>
+    public DateOnly? DateFrom { get; init; }
+
+    /// <summary>Ngày kết thúc (giờ Việt Nam), bao gồm cả ngày này.</summary>
+    public DateOnly? DateTo { get; init; }
 }

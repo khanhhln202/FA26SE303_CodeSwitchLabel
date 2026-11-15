@@ -62,11 +62,11 @@ public sealed class WorkAfterTargetTests(DatabaseFixture fixture)
 
         var done = await CreateValidatedScriptAsync(
             $"[vi]Em [en]xong{Guid.NewGuid():N} [vi]rồi", "[vi]Em làm xong rồi",
-            ScriptDomain.ItTechnology, speaker.UserId);
+            "ItTechnology", speaker.UserId);
 
         var next = await CreateValidatedScriptAsync(
             $"[vi]Em [en]them{Guid.NewGuid():N} [vi]nữa", "[vi]Em làm thêm nữa",
-            ScriptDomain.ItTechnology, speaker.UserId);
+            "ItTechnology", speaker.UserId);
 
         Db.TaskScripts.Add(new TaskScript
         {
@@ -122,11 +122,11 @@ public sealed class WorkAfterTargetTests(DatabaseFixture fixture)
 
         var doneScript = await CreateValidatedScriptAsync(
             $"[vi]Em [en]duyet{Guid.NewGuid():N} [vi]xong", "[vi]Em duyệt xong",
-            ScriptDomain.ItTechnology, speaker.UserId);
+            "ItTechnology", speaker.UserId);
 
         var nextScript = await CreateValidatedScriptAsync(
             $"[vi]Em [en]cho{Guid.NewGuid():N} [vi]duyệt", "[vi]Em còn chờ duyệt",
-            ScriptDomain.ItTechnology, speaker.UserId);
+            "ItTechnology", speaker.UserId);
 
         var doneRecording = await CreateRecordingAsync(doneScript.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
         doneRecording.Status = RecordingStatus.Approved;
@@ -222,7 +222,7 @@ public sealed class WorkAfterTargetTests(DatabaseFixture fixture)
 
         var script = await CreateValidatedScriptAsync(
             $"[vi]Em [en]thu{Guid.NewGuid():N} [vi]lại lần nữa", "[vi]Em thu lại lần nữa",
-            ScriptDomain.ItTechnology, speaker.UserId);
+            "ItTechnology", speaker.UserId);
 
         // Bản CS cũ trượt QC — KHÔNG nằm trong task; speaker thu lại thành _t2 đang chờ duyệt.
         var dead = await CreateRecordingAsync(script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching);
@@ -289,7 +289,7 @@ public sealed class WorkAfterTargetTests(DatabaseFixture fixture)
 
         var script = await CreateValidatedScriptAsync(
             $"[vi]Em [en]huy{Guid.NewGuid():N} [vi]rồi", "[vi]Em bị huỷ rồi",
-            ScriptDomain.ItTechnology, speaker.UserId);
+            "ItTechnology", speaker.UserId);
 
         Db.TaskScripts.Add(new TaskScript
         {
@@ -369,7 +369,7 @@ public sealed class WorkAfterTargetTests(DatabaseFixture fixture)
         {
             var script = await CreateValidatedScriptAsync(
                 $"[vi]Em [en]h1{Guid.NewGuid():N} [vi]đọc", "[vi]Em đọc câu này",
-                ScriptDomain.ItTechnology, speaker1.UserId);
+                "ItTechnology", speaker1.UserId);
 
             var recording = await CreateRecordingAsync(script.ScriptId, speaker1.UserId, variant);
             recording.Status = status;
@@ -381,7 +381,7 @@ public sealed class WorkAfterTargetTests(DatabaseFixture fixture)
         {
             var script = await CreateValidatedScriptAsync(
                 $"[vi]Em [en]h2{Guid.NewGuid():N} [vi]đọc", "[vi]Em đọc câu này",
-                ScriptDomain.ItTechnology, speaker2.UserId);
+                "ItTechnology", speaker2.UserId);
 
             var recording = await CreateRecordingAsync(script.ScriptId, speaker2.UserId, SentenceVariant.CodeSwitching);
             recording.Status = status;

@@ -6,7 +6,7 @@ namespace CodeSwitchLabel.Services.Dtos;
 public record WaveDto(
     long WaveId,
     string WaveName,
-    ScriptDomain Domain,
+    string Domain,
     int TargetQty,
     DateOnly StartDate,
     DateOnly EndDate,
@@ -20,7 +20,7 @@ public record WaveDto(
 public record WaveListItemDto(
     long WaveId,
     string WaveName,
-    ScriptDomain Domain,
+    string Domain,
     int TargetQty,
     DateOnly StartDate,
     DateOnly EndDate,
@@ -39,7 +39,7 @@ public record CreateWaveRequest
 
     /// <summary>Chủ đề của cả đợt; chỉ nhiệm vụ cùng chủ đề mới gắn vào được.</summary>
     [Required(ErrorMessage = "Phải chọn chủ đề (domain).")]
-    public ScriptDomain? Domain { get; init; }
+    public string? Domain { get; init; }
 
     /// <summary>Chỉ tiêu cặp câu cho cả chiến dịch; lược đồ giới hạn 2000..5000.</summary>
     [Required(ErrorMessage = "Phải đặt chỉ tiêu.")]
@@ -63,7 +63,7 @@ public record UpdateWaveRequest
     /// Đổi chủ đề chỉ được khi đợt chưa có task khác chủ đề — database chặn,
     /// vì mọi task đang gắn đều phải cùng chủ đề với đợt.
     /// </summary>
-    public ScriptDomain? Domain { get; init; }
+    public string? Domain { get; init; }
 
     [Range(2000, 5000, ErrorMessage = "Chỉ tiêu chiến dịch phải từ 2000 đến 5000 cặp câu.")]
     public int? TargetQty { get; init; }

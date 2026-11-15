@@ -46,6 +46,18 @@ export const adminService = {
     const res = await httpClient.get("/api/config/topics");
     return res.data;
   },
+  createTopic: async (name) => {
+    const res = await httpClient.post("/api/admin/domains", { name });
+    return res.data;
+  },
+  updateTopic: async (code, name) => {
+    const res = await httpClient.put(`/api/admin/domains/${encodeURIComponent(code)}`, { name });
+    return res.data;
+  },
+  deleteTopic: async (code) => {
+    const res = await httpClient.delete(`/api/admin/domains/${encodeURIComponent(code)}`);
+    return res.data;
+  },
 
   // 5. Quản lý Scripts (Văn bản)
   getTexts: async (params) => {
@@ -56,9 +68,12 @@ export const adminService = {
     const res = await httpClient.post("/api/scripts", data);
     return res.data;
   },
-  importScripts: async (file) => {
+  importScripts: async (file, domain) => {
     const formData = new FormData();
     formData.append("file", file);
+    if (domain) {
+      formData.append("domain", domain);
+    }
     const res = await httpClient.post("/api/scripts/import", formData, {
       headers: {
         "Content-Type": "multipart/form-data"
@@ -82,6 +97,11 @@ export const adminService = {
   // 6. Quản lý Recordings (Bản thu)
   getRecordings: async (params) => {
     const res = await httpClient.get("/api/recordings", { params });
+    return res.data;
+  },
+  // Cặp bản ghi cho Admin: trạng thái cặp do BE chốt (GET /api/admin/recordings)
+  getAdminRecordingPairs: async (params) => {
+    const res = await httpClient.get("/api/admin/recordings", { params });
     return res.data;
   },
   getAudioUrl: async (id) => {

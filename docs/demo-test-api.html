@@ -150,7 +150,7 @@ body.short .act.extra{display:none}
       <tr><td>Set Target &amp; Deadline</td><td><span class="pill done">Xong</span></td><td>Chỉ tiêu thu âm đếm theo cặp câu. Sửa được về sau; nâng chỉ tiêu thì task tự mở lại.</td></tr>
       <tr><td>Monitor Progress</td><td><span class="pill done">Xong</span></td><td>Lọc task quá hạn, chi tiết từng task, tổng hợp theo người nhận.</td></tr>
       <tr><td>Reassign Tasks</td><td><span class="pill done">Xong</span></td><td>Giao sang người khác, lượt giao cũ giữ lại trong lịch sử.</td></tr>
-      <tr><td class="actor" rowspan="6">Admin</td><td>Manage Text Data</td><td><span class="pill part">Một phần</span></td><td>Nhập file <code>input_text.json</code>, thêm từng cặp, tìm và lọc. API đã nhận thêm file <code>.txt</code> kèm <code>Domain</code> và LLM gán nhãn, nhưng giao diện chưa nối. Chưa ẩn hay khôi phục được câu đã bị loại trên UI.</td></tr>
+      <tr><td class="actor" rowspan="6">Admin</td><td>Manage Text Data</td><td><span class="pill part">Một phần</span></td><td>Nhập file <code>.txt</code> kèm chọn chủ đề, thêm/sửa từng cặp, tìm và lọc theo chủ đề. API vẫn nhận <code>.json</code>; chủ đề quản lý động ở màn Topic Config. Chưa ẩn hay khôi phục được câu đã bị loại trên UI.</td></tr>
       <tr><td>Manage Users &amp; Roles</td><td><span class="pill done">Xong</span></td><td>Tạo tài khoản kèm mật khẩu tạm, khoá, đổi vai, cấp lại mật khẩu. Có hiệu lực ngay.</td></tr>
       <tr><td>Manage Recordings &amp; Dataset</td><td><span class="pill part">Một phần</span></td><td>Xem, lọc, nghe bản ghi; tải ZIP các cặp đã chọn qua <code>POST /api/datasets/export</code>. Chưa có giao diện tạo/phát hành dataset.</td></tr>
       <tr><td>View Dashboard &amp; Statistics</td><td><span class="pill done">Xong</span></td><td>Tổng số câu, số bản đạt và bị từ chối, tổng thời lượng đã duyệt, số người đọc và người duyệt.</td></tr>
@@ -163,7 +163,7 @@ body.short .act.extra{display:none}
 <section id="noi-bat">
   <h2>Điểm kỹ thuật nổi bật</h2>
   <ul class="points">
-    <li><b>Database tự giữ luật.</b> Lược đồ nhóm chốt có 30 trigger: chốt đa số sau ba lượt duyệt, chặn tự duyệt, lỗi nội dung đưa câu về duyệt lại, tự ghi nhật ký kèm người thao tác. Backend không tự đặt trạng thái bản ghi: ghi lượt duyệt rồi đọc lại kết quả.</li>
+    <li><b>Database tự giữ luật.</b> Lược đồ nhóm chốt có 33 trigger: chốt đa số sau ba lượt duyệt, chặn tự duyệt, lỗi nội dung đưa câu về duyệt lại, tự ghi nhật ký kèm người thao tác. Backend không tự đặt trạng thái bản ghi: ghi lượt duyệt rồi đọc lại kết quả.</li>
     <li><b>Ba lượt duyệt mù.</b> Không ai thấy ý kiến người khác khi bản ghi chưa chốt, kể cả qua API lịch sử. Hai người bấm cùng lúc thì khoá hàng bằng <code>SELECT … FOR UPDATE</code> và so vòng client đã thấy (<code>expectedRound</code>): người đến sau nhận <code>409 round_changed</code>.</li>
     <li><b>Âm thanh.</b> Nhận file trình duyệt ghi ra (WebM, M4A, WAV), ffmpeg chuyển sang WAV 16 kHz mono, đo thời lượng trên file đã chuyển rồi kiểm tra theo ngưỡng cấu hình. File nằm trong MinIO, người nghe nhận link tạm 15 phút.</li>
     <li><b>Task tự chạy trạng thái</b> InProgress → Completed (hoặc Cancelled); đợt tự tính Open → InProgress → Completed theo task. Chỉ tiêu thu âm đếm theo cặp câu: một cặp chỉ xong khi cả hai bản được duyệt đạt.</li>
@@ -177,7 +177,7 @@ body.short .act.extra{display:none}
     <div class="idrow" role="group" aria-label="Cấu tạo mã cặp câu s_211000007">
       <div class="seg"><b>s_</b><span>Cặp câu</span></div>
       <div class="seg key"><b>2</b><span>Số từ tiếng Anh</span></div>
-      <div class="seg key"><b>1</b><span>Chủ đề: 1 IT/Technology, 2 Education, 3 Daily Life</span></div>
+      <div class="seg key"><b>1</b><span>Chủ đề: chữ số 1–9 lấy từ bảng <code>domain</code> (seed: 1 IT, 2 giáo dục, 3 đời sống)</span></div>
       <div class="seg key"><b>1</b><span>Quan hệ: 1 dịch nghĩa, 2 tên riêng</span></div>
       <div class="seg"><b>000007</b><span>Số thứ tự toàn kho, tăng dần</span></div>
     </div>
@@ -208,10 +208,10 @@ body.short .act.extra{display:none}
     <thead><tr><th>Phần</th><th>Công nghệ</th><th>Dùng để</th></tr></thead>
     <tbody>
       <tr><td>Nền tảng</td><td>.NET 10 LTS · ASP.NET Core Web API · C# 14</td><td>REST API, tách 3 tầng Api → Services → Repositories. Được hỗ trợ tới 14/11/2028</td></tr>
-      <tr><td>Database</td><td>PostgreSQL 16</td><td>Lược đồ nhóm chốt <code>docs/codeswitchlabel.sql</code>: 25 bảng (+ partition <code>audit_log_default</code>), 25 enum, 30 trigger, 7 view, 28 hàm. Tự chạy khi tạo database, không dùng migration</td></tr>
+      <tr><td>Database</td><td>PostgreSQL 16</td><td>Lược đồ nhóm chốt <code>docs/codeswitchlabel.sql</code>: 27 bảng (+ partition <code>audit_log_default</code>), 25 enum, 33 trigger, 7 view, 29 hàm. Tự chạy khi tạo database; nâng cấp bằng migration V2..V29</td></tr>
       <tr><td>ORM</td><td>Entity Framework Core 10 · Npgsql 10</td><td>Ánh xạ bảng và enum của lược đồ, tên cột snake_case</td></tr>
       <tr><td>Xác thực</td><td>JWT Bearer · BCrypt.Net-Next 4.2</td><td>Đăng nhập, phân quyền 4 vai, thu hồi quyền ngay khi khoá tài khoản</td></tr>
-      <tr><td>Tài liệu API</td><td>Swagger · Swashbuckle 10.2</td><td>113 endpoint chia 13 controller, chú thích tiếng Việt từng endpoint</td></tr>
+      <tr><td>Tài liệu API</td><td>Swagger · Swashbuckle 10.2</td><td>122 endpoint chia 15 controller, chú thích tiếng Việt từng endpoint</td></tr>
       <tr><td>Lưu file</td><td>MinIO · AWSSDK.S3</td><td>Lưu âm thanh theo chuẩn S3; sau này đổi sang AWS S3 chỉ cần sửa cấu hình</td></tr>
       <tr><td>Âm thanh</td><td>ffmpeg / ffprobe</td><td>Chuyển về WAV 16 kHz mono, đo thời lượng</td></tr>
       <tr><td>Kiểm thử</td><td>xunit.v3</td><td>Unit + integration test cho luật duyệt, luật task, nhãn ngôn ngữ, âm thanh, token. Kịch bản đầu–cuối chính là trang này</td></tr>
@@ -300,7 +300,7 @@ body.short .act.extra{display:none}
     <li><b>Các ngưỡng do nhóm đề xuất</b>, chưa được duyệt: bản ghi dài 1–30 giây. Hai tham số khoảng lặng đầu/cuối có trong lược đồ nhưng hệ thống chưa đo được.</li>
     <li><b>Đồng ý cho dùng dữ liệu.</b> Có cần người đọc đồng ý trước khi thu không? Hệ thống lưu giọng nói, năm sinh, tỉnh.</li>
     <li><b>Thông báo.</b> Có cần báo cho người đọc khi bản ghi bị từ chối không? Hiện người đọc tự xem lý do trong danh sách bản ghi của mình.</li>
-    <li><b>Còn phải làm:</b> giao diện cho ba nút xử lý của yêu cầu 2.4 (duyệt, từ chối âm thanh, bỏ cặp), nối UI nhập <code>.txt</code> + <code>Domain</code>, khôi phục câu bị loại trên UI, quản lý danh mục lý do trên giao diện.</li>
+    <li><b>Còn phải làm:</b> giao diện cho ba nút xử lý của yêu cầu 2.4 (duyệt, từ chối âm thanh, bỏ cặp), khôi phục câu bị loại trên UI, quản lý danh mục lý do trên giao diện, ô vùng miền trong hồ sơ và màn chạy máy duyệt.</li>
   </ul>
 </section>
 </div>

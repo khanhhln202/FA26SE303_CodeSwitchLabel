@@ -25,6 +25,10 @@ public record ImportScriptItem
 
     [JsonPropertyName("alignment")]
     public List<AlignmentItem> Alignment { get; init; } = [];
+
+    /// <summary>Cảnh báo lệch nghĩa do LLM sinh khi nhập .txt; file JSON không gửi trường này.</summary>
+    [JsonIgnore]
+    public string? SemanticWarning { get; init; }
 }
 
 public record AlignmentItem
@@ -77,7 +81,7 @@ public record ScriptListItemDto(
     string ViContent,
     string ViPlain,
     ScriptStatus Status,
-    ScriptDomain Domain,
+    string Domain,
     int WordCount,
     int EnWordCount,
     DateTimeOffset CreatedAt);
@@ -91,14 +95,15 @@ public record ScriptDetailDto(
     string ViPlain,
     IReadOnlyList<AlignmentItem> Alignment,
     ScriptStatus Status,
-    ScriptDomain Domain,
+    string Domain,
     int WordCount,
     int EnWordCount,
     long CreatedBy,
     long? ImportBatchId,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    IReadOnlyList<ScriptReviewDto> Reviews);
+    IReadOnlyList<ScriptReviewDto> Reviews,
+    string? SemanticWarning);
 
 public record ScriptReviewDto(
     long ScriptReviewId,
@@ -117,11 +122,13 @@ public record NextScriptDto(
     string CsPlain,
     string ViContent,
     string ViPlain,
-    ScriptDomain Domain,
+    string Domain,
     int WordCount,
     int EnWordCount,
     IReadOnlyList<SentenceVariant> RemainingVariants,
-    RecordingGuidanceDto Guidance);
+    RecordingGuidanceDto Guidance,
+    IReadOnlyList<AlignmentItem> Alignment,
+    string? SemanticWarning);
 
 /// <param name="MaxLeadingSilenceSec">Khoảng lặng đầu tối đa; vượt mức này là trượt kiểm tra tự động.</param>
 /// <param name="MaxTrailingSilenceSec">Khoảng lặng cuối tối đa; vượt mức này là trượt kiểm tra tự động.</param>
@@ -131,20 +138,42 @@ public record RecordingGuidanceDto(
     decimal MaxLeadingSilenceSec,
     decimal MaxTrailingSilenceSec);
 
+/// <summary>Cặp câu thô cần gán nhãn tự động — LLM nếu đã cấu hình, ngược lại dùng luật.</summary>
+public record AutoLabelRequest
+{
+    [Required(ErrorMessage = "Thiếu câu trộn Việt–Anh.")]
+    [StringLength(1000, MinimumLength = 3)]
+    public string CsRaw { get; init; } = string.Empty;
+
+    [Required(ErrorMessage = "Thiếu câu thuần Việt tương đương.")]
+    [StringLength(1000, MinimumLength = 3)]
+    public string ViRaw { get; init; } = string.Empty;
+}
+
+/// <summary>
+/// Gửi một trong hai dạng: cặp đã gắn nhãn (CsContent/ViContent + Alignment) hoặc cặp thô
+/// (CsRaw/ViRaw). Cặp thô thắng nếu gửi cả hai; khi đó backend tự gán nhãn và bỏ qua Alignment.
+/// </summary>
 public record CreateScriptRequest
 {
     /// <summary>Câu chen tiếng Anh, PHẢI có nhãn: [vi]Em nên [en]scan [vi]tài liệu này.</summary>
-    [Required(ErrorMessage = "Thiếu câu chen tiếng Anh.")]
     [StringLength(1000, MinimumLength = 3)]
-    public string CsContent { get; init; } = string.Empty;
+    public string? CsContent { get; init; }
 
     /// <summary>Câu thuần Việt tương đương, cũng có nhãn: [vi]Em nên quét tài liệu này.</summary>
-    [Required(ErrorMessage = "Thiếu câu thuần Việt tương đương.")]
     [StringLength(1000, MinimumLength = 3)]
-    public string ViContent { get; init; } = string.Empty;
+    public string? ViContent { get; init; }
+
+    /// <summary>Câu trộn Việt–Anh thô, chưa có nhãn. Gửi kèm ViRaw để backend tự gán nhãn.</summary>
+    [StringLength(1000, MinimumLength = 3)]
+    public string? CsRaw { get; init; }
+
+    /// <summary>Câu thuần Việt thô tương đương. Gửi kèm CsRaw để backend tự gán nhãn.</summary>
+    [StringLength(1000, MinimumLength = 3)]
+    public string? ViRaw { get; init; }
 
     [Required(ErrorMessage = "Phải chọn chủ đề.")]
-    public ScriptDomain? Domain { get; init; }
+    public string? Domain { get; init; }
 
     /// <summary>Quan hệ Anh–Việt, vào chữ số thứ ba của mã script. Bỏ trống là dịch trực tiếp.</summary>
     public ScriptRelation? Relation { get; init; }
@@ -224,7 +253,7 @@ public record ContributionReviewItemDto(
     string ScriptId,
     string CsContent,
     string ViContent,
-    ScriptDomain Domain,
+    string Domain,
     DateTimeOffset CreatedAt,
     ContributorDto Contributor,
     ContributionBlocker Blocker)
@@ -236,14 +265,14 @@ public record ContributionReviewItemDto(
 /// <param name="OnlyReviewable">true: bỏ qua câu đang nằm trong lô của người khác.</param>
 public record ContributionSearchRequest : PageRequest
 {
-    public ScriptDomain? Domain { get; init; }
+    public string? Domain { get; init; }
     public bool OnlyReviewable { get; init; }
 }
 
 public record ScriptSearchRequest : PageRequest
 {
     public ScriptStatus? Status { get; init; }
-    public ScriptDomain? Domain { get; init; }
+    public string? Domain { get; init; }
     public string? Keyword { get; init; }
 }
 

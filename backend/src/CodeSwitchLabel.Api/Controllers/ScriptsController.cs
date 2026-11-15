@@ -15,7 +15,7 @@ namespace CodeSwitchLabel.Api.Controllers;
 [Route("api/scripts")]
 [Tags(ApiTags.Scripts)]
 [Authorize]
-public class ScriptsController(IScriptService scriptService) : ControllerBase
+public class ScriptsController(IScriptService scriptService, ILabelingService labelingService) : ControllerBase
 {
     /// <summary>Tìm kiếm, lọc theo trạng thái và chủ đề, có phân trang.</summary>
     /// <remarks>
@@ -44,6 +44,8 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
     ///
     /// Hệ thống đếm số từ tiếng Anh từ nhãn — con số này đi vào **chữ số đầu của mã câu**
     /// nên phải nằm trong khoảng 1..9. Câu thuần Việt không được có nhãn [en] nào.
+    ///
+    /// Gửi cặp thô qua `csRaw`/`viRaw` thì backend tự gán nhãn và bỏ qua `alignment`.
     /// </remarks>
     [HttpPost]
     [Authorize(Roles = "Admin")]
@@ -67,6 +69,9 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
     /// Reviewer **không** dùng đường này: người vừa viết câu vừa duyệt câu là xung đột vai, cùng
     /// lý do hệ thống cấm tự duyệt bản ghi của chính mình. Màn hình duyệt câu đóng góp của
     /// Reviewer nằm ở `GET /api/reviewer/contributions`.
+    ///
+    /// Gửi cặp đã gắn nhãn (`csContent`/`viContent`/`alignment`) hoặc cặp thô
+    /// (`csRaw`/`viRaw`); với cặp thô, backend tự gán nhãn và bỏ qua `alignment` gửi kèm.
     /// </remarks>
     [HttpPost("contribute")]
     [Authorize(Roles = "Speaker")]
@@ -80,16 +85,32 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
         return CreatedAtAction(nameof(Get), new { id = created.ScriptId }, created);
     }
 
-    /// <summary>Admin sửa nội dung một cặp câu đang chờ duyệt — sửa bao nhiêu lần cũng được.</summary>
+    /// <summary>Gán nhãn [vi]/[en] và sinh alignment cho một cặp câu thô.</summary>
+    /// <remarks>
+    /// Dùng LLM nếu đã cấu hình `Llm:Endpoint`/`Model`; chưa cấu hình thì gán nhãn bằng luật.
+    /// Trả về câu đã chèn nhãn và alignment, sẵn sàng gửi vào luồng đóng góp hiện có.
+    /// </remarks>
+    // shortcut: Admin-only vì mỗi lần gọi có thể tốn quota LLM và chưa có UI nào cần cho role khác,
+    // mở lại kèm rate limit theo user khi có UI cho Speaker.
+    [HttpPost("auto-label")]
+    [Authorize(Roles = "Admin")]
+    [ProducesResponseType(typeof(LabeledPair), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ActionResult<LabeledPair>> AutoLabel(
+        [FromBody] AutoLabelRequest request, CancellationToken ct)
+        => Ok(await labelingService.AutoLabelAsync(
+            request.CsRaw.Trim(), request.ViRaw.Trim(), ct));
+
+    /// <summary>Admin sửa nội dung một cặp câu đang chờ duyệt hoặc đã sẵn sàng — sửa bao nhiêu lần cũng được.</summary>
     /// <remarks>
     /// Khác `POST /api/scripts/{id}/review` với `action: Edited`: đường đó **sửa xong là duyệt luôn**,
-    /// câu chuyển sang đã duyệt và không sửa tiếp được. Đường này chỉ đổi nội dung, câu **ở nguyên
-    /// trạng thái chờ duyệt**, nên Admin đổi đi đổi lại tới khi ưng rồi mới chốt bằng `action: Accepted`.
+    /// câu chuyển sang đã duyệt và không sửa tiếp được. Đường này chỉ đổi nội dung và **giữ nguyên
+    /// trạng thái**, nên câu đã sẵn sàng vẫn sửa được mà không phải duyệt lại.
     ///
     /// Ba thứ không đổi được vì chúng nằm trong mã câu: **số từ tiếng Anh**, **chủ đề** và
     /// **quan hệ Anh–Việt**. Muốn đổi thì loại câu này rồi tạo cặp mới.
     ///
-    /// - **409 `script_not_pending`** — câu đã duyệt, đã bị loại hoặc đã ngừng dùng.
+    /// - **409 `script_not_pending`** — câu đã bị loại hoặc đã ngừng dùng.
     /// - **409 `script_already_recorded`** — đã có bản ghi âm, sửa sẽ làm transcript lệch với âm thanh.
     /// - **422 `en_word_count_locked`** / **`relation_locked`** — bản sửa đổi thứ nằm trong mã câu.
     /// </remarks>
@@ -112,11 +133,13 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
     /// dòng sau là câu thuần Việt tương đương; mỗi câu kết thúc bằng dấu chấm. Dòng trống
     /// bị bỏ qua. Tối đa **100 cặp** mỗi file và bắt buộc gửi kèm trường `Domain`.
     /// Có cấu hình LLM (OpenAI-compatible) thì LLM chèn nhãn `[vi]`/`[en]` và sinh `alignment`;
-    /// chưa cấu hình thì backend gán nhãn bằng luật: đối chiếu các từ chung của hai câu để
-    /// lấy đoạn nghĩa tương ứng (có thể nhiều từ, ví dụ `email` → `thư điện tử`); đoạn không
-    /// đối chiếu được thì lấy theo vị trí, hết từ thì để trống cho người duyệt điền.
-    /// Cặp nào gán nhãn hỏng bị bỏ qua, không làm hỏng cả file: LLM lỗi có mã
-    /// `llm_failed`/`llm_parse_error`, luật lỗi có mã `invalid_text_format`/`invalid_language_tags`.
+    /// LLM lỗi hoặc trả kết quả không đọc được thì lùi về luật. Chưa cấu hình thì gán nhãn bằng
+    /// luật: từ ASCII là tiếng Việt khi là hư từ quen thuộc hoặc có trong từ điển âm tiết Việt
+    /// không dấu và cũng xuất hiện trong câu thuần Việt; nghĩa lấy bằng cách đối chiếu các từ
+    /// chung của hai câu (có thể nhiều từ, ví dụ `email` → `thư điện tử`); đoạn không đối chiếu
+    /// được thì lấy theo vị trí, hết từ thì để trống cho người duyệt điền.
+    /// Cặp nào gán nhãn hỏng bị bỏ qua, không làm hỏng cả file: luật lỗi có mã
+    /// `invalid_text_format`/`invalid_language_tags`.
     ///
     /// Mã câu **được sinh lại** theo đúng quy tắc của database: giữ ý nghĩa ba chữ số đầu
     /// (số từ tiếng Anh, chủ đề, quan hệ Anh–Việt) rồi cấp số thứ tự mới.
@@ -124,10 +147,9 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
     /// Câu hỏng **không làm hỏng cả file**: phần hợp lệ vẫn được nhập, phần bị loại nằm trong
     /// `skipped` kèm lý do.
     ///
-    /// Câu nhập vào nằm ở trạng thái **chờ duyệt nội dung**, KHÔNG tự động duyệt. Admin xem lại
-    /// từng câu rồi chốt: `PUT /api/scripts/{id}` để sửa (sửa bao nhiêu lần cũng được),
-    /// `POST /api/scripts/{id}/review` với `action: Rejected` để loại,
-    /// hoặc `action: Accepted` để đưa sang đã duyệt — sau bước đó thì câu bị khoá, không sửa nữa.
+    /// Câu nhập vào **vào thẳng trạng thái đã duyệt** kèm một lượt duyệt `Accepted` tự động của
+    /// chính Admin. Admin vẫn sửa được về sau bằng `PUT /api/scripts/{id}` (trạng thái giữ nguyên),
+    /// hoặc loại bằng `POST /api/scripts/{id}/review` với `action: Rejected`.
     /// </remarks>
     [HttpPost("import")]
     [Authorize(Roles = "Admin")]
@@ -179,7 +201,7 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
             return UnprocessableEntity(new ProblemDetails
             {
                 Status = StatusCodes.Status422UnprocessableEntity,
-                Title = "File .txt cần chọn chủ đề: IT/Technology, Education hoặc Daily Life.",
+                Title = "File .txt cần chọn chủ đề đang hoạt động.",
                 Type = "https://codeswitchlabel.local/errors/domain_required",
                 Extensions =
                 {
@@ -232,6 +254,8 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
     /// <summary>Duyệt nội dung một cặp câu: chấp nhận, sửa, hoặc từ chối.</summary>
     /// <remarks>
     /// Đây là use case "Review Text". Mỗi lượt duyệt ghi thành một dòng lịch sử riêng.
+    /// Chỉ **Admin** và **Reviewer** gọi được; Speaker báo lỗi hoặc đề xuất sửa câu qua
+    /// `POST /api/speaker/scripts/{scriptId}/proposals`.
     ///
     /// - **Edited** — bắt buộc gửi **cả hai** câu đã sửa; lược đồ chỉ cho sửa theo cặp.
     ///   Số từ tiếng Anh không được đổi vì nó nằm trong mã câu.
@@ -241,7 +265,7 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
     /// Cặp câu đã có bản ghi âm thì **không sửa nội dung được nữa**.
     /// </remarks>
     [HttpPost("{id}/review")]
-    [Authorize(Roles = "Admin,Speaker,Reviewer")]
+    [Authorize(Roles = "Admin,Reviewer")]
     [ProducesResponseType(typeof(ScriptDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
@@ -250,13 +274,13 @@ public class ScriptsController(IScriptService scriptService) : ControllerBase
         string id, [FromBody] ReviewScriptRequest request, CancellationToken ct)
         => Ok(await scriptService.ReviewAsync(id, User.GetUserId(), request, ct));
 
-    /// <summary>Xoá cứng một câu đang chờ duyệt.</summary>
+    /// <summary>Xoá cứng một câu đang chờ duyệt hoặc đã sẵn sàng.</summary>
     /// <remarks>
-    /// Chỉ câu `PendingValidation` mới xoá cứng được. Câu đã duyệt trả **409 `script_not_pending`**;
-    /// câu đã có bản ghi âm trả **409 `script_already_recorded`** — trường hợp đó dùng
-    /// `POST /api/recordings/{id}/discard-pair` để xoá mềm cả câu lẫn audio.
+    /// Nhận câu `PendingValidation` và `Validated`; câu đã bị loại/ngừng dùng trả
+    /// **409 `script_not_pending`**. Câu đã có bản ghi âm trả **409 `script_already_recorded`** —
+    /// trường hợp đó dùng `POST /api/recordings/{id}/discard-pair` để xoá mềm cả câu lẫn audio.
     ///
-    /// Xoá cứng kéo theo lịch sử duyệt và đề xuất của câu; dữ liệu không khôi phục được.
+    /// Xoá cứng kéo theo lịch sử duyệt, đề xuất và mục trong task của câu; dữ liệu không khôi phục được.
     /// </remarks>
     [HttpDelete("{id}")]
     [Authorize(Roles = "Admin")]

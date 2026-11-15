@@ -21,7 +21,7 @@ public record TaskRow(
     long? WaveId,
     string? WaveName,
     TaskType TaskType,
-    ScriptDomain Domain,
+    string Domain,
     string? Description,
     WorkTaskStatus Status,
     int TargetQty,
@@ -107,7 +107,7 @@ public interface ITaskRepository
     /// <summary><paramref name="sort"/> rỗng (Field = null) là thứ tự mặc định.</summary>
     /// <param name="ownerId">chỉ trả task do người này tạo hoặc đợt do người này phụ trách (không phải Admin).</param>
     Task<(IReadOnlyList<TaskRow> Items, int Total)> SearchAsync(
-        TaskType? type, WorkTaskStatus? status, long? assigneeId, ScriptDomain? domain, bool? overdue,
+        TaskType? type, WorkTaskStatus? status, long? assigneeId, string? domain, bool? overdue,
         DateTimeOffset now, int page, int pageSize, SortSpec<TaskSortField> sort,
         long? ownerId = null, bool isAdmin = false, CancellationToken ct = default);
 
@@ -209,7 +209,7 @@ public interface ITaskRepository
     Task<List<Recording>> GetRecordingsWithReviewsAsync(string[] ids, CancellationToken ct = default);
 
     Task<List<string>> FindScriptCandidatesAsync(
-        long taskId, long[] assigneeIds, ScriptDomain? domain, int count, string[] excludedIds,
+        long taskId, long[] assigneeIds, string? domain, int count, string[] excludedIds,
         CancellationToken ct = default);
 
     Task<List<string>> FindRecordingCandidatesAsync(
@@ -221,7 +221,7 @@ public interface ITaskRepository
     /// Nhiều Speaker có thể nhận cùng câu; mỗi Speaker chỉ nhận câu mình chưa thu.
     /// </summary>
     Task<List<string>> GetRecordableScriptIdsByDomainAsync(
-        ScriptDomain domain, long speakerId, int count, CancellationToken ct = default);
+        string domain, long speakerId, int count, CancellationToken ct = default);
 
     /// <summary>
     /// Mục còn chờ trong task mà người này KHÔNG làm được nữa. Với task thu âm trả
@@ -243,7 +243,7 @@ public interface ITaskRepository
     /// dùng cho màn hình "câu tiếp theo" khi làm trong task.
     /// </summary>
     Task<List<string>> GetAssignedScriptIdsAsync(
-        long speakerId, long taskId, int count, CancellationToken ct = default);
+        long speakerId, long taskId, int count, string[] excludedIds, CancellationToken ct = default);
 
     Task<(int Submitted, int Approved)> GetSpeakerTotalsAsync(long speakerId, CancellationToken ct = default);
 
@@ -325,7 +325,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
             .FirstOrDefaultAsync(ct);
 
     public async Task<(IReadOnlyList<TaskRow> Items, int Total)> SearchAsync(
-        TaskType? type, WorkTaskStatus? status, long? assigneeId, ScriptDomain? domain, bool? overdue,
+        TaskType? type, WorkTaskStatus? status, long? assigneeId, string? domain, bool? overdue,
         DateTimeOffset now, int page, int pageSize, SortSpec<TaskSortField> sort,
         long? ownerId = null, bool isAdmin = false, CancellationToken ct = default)
     {
@@ -333,7 +333,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
 
         if (type.HasValue) query = query.Where(t => t.TaskType == type.Value);
         if (status.HasValue) query = query.Where(t => t.Status == status.Value);
-        if (domain.HasValue) query = query.Where(t => t.Domain == domain.Value);
+        if (domain is not null) query = query.Where(t => t.Domain == domain);
 
         // Task Manager (không phải Admin) chỉ thấy task do mình tạo, hoặc task trong đợt
         // mình phụ trách. Admin thấy hết.
@@ -767,14 +767,14 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
             .ToListAsync(ct);
 
     public Task<List<string>> FindScriptCandidatesAsync(
-        long taskId, long[] assigneeIds, ScriptDomain? domain, int count, string[] excludedIds,
+        long taskId, long[] assigneeIds, string? domain, int count, string[] excludedIds,
         CancellationToken ct = default)
     {
         var query = db.Scripts
             .AsNoTracking()
             .Where(s => s.Status == ScriptStatus.Validated);
 
-        if (domain.HasValue) query = query.Where(s => s.Domain == domain.Value);
+        if (domain is not null) query = query.Where(s => s.Domain == domain);
         if (excludedIds.Length > 0) query = query.Where(s => !excludedIds.Contains(s.ScriptId));
 
         if (assigneeIds.Length > 0)
@@ -859,7 +859,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
     }
 
     public Task<List<string>> GetRecordableScriptIdsByDomainAsync(
-        ScriptDomain domain, long speakerId, int count, CancellationToken ct = default) =>
+        string domain, long speakerId, int count, CancellationToken ct = default) =>
         db.Scripts
             .AsNoTracking()
             .Where(s => s.Status == ScriptStatus.Validated && s.Domain == domain)
@@ -880,20 +880,28 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
             .ToListAsync(ct);
 
     public async Task<List<string>> GetAssignedScriptIdsAsync(
-        long speakerId, long taskId, int count, CancellationToken ct = default)
+        long speakerId, long taskId, int count, string[] excludedIds, CancellationToken ct = default)
     {
         var waveId = await db.WorkTasks.AsNoTracking()
             .Where(t => t.TaskId == taskId)
             .Select(t => t.WaveId)
             .FirstOrDefaultAsync(ct);
 
-        return await db.TaskScripts.AsNoTracking()
+        var query = db.TaskScripts.AsNoTracking()
             .Where(ts => ts.Status == TaskScriptStatus.Pending)
             .Where(ts => ts.Task.TaskType == TaskType.Recording &&
                          ts.Task.Status != WorkTaskStatus.Cancelled)
             .Where(ts => (ts.AssigneeUserId == null || ts.AssigneeUserId == speakerId) &&
                          (ts.TaskId == taskId ||
-                          (waveId != null && ts.Task.WaveId == waveId)))
+                          (waveId != null && ts.Task.WaveId == waveId)));
+
+        // Câu Speaker vừa bỏ qua trong phiên: không trả lại trong lần lấy kế tiếp.
+        if (excludedIds.Length > 0)
+        {
+            query = query.Where(ts => !excludedIds.Contains(ts.ScriptId));
+        }
+
+        return await query
             // Speaker đã có đủ hai bản chờ duyệt/đạt thì câu này không còn việc. Lọc ngay
             // trong SQL để các mục đầu không chiếm hết hạn mức lấy câu kế tiếp.
             .Where(ts => !(

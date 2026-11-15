@@ -43,6 +43,12 @@ public class SpeakerProfile
     public short? BirthYear { get; set; }
     public string? Province { get; set; }
 
+    /// <summary>
+    /// Vùng miền giọng nói. Không bắt buộc; hồ sơ tạo trước V27 không có giá trị.
+    /// Độc lập với <see cref="Province"/> — xem <see cref="SpeakerRegion"/>.
+    /// </summary>
+    public SpeakerRegion? Region { get; set; }
+
     /// <summary>Điểm IELTS quy đổi, từ 0.0 đến 9.0.</summary>
     public decimal? EnglishLevel { get; set; }
 
@@ -65,7 +71,7 @@ public class SpeakerProfile
 public class UserDomain
 {
     public long UserId { get; set; }
-    public ScriptDomain Domain { get; set; }
+    public string Domain { get; set; } = string.Empty;
     public DateTimeOffset AssignedAt { get; set; }
 
     public AppUser User { get; set; } = null!;

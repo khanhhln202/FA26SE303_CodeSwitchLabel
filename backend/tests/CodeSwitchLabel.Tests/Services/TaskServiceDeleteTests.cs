@@ -27,6 +27,7 @@ public sealed class TaskServiceDeleteTests
             Mock.Of<IWaveRepository>(),
             Mock.Of<IScriptQueueRepository>(),
             Mock.Of<ITaskProgressTracker>(),
+            Mock.Of<IDomainService>(),
             Mock.Of<ISystemConfigService>(),
             TimeProvider.System);
     }

@@ -12,7 +12,10 @@ namespace CodeSwitchLabel.Api.Controllers;
 [Route("api/recordings")]
 [Tags(ApiTags.Recordings)]
 [Authorize]
-public class RecordingsController(IRecordingService recordingService, IReviewService reviewService)
+public class RecordingsController(
+    IRecordingService recordingService,
+    IReviewService reviewService,
+    IAdminRecordingService adminRecordings)
     : ControllerBase
 {
     /// <summary>Nộp một bản ghi âm cho một biến thể của cặp câu.</summary>
@@ -132,6 +135,18 @@ public class RecordingsController(IRecordingService recordingService, IReviewSer
     public async Task<ActionResult<DiscardPairResult>> DiscardPair(
         string id, [FromBody] DiscardPairRequest request, CancellationToken ct)
         => Ok(await reviewService.DiscardPairAsync(id, User.GetUserId(), request, ct));
+
+    /// <summary>
+    /// Admin xem bản ghi theo CẶP; trạng thái cặp do BE chốt bằng cùng luật với lịch sử
+    /// Reviewer/Speaker: một bản bị từ chối thì cả cặp từ chối; đủ cả hai bản đạt mới là đạt;
+    /// còn lại là đang chờ. Mỗi biến thể chỉ lấy lần thu MỚI NHẤT; lượt duyệt trả kèm tên người duyệt.
+    /// </summary>
+    [HttpGet("/api/admin/recordings")]
+    [Authorize(Roles = "Admin")]
+    [ProducesResponseType(typeof(PagedResult<AdminRecordingPairDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResult<AdminRecordingPairDto>>> AdminPairs(
+        [FromQuery] PageRequest query, CancellationToken ct)
+        => Ok(await adminRecordings.GetPairsAsync(query, ct));
 
     /// <summary>Speaker chỉ được đụng tới bản ghi của mình; các vai khác thì không giới hạn.</summary>
     private long? OwnerFilter() => User.IsInRole("Speaker") ? User.GetUserId() : null;

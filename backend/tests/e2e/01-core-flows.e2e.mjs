@@ -124,9 +124,9 @@ record('2.2', 'Mã sinh đúng quy tắc: 2 từ tiếng Anh, chủ đề IT, qu
   { status: 200, check: (b) => /^s_211\d{6}$/.test(b.scriptId ?? '') }, (b) => b);
 
 r = record('2.3', 'Chi tiết câu vừa nhập', await call(T.admin, 'GET', `/api/scripts/${ID.imported}`),
-  // câu nhập từ file vào thẳng hàng đợi chờ duyệt (PendingValidation), không tự
-  // sang Validated như trước — người nhập không tự duyệt được câu của chính mình.
-  { status: 200, check: (b) => b.status === 'PendingValidation' && b.enWordCount === 2 && b.alignment.length === 2 },
+  // Admin nhập file xong là câu vào thẳng Validated, kèm lượt duyệt Accepted tự động của chính Admin.
+  { status: 200, check: (b) => b.status === 'Validated' && b.reviews.length === 1
+        && b.enWordCount === 2 && b.alignment.length === 2 },
   (b) => ({ status: b.status, wordCount: b.wordCount, enWordCount: b.enWordCount, csPlain: b.csPlain, alignment: b.alignment.map((a) => `${a.source}→${a.target}`) }));
 
 record('2.4', 'Nhập lại đúng file đó', await call(T.admin, 'POST', '/api/scripts/import', jsonForm('input_text.json', sample)),
@@ -149,7 +149,6 @@ r = record('2.7', 'Admin thêm tay một cặp câu',
     domain: 'DailyLife',
     alignment: [{ source: 'link', target: 'đường dẫn' }]
     // Câu Admin thêm tay vào thẳng Validated, kèm một lượt duyệt Accepted tự động của chính Admin.
-    // Admin vẫn phải được phân đúng chủ đề của câu, nếu không nhận 422 reviewer_domain_required.
   }), { status: 201, check: (b) => b.status === 'Validated' && /^s_13\d{7}$/.test(b.scriptId)
         && b.reviews.length === 1 && b.reviews[0].action === 'Accepted' },
   (b) => ({ scriptId: b.scriptId, status: b.status, enWordCount: b.enWordCount }));
@@ -157,10 +156,19 @@ ID.manual = r.body?.scriptId;
 
 // ------------------------------------------------------------ duyệt nội dung
 console.log('\n== Duyệt nội dung (Review Text) ==');
-// Luật mới: một cặp câu chỉ sang Validated khi người duyệt được phân đúng chủ đề của câu đó.
-// Chủ đề chỉ phân được cho vai Reviewer, nên Speaker và Admin không chốt được câu nào.
+// Câu Speaker đóng góp vẫn chờ duyệt; một cặp chỉ sang Validated khi người duyệt được
+// phân đúng chủ đề của câu đó. Chủ đề chỉ phân được cho vai Reviewer.
+r = record('3.0', 'speaker1 đóng góp một câu mới — chờ duyệt',
+  await call(T.speaker1, 'POST', '/api/scripts/contribute', {
+    csContent: '[vi]Mình cần [en]review [vi]lại đoạn mã này nhé.',
+    viContent: '[vi]Mình cần xem lại đoạn mã này nhé.',
+    domain: 'ItTechnology',
+    alignment: [{ source: 'review', target: 'xem lại' }]
+  }), { status: 201, check: (b) => b.status === 'PendingValidation' }, (b) => ({ scriptId: b.scriptId, status: b.status }));
+ID.contributed = r.body?.scriptId;
+
 record('3.1a', 'speaker1 duyệt câu nhưng chưa được phân chủ đề',
-  await call(T.speaker1, 'POST', `/api/scripts/${ID.imported}/review`, { action: 'Accepted', comment: 'Câu tự nhiên' }),
+  await call(T.speaker1, 'POST', `/api/scripts/${ID.contributed}/review`, { action: 'Accepted', comment: 'Câu tự nhiên' }),
   { status: 422, code: 'reviewer_domain_required' });
 
 record('3.1b', 'Không phân chủ đề cho Speaker được',
@@ -171,9 +179,9 @@ record('3.1c', 'Chủ đề của reviewer do seed đặt sẵn',
   await call(T.admin, 'GET', `/api/users/${ID.reviewer}/domains`),
   { status: 200, check: (b) => b.includes('ItTechnology') }, (b) => b);
 
-record('3.1', 'reviewer đúng chủ đề duyệt câu sang Validated',
-  await call(T.reviewer, 'POST', `/api/scripts/${ID.imported}/review`, { action: 'Accepted', comment: 'Câu tự nhiên' }),
-  // Một lượt duyệt: trước đợt hàng đợi, lúc nhập file đã có sẵn một lượt tự động của Admin.
+record('3.1', 'reviewer đúng chủ đề duyệt câu đóng góp sang Validated',
+  await call(T.reviewer, 'POST', `/api/scripts/${ID.contributed}/review`, { action: 'Accepted', comment: 'Câu tự nhiên' }),
+  // Câu đóng góp chưa có lượt duyệt nào, nên sau bước này chỉ có đúng một lượt.
   { status: 200, check: (b) => b.status === 'Validated' && b.reviews.length === 1 },
   (b) => ({ status: b.status, reviews: b.reviews.map((v) => v.action) }));
 

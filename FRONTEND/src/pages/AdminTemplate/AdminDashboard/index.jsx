@@ -66,116 +66,23 @@ export default function AdminDashboard() {
         setRejectionReasonsApiMap(map);
       }
 
-      // TẢI TẤT CẢ BẢN THU ÂM VÀ THỰC HIỆN GỘP CẶP ĐỒNG BỘ 100% VỚI ADMINRECORDINGS
-      let allItems = [];
+      // Tải cặp bản ghi từ BE: trạng thái cặp đã được BE chốt, FE chỉ đếm.
+      let allPairs = [];
       let page = 1;
       let totalPages = 1;
       do {
-        const recRes = await adminService.getRecordings({ page, pageSize: 100 });
-        const items = recRes.items || recRes || [];
-        allItems = [...allItems, ...items];
+        const recRes = await adminService.getAdminRecordingPairs({ page, pageSize: 100 });
+        allPairs = [...allPairs, ...(recRes.items || [])];
         totalPages = recRes.totalPages || 1;
         page++;
       } while (page <= totalPages);
 
-      const rawRecordings = await Promise.all(
-        allItems.map(async (r) => {
-          const recId = r.recordingId || r.id;
-          const sId = r.scriptId || r.textId;
-
-          let reviews = [];
-          try {
-            const revsRes = await adminService.getRecordingReviews(recId);
-            if (Array.isArray(revsRes)) {
-              reviews = revsRes;
-            }
-          } catch (e) {
-            console.warn("Lỗi tải reviews:", recId, e);
-          }
-
-          const variantRaw = r.sentenceVariant !== undefined ? r.sentenceVariant : r.variant;
-          const variantStr = String(variantRaw || r.language || r.type || "").toLowerCase();
-
-          const isCs = variantStr.includes("codeswitching") || variantStr === "1" || variantStr.includes("cs") || variantStr.includes("vi-en");
-          const isVi = variantStr.includes("purevietnamese") || variantStr === "2" || (variantStr.includes("vi") && !variantStr.includes("vi-en"));
-
-          return {
-            recId,
-            scriptId: sId || "N/A",
-            speakerId: r.speakerId,
-            taskId: r.taskId || r.taskTitle || "Thu âm 20",
-            isCs,
-            isVi,
-            durationSec: r.durationSec || 0,
-            status: parseBeRecordingStatus(r.recordingStatus || r.status),
-            reviews
-          };
-        })
-      );
-
-      // GỘP CẶP CHUẨN THEO SCRIPT + SPEAKER + TASK
-      const groupedMap = new Map();
-
-      rawRecordings.forEach((rec) => {
-        const groupKey = `${rec.scriptId}_${rec.speakerId}_${rec.taskId}`;
-
-        if (!groupedMap.has(groupKey)) {
-          groupedMap.set(groupKey, {
-            id: groupKey,
-            rawIds: [],
-            durationSec: 0,
-            rawStatuses: [],
-            reviews: []
-          });
-        }
-
-        const group = groupedMap.get(groupKey);
-        if (!group.rawIds.includes(rec.recId)) {
-          group.rawIds.push(rec.recId);
-        }
-
-        group.durationSec += rec.durationSec || 0;
-        group.rawStatuses.push(rec.status);
-        if (Array.isArray(rec.reviews) && rec.reviews.length > 0) {
-          rec.reviews.forEach(rv => group.reviews.push({ ...rv, recId: rec.recId }));
-        }
-      });
-
-      // TÍNH KẾT QUẢ CUỐI CÙNG CHO TỪNG CẶP BẢN THU
-      const pairedRecordings = Array.from(groupedMap.values()).map((pair) => {
-        let finalStatus = "Pending";
-        const reviewsList = pair.reviews;
-
-        if (reviewsList.length > 0) {
-          const approveVotes = reviewsList.filter(r => r.decision === "Approved" || String(r.status).toLowerCase().includes("approved")).length;
-          const rejectVotes = reviewsList.filter(r => r.decision === "Rejected" || String(r.status).toLowerCase().includes("rejected")).length;
-
-          if (approveVotes >= 2) {
-            finalStatus = "Approved";
-          } else if (rejectVotes >= 2) {
-            finalStatus = "Rejected";
-          } else if (pair.rawStatuses.includes("Approved")) {
-            finalStatus = "Approved";
-          } else if (pair.rawStatuses.includes("Rejected")) {
-            finalStatus = "Rejected";
-          }
-        } else {
-          if (pair.rawStatuses.every(s => s === "Approved")) {
-            finalStatus = "Approved";
-          } else if (pair.rawStatuses.some(s => s === "Rejected")) {
-            finalStatus = "Rejected";
-          }
-        }
-
-        return {
-          id: pair.id,
-          durationSec: pair.durationSec,
-          status: finalStatus,
-          reviews: pair.reviews
-        };
-      });
-
-      setPairedRecordingsDataset(pairedRecordings);
+      setPairedRecordingsDataset(allPairs.map((pair) => ({
+        id: pair.id,
+        durationSec: pair.totalDurationSec ?? pair.durationSec ?? 0,
+        status: parseBeRecordingStatus(pair.status),
+        reviews: pair.reviews || [],
+      })));
     } catch (err) {
       console.error("Lỗi khi tải dữ liệu dashboard:", err);
     }

@@ -70,11 +70,18 @@ public class UserRepository(CodeSwitchLabelDbContext db) : IUserRepository
     public Task<AppUser?> GetByIdAsync(long userId, CancellationToken ct = default) =>
         Load().FirstOrDefaultAsync(u => u.UserId == userId, ct);
 
-    public Task<AppUser?> GetForUpdateAsync(long userId, CancellationToken ct = default) =>
-        db.AppUsers
+    public async Task<AppUser?> GetForUpdateAsync(long userId, CancellationToken ct = default)
+    {
+        // SQL thô vì LINQ không diễn đạt được FOR UPDATE (cùng cách ScriptRepository).
+        // Câu lệnh chỉ có tác dụng khoá khi caller đang ở trong một transaction.
+        var rows = await db.AppUsers
+            .FromSqlInterpolated($"SELECT * FROM app_user WHERE user_id = {userId} FOR UPDATE")
             .Include(u => u.Role)
             .Include(u => u.SpeakerProfile)
-            .FirstOrDefaultAsync(u => u.UserId == userId, ct);
+            .ToListAsync(ct);
+
+        return rows.FirstOrDefault();
+    }
 
     public Task<List<AppUser>> GetByRoleAsync(RoleName role, CancellationToken ct = default) =>
         Load().Where(u => u.Role.RoleName == role).OrderBy(u => u.FullName).ToListAsync(ct);

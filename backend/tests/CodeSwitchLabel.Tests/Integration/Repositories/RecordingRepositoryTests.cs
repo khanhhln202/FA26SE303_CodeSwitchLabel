@@ -20,7 +20,7 @@ public class RecordingRepositoryTests : IntegrationTestBase
         var script = await CreateScriptAsync(
             "[vi]Test [en]hello [vi]world",
             "[vi]Test chào thế giới",
-            ScriptDomain.ItTechnology,
+            "ItTechnology",
             AdminUserId);
 
         var recording = await CreateRecordingAsync(script.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching);
@@ -40,7 +40,7 @@ public class RecordingRepositoryTests : IntegrationTestBase
         var script = await CreateScriptAsync(
             "[vi]Test [en]record [vi]this",
             "[vi]Test ghi âm cái này",
-            ScriptDomain.ItTechnology,
+            "ItTechnology",
             AdminUserId);
 
         await CreateRecordingAsync(script.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching, 7.5m);
@@ -69,7 +69,7 @@ public class RecordingRepositoryTests : IntegrationTestBase
         {
             var script = await CreateScriptAsync(
                 $"[vi]Ban [en]ghi {token} so {i}", $"[vi]Bản ghi {token} số {i}",
-                ScriptDomain.ItTechnology, AdminUserId);
+                "ItTechnology", AdminUserId);
 
             var recording = await CreateRecordingAsync(
                 script.ScriptId, speaker.UserId, SentenceVariant.CodeSwitching, durationSec: 3m + i);
@@ -139,7 +139,7 @@ public class RecordingRepositoryTests : IntegrationTestBase
         var script = await CreateScriptAsync(
             "[vi]Test [en]active [vi]check",
             "[vi]Test kiểm tra active",
-            ScriptDomain.ItTechnology,
+            "ItTechnology",
             AdminUserId);
 
         // Act
@@ -158,7 +158,7 @@ public class RecordingRepositoryTests : IntegrationTestBase
         var script = await CreateScriptAsync(
             "[vi]Test [en]active [vi]true",
             "[vi]Test kiểm tra active true",
-            ScriptDomain.ItTechnology,
+            "ItTechnology",
             AdminUserId);
 
         await CreateRecordingAsync(script.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching);
@@ -179,7 +179,7 @@ public class RecordingRepositoryTests : IntegrationTestBase
         var script = await CreateScriptAsync(
             "[vi]Test [en]share [vi]cau",
             "[vi]Test chia sẻ câu",
-            ScriptDomain.ItTechnology,
+            "ItTechnology",
             AdminUserId);
 
         await CreateRecordingAsync(script.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching);
@@ -200,7 +200,7 @@ public class RecordingRepositoryTests : IntegrationTestBase
         var script = await CreateScriptAsync(
             "[vi]Test [en]count [vi]takes",
             "[vi]Test đếm lượt",
-            ScriptDomain.ItTechnology,
+            "ItTechnology",
             AdminUserId);
 
         await CreateRecordingAsync(script.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching);

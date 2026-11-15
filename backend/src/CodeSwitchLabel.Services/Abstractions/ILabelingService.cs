@@ -14,7 +14,14 @@ public interface ILabelingService
     /// khi gọi hoặc đọc kết quả thất bại.
     /// </summary>
     Task<LabeledPair> LabelAsync(string csRaw, string viRaw, CancellationToken ct = default);
+
+    /// <summary>
+    /// Gán nhãn tự động: dùng LLM nếu đã cấu hình, ngược lại dùng luật.
+    /// LLM lỗi gọi hoặc trả kết quả không đọc được cũng lùi về luật.
+    /// </summary>
+    Task<LabeledPair> AutoLabelAsync(string csRaw, string viRaw, CancellationToken ct = default);
 }
 
 /// <summary>Câu đã gán nhãn và alignment tương ứng, sẵn sàng đưa vào luồng import hiện có.</summary>
-public record LabeledPair(string CsTagged, List<AlignmentItem> Alignment);
+/// <param name="SemanticWarning">LLM báo hai câu lệch nghĩa; null khi khớp hoặc khi gán nhãn bằng luật.</param>
+public record LabeledPair(string CsTagged, List<AlignmentItem> Alignment, string? SemanticWarning = null);

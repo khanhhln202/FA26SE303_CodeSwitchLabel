@@ -105,6 +105,96 @@ public sealed class LabelingServiceTests
         Assert.Equal(0, handler.Calls);
     }
 
+    [Fact]
+    public async Task AutoLabel_KhongCauHinh_DungLuat()
+    {
+        var handler = new StubHandler(() => Ok(ChatResponse(ValidContent)));
+        var service = CreateService(handler, new LlmOptions());
+
+        var result = await service.AutoLabelAsync(
+            "Em nên scan tài liệu này.", "Em nên quét tài liệu này.",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("[vi]Em nên [en]scan [vi]tài liệu này.", result.CsTagged);
+        var word = Assert.Single(result.Alignment);
+        Assert.Equal("scan", word.Source);
+        Assert.Equal("quét", word.Target);
+        Assert.Equal(0, handler.Calls);
+    }
+
+    [Fact]
+    public async Task AutoLabel_CoCauHinh_GoiLlm()
+    {
+        var handler = new StubHandler(() => Ok(ChatResponse(ValidContent)));
+        var service = CreateService(handler);
+
+        var result = await service.AutoLabelAsync(
+            "Em nên scan tài liệu này.", "Em nên quét tài liệu này.",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("[vi]Em nên [en]scan [vi]tài liệu này.", result.CsTagged);
+        Assert.Equal(1, handler.Calls);
+    }
+
+    [Fact]
+    public async Task AutoLabel_LlmTraSaiDinhDang_DungLuat()
+    {
+        var handler = new StubHandler(() => Ok(ChatResponse("không phải json")));
+        var service = CreateService(handler);
+
+        var result = await service.AutoLabelAsync(
+            "Em nên scan tài liệu này.", "Em nên quét tài liệu này.",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("[vi]Em nên [en]scan [vi]tài liệu này.", result.CsTagged);
+        var word = Assert.Single(result.Alignment);
+        Assert.Equal("scan", word.Source);
+        Assert.Equal("quét", word.Target);
+        Assert.Equal(1, handler.Calls);
+    }
+
+    [Fact]
+    public async Task GoiLlm_CoGioiHanMaxTokens()
+    {
+        var handler = new StubHandler(() => Ok(ChatResponse(ValidContent)));
+        var service = CreateService(handler);
+
+        await service.LabelAsync(
+            "Em nên scan tài liệu này.", "Em nên quét tài liệu này.",
+            TestContext.Current.CancellationToken);
+
+        using var body = JsonDocument.Parse(handler.LastBody);
+        Assert.InRange(body.RootElement.GetProperty("max_tokens").GetInt32(), 256, 8192);
+    }
+
+    [Fact]
+    public async Task LlmBaoLechNghia_TraVeCanhBao()
+    {
+        const string mismatch =
+            """{"cs_tagged":"[vi]Em nên [en]scan [vi]tài liệu này.","alignment":[{"source":"scan","target":"quét","relation":"semantic_equivalent"}],"semantic_warning":"Câu tiếng Việt nói về quét tài liệu, câu trộn lại nói về nộp hồ sơ."}""";
+        var service = CreateService(new StubHandler(() => Ok(ChatResponse(mismatch))));
+
+        var result = await service.LabelAsync(
+            "Em nên scan tài liệu này.", "Em nên quét tài liệu này.",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            "Câu tiếng Việt nói về quét tài liệu, câu trộn lại nói về nộp hồ sơ.",
+            result.SemanticWarning);
+    }
+
+    [Fact]
+    public async Task LlmKhongBaoLechNghia_CanhBaoNull()
+    {
+        var service = CreateService(new StubHandler(() => Ok(ChatResponse(ValidContent))));
+
+        var result = await service.LabelAsync(
+            "Em nên scan tài liệu này.", "Em nên quét tài liệu này.",
+            TestContext.Current.CancellationToken);
+
+        Assert.Null(result.SemanticWarning);
+    }
+
     private static LabelingService CreateService(
         StubHandler handler, LlmOptions? options = null)
     {
@@ -135,12 +225,17 @@ public sealed class LabelingServiceTests
         private int _calls;
 
         public int Calls => _calls;
+        public string LastBody { get; private set; } = string.Empty;
 
-        protected override Task<HttpResponseMessage> SendAsync(
+        protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            LastBody = request.Content is null
+                ? string.Empty
+                : await request.Content.ReadAsStringAsync(cancellationToken);
+
             var index = Math.Min(_calls++, responses.Length - 1);
-            return Task.FromResult(responses[index]());
+            return responses[index]();
         }
     }
 }

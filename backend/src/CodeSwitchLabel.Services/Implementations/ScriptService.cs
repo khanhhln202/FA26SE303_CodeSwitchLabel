@@ -1,6 +1,7 @@
 using System.Text.Json;
 using CodeSwitchLabel.Repositories.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Repositories.Persistence;
 using CodeSwitchLabel.Repositories.Repositories;
@@ -36,7 +37,8 @@ internal static class ScriptMapper
             s.UpdatedAt,
             [.. s.Reviews.Select(r => new ScriptReviewDto(
                 r.ScriptReviewId, r.UserId, r.Action, r.ErrorReason?.ReasonCode,
-                r.EditedCsContent, r.EditedViContent, r.Comment, r.ReviewedAt))]);
+                r.EditedCsContent, r.EditedViContent, r.Comment, r.ReviewedAt))],
+            s.SemanticWarning);
 }
 
 public class ScriptService(
@@ -44,6 +46,7 @@ public class ScriptService(
     IScriptQueueService queue,
     IReasonRepository reasonRepository,
     IUserDomainRepository domainRepository,
+    IDomainService domains,
     ISystemConfigService config,
     ITaskProgressTracker taskTracker,
     ILabelingService labeling,
@@ -141,17 +144,19 @@ public class ScriptService(
         if (string.IsNullOrWhiteSpace(domain))
         {
             throw new UnprocessableException(
-                "domain_required", "File .txt cần chọn chủ đề: IT/Technology, Education hoặc Daily Life.");
+                "domain_required", "File .txt cần chọn chủ đề đang hoạt động.");
         }
 
         // Kiểm tra chủ đề một lần trước khi gán nhãn; từng câu vẫn đi qua đúng luật import hiện có.
-        _ = ParseDomain(domain);
+        var domainCode = await domains.ResolveActiveAsync(domain, ct);
 
         var pairs = await RawScriptTextParser.ParseAsync(textFile, ct);
 
-        // Không có LLM thì gắn nhãn bằng luật; nghĩa tiếng Việt là đoạn giữa hai từ chung
-        // của hai câu, hết từ tương ứng thì để trống cho người duyệt điền.
-        var useRule = !labeling.IsConfigured;
+        // AutoLabelAsync tự chọn LLM hay luật. Luật có thể để trống nghĩa tiếng Việt
+        // (hết từ tương ứng) nên vẫn cho qua như trước cho người duyệt điền.
+        // Khi LLM lỗi, AutoLabelAsync cũng rơi về luật; lúc đó IsConfigured vẫn true nên
+        // không thể dựa vào nó để quyết định — luôn cho phép nghĩa rỗng ở đường .txt.
+        const bool allowEmptyTargets = true;
 
         var items = new List<ImportScriptItem>(pairs.Count);
         var skipped = new List<ImportSkippedDto>();
@@ -164,17 +169,16 @@ public class ScriptService(
 
             try
             {
-                var labeled = useRule
-                    ? RuleBasedLabeler.Label(pairs[i].Cs, pairs[i].Vi)
-                    : await labeling.LabelAsync(pairs[i].Cs, pairs[i].Vi, ct);
+                var labeled = await labeling.AutoLabelAsync(pairs[i].Cs, pairs[i].Vi, ct);
 
                 items.Add(new ImportScriptItem
                 {
                     Id = id,
-                    Domain = domain,
+                    Domain = domainCode,
                     CsTranscript = labeled.CsTagged,
                     ViEquivalent = CodeSwitchText.ViTag + pairs[i].Vi,
-                    Alignment = labeled.Alignment
+                    Alignment = labeled.Alignment,
+                    SemanticWarning = labeled.SemanticWarning
                 });
             }
             catch (UnprocessableException ex)
@@ -184,7 +188,7 @@ public class ScriptService(
             }
         }
 
-        return await ImportCoreAsync(items, skipped, fileName, importedById, useRule, ct);
+        return await ImportCoreAsync(items, skipped, fileName, importedById, allowEmptyTargets, ct);
     }
 
     private async Task<ImportResultDto> ImportCoreAsync(
@@ -233,6 +237,9 @@ public class ScriptService(
                     throw new UnprocessableException("empty_content", "Thiếu câu chen tiếng Anh hoặc câu thuần Việt.");
                 }
 
+                cs = ScriptPairRules.NormalizePunctuation(cs);
+                ve = ScriptPairRules.NormalizePunctuation(ve);
+
                 var (wordCount, enWordCount) = ScriptPairRules.ValidatePair(cs, ve);
                 var key = CodeSwitchText.ComparisonKey(cs);
 
@@ -241,7 +248,7 @@ public class ScriptService(
                     throw ConflictException.DuplicateContent();
                 }
 
-                var domain = ParseDomain(item.Domain);
+                var domain = await domains.ResolveActiveAsync(item.Domain ?? string.Empty, ct);
                 var words = ScriptPairRules.BuildWords(item.Alignment ?? [], enWordCount, allowEmptyTargets);
                 var relation = ScriptPairRules.RelationOf(words);
                 var scriptId = await repository.GenerateIdAsync(enWordCount, domain, relation, ct);
@@ -259,7 +266,8 @@ public class ScriptService(
                     CreatedBy = importedById,
                     ImportBatchId = batch.BatchId,
                     CreatedAt = now,
-                    UpdatedAt = now
+                    UpdatedAt = now,
+                    SemanticWarning = item.SemanticWarning
                 };
 
                 foreach (var word in words) word.ScriptId = scriptId;
@@ -335,14 +343,17 @@ public class ScriptService(
         }
 
         batch.ScriptCount = imported.Count;
+        // Fallback ở trên gọi ClearTracked() nên batch có thể đã bị detach; Update để chắc chắn
+        // ScriptCount được lưu thay vì lịch sử import hiện 0 câu.
+        repository.UpdateBatch(batch);
         await repository.SaveChangesAsync(ct);
+
+        // Admin nhập câu là chốt luôn: repo ghi lượt duyệt Accepted của chính người nhập
+        // trước, rồi mới đổi status — trigger trg_script_validated_domain đòi lượt duyệt
+        // nằm sẵn trong database khi status chuyển sang validated.
+        await repository.AutoValidateAsync(imported, importedById, clock.GetUtcNow(), ct);
         await transaction.CommitAsync(ct);
 
-        // TEAM_010 (yêu cầu 2.1): câu nhập từ file cũng phải VÀO HÀNG ĐỜI chung, đợi
-        // người duyệt — không tự coi là đã duyệt như trước đây. Trigger
-        // trg_script_queue_sync đã tự tạo hàng chặng text_review cho từng câu lúc INSERT;
-        // ở đây không cần (và không được) tự set Validated, vì làm vậy là câu đó lọt
-        // qua hàng đợi mà không ai xem.
         return new ImportResultDto(batch.BatchId, safeName, imported.Count, imported, skipped);
     }
 
@@ -426,12 +437,13 @@ public class ScriptService(
     }
 
     /// <summary>
-    /// Sửa nội dung câu đang chờ duyệt, KHÔNG ghi lượt duyệt.
+    /// Sửa nội dung một cặp câu đang chờ duyệt hoặc đã sẵn sàng, KHÔNG ghi lượt duyệt và
+    /// KHÔNG đổi trạng thái.
     ///
     /// Vì sao tách khỏi <c>ReviewAsync</c>: ở đó "sửa" nghĩa là "sửa xong và cho qua" — hợp với
     /// Reviewer mở một câu trong hàng đợi, thấy sai chính tả thì chữa rồi duyệt luôn. Admin dọn
-    /// kho câu lại cần việc khác: đổi đi đổi lại cho tới khi ưng mới chốt. Không ghi lượt duyệt
-    /// nên <c>HasAcceptedReviewAsync</c> vẫn false, câu ở nguyên Chờ duyệt và sửa tiếp được.
+    /// kho câu lại cần việc khác: đổi đi đổi lại cho tới khi ưng. Câu đã sẵn sàng vẫn sửa được
+    /// vì Admin là người chốt nội dung, không cần duyệt lại.
     ///
     /// Dùng lại đúng bộ kiểm tra của luồng duyệt, nên các ràng buộc giữ nguyên: không sửa câu đã
     /// có bản ghi âm, không đổi số từ tiếng Anh, không đổi quan hệ Anh–Việt — hai thứ sau nằm
@@ -440,26 +452,31 @@ public class ScriptService(
     public async Task<ScriptDetailDto> UpdatePendingAsync(
         string scriptId, UpdateScriptContentRequest request, CancellationToken ct = default)
     {
+        await using var transaction = await BeginTransactionIfNeededAsync(ct);
+
         var script = await repository.GetForUpdateAsync(scriptId, ct)
                      ?? throw NotFoundException.Script(scriptId);
 
-        if (script.Status != ScriptStatus.PendingValidation)
+        if (script.Status is not (ScriptStatus.PendingValidation or ScriptStatus.Validated))
         {
             throw new ConflictException(
                 "script_not_pending",
                 $"Cặp câu {scriptId} đang là {script.Status} nên không sửa trực tiếp được. " +
-                "Chỉ câu đang chờ duyệt mới sửa được; câu đã duyệt thì gửi đề xuất sửa để Reviewer xử lý.");
+                "Chỉ câu đang chờ duyệt hoặc đã sẵn sàng mới sửa được.");
         }
 
         var cs = request.CsContent.Trim();
         var vi = request.ViContent.Trim();
 
         var plan = await ScriptPairRules.ValidateEditContentAsync(repository, script, cs, vi, request.Alignment, ct);
-        ScriptPairRules.ApplyEdit(repository, script, cs, vi, plan);
+        ScriptPairRules.ApplyEdit(repository, script, plan);
 
         await repository.SaveChangesAsync(ct);
 
-        return (await repository.GetWithReviewsAsync(scriptId, ct))!.ToDetail();
+        var detail = (await repository.GetWithReviewsAsync(scriptId, ct))!.ToDetail();
+        if (transaction is not null) await transaction.CommitAsync(ct);
+
+        return detail;
     }
 
     public async Task<ScriptDetailDto> ReviewAsync(
@@ -483,6 +500,10 @@ public class ScriptService(
     private async Task<ScriptDetailDto> ReviewCoreAsync(
         string scriptId, long userId, ReviewScriptRequest request, CancellationToken ct)
     {
+        // Khoá dòng câu tới hết quyết định: hai Reviewer mở cùng lúc, người thứ hai
+        // phải đọc được trạng thái/lượt duyệt sau khi người đầu commit rồi mới kết luận.
+        await using var transaction = await BeginTransactionIfNeededAsync(ct);
+
         var script = await repository.GetForUpdateAsync(scriptId, ct)
                      ?? throw NotFoundException.Script(scriptId);
 
@@ -527,10 +548,10 @@ public class ScriptService(
 
             case ScriptReviewAction.Edited:
                 (editedCs, editedVe) = RequireEditedPair(request);
-                review.EditedCsContent = editedCs;
-                review.EditedViContent = editedVe;
                 edit = await ScriptPairRules.ValidateEditContentAsync(
                     repository, script, editedCs, editedVe, request.EditedAlignment, ct);
+                review.EditedCsContent = edit.Cs;
+                review.EditedViContent = edit.Vi;
                 break;
 
             case ScriptReviewAction.Rejected:
@@ -564,7 +585,7 @@ public class ScriptService(
         // LƯU LẦN 2 — sửa câu và chốt trạng thái, lúc này lượt duyệt đã nằm trong database.
         if (edit is not null)
         {
-            ScriptPairRules.ApplyEdit(repository, script, editedCs!, editedVe!, edit);
+            ScriptPairRules.ApplyEdit(repository, script, edit);
         }
 
         if (action is ScriptReviewAction.Accepted or ScriptReviewAction.Edited)
@@ -580,17 +601,38 @@ public class ScriptService(
             await taskTracker.OnScriptRejectedAsync(scriptId, ct);
         }
 
-        return (await repository.GetWithReviewsAsync(scriptId, ct))!.ToDetail();
+        var detail = (await repository.GetWithReviewsAsync(scriptId, ct))!.ToDetail();
+        if (transaction is not null) await transaction.CommitAsync(ct);
+
+        return detail;
     }
 
     // ----------------------------------------------------------------- nội bộ
 
     /// <summary>
-    /// Xoá cứng một câu đang chờ duyệt.
+    /// Mở transaction riêng, trừ khi caller đã ở trong một transaction (test tích hợp giữ
+    /// transaction ambient để rollback). EF không cho transaction lồng nhau trên cùng
+    /// connection nên trường hợp đó dùng luôn ambient — cùng cách ScriptProposalService.
+    /// </summary>
+    private async Task<IDbContextTransaction?> BeginTransactionIfNeededAsync(CancellationToken ct)
+    {
+        try
+        {
+            return await repository.BeginTransactionAsync(ct);
+        }
+        catch (InvalidOperationException ex)
+            when (ex.Message.Contains("already in a transaction", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Xoá cứng một câu đang chờ duyệt hoặc đã sẵn sàng.
     ///
-    /// Chỉ câu chưa từng được duyệt mới đi đường này. Câu đã có bản ghi âm bị chặn vì
-    /// audio/S3 và lịch sử duyệt sẽ mồ côi — trường hợp đó dùng nút "Xoá hoàn toàn" ở màn
-    /// bản ghi (xoá mềm, giữ dấu vết).
+    /// Câu đã có bản ghi âm bị chặn vì audio/S3 và lịch sử duyệt sẽ mồ côi — trường hợp đó
+    /// dùng nút "Xoá hoàn toàn" ở màn bản ghi (xoá mềm, giữ dấu vết). Câu đang nằm trong task
+    /// thu âm được gỡ khỏi task và tiến độ task tính lại trước khi xoá.
     /// </summary>
     public async Task DeletePendingAsync(string scriptId, CancellationToken ct = default)
     {
@@ -599,12 +641,12 @@ public class ScriptService(
         var script = await repository.GetForUpdateAsync(scriptId, ct)
                      ?? throw NotFoundException.Script(scriptId);
 
-        if (script.Status != ScriptStatus.PendingValidation)
+        if (script.Status is not (ScriptStatus.PendingValidation or ScriptStatus.Validated))
         {
             throw new ConflictException(
                 "script_not_pending",
                 $"Cặp câu {scriptId} đang là {script.Status} nên không xoá cứng được. " +
-                "Chỉ câu đang chờ duyệt mới xoá cứng được.");
+                "Chỉ câu đang chờ duyệt hoặc đã sẵn sàng mới xoá cứng được.");
         }
 
         if (await repository.HasRecordingsAsync(scriptId, ct))
@@ -615,6 +657,7 @@ public class ScriptService(
                 "Dùng 'Xoá hoàn toàn' ở màn bản ghi để loại cả câu lẫn audio.");
         }
 
+        await taskTracker.OnPairDiscardedAsync(scriptId, ct);
         await repository.DeleteRelatedAsync(scriptId, ct);
         repository.Remove(script);
         await repository.SaveChangesAsync(ct);
@@ -683,8 +726,53 @@ public class ScriptService(
     private async Task<ScriptDetailDto> CreateInternalAsync(
         CreateScriptRequest request, long userId, ScriptStatus status, long? batchId, CancellationToken ct)
     {
-        var cs = request.CsContent.Trim();
-        var ve = request.ViContent.Trim();
+        var csRaw = request.CsRaw?.Trim();
+        var viRaw = request.ViRaw?.Trim();
+        var hasRaw = csRaw is not null || viRaw is not null;
+
+        string cs;
+        string ve;
+        List<AlignmentItem> alignment;
+        var allowEmptyTargets = false;
+        string? semanticWarning = null;
+
+        if (hasRaw)
+        {
+            if (string.IsNullOrEmpty(csRaw) || string.IsNullOrEmpty(viRaw))
+            {
+                throw new UnprocessableException(
+                    "raw_pair_required",
+                    "Gửi câu thô thì phải gửi cả câu trộn Việt–Anh lẫn câu thuần Việt tương đương.");
+            }
+
+            // shortcut: raw phải gán nhãn trước khi dedupe vì dedupe dùng câu đã gán nhãn;
+            // câu trùng vẫn tốn một lần gọi LLM.
+            var labeled = await labeling.AutoLabelAsync(csRaw, viRaw, ct);
+            cs = labeled.CsTagged;
+            ve = CodeSwitchText.ViTag + viRaw;
+            alignment = labeled.Alignment;
+            semanticWarning = labeled.SemanticWarning;
+
+            // Luật có thể để trống nghĩa tiếng Việt; câu chờ duyệt cho qua như luồng
+            // import .txt để người duyệt điền sau. Admin tạo câu vào thẳng Validated
+            // nên vẫn bắt buộc đủ nghĩa, không có bước duyệt nào điền hộ.
+            allowEmptyTargets = !labeling.IsConfigured && status == ScriptStatus.PendingValidation;
+        }
+        else
+        {
+            cs = request.CsContent?.Trim() ?? string.Empty;
+            ve = request.ViContent?.Trim() ?? string.Empty;
+            alignment = request.Alignment;
+
+            if (cs.Length == 0 || ve.Length == 0)
+            {
+                throw new UnprocessableException(
+                    "empty_content", "Thiếu câu chen tiếng Anh hoặc câu thuần Việt.");
+            }
+        }
+
+        cs = ScriptPairRules.NormalizePunctuation(cs);
+        ve = ScriptPairRules.NormalizePunctuation(ve);
 
         var (wordCount, enWordCount) = ScriptPairRules.ValidatePair(cs, ve);
 
@@ -693,11 +781,11 @@ public class ScriptService(
             throw ConflictException.DuplicateContent();
         }
 
-        var domain = request.Domain!.Value;
+        var domain = await domains.ResolveActiveAsync(request.Domain ?? string.Empty, ct);
 
         // Mỗi từ tiếng Anh phải có ĐÚNG một dòng script_word, nếu không trigger defer
         // trg_script_word_consistency sẽ chặn lúc COMMIT — nên alignment phải phủ đủ số từ.
-        var words = ScriptPairRules.BuildWords(request.Alignment, enWordCount);
+        var words = ScriptPairRules.BuildWords(alignment, enWordCount, allowEmptyTargets);
 
         // Chữ số thứ ba của mã lấy từ chính các dòng script_word, không tin giá trị client gửi:
         // mã và bảng script_word phải luôn khớp nhau.
@@ -724,7 +812,8 @@ public class ScriptService(
             CreatedBy = userId,
             ImportBatchId = batchId,
             CreatedAt = now,
-            UpdatedAt = now
+            UpdatedAt = now,
+            SemanticWarning = semanticWarning
         };
 
         foreach (var word in words) word.ScriptId = scriptId;
@@ -840,21 +929,5 @@ public class ScriptService(
         }
 
         return false;
-    }
-
-    /// <summary>"IT/Technology", "daily life", "Daily_Life" đều hiểu được.</summary>
-    private static ScriptDomain ParseDomain(string value)
-    {
-        var normalized = new string((value ?? string.Empty).Where(char.IsLetter).ToArray()).ToLowerInvariant();
-
-        return normalized switch
-        {
-            "ittechnology" or "it" or "technology" => ScriptDomain.ItTechnology,
-            "education" => ScriptDomain.Education,
-            "dailylife" => ScriptDomain.DailyLife,
-            _ => throw new UnprocessableException(
-                "unknown_domain",
-                $"Chủ đề \"{value}\" không thuộc ba chủ đề của hệ thống: IT/Technology, Education, Daily Life.")
-        };
     }
 }

@@ -50,14 +50,14 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
     {
         var ct = TestContext.Current.CancellationToken;
         await CreateValidatedScriptAsync("[vi]Em nhớ [en]upload alpha nhé.", "[vi]Em nhớ tải lên alpha nhé.",
-            ScriptDomain.ItTechnology, AdminUserId);
+            "ItTechnology", AdminUserId);
         await CreateValidatedScriptAsync("[vi]Em nhớ [en]upload beta nhé.", "[vi]Em nhớ tải lên beta nhé.",
-            ScriptDomain.ItTechnology, AdminUserId);
+            "ItTechnology", AdminUserId);
 
         var source = await CreateTaskAsync(WaveId, TaskType.Recording, 1, ManagerUserId);
         var target = await CreateTaskAsync(WaveId, TaskType.Recording, 1, ManagerUserId);
         var candidates = await Tasks.FindScriptCandidatesAsync(
-            source.TaskId, [], ScriptDomain.ItTechnology, 2, [], ct);
+            source.TaskId, [], "ItTechnology", 2, [], ct);
         Assert.Equal(2, candidates.Count);
 
         await TaskService.AddItemsAsync(source.TaskId,
@@ -86,7 +86,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
 
         var script = await CreateValidatedScriptAsync(
             "[vi]Câu [en]add [vi]này", "[vi]Câu add này",
-            ScriptDomain.ItTechnology, owner.UserId);
+            "ItTechnology", owner.UserId);
 
         var rejected = await CreateRecordingAsync(script.ScriptId, owner.UserId, SentenceVariant.CodeSwitching);
         rejected.Status = RecordingStatus.Rejected;
@@ -248,7 +248,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
             var script = await CreateValidatedScriptAsync(
                 $"[vi]Em nên [en]scan{i} [vi]tài liệu này.",
                 $"[vi]Em nên quét tài liệu này {i}.",
-                ScriptDomain.ItTechnology, AdminUserId);
+                "ItTechnology", AdminUserId);
 
             scriptIds.Add(script.ScriptId);
         }
@@ -289,7 +289,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
         for (var i = 0; i < 10; i++)
         {
             var s = await CreateValidatedScriptAsync(
-                $"[vi]Em [en]test{i} [vi]câu này.", $"[vi]Em câu này {i}.", ScriptDomain.ItTechnology, AdminUserId);
+                $"[vi]Em [en]test{i} [vi]câu này.", $"[vi]Em câu này {i}.", "ItTechnology", AdminUserId);
             scriptIds.Add(s.ScriptId);
         }
         var speakers = new[]
@@ -357,18 +357,19 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
         for (var i = 0; i < 2; i++)
         {
             await CreateValidatedScriptAsync(
-                $"[vi]Em [en]p{i} [vi]t.", $"[vi]Em t {i}.", ScriptDomain.ItTechnology, AdminUserId);
+                $"[vi]Em [en]p{i} [vi]t.", $"[vi]Em t {i}.", "ItTechnology", AdminUserId);
         }
         var speaker = await CreateUserWithBuilderAsync(RoleName.Speaker, fullName: "Sp Only");
         var availableCount = await Db.Scripts.CountAsync(
-            s => s.Status == ScriptStatus.Validated && s.Domain == ScriptDomain.ItTechnology, ct);
+            s => s.Status == ScriptStatus.Validated && s.Domain == "ItTechnology", ct);
+        var targetQty = Math.Max(10, availableCount + 1);
 
         // Kho câu ít hơn chỉ tiêu: vẫn tạo task, mỗi Speaker nhận tối đa số câu còn thu được.
         var detail = await TaskService.CreateAsync(new CreateTaskRequest
         {
             WaveId = WaveId,
             TaskType = TaskType.Recording,
-            TargetQty = 10,
+            TargetQty = targetQty,
             Deadline = DateTimeOffset.UtcNow.AddDays(7),
             AssigneeUserIds = [speaker.UserId]
         }, ManagerUserId, ct);
@@ -377,7 +378,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
             .Where(ts => ts.TaskId == detail.Summary.TaskId)
             .ToListAsync(ct);
 
-        Assert.True(availableCount < 10);
+        Assert.True(availableCount < targetQty);
         Assert.Equal(availableCount, items.Count);
         Assert.All(items, i => Assert.Equal(speaker.UserId, i.AssigneeUserId));
     }
@@ -389,7 +390,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
         for (var i = 0; i < 2; i++)
         {
             await CreateValidatedScriptAsync(
-                $"[vi]Chung [en]c{i} [vi]câu.", $"[vi]Chung câu {i}.", ScriptDomain.ItTechnology, AdminUserId);
+                $"[vi]Chung [en]c{i} [vi]câu.", $"[vi]Chung câu {i}.", "ItTechnology", AdminUserId);
         }
 
         var speakers = new[]
@@ -469,7 +470,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
         for (var i = 0; i < 4; i++)
         {
             var s = await CreateValidatedScriptAsync(
-                $"[vi]Em [en]e{i} [vi]t.", $"[vi]Em t {i}.", ScriptDomain.ItTechnology, AdminUserId);
+                $"[vi]Em [en]e{i} [vi]t.", $"[vi]Em t {i}.", "ItTechnology", AdminUserId);
             scriptIds.Add(s.ScriptId);
         }
         var speakers = new[]

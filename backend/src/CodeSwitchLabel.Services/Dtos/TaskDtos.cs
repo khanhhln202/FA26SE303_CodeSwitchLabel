@@ -17,7 +17,7 @@ public record CreateTaskRequest
     /// Chủ đề của nhiệm vụ. Khi gắn vào chiến dịch, phải trùng chủ đề của chiến dịch —
     /// nếu không thì 422 task_domain_mismatch_wave.
     /// </summary>
-    public ScriptDomain? Domain { get; init; }
+    public string? Domain { get; init; }
 
     [StringLength(1000)]
     public string? Description { get; init; }
@@ -39,7 +39,7 @@ public record CreateTaskRequest
 public record UpdateTaskRequest
 {
     /// <summary>Đổi chủ đề được khi đổi cả chủ đề chiến dịch, hoặc khi task chưa gắn đợt nào.</summary>
-    public ScriptDomain? Domain { get; init; }
+    public string? Domain { get; init; }
 
     [StringLength(1000)]
     public string? Description { get; init; }
@@ -77,7 +77,7 @@ public record AutoFillCriteria
     public int Count { get; init; }
 
     /// <summary>Chỉ dùng cho task thu âm.</summary>
-    public ScriptDomain? Domain { get; init; }
+    public string? Domain { get; init; }
 
     /// <summary>Chỉ dùng cho task duyệt — duyệt theo từng người đọc.</summary>
     public long? SpeakerId { get; init; }
@@ -165,7 +165,7 @@ public record TaskListItemDto(
     long? WaveId,
     string? WaveName,
     TaskType TaskType,
-    ScriptDomain Domain,
+    string Domain,
     string? Description,
     WorkTaskStatus Status,
     IReadOnlyList<TaskAssigneeDto> Assignees,
@@ -211,7 +211,7 @@ public record TaskSearchRequest : PageRequest
     public long? AssigneeId { get; init; }
 
     /// <summary>Lọc theo chủ đề.</summary>
-    public ScriptDomain? Domain { get; init; }
+    public string? Domain { get; init; }
 
     /// <summary>true: chỉ task còn đang làm mà đã quá hạn.</summary>
     public bool? Overdue { get; init; }

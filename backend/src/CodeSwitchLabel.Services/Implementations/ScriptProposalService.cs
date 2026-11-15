@@ -83,13 +83,14 @@ public class ScriptProposalService(
         else
         {
             var (cs, ve) = RequireProposedPair(request);
-            proposal.ProposedCsContent = cs;
-            proposal.ProposedViContent = ve;
 
             // Kiểm bản sửa NGAY lúc gửi, cùng luật với lượt duyệt sửa: giữ nguyên số từ
             // tiếng Anh và quan hệ Anh–Việt. Đề xuất sai luật không được vào hàng chờ.
-            await ScriptPairRules.ValidateEditContentAsync(
+            var plan = await ScriptPairRules.ValidateEditContentAsync(
                 repository, script, cs, ve, request.ProposedAlignment, ct);
+
+            proposal.ProposedCsContent = plan.Cs;
+            proposal.ProposedViContent = plan.Vi;
 
             if (request.ProposedAlignment is { Count: > 0 })
             {
@@ -164,13 +165,13 @@ public class ScriptProposalService(
         var alignment = request.Alignment is { Count: > 0 } ? request.Alignment : null;
 
         // Cùng luật với lượt duyệt sửa: giữ số từ tiếng Anh và quan hệ Anh–Việt.
-        await ScriptPairRules.ValidateEditContentAsync(
+        var plan = await ScriptPairRules.ValidateEditContentAsync(
             repository, proposal.Script, cs, ve, alignment, ct);
 
         var now = clock.GetUtcNow();
 
-        proposal.DraftCsContent = cs;
-        proposal.DraftViContent = ve;
+        proposal.DraftCsContent = plan.Cs;
+        proposal.DraftViContent = plan.Vi;
         proposal.DraftAlignment = alignment is null ? null : JsonSerializer.Serialize(alignment);
         proposal.DraftSavedBy = reviewerId;
         proposal.DraftSavedAt = now;
@@ -182,7 +183,7 @@ public class ScriptProposalService(
                         ?? DeserializeAlignment(proposal.ProposedAlignment)
                         ?? [.. ScriptPairRules.ToAlignment(proposal.Script.Words)];
 
-        return new ProposalDraftDto(proposalId, proposal.ScriptId, cs, ve, effective, reviewerId, now);
+        return new ProposalDraftDto(proposalId, proposal.ScriptId, plan.Cs, plan.Vi, effective, reviewerId, now);
     }
 
     public async Task<ProposalResolutionDto> ResolveAsync(
@@ -245,19 +246,19 @@ public class ScriptProposalService(
                 ScriptId = script.ScriptId,
                 UserId = reviewerId,
                 Action = ScriptReviewAction.Edited,
-                EditedCsContent = cs,
-                EditedViContent = ve,
+                EditedCsContent = plan.Cs,
+                EditedViContent = plan.Vi,
                 Comment = string.IsNullOrWhiteSpace(request.Comment) ? null : request.Comment.Trim(),
                 ReviewedAt = now
             };
 
             repository.AddReview(review);
-            ScriptPairRules.ApplyEdit(repository, script, cs, ve, plan);
+            ScriptPairRules.ApplyEdit(repository, script, plan);
 
             // Bản đã chốt cũng là bản nháp cuối cùng — giữ lại để lần sau tra được
             // Reviewer đã dựa trên nội dung nào.
-            proposal.DraftCsContent = cs;
-            proposal.DraftViContent = ve;
+            proposal.DraftCsContent = plan.Cs;
+            proposal.DraftViContent = plan.Vi;
             proposal.DraftAlignment = alignment is null ? null : JsonSerializer.Serialize(alignment);
             proposal.DraftSavedBy = reviewerId;
             proposal.DraftSavedAt = now;

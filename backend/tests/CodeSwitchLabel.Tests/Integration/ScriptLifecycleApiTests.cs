@@ -8,7 +8,7 @@ namespace CodeSwitchLabel.Tests.Integration;
 /// <summary>
 /// Vòng đời câu văn bản phía Admin:
 ///
-///   DELETE /api/scripts/{id}              xoá cứng câu đang chờ duyệt
+///   DELETE /api/scripts/{id}              xoá cứng câu chưa có bản ghi âm (chờ duyệt hoặc đã sẵn sàng)
 ///   POST   /api/scripts/{id}/deactivate   xoá mềm → Deactivated
 ///   POST   /api/scripts/{id}/reactivate   Deactivated/Rejected → PendingValidation
 ///
@@ -35,15 +35,18 @@ public sealed class ScriptLifecycleApiTests(DatabaseFixture fixture) : ApiTestBa
     }
 
     [Fact]
-    public async Task Admin_XoaCauDaDuyet_TraVe409()
+    public async Task Admin_XoaCauDaDuyet_CauBienMat()
     {
         var admin = await GetAdminTokenAsync();
         var scriptId = await TaoCauDaDuyetAsync(admin);
 
         var response = await DeleteAsync($"/api/scripts/{scriptId}", admin);
 
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-        Assert.Equal("script_not_pending", await LayTruongAsync(response, "code"));
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        using var client = CreateAuthenticatedClient(admin);
+        var get = await client.GetAsync($"/api/scripts/{scriptId}", TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.NotFound, get.StatusCode);
     }
 
     [Fact]
@@ -112,6 +115,18 @@ public sealed class ScriptLifecycleApiTests(DatabaseFixture fixture) : ApiTestBa
         var speaker = await GetSpeakerTokenAsync();
 
         var response = await PostAsync($"/api/scripts/{scriptId}/deactivate", new { }, speaker);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    /// <summary>Speaker không được gọi POST /api/scripts/{id}/review (chỉ Admin,Reviewer).</summary>
+    [Fact]
+    public async Task Speaker_GoIReview_TraVe403()
+    {
+        var scriptId = await TaoCauChoDuyetAsync();
+        var speaker = await GetSpeakerTokenAsync();
+
+        var response = await PostAsync($"/api/scripts/{scriptId}/review", new { action = "Accepted" }, speaker);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }

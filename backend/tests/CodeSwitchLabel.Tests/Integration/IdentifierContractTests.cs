@@ -26,11 +26,11 @@ public sealed class IdentifierContractTests : IntegrationTestBase
     {
         var ct = TestContext.Current.CancellationToken;
 
-        var domains = new (ScriptDomain Domain, char Digit)[]
+        var domains = new (string Domain, char Digit)[]
         {
-            (ScriptDomain.ItTechnology, '1'),
-            (ScriptDomain.Education, '2'),
-            (ScriptDomain.DailyLife, '3')
+            ("ItTechnology", '1'),
+            ("Education", '2'),
+            ("DailyLife", '3')
         };
 
         foreach (var enWords in new[] { 1, 2 })
@@ -59,20 +59,20 @@ public sealed class IdentifierContractTests : IntegrationTestBase
     {
         var ct = TestContext.Current.CancellationToken;
 
-        var combos = new (int EnWords, ScriptDomain Domain, ScriptRelation Relation, string Sequence)[]
+        var combos = new (int EnWords, string Domain, ScriptRelation Relation, string Sequence)[]
         {
-            (1, ScriptDomain.ItTechnology, ScriptRelation.DirectTranslation, "script_serial_1_1_1"),
-            (1, ScriptDomain.ItTechnology, ScriptRelation.ProperNoun, "script_serial_1_1_2"),
-            (1, ScriptDomain.Education, ScriptRelation.DirectTranslation, "script_serial_1_2_1"),
-            (1, ScriptDomain.Education, ScriptRelation.ProperNoun, "script_serial_1_2_2"),
-            (1, ScriptDomain.DailyLife, ScriptRelation.DirectTranslation, "script_serial_1_3_1"),
-            (1, ScriptDomain.DailyLife, ScriptRelation.ProperNoun, "script_serial_1_3_2"),
-            (2, ScriptDomain.ItTechnology, ScriptRelation.DirectTranslation, "script_serial_2_1_1"),
-            (2, ScriptDomain.ItTechnology, ScriptRelation.ProperNoun, "script_serial_2_1_2"),
-            (2, ScriptDomain.Education, ScriptRelation.DirectTranslation, "script_serial_2_2_1"),
-            (2, ScriptDomain.Education, ScriptRelation.ProperNoun, "script_serial_2_2_2"),
-            (2, ScriptDomain.DailyLife, ScriptRelation.DirectTranslation, "script_serial_2_3_1"),
-            (2, ScriptDomain.DailyLife, ScriptRelation.ProperNoun, "script_serial_2_3_2")
+            (1, "ItTechnology", ScriptRelation.DirectTranslation, "script_serial_1_1_1"),
+            (1, "ItTechnology", ScriptRelation.ProperNoun, "script_serial_1_1_2"),
+            (1, "Education", ScriptRelation.DirectTranslation, "script_serial_1_2_1"),
+            (1, "Education", ScriptRelation.ProperNoun, "script_serial_1_2_2"),
+            (1, "DailyLife", ScriptRelation.DirectTranslation, "script_serial_1_3_1"),
+            (1, "DailyLife", ScriptRelation.ProperNoun, "script_serial_1_3_2"),
+            (2, "ItTechnology", ScriptRelation.DirectTranslation, "script_serial_2_1_1"),
+            (2, "ItTechnology", ScriptRelation.ProperNoun, "script_serial_2_1_2"),
+            (2, "Education", ScriptRelation.DirectTranslation, "script_serial_2_2_1"),
+            (2, "Education", ScriptRelation.ProperNoun, "script_serial_2_2_2"),
+            (2, "DailyLife", ScriptRelation.DirectTranslation, "script_serial_2_3_1"),
+            (2, "DailyLife", ScriptRelation.ProperNoun, "script_serial_2_3_2")
         };
 
         var before = await ReadSequenceValuesAsync(ct);
@@ -97,9 +97,9 @@ public sealed class IdentifierContractTests : IntegrationTestBase
         var ct = TestContext.Current.CancellationToken;
 
         var a = await Scripts.GenerateIdAsync(
-            3, ScriptDomain.ItTechnology, ScriptRelation.DirectTranslation, ct);
+            3, "ItTechnology", ScriptRelation.DirectTranslation, ct);
         var b = await Scripts.GenerateIdAsync(
-            7, ScriptDomain.DailyLife, ScriptRelation.ProperNoun, ct);
+            7, "DailyLife", ScriptRelation.ProperNoun, ct);
 
         Assert.Matches(@"^s_[3-9][123][12][0-9]{9}$", a);
         Assert.Matches(@"^s_[3-9][123][12][0-9]{9}$", b);
@@ -136,7 +136,7 @@ public sealed class IdentifierContractTests : IntegrationTestBase
             Status = ScriptStatus.PendingValidation,
             WordCount = 9,
             EnWordCount = 9,
-            Domain = ScriptDomain.ItTechnology,
+            Domain = "ItTechnology",
             CreatedBy = AdminUserId,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow

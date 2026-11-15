@@ -47,8 +47,10 @@ src/
 
 ## Tính năng Admin đang nối API
 
-- **TextData**: form nhập câu hiện chỉ gửi file **JSON** (`File`). API backend đã nhận thêm `.txt` kèm trường `Domain`, nhưng UI chưa có ô chọn chủ đề hay chấp nhận `.txt`.
-- **Recordings**: nút "Tải dataset" xuất ZIP theo đúng các cặp đã chọn — gửi `recordingIds` (mã các bản thật trong cặp) lên `POST /api/datasets/export`; backend chỉ đóng gói cặp đã duyệt đủ cs+vi.
+- **TextData**: nhập câu bằng file **`.txt`** (mỗi cặp hai dòng) kèm ô chọn **chủ đề** lấy từ `GET /api/config/topics`; có lọc theo chủ đề, thêm/sửa cặp câu và hiện cột nội dung có nhãn. API vẫn nhận `.json` nhưng UI chưa mở lại đường đó.
+- **TopicConfig**: gọi API thật `/api/admin/domains` để tạo, đổi tên và xóa mềm chủ đề; danh sách đọc từ `GET /api/config/topics`.
+- **Recordings**: lọc theo người đọc/thời gian, hiện thời điểm duyệt gần nhất; nút "Tải dataset" xuất ZIP theo đúng các cặp đã chọn — gửi `recordingIds` (mã các bản thật trong cặp) lên `POST /api/datasets/export`; backend chỉ đóng gói cặp đã duyệt đủ cs+vi.
+- **Chưa có UI**: ô `region` trong hồ sơ, hiển thị `semanticWarning`, và màn chạy máy duyệt.
 
 ## Liên quan
 

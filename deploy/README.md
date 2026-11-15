@@ -20,6 +20,14 @@ Caddy tự xin chứng chỉ Let's Encrypt và tự gia hạn, nhóm không ph�
 ## Chuẩn bị
 
 1. **Máy chủ**: 2 vCPU, 4 GB RAM, 40 GB ổ đĩa là đủ cho giai đoạn thu dữ liệu. Ubuntu 24.04.
+   Cần thêm **ít nhất 1 GB swap** (khuyến nghị 4 GB) và khoảng 6 GB đĩa cho dịch vụ nhận
+   dạng giọng nói: lúc nạp model có một đỉnh RAM nhất thời vượt mức dùng khi chạy ổn định,
+   không có swap thì container `asr` bị giết và AI duyệt hỏng. Tạo swap:
+
+   ```bash
+   sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile      && sudo mkswap /swapfile && sudo swapon /swapfile
+   echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab   # giữ sau khi khởi động lại
+   ```
 2. **Tên miền**: một tên miền bất kỳ, tạo hai bản ghi A trỏ về IP máy chủ: `api` và `files`.
 3. **Mở cổng** 80 và 443 trên firewall của nhà cung cấp.
 
@@ -134,26 +142,47 @@ docker compose -f deploy/docker-compose.prod.yml logs -f api
 
 `POST /api/scripts/import` nhận file `.txt` cả khi không có LLM: backend gán nhãn `[vi]`/`[en]`
 bằng luật và lấy nghĩa tiếng Việt bằng các từ chung của hai câu (có thể nhiều từ). Cấu hình LLM
-OpenAI-compatible để sinh nghĩa từ chính xác hơn. Thêm các biến sau vào phần `environment` của service `api` trong
-`deploy/docker-compose.prod.yml`:
-
-```yaml
-      Llm__Endpoint: https://api.openai.com/v1
-      Llm__Model: gpt-4o-mini
-      Llm__ApiKey: ${LLM_API_KEY}
-      Llm__TimeoutSeconds: 60
-```
-
-File compose được track, nên commit thay đổi — `deploy/deploy.sh` dừng ngay khi cây làm việc còn file
-chưa commit. Sau đó thêm `LLM_API_KEY=...` vào `deploy/.env` và dựng lại API:
+OpenAI-compatible để sinh nghĩa từ chính xác hơn. `deploy/docker-compose.prod.yml` đã truyền sẵn
+`Llm__*` từ `deploy/.env`, nên chỉ cần thêm các biến sau vào `deploy/.env` **trên máy chủ**:
 
 ```bash
-docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build api
+LLM_ENDPOINT=https://api.openai.com/v1
+LLM_MODEL=gpt-4o-mini
+LLM_API_KEY=...
+LLM_TIMEOUT_SECONDS=60
 ```
 
-**Hiện `deploy/docker-compose.prod.yml` chưa truyền `Llm__*`**, nên máy chủ mới deploy vẫn nhập được
-`.txt` bằng luật; nghĩa từ có thể trống và người duyệt phải điền. Cấu hình `Llm__Endpoint`/`Llm__Model`
-để LLM sinh nghĩa từ. `Llm__ApiKey` chỉ cần khi endpoint yêu cầu xác thực.
+`deploy/.env` đã bị gitignore nên khóa không vào git. Để trống `LLM_ENDPOINT`/`LLM_MODEL` thì backend
+gán nhãn bằng luật; `LLM_API_KEY` chỉ cần khi endpoint yêu cầu xác thực. Sau khi sửa, dựng lại API:
+
+```bash
+docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d api
+```
+
+Kiểm tra container đã nhận cấu hình:
+
+```bash
+docker exec csl-api printenv Llm__Model
+```
+
+### Bật máy duyệt bản ghi (tuỳ chọn)
+
+Service `asr` (faster-whisper, CPU int8) nằm sẵn trong `deploy/docker-compose.prod.yml`; `deploy/.env.example`
+đã đặt `ASR_ENDPOINT=http://asr:8000/v1` và `ASR_MODEL=deepdml/faster-whisper-large-v3-turbo-ct2`. Máy chỉ là
+**phiếu thứ ba** khi hai Reviewer đầu lệch nhau, và **tắt mặc định**. Bật trong `system_config`:
+
+```bash
+docker exec csl-postgres psql -U csl -d codeswitchlabel -c \
+  "UPDATE system_config SET config_value='true' WHERE config_key='ai_review.enabled';"
+# tuỳ chọn: worker tự nhặt hàng đợi thay vì gọi POST /api/recordings/{id}/ai-review
+docker exec csl-postgres psql -U csl -d codeswitchlabel -c \
+  "UPDATE system_config SET config_value='true' WHERE config_key='ai_review.auto_enabled';"
+```
+
+- `ASR_LANGUAGE` cố ý để trống: ép `vi` làm mô hình phiên âm từ tiếng Anh thành chữ Việt gần âm, WER sai.
+- Model bị nhả khỏi RAM sau `ASR_MODEL_TTL` giây không dùng; lần gọi đầu sau quãng nghỉ chậm ~60 giây,
+  nên `ASR_TIMEOUT_SECONDS` để 180 chứ không phải 120.
+- Thiếu `Asr:Endpoint`/`Model` → endpoint máy duyệt trả `422 asr_not_configured`; API vẫn chạy bình thường.
 
 ## Nghiệm thu bản deploy
 
@@ -283,12 +312,20 @@ mục gốc của repo trên máy chủ. Script làm theo đúng thứ tự này
 | 2. Chờ | `pg_isready` (tối đa 30 giây) | postgres không dậy |
 | 3. Sao lưu | `pg_dump` → `gzip`, kiểm tra bằng `gzip -t`; tar volume MinIO; giữ 7 bản gần nhất | dump rỗng hoặc gzip hỏng |
 | 4. Kéo code | `git pull --ff-only` | git lỗi |
-| 5. Migration | Chạy file `migrations/V*.sql` **chưa có** trong bảng `schema_migration` | migration lỗi (file tự rollback) |
+| 5. Migration | Có file mới thì dựng image, dừng API, `pg_dump` lần nữa, rồi chạy file `migrations/V*.sql` **chưa có** trong bảng `schema_migration` | migration lỗi (file tự rollback; API cũ được bật lại nếu chưa file nào commit) |
 | 6. Dựng lại | `docker compose up -d --build` | — |
 | 7. Kiểm tra | `/health`, đăng nhập `admin@`, `GET /api/auth/me`; ghi commit vào `deploy/.deployed-sha` | API không lên, sai mật khẩu |
 
 V22 đổi tên tại chỗ các bảng, cột, enum, view, hàm và trigger cũ sang Wave. Dữ liệu sẵn có được giữ
 nguyên; client phải dùng route `/api/waves` và các trường JSON mang tên Wave.
+
+V23 cho Admin duyệt mọi chủ đề; V24–V26 thêm bảng `ai_review` và máy duyệt (mặc định tắt);
+V27 thêm vùng miền người đọc; V28 thêm `script.semantic_warning`; **V29** (từng đánh số V27, đổi để
+không trùng `V27__speaker_region`) đổi enum `script_domain` thành bảng `domain` — migration **một chiều**,
+`deploy.sh` đã dừng API và sao lưu lần nữa trước khi áp.
+
+V29 có guard: database nào đã chạy bản chủ đề động dưới số V27 cũ (bảng `domain` đã tồn tại) thì file
+tự bỏ qua, `deploy.sh` vẫn ghi nhận V29 — không có lần chạy nào bị kẹt vì trùng số.
 
 **Bảng `schema_migration`** là sổ ghi những migration đã chạy, do script tự tạo ở bước 5. Nhờ đó
 "migration nào đã áp rồi" trả lời bằng truy vấn thay vì đọc lại tài liệu:
@@ -318,10 +355,16 @@ chính nó.
 > Lần đang chạy vẫn dùng bản script đã nạp lúc bắt đầu; bản mới chỉ có hiệu lực từ lần sau. Vì vậy
 > bước kiểm tra cuối gọi `GET /api/auth/me`, route không đổi tên theo domain (bài học từ V22).
 
-> **Migration phải tương thích ngược** với code đang chạy (kiểu expand/contract: thêm cột/bảng mới,
-> chưa xoá cái cũ). Vì vậy mới áp migration *trước* khi dựng lại container — code cũ vẫn chạy được
-> với lược đồ mới. Migration phá vỡ tương thích (xoá cột, đổi kiểu) thì phải làm ngược lại và sửa
-> thứ tự trong `deploy/deploy.sh`.
+> **Migration chạy khi API đã dừng.** Khi có file migration mới, `deploy.sh` dựng image trước (API cũ
+> vẫn phục vụ), dừng API, sao lưu database lần nữa, rồi mới áp migration. Nhờ vậy migration xoá
+> cột/đổi kiểu không cần viết theo kiểu expand/contract; đổi lại có downtime ngắn trong lúc áp
+> migration và khởi động lại. Nếu API mới không lên sau khi migration commit, phục hồi từ bản
+> `pre-migration-*.sql.gz` rồi mới lùi code (mục "Khôi phục database..." bên dưới).
+>
+> **Lần đầu đổi chính `deploy/deploy.sh`:** push riêng một commit chỉ có `deploy/**` trước, chờ
+> deploy xanh, rồi mới push commit có migration. Tiến trình bash đang chạy luôn là bản đã nạp trước
+> `git pull`; push chung thì script cũ sẽ áp migration. Script mới có lớp bảo vệ: thấy `deploy.sh`
+> đổi cùng migration thì dừng và yêu cầu chạy lại.
 
 File âm thanh nằm trong volume `codeswitchlabel_minio-data`; sao lưu volume này cùng với database,
 vì mất file audio là mất dữ liệu nghiên cứu, không tạo lại được.
@@ -363,6 +406,10 @@ docker compose -f deploy/docker-compose.prod.yml logs -f api
 V15 thay hàm `fn_queue_claim_next` để tôn trọng `task_script.assignee_user_id`. Nếu phải rollback thủ công, dừng API trước rồi chạy lại migration V15 cũ; thao tác này làm mất phân công câu theo Speaker và hàng đợi ghi âm sẽ phát chung như cũ.
 
 ### Khôi phục database từ bản sao lưu (khi migration hoặc deploy hỏng)
+
+`deploy.sh` tạo `pre-migration-<...>.sql.gz` ngay trước khi áp migration. Dùng file đó trước:
+nó được tạo lúc API đã dừng nên không mất dữ liệu người dùng đã ghi. `backup-<...>.sql.gz` chỉ là
+phương án sau, và có thể cũ hơn vài phút.
 
 ```bash
 # 1. Phục hồi database từ file backup ở bước 0 (ghi đè toàn bộ DB hiện tại)

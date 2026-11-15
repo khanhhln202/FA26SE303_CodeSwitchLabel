@@ -16,7 +16,7 @@ internal static class ScriptGuards
     /// rõ ràng, thay vì để trigger trg_script_validated_domain ném lỗi thô từ database.
     /// </summary>
     public static async Task EnsureDomainQualifiedAsync(
-        this IUserDomainRepository domainRepository, long userId, ScriptDomain domain, CancellationToken ct)
+        this IUserDomainRepository domainRepository, long userId, string domain, CancellationToken ct)
     {
         if (await domainRepository.IsQualifiedAsync(userId, domain, ct)) return;
 

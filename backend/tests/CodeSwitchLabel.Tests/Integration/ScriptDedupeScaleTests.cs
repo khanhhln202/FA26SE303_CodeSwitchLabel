@@ -24,7 +24,7 @@ public sealed class ScriptDedupeScaleTests : IntegrationTestBase
         var needle = "[vi]Câu cần tìm [en]lastchunk [vi]ở cuối danh sách.";
         await CreateScriptAsync(
             needle, "[vi]Câu cần tìm ở cuối danh sách.",
-            ScriptDomain.Education, AdminUserId);
+            "Education", AdminUserId);
 
         var contents = new List<string>(10_000);
         for (var i = 0; i < 9_999; i++)
@@ -46,7 +46,7 @@ public sealed class ScriptDedupeScaleTests : IntegrationTestBase
         var stored = "[vi]Em nên [en]scan [vi]tài liệu này.";
         await CreateScriptAsync(
             stored, "[vi]Em nên quét tài liệu này.",
-            ScriptDomain.ItTechnology, AdminUserId);
+            "ItTechnology", AdminUserId);
 
         var found = await Scripts.FindExistingContentsAsync(
             ["  [vi]EM NÊN [en]SCAN [vi]TÀI   LIỆU NÀY.  "], ct);

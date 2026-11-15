@@ -49,6 +49,24 @@ public static class ReviewRules
     /// </summary>
     public static int MajorityOf(int roundsRequired) => (roundsRequired / 2) + 1;
 
+    /// <summary>
+    /// Trạng thái của CẶP từ trạng thái hai bản: một bản bị từ chối thì cả cặp từ chối;
+    /// đủ cả hai bản đạt mới là đạt; mọi bản đã thu đều trượt QC thì báo lỗi chất lượng;
+    /// còn lại là đang chờ (thiếu bản, hoặc đã nộp chưa có kết quả).
+    /// </summary>
+    public static RecordingStatus PairOutcome(RecordingStatus? cs, RecordingStatus? vi)
+    {
+        if (cs == RecordingStatus.Rejected || vi == RecordingStatus.Rejected)
+            return RecordingStatus.Rejected;
+        if (cs == RecordingStatus.Approved && vi == RecordingStatus.Approved)
+            return RecordingStatus.Approved;
+        if ((cs is null || cs == RecordingStatus.QcFailed)
+            && (vi is null || vi == RecordingStatus.QcFailed)
+            && (cs is not null || vi is not null))
+            return RecordingStatus.QcFailed;
+        return RecordingStatus.PendingReview;
+    }
+
     public static RecordingStatus? Outcome(IReadOnlyList<ReviewDecision> decisions, int roundsRequired)
     {
         if (roundsRequired < 1) throw new ArgumentOutOfRangeException(nameof(roundsRequired));

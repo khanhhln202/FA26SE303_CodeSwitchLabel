@@ -32,9 +32,10 @@ public class LabelingService(
         - alignment có đúng một mục cho mỗi từ tiếng Anh, theo thứ tự xuất hiện.
         - source là từ tiếng Anh; target là nghĩa tiếng Việt của từ đó trong câu.
         - relation là "proper_noun" nếu là tên riêng, ngược lại "semantic_equivalent".
+        - semantic_warning: null nếu hai câu cùng nghĩa; nếu câu thuần Việt không còn là bản tương đương nghĩa của câu trộn, viết một câu tiếng Việt ngắn chỉ rõ chỗ lệch.
 
         Chỉ trả về một đối tượng JSON, không markdown, đúng mẫu:
-        {"cs_tagged":"[vi]Em nên [en]scan [vi]tài liệu này.","alignment":[{"source":"scan","target":"quét","relation":"semantic_equivalent"}]}
+        {"cs_tagged":"[vi]Em nên [en]scan [vi]tài liệu này.","alignment":[{"source":"scan","target":"quét","relation":"semantic_equivalent"}],"semantic_warning":null}
         """;
 
     private LlmOptions Options => options.Value;
@@ -55,6 +56,8 @@ public class LabelingService(
         {
             model = Options.Model,
             temperature = 0,
+            // OpenRouter giữ chỗ theo max_tokens; model có thể mặc định 131k nên bị 402 dù câu trả lời rất ngắn.
+            max_tokens = 2048,
             messages = new object[]
             {
                 new { role = "system", content = SystemPrompt },
@@ -220,6 +223,10 @@ public class LabelingService(
             throw ParseError("LLM đã sửa câu thuần Việt; cần nhập lại câu gốc.");
         }
 
+        var warning = labeled?.SemanticWarning?.Trim();
+        if (string.IsNullOrEmpty(warning)) warning = null;
+        else if (warning.Length > 500) warning = warning[..500];
+
         return new LabeledPair(cs, [.. alignment.Select(a => new AlignmentItem
         {
             Source = a.Source.Trim(),
@@ -227,7 +234,7 @@ public class LabelingService(
             Relation = string.IsNullOrWhiteSpace(a.Relation)
                 ? "semantic_equivalent"
                 : a.Relation.Trim()
-        })]);
+        })], warning);
     }
 
     /// <summary>Model hay bọc JSON trong markdown hoặc thêm lời dẫn; lấy đúng khối ngoặc ngoài cùng.</summary>
@@ -237,6 +244,20 @@ public class LabelingService(
         var end = content.LastIndexOf('}');
 
         return start >= 0 && end > start ? content[start..(end + 1)] : content.Trim();
+    }
+
+    public async Task<LabeledPair> AutoLabelAsync(string csRaw, string viRaw, CancellationToken ct = default)
+    {
+        if (!IsConfigured) return RuleBasedLabeler.Label(csRaw, viRaw);
+        try
+        {
+            return await LabelAsync(csRaw, viRaw, ct);
+        }
+        catch (UnprocessableException ex) when (ex.Code is "llm_failed" or "llm_parse_error")
+        {
+            logger.LogWarning(ex, "LLM failed or returned unusable labels; using rule-based labeler.");
+            return RuleBasedLabeler.Label(csRaw, viRaw);
+        }
     }
 
     private static UnprocessableException ParseError(string message) =>
@@ -252,5 +273,8 @@ public class LabelingService(
 
         [JsonPropertyName("alignment")]
         public List<AlignmentItem>? Alignment { get; init; }
+
+        [JsonPropertyName("semantic_warning")]
+        public string? SemanticWarning { get; init; }
     }
 }

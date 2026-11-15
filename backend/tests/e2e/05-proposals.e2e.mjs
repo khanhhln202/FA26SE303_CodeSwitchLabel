@@ -124,14 +124,7 @@ if (nhap.status !== 200 || !nhap.body?.scriptIds?.length) {
 }
 const [cauBaoLoi, cauDeXuatSua] = nhap.body.scriptIds;
 
-for (const ma of [cauBaoLoi, cauDeXuatSua]) {
-  B('1.2', 'reviewer', 'POST', `/api/scripts/${ma}/review`,
-    await goi(reviewer.token, 'POST', `/api/scripts/${ma}/review`,
-      { action: 'Accepted', comment: 'Câu tự nhiên, đưa vào hàng đợi ghi âm' }), 200,
-    (b) => ({ maCau: ma, trangThai: b.status }));
-}
-
-sql('Hai câu vừa duyệt và hàng đợi ghi âm của chúng (chưa ai thu)',
+sql('Hai câu vừa nhập đã Sẵn sàng và hàng đợi ghi âm của chúng (chưa ai thu)',
   `select s.script_id, s.status, q.stage, q.state from script s join script_queue q on q.script_id = s.script_id where s.script_id in ('${cauBaoLoi}','${cauDeXuatSua}') order by s.script_id, q.queue_id;`);
 
 // ============================================================ MÀN 2 · SPEAKER GỬI ĐỀ XUẤT
