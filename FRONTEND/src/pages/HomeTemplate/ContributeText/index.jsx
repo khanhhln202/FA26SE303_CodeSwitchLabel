@@ -74,7 +74,7 @@ function RadioGroup({ label, options, value, onChange, renderLabel = (o) => o })
   return (
     <div role="radiogroup" aria-label={label} className="min-w-0">
       <p className="type-label mb-1.5" style={{ color: TEXT_HEADING }}>{label}</p>
-      <div className="grid grid-cols-1 sm:grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-1.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-1.5">
         {options.map((o) => (
           <RadioOption key={o} selected={value === o} label={renderLabel(o)} onClick={() => onChange(o)} />
         ))}

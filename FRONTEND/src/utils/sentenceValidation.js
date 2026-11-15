@@ -16,7 +16,7 @@ const isVietnameseTagged = (text) => text.startsWith('[vi]') && !text.includes('
 const pairsFilled = (pairs) => pairs.every((p) => p.source.trim() && p.target.trim());
 
 /**
- * Một câu thường (không nhãn) ở trang Đóng góp văn bản: độ dài 5-20 từ, kết thúc bằng dấu câu.
+ * Một câu thường (không nhãn) ở trang Đóng góp văn bản: độ dài 5-20 từ (không bắt buộc dấu câu cuối).
  * Backend tự gắn nhãn [vi]/[en] cho cặp câu thô (csRaw / viRaw).
  * Trả về { empty, words, rules } - `words` để hiện bộ đếm "x/20 từ".
  */
@@ -28,7 +28,6 @@ export function evaluateSentence(text) {
     words,
     rules: [
       { ok: words >= 5 && words <= 20, label: '5-20 từ' },
-      { ok: /[.!?…]$/.test(trimmed), label: 'Kết thúc . ! ?' },
     ],
   };
 }

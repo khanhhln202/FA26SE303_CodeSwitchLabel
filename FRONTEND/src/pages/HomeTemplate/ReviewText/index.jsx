@@ -48,6 +48,8 @@ import {
 // "2026-10-20T00:00:00Z" -> "20/10/2026"
 const formatDate = (iso) => (iso ? new Date(iso).toLocaleDateString("vi-VN") : "—");
 
+const SHOW_EDIT_BUTTON = false;
+
 const SECONDARY_BTN =
   "inline-flex items-center gap-2 px-4 py-2 rounded-full text-ui font-label bg-white hover:bg-[#FAF9F5] active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed";
 
@@ -410,13 +412,16 @@ export default function ReviewText() {
         >
           <Flag className="w-4 h-4" style={{ color: DANGER }} /> Báo lỗi câu này
         </button>
-        <button
-          onClick={openEditModal}
-          className={SECONDARY_BTN}
-          style={{ border: `1px solid ${BORDER_LIGHT}`, color: TEXT_BODY }}
-        >
-          <Edit3 className="w-4 h-4" style={{ color: "#A85E12" }} /> Chỉnh sửa câu
-        </button>
+        {/* Tạm ẩn nút "Chỉnh sửa câu" - đổi SHOW_EDIT_BUTTON thành true để hiện lại */}
+        {SHOW_EDIT_BUTTON && (
+          <button
+            onClick={openEditModal}
+            className={SECONDARY_BTN}
+            style={{ border: `1px solid ${BORDER_LIGHT}`, color: TEXT_BODY }}
+          >
+            <Edit3 className="w-4 h-4" style={{ color: "#A85E12" }} /> Chỉnh sửa câu
+          </button>
+        )}
       </div>
 
       </>
