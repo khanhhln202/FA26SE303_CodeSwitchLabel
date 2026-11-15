@@ -29,6 +29,23 @@ export const uploadRecordingApi = async ({ audio, scriptId, variant, taskId }) =
   }
 };
 
+// Bằng chứng máy đã phán cho một bản ghi: GET /api/recordings/{id}/ai-review
+// Trả về { verdict, transcript, expectedText, effectiveWer, explanation, ... } hoặc null khi:
+// 204 = máy chưa phán bản này; 403 = vai trò hiện tại chưa được xem (vd. Speaker); 404 = không có bản ghi.
+// Không ném lỗi ở các trường hợp đó vì popup chỉ hiện phần AI khi máy thật sự có phán.
+export const getAiReviewApi = async (recordingId) => {
+  try {
+    const response = await httpClient.get(`/api/recordings/${recordingId}/ai-review`);
+    return response.status === 204 ? null : response.data || null;
+  } catch (error) {
+    if ([403, 404].includes(error.response?.status)) return null;
+    const message =
+      error.response?.data?.title ||
+      "Không lấy được kết quả AI duyệt!";
+    throw new Error(message, { cause: error });
+  }
+};
+
 // Link nghe tạm của một bản ghi: GET /api/recordings/{id}/audio-url
 // Trả về { url, expiresAt } - link hết hạn sau 15 phút, dùng thẳng làm src của audio
 export const getRecordingAudioUrlApi = async (recordingId) => {

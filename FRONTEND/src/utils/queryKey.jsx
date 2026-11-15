@@ -39,6 +39,8 @@ export const CREATE_SCRIPT_PROPOSAL_API = 'CREATE_SCRIPT_PROPOSAL_API'
 export const UPLOAD_RECORDING_API = 'UPLOAD_RECORDING_API'
 // Link nghe tạm của một bản ghi (GET /api/recordings/{id}/audio-url)
 export const GET_RECORDING_AUDIO_URL_API = 'GET_RECORDING_AUDIO_URL_API'
+// Bằng chứng AI phá thế của một bản ghi (GET /api/recordings/{id}/ai-review)
+export const GET_AI_REVIEW_API = 'GET_AI_REVIEW_API'
 // Lịch sử ghi âm của Speaker (GET /api/speaker/recordings/history)
 export const GET_SPEAKER_RECORDING_HISTORY_API = 'GET_SPEAKER_RECORDING_HISTORY_API'
 // Thống kê bản ghi của Speaker (GET /api/speaker/stats)

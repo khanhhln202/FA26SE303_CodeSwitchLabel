@@ -48,15 +48,6 @@ import {
 // "2026-10-20T00:00:00Z" -> "20/10/2026"
 const formatDate = (iso) => (iso ? new Date(iso).toLocaleDateString("vi-VN") : "—");
 
-// Chủ đề backend trả tiếng Anh -> nhãn tiếng Việt trên giao diện
-const DOMAIN_LABEL = {
-  Education: "Giáo dục",
-  "IT/Technology": "Công nghệ thông tin",
-  ItTechnology: "Công nghệ thông tin",
-  "Daily Life": "Đời sống",
-  DailyLife: "Đời sống",
-};
-
 const SECONDARY_BTN =
   "inline-flex items-center gap-2 px-4 py-2 rounded-full text-ui font-label bg-white hover:bg-[#FAF9F5] active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed";
 
@@ -239,7 +230,9 @@ export default function ReviewText() {
   const barColor = percent >= 50 ? SUCCESS : WARNING;
 
   return (
-    <div className="[@media(min-height:900px)]:pb-12 text-left max-w-3xl mx-auto font-sans">
+    // Màn lớn: khung cao đúng phần còn lại của màn hình, thẻ câu co giãn ở giữa để trang không bị cuộn
+    <div className="text-left max-w-3xl mx-auto font-sans lg:h-full lg:flex lg:flex-col">
+
       <TaskStepper currentStep={1} />
 
       {/* THANH NHIỆM VỤ */}
@@ -325,7 +318,7 @@ export default function ReviewText() {
       ) : (
       <>
       {/* CẶP CÂU VĂN: 1 thẻ, 2 câu ngăn bằng đường mảnh, căn giữa - 2 lớp thẻ nghiêng phía sau làm điểm nhấn */}
-      <div className="relative mt-6 [@media(min-height:900px)]:mt-8">
+      <div className="relative mt-6 [@media(min-height:900px)]:mt-8 lg:flex-1 lg:min-h-0">
         <div
           className="absolute inset-x-2 -top-3 h-full rounded-[24px] rotate-[-1.5deg]"
           style={{ background: "#EFEDE3", border: "1px solid #E2DFD3" }}
@@ -335,15 +328,14 @@ export default function ReviewText() {
           style={{ background: SURFACE_PAGE, border: "1px solid #E9E6DA" }}
         />
       <div
-        className="relative bg-white rounded-[24px] overflow-hidden"
+        className="relative bg-white rounded-[24px] overflow-hidden flex flex-col lg:h-full"
         style={{ border: `1px solid ${BORDER_LIGHT}`, boxShadow: "0 6px 20px rgba(16,17,20,0.07)" }}
       >
-        <div className="h-1.5 w-full" style={{ background: ACCENT }} />
-        <p className="type-meta text-center pt-5 [@media(min-height:900px)]:pt-6" style={{ color: TEXT_BODY }}>
-          {[DOMAIN_LABEL[sentence.domain] ?? sentence.domain, sentence.wordCount != null && `${sentence.wordCount} từ`, sentence.enWordCount != null && `${sentence.enWordCount} từ tiếng Anh`]
-            .filter(Boolean)
-            .join(" · ")}
-        </p>
+        <div className="h-1.5 w-full shrink-0" style={{ background: ACCENT }} />
+
+        {/* Câu dài quá chiều cao còn lại thì chỉ cuộn trong thẻ; câu ngắn thì nằm giữa thẻ */}
+        <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
+        <div className="my-auto">
 
         {[
           {
@@ -368,7 +360,7 @@ export default function ReviewText() {
               <span className="inline-block type-caption px-2.5 py-0.5 rounded-full mb-3" style={part.chip}>
                 {part.label}
               </span>
-              <p className="text-headline font-label sm:type-reading" style={{ color: TEXT_HEADING, textWrap: "pretty" }}>
+              <p className="text-headline font-label sm:text-[24px] sm:leading-[34px]" style={{ color: TEXT_HEADING, textWrap: "pretty" }}>
                 {part.plain}
               </p>
               {/* Câu giữ nguyên nhãn [vi]/[en] */}
@@ -381,6 +373,8 @@ export default function ReviewText() {
             </div>
           </div>
         ))}
+        </div>
+        </div>
       </div>
       </div>
 
@@ -397,8 +391,10 @@ export default function ReviewText() {
         Sẵn sàng, vào ghi âm <ArrowRight className="w-4 h-4" />
       </button>
 
-      {/* Hành động phụ: nền trắng viền mảnh, chỉ icon có màu - nút chính vẫn nổi bật nhất */}
-      <div className="flex items-center justify-center gap-2.5 flex-wrap mt-3 [@media(min-height:900px)]:mt-4">
+      {/* Hành động phụ: nền trắng viền mảnh, chỉ icon có màu - nút chính vẫn nổi bật nhất.
+          relative z-10: nút chính đổi opacity khi hover sẽ tạo lớp vẽ mới, nếu không nâng hàng này lên
+          thì bóng đổ của nút chính phủ lên 3 nút phụ, trông như cả 3 cùng bị hover. */}
+      <div className="relative z-10 flex items-center justify-center gap-2.5 flex-wrap mt-3 [@media(min-height:900px)]:mt-4">
         <button
           onClick={handleSkip}
           disabled={isFetchingScript}

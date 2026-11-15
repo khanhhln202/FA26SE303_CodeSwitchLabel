@@ -16,24 +16,19 @@ const isVietnameseTagged = (text) => text.startsWith('[vi]') && !text.includes('
 const pairsFilled = (pairs) => pairs.every((p) => p.source.trim() && p.target.trim());
 
 /**
- * Một câu ở trang Đóng góp văn bản: độ dài 5-20 từ, nhãn đúng loại câu, kết thúc bằng dấu câu.
- * mixed = true: câu Việt-Anh (phải có cả [vi] và [en]); false: câu tiếng Việt (chỉ [vi], không có [en]).
+ * Một câu thường (không nhãn) ở trang Đóng góp văn bản: độ dài 5-20 từ, kết thúc bằng dấu câu.
+ * Backend tự gắn nhãn [vi]/[en] cho cặp câu thô (csRaw / viRaw).
  * Trả về { empty, words, rules } - `words` để hiện bộ đếm "x/20 từ".
  */
-export function evaluateSentence(text, mixed) {
-  const trimmed = text.trim();
-  const stripped = stripTags(trimmed).trim();
-  const words = stripped ? stripped.split(/\s+/).length : 0;
-  const tagOk = mixed
-    ? /\[vi\]/.test(trimmed) && /\[en\]/.test(trimmed)
-    : /\[vi\]/.test(trimmed) && !/\[en\]/.test(trimmed);
+export function evaluateSentence(text) {
+  const trimmed = stripTags(text.trim()).trim();
+  const words = trimmed ? trimmed.split(/\s+/).length : 0;
   return {
     empty: !trimmed,
     words,
     rules: [
       { ok: words >= 5 && words <= 20, label: '5-20 từ' },
-      { ok: tagOk, label: mixed ? 'Có [vi] và [en]' : 'Chỉ có [vi]' },
-      { ok: /[.!?…]$/.test(stripped), label: 'Kết thúc . ! ?' },
+      { ok: /[.!?…]$/.test(trimmed), label: 'Kết thúc . ! ?' },
     ],
   };
 }
