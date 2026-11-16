@@ -396,7 +396,8 @@ public class ScriptProposalService(
                 ? null
                 : ToSentence(
                     p.DraftCsContent, p.DraftViContent,
-                    DeserializeAlignment(p.DraftAlignment) ?? proposedAlignment));
+                    DeserializeAlignment(p.DraftAlignment) ?? proposedAlignment),
+            script.EnWordCount);
     }
 
     private static SpeakerProposalHistoryDto ToHistoryItem(ScriptProposal p)
@@ -413,7 +414,8 @@ public class ScriptProposalService(
             p.ProposedCsContent is null || p.ProposedViContent is null
                 ? null
                 : ToSentence(p.ProposedCsContent, p.ProposedViContent, proposedAlignment),
-            p.DecidedBy, p.DecidedByUser?.FullName, p.DecidedAt, p.DecisionNote);
+            p.DecidedBy, p.DecidedByUser?.FullName, p.DecidedAt, p.DecisionNote,
+            script.EnWordCount);
     }
 
     private static ProposalSentenceDto ToSentence(

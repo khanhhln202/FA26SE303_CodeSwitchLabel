@@ -460,7 +460,8 @@ public class SpeakerRoundsService(
                     r.ScriptReviewId, r.Action.ToString(), r.UserId, r.User.FullName,
                     r.ErrorReason?.ReasonCode, r.ErrorReason?.Description,
                     r.Comment, r.ReviewedAt))
-                .FirstOrDefault())).ToList();
+                .FirstOrDefault(),
+            s.EnWordCount)).ToList();
 
         return new PagedResult<SpeakerContributionHistoryDto>(items, query.Page, query.PageSize, total);
     }

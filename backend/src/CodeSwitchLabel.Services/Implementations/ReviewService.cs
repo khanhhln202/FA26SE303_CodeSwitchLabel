@@ -132,6 +132,10 @@ public class ReviewService(
                     x.ScriptId,
                     x.SentenceVariant,
                     CodeSwitchText.Strip(x.ScriptTagged),
+                    x.CsContent,
+                    CodeSwitchText.Strip(x.CsContent),
+                    x.ViContent,
+                    CodeSwitchText.Strip(x.ViContent),
                     x.DurationSec,
                     x.Status,
                     x.QueueStatus,
@@ -145,6 +149,10 @@ public class ReviewService(
                         ? new ReviewSiblingDto(
                             sibling.RecordingId, sibling.SentenceVariant,
                             CodeSwitchText.Strip(sibling.ScriptTagged),
+                            sibling.CsContent,
+                            CodeSwitchText.Strip(sibling.CsContent),
+                            sibling.ViContent,
+                            CodeSwitchText.Strip(sibling.ViContent),
                             sibling.Status, sibling.ReviewsDone,
                             sibling.MyReviewDone,
                             ReviewRules.BlockerFor(
@@ -588,6 +596,10 @@ public class ReviewService(
             recording.SentenceVariant,
             CodeSwitchText.Strip(tagged),
             tagged,
+            recording.Script.CsContent,
+            CodeSwitchText.Strip(recording.Script.CsContent),
+            recording.Script.ViContent,
+            CodeSwitchText.Strip(recording.Script.ViContent),
             recording.DurationSec,
             url,
             expiresAt,
@@ -626,6 +638,10 @@ public class ReviewService(
 
                 variants.Add(new ReviewVariantDto(
                     "", variant, CodeSwitchText.Strip(pendingText), pendingText,
+                    recording.Script.CsContent,
+                    CodeSwitchText.Strip(recording.Script.CsContent),
+                    recording.Script.ViContent,
+                    CodeSwitchText.Strip(recording.Script.ViContent),
                     null, null, null, null, 0, false));
                 continue;
             }
@@ -654,6 +670,10 @@ public class ReviewService(
                 row.SentenceVariant,
                 CodeSwitchText.Strip(text),
                 text,
+                row.Script.CsContent,
+                CodeSwitchText.Strip(row.Script.CsContent),
+                row.Script.ViContent,
+                CodeSwitchText.Strip(row.Script.ViContent),
                 row.DurationSec,
                 audioUrl,
                 audioExpiresAt,

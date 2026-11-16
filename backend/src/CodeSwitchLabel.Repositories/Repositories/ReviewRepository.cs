@@ -22,6 +22,8 @@ public record TaskReviewRow(
     string ScriptId,
     SentenceVariant SentenceVariant,
     string ScriptTagged,
+    string CsContent,
+    string ViContent,
     decimal DurationSec,
     RecordingStatus Status,
     TaskRecordingStatus QueueStatus,
@@ -40,6 +42,8 @@ public record RecordingSummaryRow(
     string ScriptId,
     SentenceVariant SentenceVariant,
     string ScriptTagged,
+    string CsContent,
+    string ViContent,
     RecordingStatus Status,
     DateTimeOffset RecordedAt,
     int ReviewsDone,
@@ -311,6 +315,8 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
             tr.Recording.SentenceVariant == SentenceVariant.CodeSwitching
                 ? tr.Recording.Script.CsContent
                 : tr.Recording.Script.ViContent,
+            tr.Recording.Script.CsContent,
+            tr.Recording.Script.ViContent,
             tr.Recording.DurationSec,
             tr.Recording.Status,
             tr.Status,
@@ -393,6 +399,7 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
 
         return db.Recordings
             .AsNoTracking()
+            .Include(r => r.Script)
             .Where(r => scriptIds.Contains(r.ScriptId))
             .OrderBy(r => r.ScriptId).ThenBy(r => r.SentenceVariant)
             .Select(r => new RecordingSummaryRow(
@@ -403,6 +410,8 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
                 r.SentenceVariant == SentenceVariant.CodeSwitching
                     ? r.Script.CsContent
                     : r.Script.ViContent,
+                r.Script.CsContent,
+                r.Script.ViContent,
                 r.Status,
                 r.RecordedAt,
                 r.Reviews.Count,

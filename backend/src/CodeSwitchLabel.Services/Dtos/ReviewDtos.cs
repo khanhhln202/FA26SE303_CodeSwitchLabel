@@ -37,6 +37,14 @@ public record NextReviewDto(
     SentenceVariant SentenceVariant,
     string ScriptText,
     string ScriptTagged,
+    /// <summary>Câu chen tiếng Anh, giữ nguyên nhãn [vi]/[en].</summary>
+    string CsContent,
+    /// <summary>Câu chen tiếng Anh, đã bỏ nhãn để hiển thị.</summary>
+    string CsPlain,
+    /// <summary>Câu thuần Việt, giữ nguyên nhãn [vi]/[en].</summary>
+    string ViContent,
+    /// <summary>Câu thuần Việt, đã bỏ nhãn để hiển thị.</summary>
+    string ViPlain,
     decimal DurationSec,
     string AudioUrl,
     DateTimeOffset AudioUrlExpiresAt,
@@ -48,6 +56,14 @@ public record ReviewVariantDto(
     SentenceVariant SentenceVariant,
     string ScriptText,
     string ScriptTagged,
+    /// <summary>Câu chen tiếng Anh, giữ nguyên nhãn [vi]/[en].</summary>
+    string CsContent,
+    /// <summary>Câu chen tiếng Anh, đã bỏ nhãn để hiển thị.</summary>
+    string CsPlain,
+    /// <summary>Câu thuần Việt, giữ nguyên nhãn [vi]/[en].</summary>
+    string ViContent,
+    /// <summary>Câu thuần Việt, đã bỏ nhãn để hiển thị.</summary>
+    string ViPlain,
     decimal? DurationSec,
     string? AudioUrl,
     DateTimeOffset? AudioUrlExpiresAt,
@@ -190,6 +206,14 @@ public record TaskReviewItemDto(
     string ScriptId,
     SentenceVariant SentenceVariant,
     string ScriptText,
+    /// <summary>Câu chen tiếng Anh, giữ nguyên nhãn [vi]/[en].</summary>
+    string CsContent,
+    /// <summary>Câu chen tiếng Anh, đã bỏ nhãn để hiển thị.</summary>
+    string CsPlain,
+    /// <summary>Câu thuần Việt, giữ nguyên nhãn [vi]/[en].</summary>
+    string ViContent,
+    /// <summary>Câu thuần Việt, đã bỏ nhãn để hiển thị.</summary>
+    string ViPlain,
     decimal DurationSec,
     RecordingStatus Status,
     TaskRecordingStatus QueueStatus,
@@ -210,6 +234,14 @@ public record ReviewSiblingDto(
     string RecordingId,
     SentenceVariant SentenceVariant,
     string ScriptText,
+    /// <summary>Câu chen tiếng Anh, giữ nguyên nhãn [vi]/[en].</summary>
+    string CsContent,
+    /// <summary>Câu chen tiếng Anh, đã bỏ nhãn để hiển thị.</summary>
+    string CsPlain,
+    /// <summary>Câu thuần Việt, giữ nguyên nhãn [vi]/[en].</summary>
+    string ViContent,
+    /// <summary>Câu thuần Việt, đã bỏ nhãn để hiển thị.</summary>
+    string ViPlain,
     RecordingStatus? Status,
     int ReviewsDone,
     bool MyReviewDone,

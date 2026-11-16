@@ -360,7 +360,8 @@ public class ReviewerStatsService(
             r.ErrorReason?.Description ?? r.ErrorReason?.ReasonCode,
             r.Comment,
             r.Script.Status.ToString(),
-            r.ReviewedAt)).ToList();
+            r.ReviewedAt,
+            r.Script.EnWordCount)).ToList();
 
         return new PagedResult<ReviewerScriptHistoryItemDto>(items, query.Page, query.PageSize, total);
     }

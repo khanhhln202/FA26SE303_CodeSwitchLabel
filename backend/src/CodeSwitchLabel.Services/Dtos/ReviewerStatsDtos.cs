@@ -66,6 +66,7 @@ public record ReviewerHistoryQuery : PageRequest
 /// <param name="Alignment">Từ tiếng Anh kèm nghĩa tiếng Việt — cùng dạng với lịch sử đóng góp của Speaker.</param>
 /// <param name="Reason">Lý do từ chối (mô tả lỗi); null khi lượt của tôi không phải từ chối.</param>
 /// <param name="Comment">Bình luận của lượt duyệt, nếu có.</param>
+/// <param name="EnWordCount">Số từ tiếng Anh của câu hiện tại — dùng cho bộ đếm và giới hạn dòng nghĩa từ.</param>
 public record ReviewerScriptHistoryItemDto(
     string ScriptId,
     string Kind,
@@ -79,7 +80,8 @@ public record ReviewerScriptHistoryItemDto(
     string? Reason,
     string? Comment,
     string ScriptStatus,
-    DateTimeOffset ReviewedAt);
+    DateTimeOffset ReviewedAt,
+    int EnWordCount);
 
 public record ReviewerScriptHistoryQuery : PageRequest
 {
