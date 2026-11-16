@@ -147,6 +147,15 @@ public class SystemConfigService(ISystemConfigRepository repository) : ISystemCo
 
     public async Task UpdateAsync(string key, string value, long updatedById, CancellationToken ct = default)
     {
+        if (key == ConfigKeys.ScriptMaxEnglishWords &&
+            (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var maxEnglishWords) ||
+             maxEnglishWords is < 1 or > 9))
+        {
+            throw new BadRequestException(
+                "invalid_config_value",
+                "Số từ tiếng Anh tối đa phải là số nguyên từ 1 đến 9.");
+        }
+
         if (!await repository.UpdateValueAsync(key, value, updatedById, ct))
         {
             throw new NotFoundException("config_not_found", $"Không có tham số cấu hình \"{key}\".");

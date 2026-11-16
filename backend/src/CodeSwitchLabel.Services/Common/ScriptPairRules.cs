@@ -47,7 +47,8 @@ internal static class ScriptPairRules
     /// <summary>
     /// Kiểm tra một cặp câu. Trả về tổng số từ của câu chen tiếng Anh và số từ tiếng Anh trong đó.
     /// </summary>
-    public static (int WordCount, int EnWordCount) ValidatePair(string cs, string ve)
+    public static (int WordCount, int EnWordCount) ValidatePair(
+        string cs, string ve, int maxEnglishWords = 9)
     {
         int wordCount, enWordCount, veEnglish;
 
@@ -69,6 +70,13 @@ internal static class ScriptPairRules
                 "en_word_count_out_of_range",
                 $"Câu phải có từ 1 đến 9 từ tiếng Anh, hiện có {enWordCount}. " +
                 "Con số này nằm trong mã script nên không thể lớn hơn một chữ số.");
+        }
+
+        if (enWordCount > maxEnglishWords)
+        {
+            throw new UnprocessableException(
+                "en_word_count_exceeds_limit",
+                $"Câu chỉ được có tối đa {maxEnglishWords} từ tiếng Anh, hiện có {enWordCount}.");
         }
 
         if (veEnglish > 0)

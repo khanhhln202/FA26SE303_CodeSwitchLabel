@@ -1848,6 +1848,7 @@ INSERT INTO system_config (config_key, config_value, value_type, description) VA
     ('recording.audio_format_default',      'wav',   'string', 'Default audio format'),
     ('recording.max_take',                  '99',    'int',    'Highest re-record take number'),
     ('import.max_scripts_per_batch',        '100000','int',    'Sanity cap per import batch'),
+    ('script.max_english_words',            '5',     'int',    'Maximum English words in each script pair'),
     ('recording.min_mean_volume_db',        '-50',   'string', 'Min mean volume (dBFS); below fails auto-QC as too_quiet'),
     ('recording.max_peak_db',               '-1',    'string', 'Max peak (dBFS); above fails auto-QC as clipping_detected'),
     -- anti-junk thresholds: PLACEHOLDER values, confirm with supervisor
