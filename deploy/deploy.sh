@@ -324,10 +324,24 @@ say "docker compose up -d --build"
 # Khong co buoc nay thi moi lan volume asr-models mat la AI duyet hong lang le.
 # -----------------------------------------------------------------------------
 STEP="nap model ASR"
-ASR_MODEL_WANTED="$(read_env ASR_MODEL)"
+
+# Model phai nap la model cua dong tro VAO chinh container nay, khong phai ASR_MODEL.
+#
+# Tu khi dat dich vu ngoai lam duong chinh, ASR_MODEL la ten model ben nha cung cap
+# (vi du openai/whisper-large-v3-turbo). Nap ten do vao speaches la tai nham mot bo
+# trong so khac dinh dang roi hong — nhung cai hai that nam o cho khac: bo model that
+# cua duong lui khong con ai kiem nua, nen volume asr-models mat la AI duyet hong lang
+# le, dung thu buoc nay sinh ra de chan.
+model_cua_container_asr() {
+  case "$1" in http://asr:*|http://asr/*) printf '%s' "$2" ;; esac
+}
+ASR_MODEL_WANTED="$(
+  model_cua_container_asr "$(read_env ASR_ENDPOINT)" "$(read_env ASR_MODEL)")"
+[ -n "$ASR_MODEL_WANTED" ] || ASR_MODEL_WANTED="$(
+  model_cua_container_asr "$(read_env ASR_FALLBACK_ENDPOINT)" "$(read_env ASR_FALLBACK_MODEL)")"
 
 if [ -z "$ASR_MODEL_WANTED" ]; then
-  say "ASR_MODEL rong -> bo qua buoc nap model."
+  say "Khong duong ASR nao tro vao container asr -> bo qua buoc nap model."
 elif ! "${COMPOSE[@]}" ps --services --status running 2>/dev/null | grep -qx asr; then
   warn "Service asr khong chay -> bo qua buoc nap model. AI duyet se bao asr_failed."
 else
