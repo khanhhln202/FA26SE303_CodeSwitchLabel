@@ -125,6 +125,14 @@ public sealed class ScriptUpdatePendingTests(DatabaseFixture fixture) : ApiTestB
         Assert.False(string.IsNullOrWhiteSpace(dong.GetProperty("contributor").GetProperty("fullName").GetString()));
         Assert.True(dong.GetProperty("canReview").GetBoolean(), "Câu chưa chia lô thì Reviewer nào cũng duyệt được.");
         Assert.Equal("None", dong.GetProperty("blocker").GetString());
+
+        // Bản đã bỏ nhãn để Reviewer đọc được ngay trong danh sách.
+        var csPlain = dong.GetProperty("csPlain").GetString()!;
+        var viPlain = dong.GetProperty("viPlain").GetString()!;
+        Assert.DoesNotContain("[vi]", csPlain);
+        Assert.DoesNotContain("[en]", csPlain);
+        Assert.Contains("report", csPlain);
+        Assert.Contains("báo cáo", viPlain);
     }
 
     /// <summary>Danh sách này là màn hình của Reviewer; vai khác không mở được.</summary>

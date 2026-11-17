@@ -177,7 +177,6 @@ public record ContributionReviewDto(
     DateTimeOffset ReviewedAt);
 
 /// <param name="Review">Null khi câu còn đang chờ duyệt.</param>
-/// <param name="EnWordCount">Số từ tiếng Anh trong câu — dùng để hiện bộ đếm cho Speaker.</param>
 public record SpeakerContributionHistoryDto(
     string ScriptId,
     string Category,
@@ -186,8 +185,7 @@ public record SpeakerContributionHistoryDto(
     IReadOnlyList<AlignmentItem> Alignment,
     DateTimeOffset CreatedAt,
     ScriptStatus Status,
-    ContributionReviewDto? Review,
-    int EnWordCount);
+    ContributionReviewDto? Review);
 
 public record SpeakerHistoryQuery : PageRequest
 {

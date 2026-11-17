@@ -21,7 +21,6 @@ public record ProposalSentenceDto(
 /// chỉ có với đề xuất Edit. Đề xuất Report để `proposed` null vì Reviewer tự đưa ra bản chốt
 /// khi duyệt.
 /// </summary>
-/// <param name="EnWordCount">Số từ tiếng Anh của câu gốc (original) — dùng cho bộ đếm và giới hạn dòng nghĩa từ.</param>
 public record ProposalQueueItemDto(
     long ProposalId,
     ProposalKind Kind,
@@ -36,8 +35,7 @@ public record ProposalQueueItemDto(
     DateTimeOffset CreatedAt,
     ProposalSentenceDto Original,
     ProposalSentenceDto? Proposed,
-    ProposalSentenceDto? Draft,
-    int EnWordCount);
+    ProposalSentenceDto? Draft);
 
 /// <summary>
 /// Một đề xuất trong lịch sử của chính Speaker: phần nội dung giống hàng chờ của Reviewer,
@@ -51,7 +49,6 @@ public record ProposalQueueItemDto(
 /// Null khi đề xuất còn chờ, hoặc khi câu bị loại khỏi kho và trigger tự đóng đề xuất —
 /// trường hợp sau có <paramref name="DecidedAt"/> nhưng không có người quyết định.
 /// </param>
-/// <param name="EnWordCount">Số từ tiếng Anh của câu gốc (original) — dùng cho bộ đếm và giới hạn dòng nghĩa từ.</param>
 public record SpeakerProposalHistoryDto(
     long ProposalId,
     ProposalKind Kind,
@@ -67,8 +64,7 @@ public record SpeakerProposalHistoryDto(
     long? DecidedBy,
     string? DecidedByName,
     DateTimeOffset? DecidedAt,
-    string? DecisionNote,
-    int EnWordCount);
+    string? DecisionNote);
 
 /// <summary>Kết quả gửi đề xuất — đủ để màn hình Speaker xác nhận đề xuất đã vào hàng chờ.</summary>
 public record ProposalCreatedDto(

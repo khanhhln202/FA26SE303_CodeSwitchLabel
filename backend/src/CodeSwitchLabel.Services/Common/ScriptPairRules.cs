@@ -48,7 +48,7 @@ internal static class ScriptPairRules
     /// Kiểm tra một cặp câu. Trả về tổng số từ của câu chen tiếng Anh và số từ tiếng Anh trong đó.
     /// </summary>
     public static (int WordCount, int EnWordCount) ValidatePair(
-        string cs, string ve, int maxEnglishWords = 9)
+        string cs, string ve, int maxEnglishWords)
     {
         int wordCount, enWordCount, veEnglish;
 
@@ -193,7 +193,8 @@ internal static class ScriptPairRules
         cs = NormalizePunctuation(cs);
         ve = NormalizePunctuation(ve);
 
-        var (wordCount, enWordCount) = ValidatePair(cs, ve);
+        // Câu cũ có thể có tới 9 từ; bản sửa phải giữ nguyên số từ nên không áp giới hạn cấu hình.
+        var (wordCount, enWordCount) = ValidatePair(cs, ve, 9);
 
         if (enWordCount != script.EnWordCount)
         {

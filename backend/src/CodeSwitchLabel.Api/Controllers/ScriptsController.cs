@@ -101,20 +101,6 @@ public class ScriptsController(IScriptService scriptService, ILabelingService la
         => Ok(await labelingService.AutoLabelAsync(
             request.CsRaw.Trim(), request.ViRaw.Trim(), ct));
 
-    /// <summary>Speaker xem trước nhãn và đếm từ tiếng Anh cho cặp câu đang soạn — không lưu, không tốn quota LLM (luôn dùng rule-based).</summary>
-    /// <remarks>
-    /// Trả về câu đã gắn nhãn, alignment, và số từ tiếng Anh. Dùng cho form Đóng góp văn bản hiện bộ đếm realtime.
-    /// Khác `/auto-label`: endpoint này không bao giờ gọi LLM, dùng rule-based labeler phía server để nhất quán.
-    /// </remarks>
-    [HttpPost("preview-label")]
-    [Authorize(Roles = "Speaker")]
-    [ProducesResponseType(typeof(LabeledPair), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
-    public async Task<ActionResult<LabeledPair>> PreviewLabel(
-        [FromBody] AutoLabelRequest request, CancellationToken ct)
-        => Ok(await labelingService.AutoLabelAsync(
-            request.CsRaw.Trim(), request.ViRaw.Trim(), ct));
-
     /// <summary>Admin sửa nội dung một cặp câu đang chờ duyệt hoặc đã sẵn sàng — sửa bao nhiêu lần cũng được.</summary>
     /// <remarks>
     /// Khác `POST /api/scripts/{id}/review` với `action: Edited`: đường đó **sửa xong là duyệt luôn**,

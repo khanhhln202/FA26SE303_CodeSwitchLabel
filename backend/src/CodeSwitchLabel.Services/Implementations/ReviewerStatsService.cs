@@ -3,6 +3,7 @@ using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Repositories.Persistence;
 using CodeSwitchLabel.Repositories.Storage;
 using CodeSwitchLabel.Services.Abstractions;
+using CodeSwitchLabel.Services.Common;
 using CodeSwitchLabel.Services.Dtos;
 using CodeSwitchLabel.Services.Reviews;
 using Microsoft.EntityFrameworkCore;
@@ -234,7 +235,9 @@ public class ReviewerStatsService(
                 take.Speaker.FullName,
                 take.Task?.Description,
                 take.Script.CsContent,
+                ScriptPairRules.SafeStrip(take.Script.CsContent),
                 take.Script.ViContent,
+                ScriptPairRules.SafeStrip(take.Script.ViContent),
                 cs?.RecordingId,
                 vi?.RecordingId,
                 await SignAsync(cs, ct),
@@ -344,7 +347,9 @@ public class ReviewerStatsService(
             },
             DomainName(r.Script.Domain),
             r.Script.CsContent,
+            ScriptPairRules.SafeStrip(r.Script.CsContent),
             r.Script.ViContent,
+            ScriptPairRules.SafeStrip(r.Script.ViContent),
             // Từ tiếng Anh kèm nghĩa tiếng Việt — cùng dạng với lịch sử đóng góp của Speaker.
             [.. r.Script.Words.OrderBy(w => w.WordPosition).Select(w => new AlignmentItem
             {
@@ -360,8 +365,7 @@ public class ReviewerStatsService(
             r.ErrorReason?.Description ?? r.ErrorReason?.ReasonCode,
             r.Comment,
             r.Script.Status.ToString(),
-            r.ReviewedAt,
-            r.Script.EnWordCount)).ToList();
+            r.ReviewedAt)).ToList();
 
         return new PagedResult<ReviewerScriptHistoryItemDto>(items, query.Page, query.PageSize, total);
     }
