@@ -82,6 +82,12 @@ public sealed class SpeakerHistoryContractTests(DatabaseFixture fixture) : Integ
         Assert.True(duyet.ReviewId > 0);
 
         Assert.Null(Assert.Single(trang.Items, i => i.ScriptId == conCho.ScriptId).Review);
+
+        // Bản đã bỏ nhãn để Speaker đọc được ngay trong lịch sử.
+        Assert.DoesNotContain("[vi]", dong.CsPlain);
+        Assert.DoesNotContain("[en]", dong.CsPlain);
+        Assert.Contains($"scan{dau}", dong.CsPlain);
+        Assert.Contains($"quét tài liệu này {dau}", dong.ViPlain);
     }
 
     /// <summary>
