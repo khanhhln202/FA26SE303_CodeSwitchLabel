@@ -79,8 +79,12 @@ services:
       timeout: 10s
       retries: 10
       start_period: 40s
-    mem_limit: 1600m
-    memswap_limit: 4000m
+    # Giong ban chay that: KHONG cho container nay dung swap. Cho muon swap thi model bi
+    # day xuong dia luc ranh, roi chet khi nap nguoc tro lai — xem chu thich o
+    # deploy/docker-compose.prod.yml.
+    mem_limit: ${ASR_MEM_LIMIT:-2048m}
+    memswap_limit: ${ASR_MEM_LIMIT:-2048m}
+    cpus: ${ASR_CPUS:-1.5}
 
   api:
     # Chỉ bật khi gọi kèm --profile api, nên `docker compose up -d postgres minio` vẫn như cũ
