@@ -111,4 +111,59 @@ public sealed class ScriptAutoLabelApiTests(DatabaseFixture fixture) : ApiTestBa
             JsonOptions, TestContext.Current.CancellationToken);
         Assert.Equal("alignment_word_missing", body.GetProperty("code").GetString());
     }
+
+    [Fact]
+    public async Task Admin_ThayDoiGioiHanTuTiengAnh_ApDungChoCauMoi()
+    {
+        const string configUrl = "/api/admin/config/script.max_english_words";
+        const string sentence = "[vi]Em [en]scan [en]file [vi]này nhé.";
+        var admin = await GetAdminTokenAsync();
+        var speaker = await GetSpeakerTokenAsync();
+
+        var invalidConfig = await PutAsync(configUrl, new { value = "10" }, admin);
+        Assert.Equal(HttpStatusCode.BadRequest, invalidConfig.StatusCode);
+
+        try
+        {
+            var setOne = await PutAsync(configUrl, new { value = "1" }, admin);
+            Assert.Equal(HttpStatusCode.NoContent, setOne.StatusCode);
+
+            var rejected = await PostAsync("/api/speaker/scripts/contribute", new
+            {
+                csContent = sentence,
+                viContent = "[vi]Em quét tệp này nhé.",
+                domain = "ItTechnology",
+                alignment = new[]
+                {
+                    new { source = "scan", target = "quét", relation = "semantic_equivalent" },
+                    new { source = "file", target = "tệp", relation = "semantic_equivalent" }
+                }
+            }, speaker);
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, rejected.StatusCode);
+            using (var body = await rejected.Content.ReadFromJsonAsync<JsonDocument>(
+                       JsonOptions, TestContext.Current.CancellationToken))
+                Assert.Equal("en_word_count_exceeds_limit", body!.RootElement.GetProperty("code").GetString());
+
+            var setTwo = await PutAsync(configUrl, new { value = "2" }, admin);
+            Assert.Equal(HttpStatusCode.NoContent, setTwo.StatusCode);
+
+            var accepted = await PostAsync("/api/speaker/scripts/contribute", new
+            {
+                csContent = sentence,
+                viContent = "[vi]Em quét tệp này nhé.",
+                domain = "ItTechnology",
+                alignment = new[]
+                {
+                    new { source = "scan", target = "quét", relation = "semantic_equivalent" },
+                    new { source = "file", target = "tệp", relation = "semantic_equivalent" }
+                }
+            }, speaker);
+            Assert.Equal(HttpStatusCode.Created, accepted.StatusCode);
+        }
+        finally
+        {
+            var reset = await PutAsync(configUrl, new { value = "5" }, admin);
+            Assert.Equal(HttpStatusCode.NoContent, reset.StatusCode);
+        }
+    }
 }

@@ -335,6 +335,7 @@ Lỗi hệ thống trả 500 với `code: "internal_error"`. Gặp lỗi này th
 | `reasons_not_allowed` | 422 | Duyệt đạt mà vẫn gửi kèm lý do | Xoá danh sách lý do khi chọn "Đạt" |
 | `edited_pair_required` | 422 | Chọn sửa câu mà thiếu một trong hai câu | Bắt buộc nhập cả hai ô |
 | `en_word_count_locked` | 422 | Bản sửa đổi số từ tiếng Anh | Báo: muốn đổi số từ tiếng Anh thì phải tạo câu mới |
+| `en_word_count_exceeds_limit` | 422 | Câu có nhiều từ tiếng Anh hơn giới hạn Admin đặt (`script.max_english_words`) | Báo số từ hiện có và giới hạn, hoặc nhờ Admin nâng giới hạn |
 | `script_already_recorded` | 409 | Sửa câu đã có bản ghi | Ẩn nút sửa khi câu đã có bản ghi |
 | `target_exceeds_items` | 422 / 409 | Chỉ tiêu lớn hơn số mục người nhận làm được. **422** khi giao task hoặc sửa chỉ tiêu, **409** khi gỡ mục | Hiện `title` — trong đó có luôn danh sách mục bị vướng |
 | `assignee_role_mismatch` | 422 | Giao task thu âm cho Reviewer, hoặc ngược lại | Lọc người nhận theo loại task |
@@ -497,7 +498,7 @@ Bản trượt kiểm tra **vẫn được lưu** kèm toàn bộ số đo (th�
 }
 ```
 
-Câu phải có từ 1 đến 9 từ tiếng Anh, vì con số này nằm trong mã câu. Câu thuần Việt không được có nhãn `[en]`.
+Câu phải có từ 1 đến giới hạn Admin đặt (khoá `script.max_english_words`, mặc định **5**, tối đa 9), vì con số này nằm trong mã câu. Quá giới hạn trả `422 en_word_count_exceeds_limit`. Câu thuần Việt không được có nhãn `[en]`.
 
 **Tiến độ** — `GET /api/speaker/progress`: tổng bản đã nộp, số bản đạt, và các task thu âm đang giao. Mỗi task trong `activeTasks` có `taskTitle` (tên nhiệm vụ — **không phụ thuộc** task có thuộc chiến dịch hay không), cùng `description` và `waveName`.
 
@@ -733,8 +734,8 @@ Reviewer cũng dùng được màn hình **duyệt câu** giống Speaker.
 | Tỉ lệ lý do từ chối | `GET /api/reviewer/stats/reject-reasons` |
 | Câu bị từ chối nhiều nhất | `GET /api/reviewer/stats/top-rejected-sentences?limit=8` |
 | Người đọc bị từ chối nhiều nhất | `GET /api/reviewer/stats/top-rejected-speakers?limit=8` |
-| Lịch sử duyệt bản ghi | `GET /api/reviewer/history/recordings?taskId&status&search&page&pageSize=` — mỗi dòng là một **cặp** bản ghi (giống màn hình Speaker): `csText`/`viText`, `csAudioUrl`/`viAudioUrl` (link tạm 15 phút), `reviews` **hiện đủ phiếu của cả hai bản sau khi mình đã duyệt** — kể cả khi cặp chưa chốt; màn hình duyệt đang mở vẫn mù. `status` lọc theo bản mình đã duyệt; `recordingStatus` là trạng thái của cặp |
-| Lịch sử duyệt câu | `GET /api/reviewer/history/contributions?kind&status&category&search&page&pageSize=` (`kind`: `edit`\|`report`\|`contribution`) — kèm `alignment` (từ tiếng Anh - nghĩa tiếng Việt), `speakerId`/`speakerName`, và `reason`/`comment` khi lượt của mình là Từ chối; mỗi câu chỉ có một lượt duyệt nên tối đa một dòng |
+| Lịch sử duyệt bản ghi | `GET /api/reviewer/history/recordings?taskId&status&search&page&pageSize=` — mỗi dòng là một **cặp** bản ghi (giống màn hình Speaker): `csText`/`viText` (còn nhãn), `csPlain`/`viPlain` (đã bỏ nhãn), `csAudioUrl`/`viAudioUrl` (link tạm 15 phút), `reviews` **hiện đủ phiếu của cả hai bản sau khi mình đã duyệt** — kể cả khi cặp chưa chốt; màn hình duyệt đang mở vẫn mù. `status` lọc theo bản mình đã duyệt; `recordingStatus` là trạng thái của cặp |
+| Lịch sử duyệt câu | `GET /api/reviewer/history/contributions?kind&status&category&search&page&pageSize=` (`kind`: `edit`\|`report`\|`contribution`) — kèm `csPlain`/`viPlain` (đã bỏ nhãn), `alignment` (từ tiếng Anh - nghĩa tiếng Việt), `speakerId`/`speakerName`, và `reason`/`comment` khi lượt của mình là Từ chối; mỗi câu chỉ có một lượt duyệt nên tối đa một dòng |
 
 **Xem lại task duyệt đã đóng (mới):** `GET /api/reviewer/tasks/{taskId}/recordings` và
 `GET /api/reviewer/recordings/{id}` mở được cả khi task đã `Completed`/`Cancelled` (mình từng được

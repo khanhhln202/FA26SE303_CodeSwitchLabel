@@ -195,6 +195,7 @@ public class ScriptService(
         List<ImportScriptItem> items, List<ImportSkippedDto> skipped,
         string fileName, long importedById, bool allowEmptyTargets, CancellationToken ct)
     {
+        var maxEnglishWords = await config.GetIntAsync(ConfigKeys.ScriptMaxEnglishWords, 5, ct);
         var safeName = SanitizeFileName(fileName);
 
         await using var transaction = await repository.BeginTransactionAsync(ct);
@@ -240,7 +241,7 @@ public class ScriptService(
                 cs = ScriptPairRules.NormalizePunctuation(cs);
                 ve = ScriptPairRules.NormalizePunctuation(ve);
 
-                var (wordCount, enWordCount) = ScriptPairRules.ValidatePair(cs, ve);
+                var (wordCount, enWordCount) = ScriptPairRules.ValidatePair(cs, ve, maxEnglishWords);
                 var key = CodeSwitchText.ComparisonKey(cs);
 
                 if (!seen.Add(key) || existing.Contains(key))
@@ -774,7 +775,8 @@ public class ScriptService(
         cs = ScriptPairRules.NormalizePunctuation(cs);
         ve = ScriptPairRules.NormalizePunctuation(ve);
 
-        var (wordCount, enWordCount) = ScriptPairRules.ValidatePair(cs, ve);
+        var maxEnglishWords = await config.GetIntAsync(ConfigKeys.ScriptMaxEnglishWords, 5, ct);
+        var (wordCount, enWordCount) = ScriptPairRules.ValidatePair(cs, ve, maxEnglishWords);
 
         if (await repository.ContentExistsAsync(cs, ct))
         {

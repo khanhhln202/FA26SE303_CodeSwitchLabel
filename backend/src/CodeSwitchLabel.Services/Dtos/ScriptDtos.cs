@@ -252,7 +252,9 @@ public enum ContributionBlocker
 public record ContributionReviewItemDto(
     string ScriptId,
     string CsContent,
+    string CsPlain,
     string ViContent,
+    string ViPlain,
     string Domain,
     DateTimeOffset CreatedAt,
     ContributorDto Contributor,

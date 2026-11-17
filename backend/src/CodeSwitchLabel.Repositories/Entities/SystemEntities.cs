@@ -30,6 +30,7 @@ public static class ConfigKeys
     public const string RecordingAudioFormatDefault = "recording.audio_format_default";
     public const string RecordingMaxTake = "recording.max_take";
     public const string ImportMaxScriptsPerBatch = "import.max_scripts_per_batch";
+    public const string ScriptMaxEnglishWords = "script.max_english_words";
 
     /// <summary>Ngưỡng dB coi là khoảng lặng khi phân tích tự động bản ghi.</summary>
     public const string RecordingSilenceNoiseDb = "recording.silence_noise_db";

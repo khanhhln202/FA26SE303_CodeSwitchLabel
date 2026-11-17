@@ -298,6 +298,8 @@ public static partial class DatabaseSeeder
                 "Khoảng lặng ngắn hơn mức này (giây) bị bỏ qua khi phân tích tự động"),
             (ConfigKeys.ImportMaxScriptsPerBatch, "100000", ConfigValueType.Int,
                 "Giới hạn số câu mỗi lần nhập"),
+            (ConfigKeys.ScriptMaxEnglishWords, "5", ConfigValueType.Int,
+                "Số từ tiếng Anh tối đa trong mỗi cặp câu"),
             (ConfigKeys.RecordingMinMeanVolumeDb, "-50", ConfigValueType.String,
                 "Âm lượng trung bình tối thiểu (dBFS), thấp hơn là quá nhỏ và trượt QC"),
             (ConfigKeys.RecordingMaxPeakDb, "-1", ConfigValueType.String,
