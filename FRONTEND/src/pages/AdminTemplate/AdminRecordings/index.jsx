@@ -107,7 +107,7 @@ export default function AdminRecordings() {
   const [timeFilter, setTimeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 10;
+  const [pageSize, setPageSize] = useState(10);
 
   const [selectedReviewersList, setSelectedReviewersList] = useState(null);
 
@@ -591,6 +591,11 @@ export default function AdminRecordings() {
             currentPage={currentPage}
             totalPages={totalPages}
             onPageChange={(p) => setCurrentPage(p)}
+            pageSize={pageSize}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setCurrentPage(1);
+            }}
             accent={ADMIN_ACCENT}
             variant="soft"
           />

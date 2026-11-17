@@ -98,7 +98,7 @@ export default function AdminTextData() {
   
   const [currentPage, setCurrentPage] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
-  const pageSize = 10;
+  const [pageSize, setPageSize] = useState(10);
   
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState(null); 
@@ -211,7 +211,7 @@ export default function AdminTextData() {
 
   useEffect(() => {
     fetchTexts();
-  }, [currentPage, activeSearchTerm, selectedTopic]);
+  }, [currentPage, pageSize, activeSearchTerm, selectedTopic]);
 
   const handleSearch = () => {
     setActiveSearchTerm(searchInput);
@@ -602,6 +602,11 @@ export default function AdminTextData() {
             currentPage={currentPage}
             totalPages={totalPages}
             onPageChange={(p) => setCurrentPage(p)}
+            pageSize={pageSize}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setCurrentPage(1);
+            }}
             accent={ADMIN_ACCENT}
             variant="soft"
           />
