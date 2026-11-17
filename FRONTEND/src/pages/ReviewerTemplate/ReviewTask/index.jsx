@@ -41,7 +41,7 @@ export default function ReviewTasks() {
   );
 
   // Cố định 10 nhiệm vụ mỗi trang; trang đầy thì các dòng giãn đều hết khung (màn thấp thì bảng cuộn bên trong)
-  const pageSize = 10;
+  const [pageSize, setPageSize] = useState(10);
   const totalPages = Math.ceil(filteredTasks.length / pageSize) || 1;
   const paginatedTasks = filteredTasks.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
@@ -132,7 +132,18 @@ export default function ReviewTasks() {
         </div>
 
         <div className="shrink-0 px-3 border-t border-[#E5E2D8]">
-          <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={(page) => setCurrentPage(page)} accent={ACCENT} variant="soft" />
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={(page) => setCurrentPage(page)}
+            pageSize={pageSize}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setCurrentPage(1);
+            }}
+            accent={ACCENT}
+            variant="soft"
+          />
         </div>
       </div>
     </div>

@@ -69,6 +69,7 @@ function formatDateTime(iso) {
 
 export default function ReviewHistoryContribution() {
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE);
   const [detailItem, setDetailItem] = useState(null);
   const [typeFilter, setTypeFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
@@ -84,7 +85,7 @@ export default function ReviewHistoryContribution() {
   // Call API lấy 1 trang lịch sử (lọc loại / chủ đề / từ khoá ở phía server)
   const { data: history, isLoading, isError, error, refetch } = useQuery({
     queryKey: [GET_REVIEWER_CONTRIBUTION_HISTORY_API, typeFilter, categoryFilter, search, currentPage],
-    queryFn: () => getReviewerContributionHistoryApi({ kind: typeFilter, category: categoryFilter, search, page: currentPage, pageSize: ITEMS_PER_PAGE }),
+    queryFn: () => getReviewerContributionHistoryApi({ kind: typeFilter, category: categoryFilter, search, page: currentPage, pageSize }),
     placeholderData: keepPreviousData,
   });
 
@@ -146,7 +147,7 @@ export default function ReviewHistoryContribution() {
         </div>
 
         <div className="relative flex-1 min-h-0 overflow-auto">
-          <table className={`w-full min-w-[1000px] border-collapse table-fixed ${items.length === ITEMS_PER_PAGE ? "h-full" : ""}`}>
+          <table className={`w-full min-w-[1000px] border-collapse table-fixed ${items.length === pageSize ? "h-full" : ""}`}>
             <colgroup>
               <col className="w-[5%]" />
               <col className="w-[12%]" />
@@ -170,7 +171,7 @@ export default function ReviewHistoryContribution() {
                 const tag = tagOf(item.kind);
                 return (
                   <tr key={`${item.scriptId}-${item.reviewedAt}`} onClick={() => setDetailItem(item)} className="hover:bg-[#F7F5EF]/70 transition-colors h-11 cursor-pointer">
-                    <td className="px-3 text-center"><span className="text-[#9A9CA3] type-meta">{(currentPage - 1) * ITEMS_PER_PAGE + idx + 1}</span></td>
+                    <td className="px-3 text-center"><span className="text-[#9A9CA3] type-meta">{(currentPage - 1) * pageSize + idx + 1}</span></td>
                     <td className="px-3 text-left">
                       <span className="w-[84px] h-6 inline-flex items-center justify-center rounded-md type-caption whitespace-nowrap" style={{ background: tag.bg, color: tag.text }}>{tag.label}</span>
                     </td>
@@ -192,7 +193,18 @@ export default function ReviewHistoryContribution() {
         </div>
 
         <div className="px-3 border-t border-[#E5E2D8] bg-white shrink-0">
-          <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={(page) => setCurrentPage(page)} accent={ACCENT} variant="soft" />
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={(page) => setCurrentPage(page)}
+            pageSize={pageSize}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setCurrentPage(1);
+            }}
+            accent={ACCENT}
+            variant="soft"
+          />
         </div>
       </div>
 

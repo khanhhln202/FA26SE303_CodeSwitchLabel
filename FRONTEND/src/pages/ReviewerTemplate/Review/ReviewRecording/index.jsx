@@ -366,7 +366,7 @@ export default function ReviewRecording() {
           )}
           </div>
           <div className="shrink-0 border-t border-[#F0EEE6] px-2 flex justify-center">
-            <Pagination currentPage={page} totalPages={totalPages} onPageChange={changePage} accent={ACCENT} variant="soft" />
+            <Pagination currentPage={page} totalPages={totalPages} onPageChange={changePage} accent={ACCENT} variant="soft" showPageSize={false} />
           </div>
         </aside>
 
