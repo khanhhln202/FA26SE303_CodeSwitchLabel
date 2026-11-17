@@ -44,6 +44,15 @@ public class WhisperAsrClient(
     /// </summary>
     private static readonly TimeSpan MaxRetryAfter = TimeSpan.FromSeconds(20);
 
+    /// <summary>
+    /// Dựng từ cấu hình trần, để tầng đăng ký tạo được HAI client từ cùng một
+    /// <see cref="AsrOptions"/> — một cho đường chính, một cho đường lui.
+    /// </summary>
+    public WhisperAsrClient(HttpClient http, AsrOptions settings, ILogger<WhisperAsrClient> logger)
+        : this(http, Microsoft.Extensions.Options.Options.Create(settings), logger)
+    {
+    }
+
     private AsrOptions Options => options.Value;
 
     public bool IsConfigured =>
