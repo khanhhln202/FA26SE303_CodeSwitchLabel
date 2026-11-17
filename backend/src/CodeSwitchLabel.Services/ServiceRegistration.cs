@@ -11,6 +11,8 @@ using CodeSwitchLabel.Services.Implementations;
 using CodeSwitchLabel.Services.WorkTasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using CodeSwitchLabel.Services.Options;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Npgsql;
 
@@ -74,7 +76,25 @@ public static class ServiceRegistration
         services.AddScoped<ILabelingService, LabelingService>();
 
         // Máy duyệt bản ghi: dùng chung HttpClient ở trên, timeout cũng đặt theo từng request.
-        services.AddScoped<IAsrClient, WhisperAsrClient>();
+        //
+        // Khai Asr:Fallback:Endpoint thì bọc thêm một lớp tự lùi đường: gọi dịch vụ chính
+        // trước, hỏng thì gọi dịch vụ dự phòng. Không khai thì chỉ có một client như cũ,
+        // nên cấu hình cũ chạy y nguyên.
+        services.AddScoped<IAsrClient>(sp =>
+        {
+            var http = sp.GetRequiredService<HttpClient>();
+            var loggers = sp.GetRequiredService<ILoggerFactory>();
+            var options = sp.GetRequiredService<IOptions<AsrOptions>>().Value;
+
+            var chinh = new WhisperAsrClient(http, options, loggers.CreateLogger<WhisperAsrClient>());
+
+            if (string.IsNullOrWhiteSpace(options.Fallback?.Endpoint)) return chinh;
+
+            var lui = new WhisperAsrClient(
+                http, options.Fallback, loggers.CreateLogger<WhisperAsrClient>());
+
+            return new FallbackAsrClient(chinh, lui, loggers.CreateLogger<FallbackAsrClient>());
+        });
         services.AddScoped<IAiReviewRepository, AiReviewRepository>();
         services.AddScoped<IAiReviewService, AiReviewService>();
 
