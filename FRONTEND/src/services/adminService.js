@@ -31,11 +31,11 @@ export const adminService = {
 
   // 3. Cấu hình Hệ thống (System Config)
   getTextConfig: async (key) => {
-    const res = await httpClient.get(`/api/config/${key}`);
+    const res = await httpClient.get(`/api/config/${encodeURIComponent(key)}`);
     return res.data;
   },
   updateTextConfig: async (key, value) => {
-    const res = await httpClient.put(`/api/admin/config/${key}`, {
+    const res = await httpClient.put(`/api/admin/config/${encodeURIComponent(key)}`, {
       value: String(value)
     });
     return res.data;

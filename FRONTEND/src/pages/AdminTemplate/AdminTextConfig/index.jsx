@@ -22,7 +22,7 @@ export default function AdminTextConfig() {
         // Đúng key của Backend: "script.max_english_words"
         const data = await adminService.getTextConfig("script.max_english_words");
         if (data) {
-          const rawVal = data.value || data.configValue || data.val;
+          const rawVal = data.value ?? data.configValue ?? data.val;
           const val = parseInt(rawVal, 10);
           if (!isNaN(val)) {
             setMaxEnglishWords(val);
@@ -53,12 +53,12 @@ export default function AdminTextConfig() {
       toast.success(`Đã lưu cấu hình ${maxEnglishWords} từ thành công!`);
     } catch (err) {
       console.error("Lỗi cập nhật cấu hình Backend:", err);
-      localStorage.setItem("maxEnglishWords", maxEnglishWords.toString());
-      toast.success(`Đã lưu cấu hình ${maxEnglishWords} từ thành công!`);
+      const msg = err?.response?.data?.detail || err?.response?.data?.message || err?.message || "Không thể lưu cấu hình lên hệ thống!";
+      toast.error(msg);
     }
   };
 
-  const percentage = ((maxEnglishWords - 1) / (10 - 1)) * 100;
+  const percentage = ((maxEnglishWords - 1) / (9 - 1)) * 100;
 
   return (
     <div className="max-w-6xl mx-auto h-full flex flex-col justify-between text-left font-sans p-1 overflow-hidden relative transition-colors">
@@ -98,7 +98,7 @@ export default function AdminTextConfig() {
             <input
               type="range"
               min="1"
-              max="10"
+              max="9"
               step="1"
               value={maxEnglishWords}
               onChange={(e) => setMaxEnglishWords(parseInt(e.target.value, 10))}
