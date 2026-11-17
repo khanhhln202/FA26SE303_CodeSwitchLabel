@@ -175,6 +175,15 @@ services:
       Asr__Language: ${ASR_LANGUAGE:-}
       Asr__TimeoutSeconds: ${ASR_TIMEOUT_SECONDS:-120}
 
+      # Đường lui khi gọi Asr__Endpoint hỏng. Bỏ trống ASR_FALLBACK_ENDPOINT là tắt hẳn
+      # cơ chế này và chạy y như trước. Nên khai CÙNG một model ở cả hai nơi để lùi đường
+      # không làm đổi phán quyết.
+      Asr__Fallback__Endpoint: ${ASR_FALLBACK_ENDPOINT:-}
+      Asr__Fallback__Model: ${ASR_FALLBACK_MODEL:-}
+      Asr__Fallback__ApiKey: ${ASR_FALLBACK_API_KEY:-}
+      Asr__Fallback__Language: ${ASR_FALLBACK_LANGUAGE:-}
+      Asr__Fallback__TimeoutSeconds: ${ASR_FALLBACK_TIMEOUT_SECONDS:-180}
+
       # Trình duyệt chỉ cho frontend gọi API nếu origin nằm trong danh sách này.
       Cors__AllowedOrigins__0: ${FE_ORIGIN}
       Cors__AllowedOrigins__1: ${FE_ORIGIN_PREVIEW:-${FE_ORIGIN}}
