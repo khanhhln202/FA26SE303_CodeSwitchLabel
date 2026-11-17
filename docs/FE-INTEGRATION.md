@@ -546,7 +546,9 @@ Mỗi dòng của `GET /api/speaker/rounds/{waveId}/leaderboard` mang:
   "scriptId": "s_111000000003",
   "taskTitle": "Thu âm đợt 4",
   "csText": "[vi]Mình cần [en]review [vi]lại phần mã nguồn này",
+  "csPlain": "Mình cần review lại phần mã nguồn này",
   "viText": "Mình cần xem lại phần mã nguồn này",
+  "viPlain": "Mình cần xem lại phần mã nguồn này",
   "csRecordingId": "r_cs_111000000003",
   "viRecordingId": "r_vi_111000000003",
   "csAudioUrl": "http://localhost:9000/recordings/...",
@@ -562,6 +564,7 @@ Mỗi dòng của `GET /api/speaker/rounds/{waveId}/leaderboard` mang:
 ```
 
 - `csRecordingId` / `viRecordingId` null nghĩa là cặp **chưa thu** bản đó. `csAudioUrl` / `viAudioUrl` là link tạm 15 phút, null nếu chưa có hoặc không ký được.
+- `csText` / `viText` giữ nhãn `[vi]`/`[en]`; `csPlain` / `viPlain` đã bỏ nhãn để hiển thị cho người đọc.
 - `status` là trạng thái của **cặp**: có bản bị từ chối → `Rejected`; cả hai bản đạt → `Approved`; trượt QC hết → `QcFailed`; còn lại → `PendingReview`.
 - `reviews` hiện **ngay khi có lượt**, không chờ bản ghi chốt. Mỗi lượt kèm `recordingId` vì hai bản là hai cuộc duyệt riêng; giữ đủ lượt của cả hai bản.
 - `reviewedRounds` là số lượt ít nhất của một bản trong cặp, `roundsRequired` là số vòng tối đa (mặc định 3).
