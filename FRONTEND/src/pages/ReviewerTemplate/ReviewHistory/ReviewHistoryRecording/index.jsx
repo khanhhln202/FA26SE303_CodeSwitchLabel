@@ -154,6 +154,7 @@ function pairRounds(item) {
 
 export default function ReviewHistoryRecording() {
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE);
   // Popup PHẢN HỒI (đầy đủ 3 reviewer, mở từ cột "Phản hồi")
   const [detailItem, setDetailItem] = useState(null);
   // Popup CÂU VĂN (chỉ 2 câu VI-EN + VI, mở từ icon con mắt cạnh nội dung)
@@ -196,8 +197,8 @@ export default function ReviewHistoryRecording() {
 
   const pageItems = history?.items ?? [];
   const totalPages = Math.max(1, history?.totalPages ?? 1);
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-  const itemsPerPage = ITEMS_PER_PAGE;
+  const startIndex = (currentPage - 1) * pageSize;
+  const itemsPerPage = pageSize;
 
   if (isLoading) return <Loading />;
   if (isError) return <ErrorState message={error.message} onRetry={refetch} />;
@@ -432,6 +433,11 @@ export default function ReviewHistoryRecording() {
             currentPage={currentPage}
             totalPages={totalPages}
             onPageChange={setCurrentPage}
+            pageSize={pageSize}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setCurrentPage(1);
+            }}
             accent={ACCENT}
             variant="soft"
           />

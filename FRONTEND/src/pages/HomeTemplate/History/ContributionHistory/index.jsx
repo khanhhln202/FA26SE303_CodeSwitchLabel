@@ -160,7 +160,7 @@ export default function ContributionHistory() {
     );
   }, [withStatus, statusFilter, categoryFilter, searchTerm]);
   // Cố định 10 câu mỗi trang; trang đầy thì 10 dòng giãn đều hết chiều cao khung (màn thấp thì bảng cuộn bên trong)
-  const itemsPerPage = 10;
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   const totalPages = Math.max(1, Math.ceil(filteredData.length / itemsPerPage));
   const pageItems = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
@@ -277,7 +277,18 @@ export default function ContributionHistory() {
         </div>
 
         <div className="px-3 border-t border-[#E5E2D8] bg-white shrink-0">
-          <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={(page) => setCurrentPage(page)} accent={ACCENT} variant="soft" />
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={(page) => setCurrentPage(page)}
+            pageSize={itemsPerPage}
+            onPageSizeChange={(size) => {
+              setItemsPerPage(size);
+              setCurrentPage(1);
+            }}
+            accent={ACCENT}
+            variant="soft"
+          />
         </div>
       </div>
 
