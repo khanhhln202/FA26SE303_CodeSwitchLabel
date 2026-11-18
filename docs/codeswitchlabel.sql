@@ -1861,8 +1861,18 @@ INSERT INTO system_config (config_key, config_value, value_type, description) VA
     -- lô câu văn bản Task Manager giao cho mỗi người duyệt (yêu cầu 2.2).
     ('text_review.batch_size',                   '100', 'int', 'Default number of pending sentences claimed per reviewer'),
     -- [V24] may duyet ban ghi, chi vao khi hai Reviewer nguoi lech nhau.
-    ('ai_review.enabled',                'false', 'bool',   'Enable the AI recording reviewer'),
-    ('ai_review.wer_decision_threshold', '0.40',  'string', 'Single boundary: WER below it votes approved, at or above it votes rejected with content_mismatch');
+    ('ai_review.enabled',                'false', 'bool',   'Enable the AI recording reviewer. Needs ASR_ENDPOINT and ASR_MODEL set before turning on'),
+    -- [V31] 0.0001 chu KHONG phai 0: AiReviewEvaluator so bang >=, nen dat 0 se lam
+    -- 0 >= 0 dung va tu choi ca ban ghi doc khop hoan hao. Gia tri nay nam lot giua
+    -- "khong sai tu nao" (WER = 0) va "sai it nhat mot tu" (WER = 1/so_tu).
+    ('ai_review.wer_decision_threshold', '0.0001', 'string', 'Any word error rejects: 0 errors -> WER 0 -> approved, 1+ errors -> WER > 0 -> rejected'),
+    -- [V26] tien trinh nen tu quet cac ban ghi dang hoa 1-1 roi goi may duyet.
+    -- MAC DINH TAT co y: bat len tren mot ban trien khai dung ASR tu host la bat may chu
+    -- tieu CPU deu dan cho nhan dang giong noi. May chu that bat tay ngay 17/11/2026,
+    -- sau khi da chuyen sang dich vu nhan dang ben ngoai nen khong con ton CPU nua.
+    ('ai_review.auto_enabled',           'false', 'bool',   'Background worker auto-reviews 1-1 ties. Turn on only after ASR is configured'),
+    ('ai_review.auto_interval_seconds',  '60',    'string', 'Seconds between scans; each recording takes a few seconds on a hosted ASR'),
+    ('ai_review.auto_batch_size',        '3',     'string', 'Max recordings per scan, processed serially so two transcriptions never overlap');
 
 -- Bootstrap admin — KHÔNG lưu mã hash mật khẩu trong SQL seed.
 -- DatabaseSeeder gán hash thật (từ Seed:DefaultPassword) khi ứng dụng khởi động,
