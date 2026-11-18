@@ -50,8 +50,9 @@ const fromReason = (review) => {
  * Gọi GET /api/recordings/{id}/ai-review cho từng bản trong cặp; bản nào máy chưa phán
  * (204) thì bỏ qua. Vai trò chưa được xem (403) thì lấy từ lý do "[Máy duyệt]" của lượt đó
  * (fallbackReviews: [{ variant, decision, reason }]). Không bản nào có phán thì không hiện gì.
+ * showExplanation=false ẩn dòng giải thích của máy (tỉ lệ sai từ...) - trang Speaker dùng.
  */
-export default function AiReviewVerdict({ csRecordingId, viRecordingId, fallbackReviews = [] }) {
+export default function AiReviewVerdict({ csRecordingId, viRecordingId, fallbackReviews = [], showExplanation = true }) {
   const targets = [
     { variant: "cs", id: csRecordingId },
     { variant: "vi", id: viRecordingId },
@@ -88,7 +89,7 @@ export default function AiReviewVerdict({ csRecordingId, viRecordingId, fallback
           <MarkedLine text={data.transcript} other={data.expectedText} tone="wrong" />
           <p className="text-caption text-[#6E7078] mt-1.5 mb-0.5">Văn bản cần đọc</p>
           <MarkedLine text={data.expectedText} other={data.transcript} tone="miss" />
-          {data.explanation && <p className="text-caption text-[#6E7078] mt-1.5">{data.explanation}</p>}
+          {showExplanation && data.explanation && <p className="text-caption text-[#6E7078] mt-1.5">{data.explanation}</p>}
         </div>
       ))}
     </div>

@@ -15,7 +15,6 @@ import {
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import CodeSwitchText from "../../../components/CodeSwitchText/CodeSwitchText";
-import TaggedText from "../../../components/CodeSwitchText/TaggedText";
 import { editChecks } from "../../../utils/sentenceValidation";
 import {
   SPEAKER_ACCENT as ACCENT,
@@ -365,12 +364,12 @@ export default function ReviewText() {
               <p className="text-headline font-label sm:text-[24px] sm:leading-[34px]" style={{ color: TEXT_HEADING, textWrap: "pretty" }}>
                 {part.plain}
               </p>
-              {/* Câu giữ nguyên nhãn [vi]/[en] */}
+              {/* Câu có nhãn hiện nguyên chuỗi API trả về, không tách nhãn ra ô riêng */}
               <p
                 className="inline-block type-body mt-3 px-3 py-1.5 rounded-xl"
                 style={{ background: SURFACE_PAGE, color: TEXT_HEADING }}
               >
-                <TaggedText transcript={part.tagged} accent={ACCENT} />
+                {part.tagged}
               </p>
             </div>
           </div>
