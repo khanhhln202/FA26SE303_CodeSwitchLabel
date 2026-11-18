@@ -24,6 +24,13 @@ const OCCUPATIONS = [
   { value: 'Other', label: 'Khác' },
 ];
 
+// Giọng nói - API nhận North / Central / South; chưa chọn thì gửi null
+const REGIONS = [
+  { value: 'North', label: 'Miền Bắc' },
+  { value: 'Central', label: 'Miền Trung' },
+  { value: 'South', label: 'Miền Nam' },
+];
+
 const CURRENT_YEAR = new Date().getFullYear();
 
 // Điểm IELTS người dùng tự nhập: 0 -> 9, bước 0.5 (chấp nhận dấu phẩy "6,5")
@@ -133,6 +140,7 @@ export default function Profile() {
       occupation: speakerProfile?.occupation ?? '',
       major: speakerProfile?.major ?? '',
       englishLevel: speakerProfile?.englishLevel ?? '',
+      region: speakerProfile?.region ?? '',
     },
     validationSchema: profileSchema,
     onSubmit: async (values) => {
@@ -146,6 +154,8 @@ export default function Profile() {
           occupation: values.occupation,
           major: values.major.trim() || null,
           englishLevel: String(values.englishLevel).trim() ? toIelts(values.englishLevel) : null,
+          // PUT ghi đè cả hồ sơ: luôn gửi giọng nói đang chọn để không bị xoá trắng
+          region: values.region || null,
         });
 
         queryClient.setQueryData([GET_SPEAKER_PROFILE_API], profile);
@@ -248,6 +258,17 @@ export default function Profile() {
                 </label>
                 <input type="text" inputMode="decimal" maxLength={3} placeholder="Ví dụ: 6.5 - để trống nếu chưa có" {...profileForm.getFieldProps('englishLevel')} className={profile.fieldClass('englishLevel')} />
                 {profile.errorText('englishLevel')}
+              </div>
+              <div>
+                <label className="block type-label text-[#2B2C31] mb-1.5">
+                  Giọng nói của bạn gần nhất với <span className="font-regular text-[#9A9CA3]">· tuỳ chọn</span>
+                </label>
+                <select {...profileForm.getFieldProps('region')} className={profile.fieldClass('region')}>
+                  <option value="" disabled>Chọn giọng nói</option>
+                  {REGIONS.map((r) => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>
