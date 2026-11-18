@@ -79,8 +79,12 @@ services:
       timeout: 10s
       retries: 10
       start_period: 40s
-    mem_limit: 1600m
-    memswap_limit: 4000m
+    # Giong ban chay that: KHONG cho container nay dung swap. Cho muon swap thi model bi
+    # day xuong dia luc ranh, roi chet khi nap nguoc tro lai — xem chu thich o
+    # deploy/docker-compose.prod.yml.
+    mem_limit: ${ASR_MEM_LIMIT:-2048m}
+    memswap_limit: ${ASR_MEM_LIMIT:-2048m}
+    cpus: ${ASR_CPUS:-1.5}
 
   api:
     # Chỉ bật khi gọi kèm --profile api, nên `docker compose up -d postgres minio` vẫn như cũ
@@ -116,6 +120,15 @@ services:
       Asr__ApiKey: ${ASR_API_KEY:-}
       Asr__Language: ${ASR_LANGUAGE:-}
       Asr__TimeoutSeconds: ${ASR_TIMEOUT_SECONDS:-120}
+
+      # Đường lui khi gọi Asr__Endpoint hỏng. Bỏ trống ASR_FALLBACK_ENDPOINT là tắt hẳn
+      # cơ chế này và chạy y như trước. Nên khai CÙNG một model ở cả hai nơi để lùi đường
+      # không làm đổi phán quyết.
+      Asr__Fallback__Endpoint: ${ASR_FALLBACK_ENDPOINT:-}
+      Asr__Fallback__Model: ${ASR_FALLBACK_MODEL:-}
+      Asr__Fallback__ApiKey: ${ASR_FALLBACK_API_KEY:-}
+      Asr__Fallback__Language: ${ASR_FALLBACK_LANGUAGE:-}
+      Asr__Fallback__TimeoutSeconds: ${ASR_FALLBACK_TIMEOUT_SECONDS:-180}
     ports:
       - "5053:8080"   # cùng cổng với lúc chạy dotnet run — frontend không phải đổi cấu hình
 

@@ -106,12 +106,29 @@ services:
       timeout: 10s
       retries: 10
       start_period: 40s
-    # Tran RAM la thu bao ve csl-api. Cham tran thi Docker giet RIENG container nay,
-    # da kiem chung that: container bi OOM hai lan ma csl-api khong khoi dong lai lan nao.
-    # Do duoc: chay on dinh het 1,0 GB, nhung dinh nhat thoi luc nap model vuot 1,6 GB,
-    # nen phai cho muon swap VA may chu bat buoc phai co swap.
-    mem_limit: 1600m
-    memswap_limit: 4000m
+    # Tran RAM la thu bao ve csl-api: cham tran thi Docker giet RIENG container nay.
+    #
+    # memswap_limit PHAI BANG mem_limit, tuc KHONG cho container nay dung swap. Ban dau
+    # no duoc muon 2,4 GB swap de vuot dinh luc nap model, va dung la vuot duoc — nhung
+    # cai gia lo ra sau sau ngay chay that:
+    #
+    #   1. Model ranh -> he dieu hanh day 1,37 GB cua no xuong dia
+    #   2. Co request -> nhan nap nguoc tro lai RAM
+    #   3. Viec nap nguoc do day RSS cham tran -> container BI GIET giua chung
+    #   4. Container tu dung lai, nap model tu dau mat ~60 giay; request da hong tu buoc 3
+    #
+    # Nguoi dung bam lai, vong lap lap lai, va mot luot duyet keo dai hang chuc phut.
+    # Ghi nhan that: kernel OOM-kill luc 10:40:46 ngay 17/11 o anon-rss 1,55 GB.
+    #
+    # Khong swap thi khong co buoc 1, nen khong co ca chuoi. Doi lai tran phai du rong cho
+    # dinh luc nap (do duoc ~1,6 GB) chu khong chi cho luc chay on dinh (~0,8 GB).
+    mem_limit: ${ASR_MEM_LIMIT:-2048m}
+    memswap_limit: ${ASR_MEM_LIMIT:-2048m}
+
+    # May chu chi co 2 nhan. Khong chan thi mot luot nhan dang chiem tron ca hai trong
+    # ~45 giay, bo doi API va database — dung trieu chung "lag ca he thong" ma doi
+    # frontend bao. Chua 1,5 nhan lai cho ASR, de 0,5 cho phan con lai.
+    cpus: ${ASR_CPUS:-1.5}
     logging: *logging
 
   api:
@@ -157,6 +174,15 @@ services:
       Asr__ApiKey: ${ASR_API_KEY:-}
       Asr__Language: ${ASR_LANGUAGE:-}
       Asr__TimeoutSeconds: ${ASR_TIMEOUT_SECONDS:-120}
+
+      # Đường lui khi gọi Asr__Endpoint hỏng. Bỏ trống ASR_FALLBACK_ENDPOINT là tắt hẳn
+      # cơ chế này và chạy y như trước. Nên khai CÙNG một model ở cả hai nơi để lùi đường
+      # không làm đổi phán quyết.
+      Asr__Fallback__Endpoint: ${ASR_FALLBACK_ENDPOINT:-}
+      Asr__Fallback__Model: ${ASR_FALLBACK_MODEL:-}
+      Asr__Fallback__ApiKey: ${ASR_FALLBACK_API_KEY:-}
+      Asr__Fallback__Language: ${ASR_FALLBACK_LANGUAGE:-}
+      Asr__Fallback__TimeoutSeconds: ${ASR_FALLBACK_TIMEOUT_SECONDS:-180}
 
       # Trình duyệt chỉ cho frontend gọi API nếu origin nằm trong danh sách này.
       Cors__AllowedOrigins__0: ${FE_ORIGIN}

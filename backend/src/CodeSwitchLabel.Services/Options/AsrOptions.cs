@@ -31,4 +31,17 @@ public class AsrOptions
     /// Chuyển âm thanh chậm hơn gọi chat nhiều, nên mặc định cao hơn LlmOptions.
     /// </summary>
     public int TimeoutSeconds { get; set; } = 120;
+
+    /// <summary>
+    /// Đường lui, dùng khi gọi <see cref="Endpoint"/> hỏng. Bỏ trống là không có đường lui.
+    ///
+    /// <para>
+    /// Dùng để đặt dịch vụ trả phí làm đường chính và dịch vụ chạy trên máy chủ làm đường
+    /// lui: nhà cung cấp hỏng hay hết số dư thì người duyệt chỉ thấy chậm hơn, không thấy lỗi.
+    /// Nên khai CÙNG một model ở cả hai nơi, để lùi đường không làm đổi phán quyết.
+    /// </para>
+    ///
+    /// <para>CHỈ một cấp: <c>Fallback.Fallback</c> bị bỏ qua.</para>
+    /// </summary>
+    public AsrOptions? Fallback { get; set; }
 }

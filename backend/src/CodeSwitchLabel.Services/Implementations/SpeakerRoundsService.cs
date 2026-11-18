@@ -227,7 +227,9 @@ public class SpeakerRoundsService(
             ketQua.Add(new RejectedPairDto(
                 cap.ScriptId,
                 cauVan.CsContent,
+                ScriptPairRules.SafeStrip(cauVan.CsContent),
                 cauVan.ViContent,
+                ScriptPairRules.SafeStrip(cauVan.ViContent),
                 lyDo,
                 cap.BiLoaiLuc,
                 cauVan.Status,
@@ -341,7 +343,9 @@ public class SpeakerRoundsService(
                 scriptId,
                 (cs ?? vi)?.Task?.Description,
                 (cs ?? vi)!.Script.CsContent,
+                ScriptPairRules.SafeStrip((cs ?? vi)!.Script.CsContent),
                 (cs ?? vi)!.Script.ViContent,
+                ScriptPairRules.SafeStrip((cs ?? vi)!.Script.ViContent),
                 cs?.RecordingId,
                 vi?.RecordingId,
                 await SignAsync(cs, ct),
@@ -440,7 +444,9 @@ public class SpeakerRoundsService(
             s.ScriptId,
             DomainName(s.Domain),
             s.CsContent,
+            ScriptPairRules.SafeStrip(s.CsContent),
             s.ViContent,
+            ScriptPairRules.SafeStrip(s.ViContent),
             [.. s.Words.OrderBy(w => w.WordPosition).Select(w => new AlignmentItem
             {
                 Source = w.EnWord,

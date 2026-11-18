@@ -309,7 +309,7 @@ export default function ReviewDashboard() {
           ))}
         </div>
         <div className="border-t border-[#F0EEE6] py-1 [&>div]:py-1">
-          <Pagination currentPage={rejectionTab === 'sentences' ? sentencePage : speakerPage} totalPages={rejectionTab === 'sentences' ? sentenceTotalPages : speakerTotalPages} onPageChange={rejectionTab === 'sentences' ? setSentencePage : setSpeakerPage} accent={ACCENT} variant="soft" />
+          <Pagination currentPage={rejectionTab === 'sentences' ? sentencePage : speakerPage} totalPages={rejectionTab === 'sentences' ? sentenceTotalPages : speakerTotalPages} onPageChange={rejectionTab === 'sentences' ? setSentencePage : setSpeakerPage} accent={ACCENT} variant="soft" showPageSize={false} />
         </div>
       </Panel>
 

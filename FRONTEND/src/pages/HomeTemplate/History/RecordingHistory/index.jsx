@@ -226,7 +226,7 @@ export default function RecordingHistory() {
     );
   }, [recordings, statusFilter, taskFilter, searchTerm]);
   // Cố định 10 mục mỗi trang; trang đầy thì các dòng giãn đều hết khung (màn thấp thì bảng cuộn bên trong)
-  const itemsPerPage = 10;
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   const totalPages = Math.max(1, Math.ceil(filteredData.length / itemsPerPage));
   const startIndex = (currentPage - 1) * itemsPerPage;
   const pageItems = filteredData.slice(startIndex, startIndex + itemsPerPage);
@@ -442,6 +442,11 @@ export default function RecordingHistory() {
             currentPage={currentPage}
             totalPages={totalPages}
             onPageChange={setCurrentPage}
+            pageSize={itemsPerPage}
+            onPageSizeChange={(size) => {
+              setItemsPerPage(size);
+              setCurrentPage(1);
+            }}
             accent={ACCENT}
             variant="soft"
           />

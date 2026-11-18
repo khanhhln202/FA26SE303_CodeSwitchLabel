@@ -31,7 +31,7 @@ export default function AdminUserManagement() {
   const [userToToggleStatus, setUserToToggleStatus] = useState(null);
   const [newUser, setNewUser] = useState({ name: "", email: "", role: "Speaker" });
   
-  const pageSize = 10;
+  const [pageSize, setPageSize] = useState(10);
 
   const fetchUsers = async () => {
     try {
@@ -259,12 +259,12 @@ export default function AdminUserManagement() {
             </div>
 
             {/* Table Body */}
-            <div className="divide-y divide-[#F0EEE6] dark:divide-gray-800 type-ui flex-1 grid grid-rows-10">
+            <div className={`divide-y divide-[#F0EEE6] dark:divide-gray-800 type-ui flex-1 ${pageSize === 10 ? "grid grid-rows-10" : "flex flex-col"}`}>
               {paginatedUsers.length > 0 ? (
                 paginatedUsers.map((u, idx) => {
                   const badgeStyle = roleBadgeStyle(u.role);
                   return (
-                    <div key={u.id} className="hover:bg-[#F7F5EF]/70 dark:hover:bg-[#25272E]/50 transition-colors flex items-center h-full">
+                    <div key={u.id} className="hover:bg-[#F7F5EF]/70 dark:hover:bg-[#25272E]/50 transition-colors flex items-center h-full min-h-[44px]">
                       <div className="px-3 text-center text-[#9A9CA3] dark:text-gray-500 font-sans whitespace-nowrap w-[65px]">
                         {(currentPage - 1) * pageSize + idx + 1}
                       </div>
@@ -339,8 +339,20 @@ export default function AdminUserManagement() {
         </div>
 
         {/* Footer Pagination */}
+        {/* Footer Pagination */}
         <div className="px-4 py-1 border-t border-[#E5E2D8] dark:border-gray-800 shrink-0 bg-white dark:bg-[#1C1D22]">
-          <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={(p) => setCurrentPage(p)} accent={ADMIN_ACCENT} variant="soft" />
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={(p) => setCurrentPage(p)}
+            pageSize={pageSize}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setCurrentPage(1);
+            }}
+            accent={ADMIN_ACCENT}
+            variant="soft"
+          />
         </div>
       </div>
 

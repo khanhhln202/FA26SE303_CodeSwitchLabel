@@ -29,7 +29,7 @@ export default function AdminTopicConfig() {
   const [activeSearchTerm, setActiveSearchTerm] = useState("");
   
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 10;
+  const [pageSize, setPageSize] = useState(10);
   
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState(null); 
@@ -230,12 +230,13 @@ export default function AdminTopicConfig() {
             </div>
 
             {/* Table Body */}
-            <div className="divide-y divide-[#F0EEE6] dark:divide-gray-800 type-ui flex-1 grid grid-rows-10">
+            {/* Table Body */}
+            <div className={`divide-y divide-[#F0EEE6] dark:divide-gray-800 type-ui flex-1 ${paginatedTopics.length <= 10 ? "grid grid-rows-10" : "flex flex-col"}`}>
               {paginatedTopics.length > 0 ? (
                 paginatedTopics.map((item, index) => {
                   const stt = (currentPage - 1) * pageSize + index + 1;
                   return (
-                    <div key={item.id} className="hover:bg-[#F7F5EF]/70 dark:hover:bg-[#25272E]/50 transition-colors flex items-center h-full">
+                    <div key={item.id} className="hover:bg-[#F7F5EF]/70 dark:hover:bg-[#25272E]/50 transition-colors flex items-center h-full min-h-[44px]">
                       <div className="px-3 text-center font-bold text-[#16171C] dark:text-gray-100 whitespace-nowrap w-[65px]">
                         {stt}
                       </div>
@@ -280,6 +281,11 @@ export default function AdminTopicConfig() {
             currentPage={currentPage}
             totalPages={totalPages}
             onPageChange={(p) => setCurrentPage(p)}
+            pageSize={pageSize}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setCurrentPage(1);
+            }}
             accent={ADMIN_ACCENT}
             variant="soft"
           />

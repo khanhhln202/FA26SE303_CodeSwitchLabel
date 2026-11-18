@@ -1,11 +1,47 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 
 // accent: màu của trang active — mặc định cam (Speaker). Các vai khác truyền màu riêng:
 // Reviewer -> "#6366D8", Task Manager / Admin -> màu tương ứng.
 // variant: "solid" (mặc định, tô đặc + bóng) | "soft" (nền nhạt + viền + chữ màu, không bóng) - dùng khi
 // phân trang không nên là thứ nổi nhất màn hình. accent phải là mã hex 6 số (#RRGGBB).
-export default function Pagination({ currentPage = 1, totalPages = 3, onPageChange, accent = '#FF4B2E', variant = 'solid' }) {
+export default function Pagination({ currentPage = 1, totalPages = 3, onPageChange, accent = '#FF4B2E', variant = 'solid', pageSize, onPageSizeChange, showPageSize = true }) {
   const soft = variant === 'soft';
+  const [internalSize, setInternalSize] = useState(10);
+  const [isOpen, setIsOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0, width: 0 });
+  const btnRef = useRef(null);
+  const menuRef = useRef(null);
+
+  const activeSize = pageSize ?? internalSize;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const updatePos = () => {
+      if (!btnRef.current) return;
+      const rect = btnRef.current.getBoundingClientRect();
+      setMenuPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+    };
+    updatePos();
+    const handleClickOutside = (e) => {
+      if (
+        btnRef.current && !btnRef.current.contains(e.target) &&
+        menuRef.current && !menuRef.current.contains(e.target)
+      ) {
+        setIsOpen(false);
+      }
+    };
+    window.addEventListener('resize', updatePos);
+    window.addEventListener('scroll', updatePos, true);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      window.removeEventListener('resize', updatePos);
+      window.removeEventListener('scroll', updatePos, true);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
   // đổi hex -> rgba cho box-shadow theo accent
   // Hàm tạo dãy số trang có rút gọn (...)
   const getPageNumbers = () => {
@@ -54,7 +90,59 @@ export default function Pagination({ currentPage = 1, totalPages = 3, onPageChan
   const pages = getPageNumbers();
 
   return (
-    <div className="flex items-center justify-center gap-1.5 py-2.5">
+    <div className="relative flex items-center justify-center gap-1.5 py-2.5">
+      {showPageSize && (
+        <div className="sm:absolute sm:left-0 flex items-center gap-2 mr-2 sm:mr-0">
+          <span className="text-meta font-label text-gray-700 dark:text-gray-300">
+            Số hàng mỗi trang
+          </span>
+          <button
+            ref={btnRef}
+            type="button"
+            onClick={() => setIsOpen((prev) => !prev)}
+            aria-label="Số hàng mỗi trang"
+            className="h-8 px-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-[#25272E] text-gray-700 dark:text-gray-300 text-meta font-label hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none cursor-pointer transition-colors inline-flex items-center gap-1.5"
+          >
+            <span>{activeSize}</span>
+            <ChevronDown className={`w-3.5 h-3.5 text-gray-500 transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          {isOpen &&
+            createPortal(
+              <div
+                ref={menuRef}
+                style={{ position: 'fixed', top: menuPos.top, left: menuPos.left }}
+                className="z-[9999] flex items-center gap-1 p-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#25272E] shadow-lg"
+              >
+                {[10, 50, 100].map((size) => {
+                  const selected = size === activeSize;
+                  return (
+                    <button
+                      key={size}
+                      type="button"
+                      onClick={() => {
+                        setInternalSize(size);
+                        setIsOpen(false);
+                        onPageSizeChange && onPageSizeChange(size);
+                        onPageChange && onPageChange(1);
+                      }}
+                      style={selected ? { color: accent, backgroundColor: `${accent}1A` } : undefined}
+                      className={`px-2.5 py-1 rounded-md text-center text-meta font-label transition-colors cursor-pointer ${
+                        selected
+                          ? 'font-bold'
+                          : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                      }`}
+                    >
+                      {size}
+                    </button>
+                  );
+                })}
+              </div>,
+              document.body
+            )}
+        </div>
+      )}
+
       <button
         onClick={() => onPageChange && onPageChange(currentPage - 1)}
         disabled={currentPage === 1}

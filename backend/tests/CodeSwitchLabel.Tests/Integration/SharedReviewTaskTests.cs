@@ -276,6 +276,13 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
         // Bản ghi vẫn đang chờ hai lượt nữa — lượt duyệt hiện ra không có nghĩa là đã chốt.
         Assert.Equal(RecordingStatus.PendingReview, dong.Status);
         Assert.Equal(vi.RecordingId, dong.ViRecordingId);
+
+        // Bản đã bỏ nhãn để Speaker đọc được ngay trong lịch sử.
+        Assert.DoesNotContain("[vi]", dong.CsPlain);
+        Assert.DoesNotContain("[en]", dong.CsPlain);
+        Assert.Contains($"report{dau}", dong.CsPlain);
+        Assert.DoesNotContain("[", dong.ViPlain);
+        Assert.Contains("báo cáo", dong.ViPlain);
     }
 
     /// <summary>
@@ -582,6 +589,10 @@ public sealed class SharedReviewTaskTests(DatabaseFixture fixture) : Integration
 
         Assert.Contains("Excel", dong.CsText, StringComparison.Ordinal);
         Assert.Contains("bảng tính", dong.ViText, StringComparison.Ordinal);
+        Assert.DoesNotContain("[vi]", dong.CsPlain);
+        Assert.DoesNotContain("[en]", dong.CsPlain);
+        Assert.Contains($"Excel{dau}", dong.CsPlain);
+        Assert.DoesNotContain("[", dong.ViPlain);
 
         // Nợ cả hai bản, và cả hai bản cũ đều có mặt để nghe lại.
         Assert.Equal(

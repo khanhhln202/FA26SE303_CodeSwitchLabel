@@ -81,7 +81,8 @@ public class ScriptQueueService(
 
         var items = rows
             .Select(r => new ContributionReviewItemDto(
-                r.ScriptId, r.CsContent, r.ViContent, r.Domain, r.CreatedAt,
+                r.ScriptId, r.CsContent, ScriptPairRules.SafeStrip(r.CsContent),
+                r.ViContent, ScriptPairRules.SafeStrip(r.ViContent), r.Domain, r.CreatedAt,
                 new ContributorDto(r.ContributorId, r.ContributorName),
                 r.TaskId is null || cuaToi[r.TaskId.Value]
                     ? ContributionBlocker.None
