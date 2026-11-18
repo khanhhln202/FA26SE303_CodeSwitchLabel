@@ -601,7 +601,7 @@ export default function RecordingHistory() {
                               <AiReviewVerdict
                                 csRecordingId={detailItem.csRecordingId}
                                 viRecordingId={detailItem.viRecordingId}
-                                fallbackReviews={r.reviews}
+                                fallbackReviews={r.reviews} showExplanation={false}
                               />
                             )}
                           </div>
