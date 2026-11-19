@@ -573,7 +573,7 @@ export default function ReviewHistoryRecording() {
                       const c = isReject ? "#C63B3B" : isApprove ? "#3FA66B" : "#A85E12";
                       const rowBg = isReject ? "#FDEAEA" : isApprove ? "#EAF7EF" : "#FFF1DE";
                       const rowBorder = isReject ? "#F3C9C9" : isApprove ? "rgba(63,166,107,0.2)" : "#F5DFC0";
-                      const reasons = [...new Set(r.reviews.map((rv) => rv.reason).filter(Boolean))];
+                      const reasons = [...new Set(r.reviews.map((rv) => rv.reason).filter((x) => x && !x.startsWith("[Máy duyệt]")))];
                       return (
                         <div key={r.round} className="flex gap-2.5 px-3 py-2.5 rounded-xl border" style={{ background: rowBg, borderColor: rowBorder }}>
                           <span className="w-6 h-6 rounded-full text-white text-caption font-label flex items-center justify-center flex-shrink-0" style={{ background: c }}>
@@ -588,7 +588,7 @@ export default function ReviewHistoryRecording() {
                             ))}
                             {/* Máy chỉ vào ở lượt 3 khi hai người lệch nhau: có phán thì hiện bằng chứng, không thì thôi */}
                             {r.round >= 3 && (
-                              <AiReviewVerdict csRecordingId={detailItem.csRecordingId} viRecordingId={detailItem.viRecordingId} />
+                              <AiReviewVerdict csRecordingId={detailItem.csRecordingId} viRecordingId={detailItem.viRecordingId} showExplanation={false} />
                             )}
                           </div>
                         </div>

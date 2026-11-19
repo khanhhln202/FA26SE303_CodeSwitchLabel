@@ -102,10 +102,10 @@ function DraftEditor({ original, draft, onChange, leftTitle, rightTitle, rightHi
             <span className="px-2.5 py-1.5">{leftTitle}</span>
             <span className="px-2.5 py-1.5">{rightTitle} <span className="font-regular">· {rightHint}</span></span>
           </div>
-          {[['cs', 'csContent', 'Câu Việt-Anh sẽ lưu'], ['vi', 'viContent', 'Câu tiếng Việt sẽ lưu']].map(([variant, key, aria]) => (
+          {[['cs', 'csContent', 'csPlain', 'Câu Việt-Anh sẽ lưu'], ['vi', 'viContent', 'viPlain', 'Câu tiếng Việt sẽ lưu']].map(([variant, key, plainKey, aria]) => (
             <div key={variant} className="grid grid-cols-[64px_1fr_1fr] border-t border-[#F0EEE6]">
               <span className="flex px-2.5 pt-3.5"><InlineLabel variant={variant} /></span>
-              <p className="px-2.5 py-[11px] type-body text-[#6E7078] break-words min-w-0">{original?.[key]}</p>
+              <div className="px-2.5 py-[11px]"><SentencePair plain={original?.[plainKey]} tagged={original?.[key]} /></div>
               <div className="px-2 py-1.5 min-w-0">
                 <textarea
                   rows={2}
@@ -194,15 +194,25 @@ function DraftEditor({ original, draft, onChange, leftTitle, rightTitle, rightHi
   );
 }
 
-/** Nội dung câu chỉ xem (giữ nhãn [vi]/[en]) + nghĩa từ. */
+/** Một bản câu theo API: câu thường (csPlain / viPlain) rồi câu gắn nhãn (csContent / viContent) ngay dưới. */
+function SentencePair({ plain, tagged, className = 'type-body' }) {
+  return (
+    <div className="min-w-0">
+      <p className={`${className} text-[#16171C] break-words`}>{plain}</p>
+      <p className="type-meta text-[#9A9CA3] break-words mt-0.5">{tagged}</p>
+    </div>
+  );
+}
+
+/** Nội dung câu chỉ xem - đủ 4 câu của API (VI-EN thường + gắn nhãn, VI thường + gắn nhãn) + nghĩa từ. */
 function SentenceView({ sentence }) {
   return (
     <>
       <div>
         <p className="type-label text-[#16171C] mb-2">Nội dung</p>
-        <div className="space-y-1.5">
-          <div className="flex items-baseline gap-2.5"><InlineLabel variant="cs" /><p className="type-body text-[#16171C] break-words min-w-0">{sentence.csContent}</p></div>
-          <div className="flex items-baseline gap-2.5"><InlineLabel variant="vi" /><p className="type-body text-[#16171C] break-words min-w-0">{sentence.viContent}</p></div>
+        <div className="space-y-2.5">
+          <div className="flex items-baseline gap-2.5"><InlineLabel variant="cs" /><SentencePair plain={sentence.csPlain} tagged={sentence.csContent} /></div>
+          <div className="flex items-baseline gap-2.5"><InlineLabel variant="vi" /><SentencePair plain={sentence.viPlain} tagged={sentence.viContent} /></div>
         </div>
       </div>
       {sentence.alignment?.length > 0 && (
@@ -468,7 +478,7 @@ export default function ReviewContribution() {
                           <span className="text-meta font-label leading-4 [@media(max-height:820px)]:leading-[14px] text-[#16171C] truncate flex-1 min-w-0">{p.proposerName}</span>
                           <span className="w-[76px] h-4 rounded type-caption inline-flex items-center justify-center shrink-0" style={{ background: tag.bg, color: tag.text }}>{tag.label}</span>
                         </span>
-                        {[['cs', sentence?.csContent], ['vi', sentence?.viContent]].map(([variant, text]) => (
+                        {[['cs', sentence?.csPlain], ['vi', sentence?.viPlain]].map(([variant, text]) => (
                           <span key={variant} className="flex items-center gap-2 w-full min-w-0">
                             <InlineLabel variant={variant} className="h-4 [@media(max-height:820px)]:h-3.5" />
                             <span className="text-meta leading-4 [@media(max-height:820px)]:text-caption [@media(max-height:820px)]:leading-[14px] text-[#6E7078] truncate min-w-0">{text}</span>
@@ -551,8 +561,8 @@ export default function ReviewContribution() {
                           <span className="text-meta font-label leading-4 [@media(max-height:820px)]:leading-[14px] text-[#16171C] truncate flex-1 min-w-0">{it.contributor?.fullName ?? '—'}</span>
                           <span className="w-[76px] h-4 rounded type-caption inline-flex items-center justify-center shrink-0" style={{ background: CONTRIBUTION_TAG.bg, color: CONTRIBUTION_TAG.text }}>{CONTRIBUTION_TAG.label}</span>
                         </span>
-                        {/* Cặp câu: VI-EN rồi VI */}
-                        {[['cs', it.csContent], ['vi', it.viContent]].map(([variant, text]) => (
+                        {/* Cặp câu thường (csPlain / viPlain): VI-EN rồi VI */}
+                        {[['cs', it.csPlain], ['vi', it.viPlain]].map(([variant, text]) => (
                           <span key={variant} className="flex items-center gap-2 w-full min-w-0">
                             <InlineLabel variant={variant} className="h-4 [@media(max-height:820px)]:h-3.5" />
                             <span className="text-meta leading-4 [@media(max-height:820px)]:text-caption [@media(max-height:820px)]:leading-[14px] text-[#6E7078] truncate min-w-0">{text}</span>
@@ -588,7 +598,7 @@ export default function ReviewContribution() {
                   )}
                 </div>
                 <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-4">
-                  <SentenceView sentence={scriptDetail?.scriptId === script.scriptId ? scriptDetail : script} />
+                  <SentenceView sentence={scriptDetail?.scriptId === script.scriptId ? { ...script, ...scriptDetail } : script} />
                 </div>
               </> : <EmptyDone text="Tuyệt vời! Không còn câu đóng góp nào đang chờ." />}
             </section>

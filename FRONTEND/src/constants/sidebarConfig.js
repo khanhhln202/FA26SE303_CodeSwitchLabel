@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, CheckSquare, Headphones,
-  History, Home, PlusCircle, Mic, FileText, ClipboardCheck, FolderKanban, Users, Sliders,
+  History, Home, PlusCircle, Mic, FileText, FileSearch, FolderKanban, Users, Sliders,
   UserCheck,
   User, 
   ListTodo
@@ -85,24 +85,28 @@ export const SIDEBAR_CONFIG = {
     borderColor: SIDEBAR_BORDER_SPEAKER,
     footerActiveBg: SPEAKER_ACCENT_SOFT_BG,
     logoVariant: 'dark',
-    items: [
-      { name: 'Tổng quan & Tiến độ', to: '/reviewer', icon: LayoutDashboard, end: true },
-      { name: 'Nhiệm vụ', to: '/reviewer/task', icon: CheckSquare },
+    // Menu chia nhóm, phẳng (không dropdown) - cùng kiểu với Speaker
+    sections: [
       {
-        name: 'Kiểm duyệt',
-        icon: ClipboardCheck,
-        children: [
-          { to: '/reviewer/recording', label: 'Ghi âm', icon: Headphones },
-          // Đề xuất câu = 1 hàng chờ chung: câu đóng góp + câu có vấn đề (báo lỗi / đề xuất sửa).
-          { to: '/reviewer/contribution', label: 'Đề xuất câu', icon: FileText },
+        title: 'Tổng quan',
+        items: [
+          { name: 'Tổng quan & Tiến độ', to: '/reviewer', icon: LayoutDashboard, end: true },
+          { name: 'Nhiệm vụ', to: '/reviewer/task', icon: CheckSquare },
         ],
       },
       {
-        name: 'Lịch sử kiểm duyệt',
-        icon: History,
-        children: [
-          { to: '/reviewer/history-recording', label: 'Ghi âm', icon: Headphones },
-          { to: '/reviewer/history-contribution', label: 'Đề xuất câu', icon: FileText },
+        title: 'Kiểm duyệt',
+        items: [
+          { name: 'Duyệt ghi âm', to: '/reviewer/recording', icon: Headphones },
+          // Đề xuất câu = 1 hàng chờ chung: câu đóng góp + câu có vấn đề (báo lỗi / đề xuất sửa).
+          { name: 'Duyệt đề xuất câu', to: '/reviewer/contribution', icon: FileText },
+        ],
+      },
+      {
+        title: 'Của bạn',
+        items: [
+          { name: 'Lịch sử duyệt ghi âm', to: '/reviewer/history-recording', icon: History },
+          { name: 'Lịch sử duyệt đề xuất', to: '/reviewer/history-contribution', icon: FileSearch },
         ],
       },
     ],

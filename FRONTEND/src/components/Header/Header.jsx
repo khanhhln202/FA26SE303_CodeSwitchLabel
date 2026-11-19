@@ -152,13 +152,16 @@ export default function Header({ role }) {
                 <p className="text-ui font-emphasis text-[#2B2C31] dark:text-gray-100">{userName}</p>
                 <p className="type-meta mt-0.5" style={{ color: accent }}>{userRole}</p>
               </div>
-              <button
-                role="menuitem"
-                onClick={() => { setMenuOpen(false); navigate(profilePath); }}
-                className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-ui font-label hover:bg-black/[0.04] dark:hover:bg-white/[0.06] transition-colors text-left text-[#2B2C31] dark:text-gray-200 cursor-pointer"
-              >
-                <User className="w-4 h-4 text-[#6E7078] dark:text-gray-400" /> Hồ sơ cá nhân
-              </button>
+              {/* Role nào không khai báo trang hồ sơ (vd. Reviewer) thì không hiện mục này */}
+              {profilePath && (
+                <button
+                  role="menuitem"
+                  onClick={() => { setMenuOpen(false); navigate(profilePath); }}
+                  className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-ui font-label hover:bg-black/[0.04] dark:hover:bg-white/[0.06] transition-colors text-left text-[#2B2C31] dark:text-gray-200 cursor-pointer"
+                >
+                  <User className="w-4 h-4 text-[#6E7078] dark:text-gray-400" /> Hồ sơ cá nhân
+                </button>
+              )}
               {config.changePasswordPath && (
                 <button
                   role="menuitem"

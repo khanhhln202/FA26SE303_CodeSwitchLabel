@@ -15,7 +15,7 @@ export const HEADER_CONFIG = {
   },
   reviewer: {
     accent: SPEAKER_HEADER_ACCENT, // cùng màu Speaker (sidebar Reviewer giờ cũng trắng + xanh lá)
-    profilePath: '/reviewer/profile',
+    // Không có profilePath: menu tài khoản của Reviewer không hiện mục "Hồ sơ cá nhân"
     changePasswordPath: '/reviewer/change-password',
   },
 };

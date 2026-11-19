@@ -33,6 +33,8 @@ function toRow(item) {
     category: item.category,
     cs_transcript: item.csTranscript,
     vi_equivalent: item.viEquivalent,
+    cs_plain: item.csPlain,
+    vi_plain: item.viPlain,
     alignment: item.alignment ?? [],
     date: formatDateTime(item.createdAt),
     status: STATUS_OF[item.status] ?? "Pending",
@@ -44,13 +46,31 @@ function toRow(item) {
   };
 }
 
+/**
+ * Câu thường: hiện đúng csPlain / viPlain. Nếu câu thường trùng nội dung câu gắn nhãn (bỏ nhãn)
+ * thì vẽ từ câu gắn nhãn để tô màu từ tiếng Anh; khác nhau thì hiện nguyên câu thường.
+ * Câu cũ chưa có câu thường thì dùng câu gắn nhãn.
+ */
+function PlainSentence({ plain, tagged }) {
+  const norm = (t = "") => t.replace(/\s+/g, " ").trim();
+  if (!plain || norm(plain) === norm(stripTags(tagged))) return <CodeSwitchText transcript={tagged} accent={AUDIO_PRIMARY} />;
+  return plain;
+}
+
 function SentenceContent({ item }) {
   return (
     <>
-      {[{ label: "VI-EN", text: item.cs_transcript, pill: { background: `${AUDIO_PRIMARY}1A`, color: AUDIO_PRIMARY } }, { label: "VI", text: item.vi_equivalent, pill: { background: "#F0EEE6", color: "#6E7078" } }].map(({ label, text, pill }) => (
-        <div key={label} className="bg-[#F7F5EF] p-3.5 rounded-xl border border-[#E5E2D8] mb-2.5 flex items-center gap-2.5">
-          <span className="text-tag font-emphasis w-9 h-4 shrink-0 rounded inline-flex items-center justify-center" style={pill}>{label}</span>
-          <p className="type-body text-[#16171C] break-words min-w-0"><CodeSwitchText transcript={text} accent={AUDIO_PRIMARY} /></p>
+      {/* Đủ 4 câu API trả về: dòng chính = câu thường (csPlain / viPlain), dòng xám = câu gắn nhãn nguyên chuỗi API */}
+      {[
+        { label: "VI-EN", tagged: item.cs_transcript, plain: item.cs_plain, pill: { background: `${AUDIO_PRIMARY}1A`, color: AUDIO_PRIMARY } },
+        { label: "VI", tagged: item.vi_equivalent, plain: item.vi_plain, pill: { background: "#F0EEE6", color: "#6E7078" } },
+      ].map(({ label, tagged, plain, pill }) => (
+        <div key={label} className="bg-[#F7F5EF] p-3.5 rounded-xl border border-[#E5E2D8] mb-2.5 flex items-start gap-2.5">
+          <span className="text-tag font-emphasis w-9 h-4 shrink-0 rounded inline-flex items-center justify-center mt-1" style={pill}>{label}</span>
+          <div className="min-w-0">
+            <p className="type-body text-[#16171C] break-words"><PlainSentence plain={plain} tagged={tagged} /></p>
+            {tagged && <p className="type-meta text-[#9A9CA3] break-words mt-1">{tagged}</p>}
+          </div>
         </div>
       ))}
       {item.alignment.length > 0 && (
