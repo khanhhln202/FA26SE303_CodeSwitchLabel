@@ -100,7 +100,36 @@ public sealed class AiReviewEvaluatorTests
         ]);
 
         Assert.False(settings.Enabled);
-        Assert.Equal(0.40m, settings.WerDecisionThreshold);
+
+        // So với hằng số chứ không với con số: thứ cần khẳng định ở đây là "có lùi về
+        // mặc định", không phải "mặc định bằng bao nhiêu". Ghi cứng giá trị vào đây chỉ
+        // làm test gãy mỗi lần luật nghiệp vụ đổi, mà chẳng bắt được lỗi nào.
+        Assert.Equal(AiReviewSettings.DefaultThreshold, settings.WerDecisionThreshold);
+    }
+
+    /// <summary>
+    /// Gác cái bẫy của ngưỡng 0. Luật so là <c>effectiveWer &gt;= ngưỡng</c>, nên đặt
+    /// ngưỡng đúng bằng 0 sẽ làm <c>0 &gt;= 0</c> đúng và từ chối CẢ bản ghi đọc khớp hoàn
+    /// hảo — tức từ chối tất cả, không phải "sai một từ là từ chối".
+    ///
+    /// <para>
+    /// Test này khẳng định ranh giới chứ không khẳng định con số: đổi
+    /// <see cref="AiReviewSettings.DefaultThreshold"/> sang giá trị khác vẫn xanh, nhưng
+    /// đổi về 0 là đỏ ngay.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void NguongMacDinh_KhopHoanHaoThiDat_SaiDuMotTuThiTuChoi()
+    {
+        var macDinh = Settings(AiReviewSettings.DefaultThreshold);
+
+        Assert.Equal(AiReviewVerdict.Approved, AiReviewEvaluator.Evaluate(0m, macDinh).Verdict);
+
+        // 0.001 = sai một từ trong kịch bản 1000 từ, tức ca sai-ít-nhất mà ta có thể gặp.
+        Assert.Equal(AiReviewVerdict.Rejected, AiReviewEvaluator.Evaluate(0.001m, macDinh).Verdict);
+
+        // 0.1 = sai một từ trong câu 10 từ, cỡ câu thật của đồ án.
+        Assert.Equal(AiReviewVerdict.Rejected, AiReviewEvaluator.Evaluate(0.1m, macDinh).Verdict);
     }
 
     private static SystemConfigDto Config(string key, string value) =>

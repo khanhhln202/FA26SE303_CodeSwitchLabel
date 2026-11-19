@@ -22,10 +22,30 @@ public enum AiReviewVerdict
 public sealed record AiReviewSettings(bool Enabled, decimal WerDecisionThreshold)
 {
     /// <summary>
-    /// 0.40 cố ý cao. ASR gặp câu trộn Việt–Anh đã sai sẵn một phần, nên ranh giới thấp
-    /// sẽ loại oan người đọc đúng.
+    /// Sai một từ là từ chối — luật đội frontend chốt ngày 18/11/2026.
+    ///
+    /// <para>
+    /// 0.0001 chứ KHÔNG phải 0. <see cref="AiReviewEvaluator.Evaluate"/> so bằng
+    /// <c>&gt;=</c>, nên đặt 0 sẽ làm <c>0 &gt;= 0</c> đúng và từ chối cả bản ghi đọc khớp
+    /// hoàn hảo — tức từ chối tất cả. Giá trị này nằm lọt giữa "không sai từ nào"
+    /// (WER = 0) và "sai ít nhất một từ" (WER = 1/số từ).
+    /// </para>
+    ///
+    /// <para>
+    /// Ngưỡng cũ 0.40 KHÔNG phải chọn bừa, và cái giá của việc bỏ nó đã được đo: trên 17
+    /// lượt máy đã chấm, 8 bản đạt nằm trong 0.00–0.30 và 9 bản không đạt nằm trong
+    /// 0.63–1.13, giữa hai cụm không có bản ghi nào. Luật mới loại 15 trong 17 bản đó, kể
+    /// cả <c>r_cs_121001014</c> mà người đọc và máy nghe đều đúng từng chữ — toàn bộ WER
+    /// 0.30 của nó đến từ việc "12 giờ 19" được viết thành "12h19".
+    /// </para>
+    ///
+    /// <para>
+    /// Gốc vấn đề nằm ở cái THƯỚC chứ không ở cái NGƯỠNG: WER đang gộp "người đọc sai",
+    /// "máy nghe sai" và "chỉ khác cách viết" vào cùng một con số. Chuẩn hoá cách viết số
+    /// và dấu thanh trước khi so sẽ tách được ba thứ đó. Chưa làm.
+    /// </para>
     /// </summary>
-    public const decimal DefaultThreshold = 0.40m;
+    public const decimal DefaultThreshold = 0.0001m;
 
     public static AiReviewSettings From(IEnumerable<SystemConfigDto> config)
     {
