@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { toast } from "sonner";
-import { Search, Download, CheckCircle2, XCircle, Filter, Clock, X, Loader2 } from "lucide-react";
+import { Search, Download, CheckCircle2, XCircle, Filter, Clock, X, Loader2, Calendar } from "lucide-react";
 import Pagination from "../../../components/Pagination/Pagination";
 import WaveformInline from "../../../components/AudioPlayer/WaveformInline";
 import {
@@ -26,6 +26,66 @@ function splitDateTime(iso) {
   if (Number.isNaN(d.getTime())) return null;
   const pad = (n) => String(n).padStart(2, "0");
   return [`${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`, `${pad(d.getHours())}:${pad(d.getMinutes())}`];
+}
+
+// Parse chuỗi "dd/mm/yyyy" -> đối tượng Date hợp lệ hoặc null
+function parseDmyDate(dmyStr, endOfDay = false) {
+  if (!dmyStr || dmyStr.length !== 10) return null;
+  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(dmyStr);
+  if (!match) return null;
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  const date = endOfDay
+    ? new Date(year, month - 1, day, 23, 59, 59, 999)
+    : new Date(year, month - 1, day, 0, 0, 0, 0);
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+  return date;
+}
+
+// Chuyển "dd/mm/yyyy" <-> "yyyy-mm-dd" cho input date ẩn
+function dmyToIsoDate(dmyStr) {
+  const parsed = parseDmyDate(dmyStr);
+  if (!parsed) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}`;
+}
+
+function isoDateToDmy(isoStr) {
+  if (!isoStr) return "";
+  const [y, m, d] = isoStr.split("-");
+  if (!y || !m || !d) return "";
+  return `${d}/${m}/${y}`;
+}
+
+// Tự động định dạng dd/mm/yyyy khi người dùng gõ số
+function formatDmyTyping(raw) {
+  const digits = raw.replace(/\D/g, "").slice(0, 8);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+}
+
+// Chuẩn hóa tên chủ đề sang tiếng Việt thống nhất
+function normalizeTopicLabel(rawTopic) {
+  if (!rawTopic) return "Công nghệ thông tin";
+  const lower = String(rawTopic).trim().toLowerCase();
+  if (lower.includes("it") || lower.includes("tech") || lower.includes("công nghệ")) {
+    return "Công nghệ thông tin";
+  }
+  if (lower.includes("daily") || lower.includes("life") || lower.includes("hội thoại")) {
+    return "Hội thoại hàng ngày";
+  }
+  if (lower.includes("edu") || lower.includes("giáo dục")) {
+    return "Giáo dục";
+  }
+  return String(rawTopic).trim();
 }
 
 // Lấy thời gian gần nhất reviewer duyệt cặp câu text và bản ghi âm
@@ -104,10 +164,15 @@ export default function AdminRecordings() {
   const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [speakerFilter, setSpeakerFilter] = useState("all");
-  const [timeFilter, setTimeFilter] = useState("all");
+  const [topicFilter, setTopicFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+
+  const dateFromPickerRef = useRef(null);
+  const dateToPickerRef = useRef(null);
 
   const [selectedReviewersList, setSelectedReviewersList] = useState(null);
 
@@ -162,6 +227,21 @@ export default function AdminRecordings() {
     return Array.from(uniqueSpeakers).sort((a, b) => a.localeCompare(b, "vi"));
   }, [recordings]);
 
+  // Tự động lấy danh sách Chủ đề duy nhất từ dữ liệu
+  const topicOptions = useMemo(() => {
+    const uniqueTopics = new Set([
+      "Công nghệ thông tin",
+      "Giáo dục",
+      "Hội thoại hàng ngày"
+    ]);
+    recordings.forEach((r) => {
+      if (r.topic && String(r.topic).trim()) {
+        uniqueTopics.add(normalizeTopicLabel(r.topic));
+      }
+    });
+    return Array.from(uniqueTopics);
+  }, [recordings]);
+
   // Lượt duyệt đã có sẵn trong cặp do BE trả về, không gọi thêm API.
   const handleOpenReviewersModal = (recording) => {
     setSelectedReviewersList({
@@ -185,9 +265,12 @@ export default function AdminRecordings() {
 
   const filteredRecordings = useMemo(() => {
     const keywords = searchTerm.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const DAY_MS = 24 * 60 * 60 * 1000;
+
+    const parsedFrom = parseDmyDate(dateFrom, false);
+    const fromTime = parsedFrom ? parsedFrom.getTime() : null;
+
+    const parsedTo = parseDmyDate(dateTo, true);
+    const toTime = parsedTo ? parsedTo.getTime() : null;
 
     return recordings.filter((r) => {
       if (r.status === "QcFailed") return false;
@@ -197,16 +280,16 @@ export default function AdminRecordings() {
       const matchSpeaker = speakerFilter === "all" || (r.speaker && String(r.speaker).trim() === speakerFilter);
       if (!matchSpeaker) return false;
 
-      if (timeFilter !== "all") {
+      const matchTopic = topicFilter === "all" || normalizeTopicLabel(r.topic) === topicFilter;
+      if (!matchTopic) return false;
+
+      if (fromTime !== null || toTime !== null) {
         if (!r.latestReviewedAt) return false;
         const reviewedTime = new Date(r.latestReviewedAt).getTime();
         if (Number.isNaN(reviewedTime)) return false;
 
-        if (timeFilter === "today" && reviewedTime < startOfToday) return false;
-        if (timeFilter === "3days" && reviewedTime < now.getTime() - 3 * DAY_MS) return false;
-        if (timeFilter === "7days" && reviewedTime < now.getTime() - 7 * DAY_MS) return false;
-        if (timeFilter === "30days" && reviewedTime < now.getTime() - 30 * DAY_MS) return false;
-        if (timeFilter === "3months" && reviewedTime < now.getTime() - 90 * DAY_MS) return false;
+        if (fromTime !== null && reviewedTime < fromTime) return false;
+        if (toTime !== null && reviewedTime > toTime) return false;
       }
 
       if (keywords.length === 0) return true;
@@ -225,7 +308,7 @@ export default function AdminRecordings() {
 
       return keywords.every((kw) => combinedSearchableText.includes(kw));
     });
-  }, [recordings, searchTerm, statusFilter, speakerFilter, timeFilter]);
+  }, [recordings, searchTerm, statusFilter, speakerFilter, topicFilter, dateFrom, dateTo]);
 
   const totalPages = Math.ceil(filteredRecordings.length / pageSize) || 1;
   const paginatedRecordings = useMemo(() => {
@@ -283,12 +366,22 @@ export default function AdminRecordings() {
     }
   };
 
+  const openNativePicker = (ref) => {
+    if (!ref.current) return;
+    if (typeof ref.current.showPicker === "function") {
+      ref.current.showPicker();
+    } else {
+      ref.current.focus();
+      ref.current.click();
+    }
+  };
+
   return (
     <div className="w-full h-full flex flex-col justify-between text-left font-sans p-1 overflow-hidden transition-colors relative">
       {/* Filter Bar + Nút Tải Dataset */}
       <div className="shrink-0 space-y-2">
-        <div className="bg-white dark:bg-[#1C1D22] rounded-2xl border border-[#E5E2D8] dark:border-gray-800 p-2.5 shadow-[0_1px_3px_rgba(16,17,20,0.04)] flex flex-col md:flex-row gap-2.5 justify-between items-center transition-colors">
-          <div className="w-full md:w-auto flex-1 max-w-xl">
+        <div className="bg-white dark:bg-[#1C1D22] rounded-2xl border border-[#E5E2D8] dark:border-gray-800 p-2.5 shadow-[0_1px_3px_rgba(16,17,20,0.04)] flex flex-col xl:flex-row gap-2.5 justify-between items-center transition-colors">
+          <div className="w-full flex-1 min-w-0">
             <div 
               className="relative w-full flex items-center bg-[#F7F5EF] dark:bg-[#25272E] rounded-xl border border-[#E5E2D8] dark:border-gray-700 transition-all p-1"
               onFocus={(e) => {
@@ -320,8 +413,8 @@ export default function AdminRecordings() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 w-full md:w-auto shrink-0 flex-wrap md:flex-nowrap justify-end">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 w-full xl:w-auto shrink-0 flex-wrap justify-end">
+            <div className="flex items-center gap-2 flex-wrap">
               <Filter className="w-4 h-4 text-[#6E7078] dark:text-gray-400 shrink-0" />
               <select
                 value={speakerFilter}
@@ -329,7 +422,7 @@ export default function AdminRecordings() {
                   setSpeakerFilter(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="w-[165px] px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
+                className="w-[145px] px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
                 onFocus={(e) => {
                   e.target.style.borderColor = ADMIN_ACCENT;
                   e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
@@ -347,13 +440,14 @@ export default function AdminRecordings() {
                 ))}
               </select>
 
+              {/* Filter theo chủ đề nằm cạnh bên phải filter speaker */}
               <select
-                value={timeFilter}
+                value={topicFilter}
                 onChange={(e) => {
-                  setTimeFilter(e.target.value);
+                  setTopicFilter(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="w-[175px] px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
+                className="w-[165px] px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
                 onFocus={(e) => {
                   e.target.style.borderColor = ADMIN_ACCENT;
                   e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
@@ -363,13 +457,107 @@ export default function AdminRecordings() {
                   e.target.style.boxShadow = 'none';
                 }}
               >
-                <option value="all" className="bg-white dark:bg-[#25272E]">Từ trước đến nay</option>
-                <option value="today" className="bg-white dark:bg-[#25272E]">Hôm nay</option>
-                <option value="3days" className="bg-white dark:bg-[#25272E]">3 ngày gần đây</option>
-                <option value="7days" className="bg-white dark:bg-[#25272E]">7 ngày gần đây</option>
-                <option value="30days" className="bg-white dark:bg-[#25272E]">1 tháng gần đây</option>
-                <option value="3months" className="bg-white dark:bg-[#25272E]">3 tháng gần đây</option>
+                <option value="all" className="bg-white dark:bg-[#25272E]">Tất cả chủ đề</option>
+                {topicOptions.map((topic) => (
+                  <option key={topic} value={topic} className="bg-white dark:bg-[#25272E]">
+                    {topic}
+                  </option>
+                ))}
               </select>
+
+              {/* Bộ lọc khoảng thời gian cụ thể định dạng dd/mm/yyyy */}
+              <div className="flex items-center gap-1.5 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl px-2.5 py-1.5 transition-all">
+                <span className="type-caption text-[#6E7078] dark:text-gray-400 whitespace-nowrap">Từ</span>
+                <div className="relative flex items-center">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="dd/mm/yyyy"
+                    maxLength={10}
+                    value={dateFrom}
+                    onChange={(e) => {
+                      setDateFrom(formatDmyTyping(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    title="Từ ngày (dd/mm/yyyy)"
+                    className="bg-transparent type-ui font-label text-[#16171C] dark:text-white outline-none w-[86px] placeholder:text-[#9A9CA3] placeholder:font-normal"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => openNativePicker(dateFromPickerRef)}
+                    title="Chọn lịch từ ngày"
+                    className="text-[#6E7078] hover:text-[#16171C] dark:hover:text-white cursor-pointer p-0.5"
+                  >
+                    <Calendar className="w-3.5 h-3.5" />
+                  </button>
+                  <input
+                    ref={dateFromPickerRef}
+                    type="date"
+                    tabIndex={-1}
+                    aria-hidden="true"
+                    value={dmyToIsoDate(dateFrom)}
+                    max={dmyToIsoDate(dateTo) || undefined}
+                    onChange={(e) => {
+                      setDateFrom(isoDateToDmy(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="sr-only"
+                  />
+                </div>
+
+                <span className="type-caption text-[#6E7078] dark:text-gray-400 whitespace-nowrap">đến</span>
+                <div className="relative flex items-center">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="dd/mm/yyyy"
+                    maxLength={10}
+                    value={dateTo}
+                    onChange={(e) => {
+                      setDateTo(formatDmyTyping(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    title="Đến ngày (dd/mm/yyyy)"
+                    className="bg-transparent type-ui font-label text-[#16171C] dark:text-white outline-none w-[86px] placeholder:text-[#9A9CA3] placeholder:font-normal"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => openNativePicker(dateToPickerRef)}
+                    title="Chọn lịch đến ngày"
+                    className="text-[#6E7078] hover:text-[#16171C] dark:hover:text-white cursor-pointer p-0.5"
+                  >
+                    <Calendar className="w-3.5 h-3.5" />
+                  </button>
+                  <input
+                    ref={dateToPickerRef}
+                    type="date"
+                    tabIndex={-1}
+                    aria-hidden="true"
+                    value={dmyToIsoDate(dateTo)}
+                    min={dmyToIsoDate(dateFrom) || undefined}
+                    onChange={(e) => {
+                      setDateTo(isoDateToDmy(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="sr-only"
+                  />
+                </div>
+
+                {(dateFrom || dateTo) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDateFrom("");
+                      setDateTo("");
+                      setCurrentPage(1);
+                    }}
+                    title="Xóa lọc ngày"
+                    className="w-5 h-5 rounded-full flex items-center justify-center text-[#6E7078] hover:text-[#16171C] dark:hover:text-white hover:bg-[#E5E2D8] dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
 
               <select
                 value={statusFilter}
@@ -377,7 +565,7 @@ export default function AdminRecordings() {
                   setStatusFilter(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="w-[160px] px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
+                className="w-[165px] px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-ui font-label text-[#16171C] dark:text-white outline-none cursor-pointer transition-all"
                 onFocus={(e) => {
                   e.target.style.borderColor = ADMIN_ACCENT;
                   e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
