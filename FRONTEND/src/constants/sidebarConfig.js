@@ -130,7 +130,6 @@ export const SIDEBAR_CONFIG = {
     isThemeable: true,
     items: [
       { name: "Trang chủ", to: "/task-manager", icon: Home, end: true },
-      { name: "Bảng điều khiển", to: "/task-manager/dashboard", icon: LayoutDashboard },
       { name: "Quản lý nhiệm vụ", to: "/task-manager/management", icon: ListTodo },
     ],
     promo: null,
