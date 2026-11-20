@@ -14,6 +14,8 @@ public sealed class ScriptPairRulesTests
     [InlineData("[vi]Anh [en]check giúp em?", "[vi]Anh [en]check giúp em.")]
     [InlineData("  [vi]Hai   dấu cách.  Câu hai!", "[vi]Hai dấu cách. Câu hai.")]
     [InlineData("[vi]Cuối câu đã có dấu.", "[vi]Cuối câu đã có dấu.")]
+    [InlineData("[vi] Sáng mai [en] backup dữ liệu.", "[vi]Sáng mai [en]backup dữ liệu.")]
+    [InlineData("[vi]\nXuống dòng sau nhãn.", "[vi]Xuống dòng sau nhãn.")]
     public void NormalizePunctuation_BoDauVaGopKhoangTrang(string input, string expected)
     {
         Assert.Equal(expected, ScriptPairRules.NormalizePunctuation(input));

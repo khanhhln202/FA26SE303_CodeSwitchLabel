@@ -25,7 +25,7 @@ internal static class TaskMapper
         var done = doneOverride ?? r.Done;
         var target = targetOverride ?? r.TargetQty;
 
-        return new(r.TaskType == TaskType.Recording ? "cặp câu" : "bản ghi",
+        return new(r.TaskType == TaskType.Review ? "bản ghi" : "cặp câu",
             target,
             done,
             submittedOverride ?? r.Started,
@@ -220,11 +220,40 @@ public class TaskService(
         List<List<string>>? recordingScriptsByUser = null;
         if (assigneeUserIds.Count > 0 && request.TaskType == TaskType.Recording)
         {
-            recordingScriptsByUser = [];
-            foreach (var userId in assigneeUserIds)
+            var selected = request.ScriptIds?
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Select(id => id.Trim())
+                .Distinct(StringComparer.Ordinal)
+                .ToList() ?? [];
+
+            if (selected.Count > 0)
             {
-                recordingScriptsByUser.Add(await tasks.GetRecordableScriptIdsByDomainAsync(
-                    taskDomain, userId, targetQty, ct));
+                // Chọn từ kho Admin: chỉ nhận câu đã duyệt nội dung, đúng chủ đề task.
+                var found = (await tasks.GetScriptsAsync([.. selected], ct))
+                    .Where(s => s.Status == ScriptStatus.Validated && s.Domain == taskDomain)
+                    .Select(s => s.ScriptId)
+                    .ToHashSet(StringComparer.Ordinal);
+
+                var invalid = selected.Where(id => !found.Contains(id)).Take(10).ToList();
+                if (invalid.Count > 0)
+                {
+                    throw new UnprocessableException(
+                        "scripts_not_recordable",
+                        $"Có câu không dùng được (chưa duyệt nội dung hoặc khác chủ đề): {string.Join(", ", invalid)}.");
+                }
+
+                // Chia rời nhau: một câu chỉ thuộc đúng một Speaker trong task này.
+                var pool = selected.Take(targetQty).ToList();
+                recordingScriptsByUser = SplitScripts(pool, assignmentQuotas!);
+            }
+            else
+            {
+                recordingScriptsByUser = [];
+                foreach (var userId in assigneeUserIds)
+                {
+                    recordingScriptsByUser.Add(await tasks.GetRecordableScriptIdsByDomainAsync(
+                        taskDomain, userId, targetQty, ct));
+                }
             }
         }
 
@@ -237,6 +266,7 @@ public class TaskService(
             Description = Clean(request.Description),
             TargetQty = targetQty,
             Deadline = deadline,
+            EnforceDeadline = request.EnforceDeadline,
             // còn ba trạng thái (InProgress/Completed/Cancelled). Task vừa tạo chưa
             // có việc gì nhưng KHÔNG còn trạng thái nháp nữa — chờ người nhận thì vẫn là
             // InProgress, và chỉ tiêu vẫn được đặt trước rồi thêm mục vào sau.
@@ -469,6 +499,7 @@ public class TaskService(
                 Domain = wave.Domain,
                 Description = wave.WaveName,
                 TargetQty = wave.TargetQty,
+                ImportedQty = wave.ImportedQty,
                 Deadline = deadline,
                 Status = WorkTaskStatus.InProgress,
                 CreatedAt = now
@@ -480,6 +511,11 @@ public class TaskService(
         }
 
         var taskId = task.TaskId;
+        if (task.ImportedQty != wave.ImportedQty)
+        {
+            task.ImportedQty = wave.ImportedQty;
+            await SaveTasksAsync(ct);
+        }
 
         if (autoFill && task.Status == WorkTaskStatus.InProgress)
         {
@@ -556,6 +592,8 @@ public class TaskService(
             }
             task.Deadline = deadline;
         }
+
+        if (request.EnforceDeadline.HasValue) task.EnforceDeadline = request.EnforceDeadline.Value;
 
         if (request.TargetQty.HasValue)
         {
@@ -665,6 +703,13 @@ public class TaskService(
         await using var transaction = await BeginTransactionIfNeededAsync(ct);
         var task = await LoadMutableAsync(taskId, ct);
         await EnsureWaveOwnerAsync(task, callerId, isAdmin, ct);
+
+        if (task.TaskType == TaskType.Contribution)
+        {
+            throw new UnprocessableException(
+                "contribution_items_automatic",
+                "Task đóng góp nhận câu từ tình nguyện viên, không thêm mục thủ công.");
+        }
 
         var hasIds = request.Ids.Count > 0;
         var hasAutoFill = request.AutoFill is not null;
@@ -779,6 +824,13 @@ public class TaskService(
         await using var transaction = await BeginTransactionIfNeededAsync(ct);
         var task = await LoadMutableAsync(taskId, ct);
         await EnsureWaveOwnerAsync(task, callerId, isAdmin, ct);
+
+        if (task.TaskType == TaskType.Contribution)
+        {
+            throw new UnprocessableException(
+                "contribution_items_automatic",
+                "Task đóng góp nhận câu từ tình nguyện viên, không gỡ mục thủ công.");
+        }
 
         if (task.TaskType == TaskType.Recording)
         {
@@ -1328,6 +1380,25 @@ public class TaskService(
     }
 
     /// <summary>
+    /// Chia danh sách câu đã chọn thành các phần rời nhau theo quota từng người.
+    /// Câu thừa (vượt quota) không giao cho ai; câu thiếu thì người cuối nhận ít hơn.
+    /// </summary>
+    private static List<List<string>> SplitScripts(IReadOnlyList<string> pool, int[] quotas)
+    {
+        var result = new List<List<string>>(quotas.Length);
+        var index = 0;
+
+        foreach (var quota in quotas)
+        {
+            var take = Math.Min(quota, Math.Max(0, pool.Count - index));
+            result.Add([.. pool.Skip(index).Take(take)]);
+            index += take;
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// quota hiển thị cho lượt giao cũ chưa có target_qty (dữ liệu trước V12).
     /// Lấy đúng phần của người ở vị trí <paramref name="index"/> trong mảng đã sắp xếp
     /// (cùng thứ tự <see cref="SplitQuota"/> dùng khi chia), để tổng các phần hiển thị
@@ -1349,8 +1420,8 @@ public class TaskService(
     /// Task thu âm và task duyệt ngoài đợt vẫn phải đủ mục trước khi giao/nâng chỉ tiêu.
     /// </summary>
     private static bool RequiresItemsToAssign(WorkTask task) =>
-        task.TaskType != TaskType.Review || task.WaveId is null;
-
+        task.TaskType == TaskType.Recording ||
+        (task.TaskType == TaskType.Review && task.WaveId is null);
     public async Task<TaskDetailDto> CancelAsync(
         long taskId, CancellationToken ct = default,
         long? callerId = null, bool isAdmin = false)
@@ -1433,7 +1504,9 @@ public class TaskService(
         long speakerId, CancellationToken ct = default)
     {
         var now = clock.GetUtcNow();
-        var rows = await tasks.GetActiveRowsForAssigneeAsync(speakerId, TaskType.Recording, ct);
+        var recordingRows = await tasks.GetActiveRowsForAssigneeAsync(speakerId, TaskType.Recording, ct);
+        var contributionRows = await tasks.GetActiveRowsForAssigneeAsync(speakerId, TaskType.Contribution, ct);
+        var rows = recordingRows.Concat(contributionRows).ToList();
 
         var active = new List<SpeakerActiveTaskDto>(rows.Count);
 
@@ -1463,7 +1536,7 @@ public class TaskService(
     public async Task<IReadOnlyList<AssignableUserDto>> GetAssignableUsersAsync(
         TaskType taskType, CancellationToken ct = default)
     {
-        var role = taskType == TaskType.Recording ? RoleName.Speaker : RoleName.Reviewer;
+        var role = taskType == TaskType.Review ? RoleName.Reviewer : RoleName.Speaker;
 
         // rows arrive ranked-first from repository
         // (approval DESC, overdue ASC, load ASC); keep that order for Task Manager UI.
@@ -1718,7 +1791,7 @@ public class TaskService(
     private async Task<AppUser> EnsureEligibleAssigneeAsync(
         long userId, TaskType taskType, CancellationToken ct)
     {
-        var requiredRole = taskType == TaskType.Recording ? RoleName.Speaker : RoleName.Reviewer;
+        var requiredRole = taskType == TaskType.Review ? RoleName.Reviewer : RoleName.Speaker;
         var user = await tasks.GetUserWithRoleAsync(userId, ct)
                    ?? throw new NotFoundException("user_not_found", $"Không tìm thấy tài khoản #{userId}.");
 
@@ -1806,23 +1879,29 @@ public class TaskService(
         var row = await tasks.GetRowAsync(taskId, ct) ?? throw NotFound(taskId);
         var history = await tasks.GetAssignmentHistoryAsync(taskId, ct);
 
-        IReadOnlyList<TaskItemDto> items = row.TaskType == TaskType.Recording
-            ? [.. (await tasks.GetScriptItemsAsync(taskId, ct)).Select(i =>
-                new TaskItemDto(
-                    i.ScriptId, i.Status.ToString(), Preview(i.Script.CsContent),
-                    i.IncludedAt, i.AssigneeUserId, i.TaskScriptId))]
-            : [.. (await tasks.GetRecordingItemsAsync(taskId, ct)).Select(i =>
-                new TaskItemDto(
-                    i.RecordingId,
-                    i.Status.ToString(),
-                    $"{i.Recording.SentenceVariant} · {i.Recording.Status} · {i.Recording.DurationSec:0.##} giây",
-                    i.IncludedAt))];
+        IReadOnlyList<TaskItemDto> items =
+            row.TaskType == TaskType.Recording
+                ? [.. (await tasks.GetScriptItemsAsync(taskId, ct)).Select(i =>
+                    new TaskItemDto(
+                        i.ScriptId, i.Status.ToString(), Preview(i.Script.CsContent),
+                        i.IncludedAt, i.AssigneeUserId, i.TaskScriptId))]
+                : row.TaskType == TaskType.Contribution
+                    ? [.. (await tasks.GetContributionItemsAsync(taskId, ct)).Select(s =>
+                        new TaskItemDto(
+                            s.ScriptId, s.Status.ToString(), Preview(s.CsContent), s.CreatedAt))]
+                    : [.. (await tasks.GetRecordingItemsAsync(taskId, ct)).Select(i =>
+                        new TaskItemDto(
+                            i.RecordingId,
+                            i.Status.ToString(),
+                            $"{i.Recording.SentenceVariant} · {i.Recording.Status} · {i.Recording.DurationSec:0.##} giây",
+                            i.IncludedAt))];
 
         return new TaskDetailDto(
             row.ToListItem(now),
             [.. history.Select(a => new TaskAssignmentDto(
                 a.AssignmentId, a.UserId, a.User.FullName, a.TargetQty, a.AssignmentStatus, a.AssignedAt))],
-            items);
+            items,
+            row.ImportedQty);
     }
 
     /// <summary>

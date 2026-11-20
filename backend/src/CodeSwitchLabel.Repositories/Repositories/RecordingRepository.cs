@@ -29,10 +29,15 @@ public interface IRecordingRepository
     /// <summary><paramref name="sort"/> rỗng (Field = null) là thứ tự mặc định.</summary>
     Task<(IReadOnlyList<Recording> Items, int Total)> SearchAsync(
         long? speakerId, string? scriptId, RecordingStatus? status,
+        DateTimeOffset? from, DateTimeOffset? to, string? domain,
         int page, int pageSize, SortSpec<RecordingSortField> sort, CancellationToken ct = default);
 
     /// <summary>Đã có bản đang chờ duyệt hoặc đã đạt của CHÍNH Speaker này cho biến thể chưa.</summary>
     Task<bool> HasActiveRecordingAsync(
+        string scriptId, SentenceVariant variant, long speakerId, CancellationToken ct = default);
+
+    /// <summary>Lần thu gần nhất bị từ chối của CHÍNH Speaker này cho biến thể, null nếu không có.</summary>
+    Task<Recording?> GetRejectedTakeAsync(
         string scriptId, SentenceVariant variant, long speakerId, CancellationToken ct = default);
 
     /// <summary>Số lần Speaker này đã thu cho (cặp câu, biến thể) — lần thu mới là số này cộng một.</summary>
@@ -92,6 +97,7 @@ public class RecordingRepository(CodeSwitchLabelDbContext db) : IRecordingReposi
 
     public async Task<(IReadOnlyList<Recording> Items, int Total)> SearchAsync(
         long? speakerId, string? scriptId, RecordingStatus? status,
+        DateTimeOffset? from, DateTimeOffset? to, string? domain,
         int page, int pageSize, SortSpec<RecordingSortField> sort, CancellationToken ct = default)
     {
         var query = db.Recordings.AsNoTracking();
@@ -99,6 +105,9 @@ public class RecordingRepository(CodeSwitchLabelDbContext db) : IRecordingReposi
         if (speakerId.HasValue) query = query.Where(r => r.SpeakerId == speakerId.Value);
         if (!string.IsNullOrWhiteSpace(scriptId)) query = query.Where(r => r.ScriptId == scriptId);
         if (status.HasValue) query = query.Where(r => r.Status == status.Value);
+        if (from.HasValue) query = query.Where(r => r.RecordedAt >= from.Value);
+        if (to.HasValue) query = query.Where(r => r.RecordedAt < to.Value);
+        if (!string.IsNullOrWhiteSpace(domain)) query = query.Where(r => r.Script.Domain == domain);
 
         var total = await query.CountAsync(ct);
 
@@ -139,6 +148,13 @@ public class RecordingRepository(CodeSwitchLabelDbContext db) : IRecordingReposi
             r.SentenceVariant == variant &&
             r.SpeakerId == speakerId &&
             (r.Status == RecordingStatus.PendingReview || r.Status == RecordingStatus.Approved), ct);
+
+    public Task<Recording?> GetRejectedTakeAsync(
+        string scriptId, SentenceVariant variant, long speakerId, CancellationToken ct = default) =>
+        db.Recordings.AsNoTracking()
+            .Where(r => r.ScriptId == scriptId && r.SentenceVariant == variant && r.SpeakerId == speakerId && r.Status == RecordingStatus.Rejected)
+            .OrderByDescending(r => r.RecordedAt)
+            .FirstOrDefaultAsync(ct);
 
     public Task<int> CountTakesAsync(
         string scriptId, SentenceVariant variant, long speakerId, CancellationToken ct = default) =>

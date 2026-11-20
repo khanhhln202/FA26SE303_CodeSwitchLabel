@@ -471,9 +471,9 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
         var first = await ScriptAssignmentService.GetNextAsync(a.UserId, t1.TaskId, null, ct);
         Assert.Equal(s2.ScriptId, first?.ScriptId);
 
-        // Không còn giữ chỗ nên B cũng nhận đúng câu đó — mỗi người một bản riêng.
+        // A đang giữ s2 nên B không nhận trùng; B nhận câu còn lại của đợt.
         var second = await ScriptAssignmentService.GetNextAsync(b.UserId, t2.TaskId, null, ct);
-        Assert.Equal(s2.ScriptId, second?.ScriptId);
+        Assert.Equal(s1.ScriptId, second?.ScriptId);
 
         // Người ngoài đợt không mượn task để lấy câu.
         var error = await Assert.ThrowsAsync<ForbiddenException>(

@@ -20,6 +20,9 @@ public interface IScriptProposalService
     Task<ProposalCreatedDto> CreateAsync(
         string scriptId, long proposerId, CreateProposalRequest request, CancellationToken ct = default);
 
+    /// <summary>Báo lỗi thống nhất cho một câu đã duyệt nội dung (Type = report), dùng cho POST /api/speaker/scripts/submit.</summary>
+    Task<UnifiedContributionResult> CreateUnifiedAsync(ContributeOrReportRequest request, long proposerId, CancellationToken ct = default);
+
     /// <summary>Hàng chờ đề xuất của Reviewer — mặc định cũ nhất trước (chờ lâu nhất xử lý trước).</summary>
     Task<PagedResult<ProposalQueueItemDto>> ListAsync(
         ProposalQueueQuery query, CancellationToken ct = default);

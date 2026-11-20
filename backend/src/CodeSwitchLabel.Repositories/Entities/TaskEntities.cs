@@ -40,6 +40,12 @@ public class Wave
     public AppUser Creator { get; set; } = null!;
     public AppUser? AssignedToUser { get; set; }
     public ICollection<WorkTask> Tasks { get; set; } = [];
+
+    /// <summary>Câu dự phòng cho đợt khi bài bị từ chối, nhập thêm đè trên chỉ tiêu task.</summary>
+    public int BufferQty { get; set; }
+
+    /// <summary>Số câu đã nhập vào đợt này (dùng khi nhập script gắn wave_id).</summary>
+    public int ImportedQty { get; set; }
 }
 
 public class WorkTask
@@ -64,6 +70,10 @@ public class WorkTask
     public int TargetQty { get; set; }
 
     public DateTimeOffset? Deadline { get; set; }
+
+    /// <summary>Quá hạn thì chặn nộp (không chỉ cảnh báo). Gia hạn = sửa Deadline.</summary>
+    public bool EnforceDeadline { get; set; }
+    public int ImportedQty { get; set; }
     public WorkTaskStatus Status { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 

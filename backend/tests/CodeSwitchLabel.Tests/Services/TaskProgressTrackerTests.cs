@@ -496,6 +496,8 @@ public sealed class TaskProgressTrackerTests
         _tasks.Setup(t => t.GetForUpdateAsync(8, It.IsAny<CancellationToken>())).ReturnsAsync(task8);
         _tasks.Setup(t => t.GetRowAsync(8, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Row(started: 1, done: 0));
+        _tasks.Setup(t => t.BackfillFromWaveBufferAsync(It.IsAny<long>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(0);
 
         // Act
         await Tracker.OnPairDiscardedAsync(scriptId, TestContext.Current.CancellationToken);

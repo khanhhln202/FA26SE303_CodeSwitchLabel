@@ -17,12 +17,44 @@ namespace CodeSwitchLabel.Services.Common;
 internal static class ScriptPairRules
 {
     /// <summary>
+    /// Nhãn ngôn ngữ phải dính sát từ đầu tiên: `[vi] Sáng` → `[vi]Sáng`.
+    /// Chỉ bỏ khoảng trắng NGAY SAU nhãn; khoảng trắng trước nhãn vẫn là dấu ngăn từ.
+    /// </summary>
+    private static string AttachTagsToNextWord(string value)
+    {
+        var sb = new System.Text.StringBuilder(value.Length);
+
+        for (var i = 0; i < value.Length;)
+        {
+            var tagLength = value.AsSpan(i).StartsWith(CodeSwitchText.ViTag) ||
+                            value.AsSpan(i).StartsWith(CodeSwitchText.EnTag)
+                ? CodeSwitchText.ViTag.Length
+                : 0;
+
+            if (tagLength == 0)
+            {
+                sb.Append(value[i++]);
+                continue;
+            }
+
+            sb.Append(value, i, tagLength);
+            i += tagLength;
+
+            while (i < value.Length && char.IsWhiteSpace(value[i])) i++;
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
     /// Chuẩn hóa dấu câu của một câu: bỏ hết `,` `!` `?`, gộp khoảng trắng, và để
     /// đúng một dấu `.` ở cuối. Giữ nguyên nhãn [vi]/[en] và chữ trong câu; không
     /// đụng dấu chấm ở giữa (câu đơn, tránh cắt nhầm chữ viết tắt).
     /// </summary>
     public static string NormalizePunctuation(string value)
     {
+        value = AttachTagsToNextWord(value);
+
         var sb = new System.Text.StringBuilder(value.Length);
         var pendingSpace = false;
 

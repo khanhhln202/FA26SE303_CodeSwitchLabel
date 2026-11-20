@@ -265,7 +265,10 @@ public class SpeakerRoundsService(
             .Include(r => r.Script)
             .Include(r => r.Task)
             .Include(r => r.Reviews).ThenInclude(v => v.RejectionReasons).ThenInclude(rr => rr.Reason)
-            .Where(r => r.SpeakerId == speakerId);
+            .Where(r => r.SpeakerId == speakerId)
+            // Bản trượt QC không phải bản ghi hoàn chỉnh: người đọc thấy lỗi ngay khi nộp
+            // và thu lại, nên không đưa vào lịch sử thu âm.
+            .Where(r => r.Status != RecordingStatus.QcFailed);
 
         // Cùng tham số mà ReviewService và trigger trg_review_majority đọc, nên "x/3" ở đây
         // không thể lệch với số vòng thật.
@@ -482,8 +485,7 @@ public class SpeakerRoundsService(
         var byRecordingStatus = recordings.ToDictionary(x => x.Key, x => x.Count);
         var approved = byRecordingStatus.GetValueOrDefault(RecordingStatus.Approved);
         var rejected = byRecordingStatus.GetValueOrDefault(RecordingStatus.Rejected);
-        var pending = byRecordingStatus.GetValueOrDefault(RecordingStatus.PendingReview)
-            + byRecordingStatus.GetValueOrDefault(RecordingStatus.QcFailed);
+        var pending = byRecordingStatus.GetValueOrDefault(RecordingStatus.PendingReview);
 
         // Câu do chính người đọc nộp: cùng cách gom theo trạng thái như bản ghi.
         var scripts = await db.Scripts.AsNoTracking()

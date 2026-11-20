@@ -476,6 +476,7 @@ public class ReviewService(
 
         await queue.RequeueAsync(recording.ScriptId, QueueStage.Recording, ct);
         await taskTracker.OnRecordingReturnedAsync(kia, kia.TaskId, ct);
+        await taskTracker.OnRecordingReturnedToPoolAsync(kia, ct);
     }
 
     /// <summary>Gộp mã lý do và bình luận thành một chuỗi để lưu vào cột discard_note.</summary>

@@ -23,8 +23,9 @@ public class SpeakerController(
     /// Mỗi cặp câu cần **hai bản ghi**: một bản đọc câu chen tiếng Anh (cs) và một bản đọc câu
     /// thuần Việt (vi). `remainingVariants` cho biết bạn còn nợ bản nào.
     ///
-    /// Nhiều Speaker có thể thu cùng một cặp câu, mỗi người một bản riêng; hệ thống chỉ bỏ qua
-    /// câu mà **chính bạn** đã có bản chờ duyệt/đạt.
+    /// Câu được khóa cho đúng một Speaker ngay khi load lên màn hình; Speaker khác gọi cùng
+    /// lúc sẽ nhận câu khác. Claim được giữ cho tới khi bạn thu đủ hai biến thể, bỏ qua câu,
+    /// hoặc hết TTL.
     ///
     /// Truyền `taskId` để lấy câu trong phạm vi task/đợt đang giao cho bạn; task không
     /// thuộc phạm vi đó trả **403**.
@@ -46,6 +47,23 @@ public class SpeakerController(
             .ToArray();
 
         var next = await assignmentService.GetNextAsync(User.GetUserId(), taskId, excluded, ct);
+        return next is null ? NoContent() : Ok(next);
+    }
+
+    /// <summary>Bỏ qua câu đang hiển thị và lấy câu kế tiếp.</summary>
+    /// <remarks>
+    /// Nhả chỗ câu vừa bỏ qua ngay lập tức rồi đẩy xuống cuối hàng đợi; câu không bị
+    /// đánh dấu đã thu nên người khác vẫn nhận được sau đó.
+    /// **204 No Content** nghĩa là đã hết câu phù hợp.
+    /// </remarks>
+    [HttpPost("scripts/{scriptId}/skip")]
+    [ProducesResponseType(typeof(NextScriptDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<NextScriptDto>> Skip(
+        string scriptId, [FromQuery] long? taskId, CancellationToken ct)
+    {
+        var next = await assignmentService.SkipAsync(User.GetUserId(), scriptId, taskId, ct);
         return next is null ? NoContent() : Ok(next);
     }
 
@@ -71,6 +89,26 @@ public class SpeakerController(
 
         return CreatedAtAction(nameof(ScriptsController.Get), "Scripts",
             new { id = created.ScriptId }, created);
+    }
+
+    /// <summary>Đóng góp cặp câu mới hoặc báo lỗi cặp câu đã có — endpoint thống nhất.</summary>
+    /// <remarks>
+    /// - `type = contribution`: gửi `csContent`, `viContent`, `domain` (bắt buộc), tùy chọn `alignment`, `taskId`, `comment`.
+    ///   Tạo câu mới ở trạng thái chờ duyệt nội dung, giống `POST /api/scripts/contribute`.
+    /// - `type = report`: gửi `scriptId`, `errorReasonCode` (bắt buộc), tùy chọn `comment`.
+    ///   Gửi đề xuất báo lỗi cho câu đã duyệt, giống `POST /api/speaker/scripts/{scriptId}/proposals` với kind = Report.
+    /// </remarks>
+    [HttpPost("scripts/submit")]
+    [ProducesResponseType(typeof(UnifiedContributionResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
+    public async Task<ActionResult<UnifiedContributionResult>> Submit(
+        [FromBody] ContributeOrReportRequest request, CancellationToken ct)
+    {
+        var result = string.Equals(request.Type, "report", StringComparison.OrdinalIgnoreCase)
+            ? await proposalService.CreateUnifiedAsync(request, User.GetUserId(), ct)
+            : await scriptService.CreateUnifiedAsync(request, User.GetUserId(), ct);
+        return Ok(result);
     }
 
     /// <summary>Gửi đề xuất cho một câu đã duyệt: báo lỗi (Report) hoặc kèm bản sửa (Edit).</summary>

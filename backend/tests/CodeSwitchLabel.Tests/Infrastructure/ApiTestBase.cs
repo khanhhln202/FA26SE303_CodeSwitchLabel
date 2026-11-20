@@ -15,6 +15,7 @@ namespace CodeSwitchLabel.Tests.Infrastructure;
 public abstract class ApiTestBase
 {
     private readonly DatabaseFixture _fixture;
+    protected DatabaseFixture Fixture => _fixture;
     protected readonly HttpClient Client;
     protected readonly JsonSerializerOptions JsonOptions = new()
     {

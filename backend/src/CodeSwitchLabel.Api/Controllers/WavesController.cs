@@ -88,6 +88,13 @@ public class WavesController(IWaveService waveService) : ControllerBase
     public async Task<ActionResult<WaveDto>> Get(long id, CancellationToken ct)
         => Ok(await waveService.GetAsync(id, User.GetUserId(), User.IsInRole("Admin"), ct));
 
+    /// <summary>Dashboard chiến dịch: quy mô câu, thời lượng audio và nhân khẩu Speaker.</summary>
+    [HttpGet("{id:long}/dashboard")]
+    [ProducesResponseType(typeof(WaveDashboardDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<WaveDashboardDto>> Dashboard(long id, CancellationToken ct)
+        => Ok(await waveService.GetDashboardAsync(id, User.GetUserId(), User.IsInRole("Admin"), ct));
+
     // TaskManager phụ trách đợt và Admin đều sửa được
     /// <summary>Sửa tên, chủ đề, chỉ tiêu hoặc khoảng ngày. Trường nào để trống thì giữ nguyên.</summary>
     /// <remarks>

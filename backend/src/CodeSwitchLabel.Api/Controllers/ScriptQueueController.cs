@@ -65,6 +65,20 @@ public class ScriptQueueController(IScriptQueueService queue) : ControllerBase
         [FromQuery] ContributionSearchRequest request, CancellationToken ct)
         => Ok(await queue.ListPendingContributionsAsync(User.GetUserId(), request, ct));
 
+    /// <summary>Hàng đợi chờ thống nhất: câu đóng góp (contribution) và báo lỗi (report).</summary>
+    /// <remarks>
+    /// Trả về cả câu đóng góp chờ duyệt nội dung lẫn đề xuất báo lỗi chờ Reviewer xử lý.
+    /// Dùng `?type=contribution|report|all` (mặc định all), `?domain=` lọc chủ đề,
+    /// `?page=` và `?pageSize=` phân trang.
+    /// </remarks>
+    [HttpGet("api/reviewer/pending-items")]
+    [Authorize(Roles = "Reviewer")]
+    [ProducesResponseType(typeof(PagedResult<PendingItemDto>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResult<PendingItemDto>>> PendingItems(
+        [FromQuery] string? type, [FromQuery] string? domain,
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
+        => Ok(await queue.ListUnifiedPendingAsync(User.GetUserId(), type, domain, page, pageSize, ct));
+
     /// <summary>Số câu đang tồn trong hàng đợi — cho Task Manager quyết định chia lô.</summary>
     /// <remarks>
     /// Yêu cầu 2.2: Task Manager chia duyệt theo TỔNG SỐ CÂU ĐANG TỒN trong hàng đợi

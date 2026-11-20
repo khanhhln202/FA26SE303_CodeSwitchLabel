@@ -48,6 +48,39 @@ public class AuthController(IAuthService authService) : ControllerBase
         [FromBody] RegisterSpeakerRequest request, CancellationToken ct)
         => Ok(await authService.RegisterSpeakerAsync(request, ct));
 
+    /// <summary>Lưu đồng ý dùng giọng nói cho nghiên cứu, kèm bản giấy đã ký (PDF/ảnh) nếu có.</summary>
+    /// <remarks>
+    /// Gọi sau khi đăng nhập. Gửi multipart: `version` bắt buộc, `document` tùy chọn.
+    /// Chỉ nhận PDF, JPEG, PNG tối đa 10 MB. Bản mới ghi đè bản cũ của cùng người.
+    /// </remarks>
+    [HttpPost("consent")]
+    [Authorize]
+    [RequestSizeLimit(10 * 1024 * 1024)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> AcceptConsent(
+        [FromForm] AcceptConsentRequest request, IFormFile? document, CancellationToken ct)
+    {
+        if (document is { Length: > 0 })
+        {
+            var allowed = document.ContentType is "application/pdf" or "image/jpeg" or "image/png";
+            if (!allowed)
+            {
+                return BadRequest(new ProblemDetails
+                {
+                    Title = "Điều khoản đã ký phải là PDF, JPEG hoặc PNG."
+                });
+            }
+        }
+
+        await authService.AcceptConsentAsync(
+            User.GetUserId(), request.Version,
+            document is { Length: > 0 } ? document.OpenReadStream() : null,
+            document?.FileName, document?.ContentType, ct);
+
+        return NoContent();
+    }
+
     /// <summary>Thông tin tài khoản đang đăng nhập.</summary>
     /// <remarks>Đọc từ database chứ không từ token, nên vai và trạng thái luôn là mới nhất.</remarks>
     [HttpGet("me")]

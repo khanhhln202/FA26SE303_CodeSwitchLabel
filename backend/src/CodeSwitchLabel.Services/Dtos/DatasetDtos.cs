@@ -71,4 +71,13 @@ public record ExportSpeakerDataRequest
 
     /// <summary>Ngày kết thúc (giờ Việt Nam), bao gồm cả ngày này.</summary>
     public DateOnly? DateTo { get; init; }
+
+    /// <summary>Mốc duyệt sớm nhất, theo giờ UTC (tùy chọn — lọc chính xác đến giờ).</summary>
+    public DateTimeOffset? From { get; init; }
+
+    /// <summary>Mốc duyệt muộn nhất, tính đến trước mốc này (tùy chọn).</summary>
+    public DateTimeOffset? To { get; init; }
+
+    /// <summary>Mã chủ đề (domain), tùy chọn.</summary>
+    public string? Domain { get; init; }
 }

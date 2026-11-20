@@ -1,6 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 using CodeSwitchLabel.Api.Infrastructure;
+using CodeSwitchLabel.Repositories.Repositories;
 using CodeSwitchLabel.Services.Abstractions;
+using CodeSwitchLabel.Services.Common;
 using CodeSwitchLabel.Services.Dtos;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -15,7 +17,7 @@ namespace CodeSwitchLabel.Api.Controllers;
 [Route("api/scripts")]
 [Tags(ApiTags.Scripts)]
 [Authorize]
-public class ScriptsController(IScriptService scriptService, ILabelingService labelingService) : ControllerBase
+public class ScriptsController(IScriptService scriptService, ILabelingService labelingService, IWaveRepository waves) : ControllerBase
 {
     /// <summary>Tìm kiếm, lọc theo trạng thái và chủ đề, có phân trang.</summary>
     /// <remarks>
@@ -48,7 +50,7 @@ public class ScriptsController(IScriptService scriptService, ILabelingService la
     /// Gửi cặp thô qua `csRaw`/`viRaw` thì backend tự gán nhãn và bỏ qua `alignment`.
     /// </remarks>
     [HttpPost]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,TaskManager")]
     [ProducesResponseType(typeof(ScriptDetailDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
@@ -115,7 +117,7 @@ public class ScriptsController(IScriptService scriptService, ILabelingService la
     /// - **422 `en_word_count_locked`** / **`relation_locked`** — bản sửa đổi thứ nằm trong mã câu.
     /// </remarks>
     [HttpPut("{id}")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,TaskManager")]
     [ProducesResponseType(typeof(ScriptDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
@@ -213,9 +215,23 @@ public class ScriptsController(IScriptService scriptService, ILabelingService la
 
         await using var stream = file.OpenReadStream();
 
-        return Ok(ext == ".txt"
-            ? await scriptService.ImportRawAsync(stream, fileName, User.GetUserId(), form.Domain!, ct)
-            : await scriptService.ImportAsync(stream, fileName, User.GetUserId(), ct));
+        // Nếu gửi waveId, kiểm tra tồn tại rồi truyền vào service để gắn wave_id cho câu nhập
+        // và cập nhật buffer_qty / imported_qty của đợt.
+        long? waveId = form.WaveId;
+        int? bufferQty = form.BufferQty;
+        if (waveId.HasValue)
+        {
+            _ = await waves.GetAsync(waveId.Value, ct)
+                ?? throw new NotFoundException("wave_not_found", $"Không tìm thấy chiến dịch #{waveId.Value}.");
+        }
+
+        var result = ext == ".txt"
+            ? await scriptService.ImportRawAsync(stream, fileName, User.GetUserId(), form.Domain!, waveId, ct)
+            : await scriptService.ImportAsync(stream, fileName, User.GetUserId(), waveId, ct);
+        if (waveId.HasValue)
+            await waves.UpdateImportCountsAsync(waveId.Value, bufferQty, result.Imported, ct);
+
+        return Ok(result);
     }
 
     /// <summary>Danh sách batch đã nhập, mới nhất trước.</summary>
@@ -300,7 +316,7 @@ public class ScriptsController(IScriptService scriptService, ILabelingService la
     /// vì phải dùng `discard-pair` để đánh dấu audio bị loại.
     /// </remarks>
     [HttpPost("{id}/deactivate")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,TaskManager")]
     [ProducesResponseType(typeof(ScriptDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
@@ -309,7 +325,7 @@ public class ScriptsController(IScriptService scriptService, ILabelingService la
 
     /// <summary>Khôi phục câu đã bị loại/ngừng dùng về chờ duyệt nội dung.</summary>
     [HttpPost("{id}/reactivate")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,TaskManager")]
     [ProducesResponseType(typeof(ScriptDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
@@ -324,4 +340,11 @@ public class ImportScriptsForm
 
     /// <summary>Bắt buộc với file .txt; file .json lấy chủ đề trong từng câu.</summary>
     public string? Domain { get; set; }
+
+    /// <summary>Chiến dịch gắn cho câu nhập; null = nhập độc lập, không thuộc đợt nào.</summary>
+    public long? WaveId { get; set; }
+
+    /// <summary>Số câu dự phòng thêm vào đợt khi bài bị từ chối (chỉ dùng khi gửi WaveId).</summary>
+    [Range(0, 10_000)]
+    public int? BufferQty { get; set; }
 }

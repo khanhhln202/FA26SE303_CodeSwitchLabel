@@ -54,6 +54,11 @@ public interface IUserRepository
 
     Task<Role> GetRoleAsync(RoleName role, CancellationToken ct = default);
 
+    /// <summary>Ghi đè bản đồng ý mới nhất của một người; có file thì cập nhật luôn đường dẫn.</summary>
+    Task UpsertConsentAsync(
+        long userId, string version, DateTimeOffset acceptedAt,
+        string? documentKey, string? documentName, CancellationToken ct = default);
+
     void Add(AppUser user);
 
     Task<int> SaveChangesAsync(CancellationToken ct = default);
@@ -224,6 +229,37 @@ public class UserRepository(CodeSwitchLabelDbContext db) : IUserRepository
 
     public Task<Role> GetRoleAsync(RoleName role, CancellationToken ct = default) =>
         db.Roles.FirstAsync(r => r.RoleName == role, ct);
+
+    public async Task UpsertConsentAsync(
+        long userId, string version, DateTimeOffset acceptedAt,
+        string? documentKey, string? documentName, CancellationToken ct = default)
+    {
+        var consent = await db.UserConsents.FirstOrDefaultAsync(c => c.UserId == userId, ct);
+
+        if (consent is null)
+        {
+            db.UserConsents.Add(new UserConsent
+            {
+                UserId = userId,
+                Version = version,
+                AcceptedAt = acceptedAt,
+                DocumentKey = documentKey,
+                DocumentName = documentName
+            });
+        }
+        else
+        {
+            consent.Version = version;
+            consent.AcceptedAt = acceptedAt;
+            if (documentKey is not null)
+            {
+                consent.DocumentKey = documentKey;
+                consent.DocumentName = documentName;
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
 
     public void Add(AppUser user) => db.AppUsers.Add(user);
 

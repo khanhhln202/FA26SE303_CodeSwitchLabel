@@ -243,6 +243,7 @@ public sealed class ScriptRawImportTests
             DomainPassThrough(),
             config.Object,
             Mock.Of<ITaskProgressTracker>(),
+            Mock.Of<ITaskRepository>(),
             labeling.Object,
             TimeProvider.System,
             Mock.Of<ILogger<ScriptService>>());

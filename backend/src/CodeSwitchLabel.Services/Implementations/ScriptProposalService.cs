@@ -117,6 +117,72 @@ public class ScriptProposalService(
             proposal.ProposalId, proposal.ScriptId, proposal.Kind, proposal.Status, proposal.CreatedAt);
     }
 
+    /// <summary>Báo lỗi thống nhất cho một câu đã duyệt nội dung (Type = report), dùng cho POST /api/speaker/scripts/submit.</summary>
+    public async Task<UnifiedContributionResult> CreateUnifiedAsync(
+        ContributeOrReportRequest request, long proposerId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.ScriptId))
+            throw new UnprocessableException("script_id_required", "Báo lỗi phải gửi mã câu (scriptId).");
+
+        var script = await repository.GetForUpdateAsync(request.ScriptId, ct)
+                     ?? throw NotFoundException.Script(request.ScriptId);
+
+        if (script.Status != ScriptStatus.Validated)
+        {
+            throw new ConflictException(
+                "script_not_validated",
+                $"Cặp câu {request.ScriptId} đang ở trạng thái {script.Status}, chỉ báo lỗi được cho câu đã duyệt nội dung.");
+        }
+
+        if (await repository.HasRecordingsAsync(request.ScriptId, ct))
+        {
+            throw new ConflictException(
+                "script_already_recorded",
+                $"Cặp câu {request.ScriptId} đã có bản ghi âm nên không gửi báo lỗi được.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.ErrorReasonCode))
+        {
+            throw new UnprocessableException(
+                "error_reason_required", "Báo lỗi phải chọn lý do lỗi (errorReasonCode).");
+        }
+
+        if (await proposals.HasPendingAsync(request.ScriptId, ct))
+        {
+            throw new ConflictException(
+                "proposal_pending_exists",
+                $"Cặp câu {request.ScriptId} đang có một đề xuất chờ Reviewer xử lý. Chờ đề xuất đó xong rồi gửi tiếp.");
+        }
+
+        var proposal = new ScriptProposal
+        {
+            ScriptId = request.ScriptId,
+            ProposerId = proposerId,
+            Kind = ProposalKind.Report,
+            Comment = string.IsNullOrWhiteSpace(request.Comment) ? null : request.Comment.Trim(),
+            Status = ProposalStatus.Pending,
+            CreatedAt = clock.GetUtcNow(),
+            ErrorReasonId = await reasonRepository.ResolveActiveReasonIdAsync(
+                request.ErrorReasonCode, "Báo lỗi một cặp câu thì bắt buộc chọn lý do.", ct)
+        };
+
+        proposals.Add(proposal);
+
+        try
+        {
+            await proposals.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+        {
+            throw new ConflictException(
+                "proposal_pending_exists",
+                $"Cặp câu {request.ScriptId} vừa có người khác gửi đề xuất. Chờ đề xuất đó xong rồi gửi tiếp.");
+        }
+
+        return new UnifiedContributionResult(
+            proposal.ScriptId, "report", proposal.Status.ToString(), proposal.CreatedAt);
+    }
+
     public async Task<PagedResult<ProposalQueueItemDto>> ListAsync(
         ProposalQueueQuery query, CancellationToken ct = default)
     {

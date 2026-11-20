@@ -2,6 +2,7 @@ using System.Globalization;
 using CodeSwitchLabel.Repositories.Entities;
 using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Repositories.Repositories;
+using CodeSwitchLabel.Repositories.Storage;
 using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Common;
 using CodeSwitchLabel.Services.Dtos;
@@ -14,6 +15,7 @@ public class AuthService(
     IUserRepository users,
     IPasswordHasher hasher,
     IAccessTokenIssuer tokens,
+    IObjectStorage storage,
     TimeProvider clock) : IAuthService
 {
     private static string? _dummyHash;
@@ -65,13 +67,21 @@ public class AuthService(
             SpeakerProfile = new SpeakerProfile
             {
                 BirthYear = profile?.BirthYear,
+                BirthPlace = Clean(profile?.BirthPlace),
                 Province = Clean(profile?.Province),
                 Region = profile?.Region,
                 EnglishLevel = profile?.EnglishLevel,
                 Occupation = profile?.Occupation,
                 Gender = profile?.Gender,
                 Major = Clean(profile?.Major)
-            }
+            },
+            Consent = request.ConsentAccepted
+                ? new UserConsent
+                {
+                    Version = string.IsNullOrWhiteSpace(request.ConsentVersion) ? "v1" : request.ConsentVersion.Trim(),
+                    AcceptedAt = clock.GetUtcNow()
+                }
+                : null
         };
 
         users.Add(user);
@@ -87,6 +97,42 @@ public class AuthService(
         }
 
         return user.ToLoginResponse(tokens.Issue(user));
+    }
+
+    public async Task AcceptConsentAsync(
+        long userId, string version, Stream? document, string? documentName, string? contentType,
+        CancellationToken ct = default)
+    {
+        var user = await users.GetByIdAsync(userId, ct)
+                   ?? throw new NotFoundException("user_not_found", $"Không tìm thấy tài khoản #{userId}.");
+
+        string? key = null;
+        string? storedName = null;
+
+        if (document is not null && !string.IsNullOrWhiteSpace(documentName))
+        {
+            var extension = Path.GetExtension(documentName);
+            var tempPath = Path.Combine(Path.GetTempPath(), $"consent-{Guid.NewGuid():N}{extension}");
+
+            try
+            {
+                await using (var file = File.Create(tempPath))
+                {
+                    await document.CopyToAsync(file, ct);
+                }
+
+                key = $"consent/{user.UserId}/{Guid.NewGuid():N}{extension}";
+                storedName = Path.GetFileName(documentName);
+                await storage.UploadAsync(
+                    key, tempPath, string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType, ct);
+            }
+            finally
+            {
+                try { File.Delete(tempPath); } catch (IOException) { }
+            }
+        }
+
+        await users.UpsertConsentAsync(userId, version.Trim(), clock.GetUtcNow(), key, storedName, ct);
     }
 
     private static string? Clean(string? value) =>

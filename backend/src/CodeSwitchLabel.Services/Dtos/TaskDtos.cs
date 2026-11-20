@@ -33,6 +33,17 @@ public record CreateTaskRequest
 
     /// <summary>thành viên nhận task ngay lúc tạo (tùy chọn). Không chọn thì giữ luồng hiện tại.</summary>
     public List<long>? AssigneeUserIds { get; init; }
+
+    /// <summary>
+    /// Task thu âm: các cặp câu đã duyệt nội dung lấy từ kho Admin. Có danh sách thì
+    /// dùng đúng danh sách này và chia rời nhau cho từng Speaker; bỏ trống thì giữ
+    /// cách tự chọn theo chủ đề như trước.
+    /// </summary>
+    [MaxLength(100_000, ErrorMessage = "Danh sách câu quá dài.")]
+    public List<string>? ScriptIds { get; init; }
+
+    /// <summary>true: quá hạn thì chặn nộp. Mặc định false để không đổi hành vi cũ.</summary>
+    public bool EnforceDeadline { get; init; }
 }
 
 /// <summary>Trường nào để trống thì giữ nguyên.</summary>
@@ -48,6 +59,9 @@ public record UpdateTaskRequest
     public int? TargetQty { get; init; }
 
     public DateTimeOffset? Deadline { get; init; }
+
+    /// <summary>Bật/tắt khóa hạn cứng. Để trống thì giữ nguyên.</summary>
+    public bool? EnforceDeadline { get; init; }
 
     /// <summary>
     /// Task Manager đổi trạng thái nhiệm vụ bằng tay. Gửi `InProgress` để mở
@@ -198,7 +212,8 @@ public record TaskItemDto(
 public record TaskDetailDto(
     TaskListItemDto Summary,
     IReadOnlyList<TaskAssignmentDto> Assignments,
-    IReadOnlyList<TaskItemDto> Items);
+    IReadOnlyList<TaskItemDto> Items,
+    int ImportedQty);
 
 public record SkippedItemDto(string Id, string Reason);
 

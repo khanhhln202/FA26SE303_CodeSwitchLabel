@@ -175,6 +175,15 @@ public record CreateScriptRequest
     [Required(ErrorMessage = "Phải chọn chủ đề.")]
     public string? Domain { get; init; }
 
+    /// <summary>
+    /// Task contribution nhận câu này. Bỏ trống với câu nhập/import/tạo tay.
+    /// Gửi kèm thì người gửi phải đang nhận task contribution còn hạn.
+    /// </summary>
+    public long? TaskId { get; init; }
+
+    [StringLength(1000)]
+    public string? Comment { get; init; }
+
     /// <summary>Quan hệ Anh–Việt, vào chữ số thứ ba của mã script. Bỏ trống là dịch trực tiếp.</summary>
     public ScriptRelation? Relation { get; init; }
 
@@ -262,6 +271,7 @@ public record ContributionReviewItemDto(
 {
     /// <summary>Bấm vào duyệt hay từ chối được ngay không.</summary>
     public bool CanReview => Blocker == ContributionBlocker.None;
+    public string? Comment { get; init; }
 }
 
 /// <param name="OnlyReviewable">true: bỏ qua câu đang nằm trong lô của người khác.</param>
@@ -291,3 +301,44 @@ public record BatchValidateScriptOutcomeDto(string ScriptId, string Code, string
 /// <param name="AcceptedCount">Số câu được duyệt đạt (`Accepted`).</param>
 /// <param name="Failures">Các câu KHÔNG được duyệt, kèm lý do. Các câu đã duyệt KHÔNG bị rollback khi câu khác bị chặn.</param>
 public record BatchValidateResultDto(long BatchId, int AcceptedCount, IReadOnlyList<BatchValidateScriptOutcomeDto> Failures);
+
+/// <summary>
+/// Yêu cầu đóng góp cặp câu mới (Type = contribution) hoặc báo lỗi cặp câu đã có (Type = report).
+/// Dùng cho POST /api/speaker/scripts/submit.
+/// </summary>
+public record ContributeOrReportRequest(
+    string Type,
+    string? CsContent,
+    string? ViContent,
+    string? Domain,
+    List<AlignmentItem>? Alignment,
+    long? TaskId,
+    string? ScriptId,
+    string? ErrorReasonCode,
+    string? Comment);
+
+/// <summary>Kết quả của POST /api/speaker/scripts/submit.</summary>
+public record UnifiedContributionResult(
+    string ScriptId,
+    string Type,
+    string Status,
+    DateTimeOffset CreatedAt);
+
+/// <summary>
+/// Một mục trong hàng đợi chờ của Reviewer, thống nhất giữa đóng góp (contribution) và báo lỗi (report).
+/// Dùng cho GET /api/reviewer/pending-items.
+/// </summary>
+public record PendingItemDto(
+    string ScriptId,
+    string Type,
+    string Status,
+    string CsContent,
+    string ViContent,
+    string Domain,
+    DateTimeOffset CreatedAt,
+    ContributorDto Contributor,
+    ContributionBlocker Blocker)
+{
+    public bool CanReview => Blocker == ContributionBlocker.None;
+    public string? Comment { get; init; }
+}

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using CodeSwitchLabel.Tests.Infrastructure;
+using Npgsql;
 
 namespace CodeSwitchLabel.Tests.Integration;
 
@@ -118,6 +119,36 @@ public sealed class RegisterSpeakerTests(DatabaseFixture fixture) : ApiTestBase(
 
         // Assert
         Assert.Equal(HttpStatusCode.Conflict, dupe.StatusCode);
+    }
+
+    [Fact]
+    public async Task RegisterSpeaker_LuuDongY_DungPhienBan()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var email = $"consent-{Guid.NewGuid():N}@codeswitchlabel.local";
+
+        var response = await PostAsync("/api/auth/register-speaker", new
+        {
+            fullName = "Người đồng ý",
+            email,
+            password = "Volunteer@123",
+            consentAccepted = true,
+            consentVersion = "v1.0"
+        });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        await using var connection = new NpgsqlConnection(Fixture.ConnectionString);
+        await connection.OpenAsync(ct);
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT c.version
+              FROM user_consent c
+              JOIN app_user u ON u.user_id = c.user_id
+             WHERE u.email = @email
+            """, connection);
+        command.Parameters.AddWithValue("email", email);
+
+        Assert.Equal("v1.0", (string?)await command.ExecuteScalarAsync(ct));
     }
 
     [Theory]
