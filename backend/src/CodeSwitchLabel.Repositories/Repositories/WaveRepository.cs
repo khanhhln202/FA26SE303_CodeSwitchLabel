@@ -34,6 +34,7 @@ public interface IWaveRepository
     Task<Wave?> GetAsync(long waveId, CancellationToken ct = default);
     Task UpdateImportCountsAsync(long waveId, int? bufferQty, int importedDelta, CancellationToken ct = default);
     Task<(int ValidatedTotal, int RecordedPairs)> GetAvailableScriptsAsync(string domain, CancellationToken ct = default);
+    Task<int> CountAvailableScriptsAsync(string domain, CancellationToken ct = default);
 
     /// <summary><paramref name="sort"/> rỗng (Field = null) là thứ tự mặc định.</summary>
     Task<(IReadOnlyList<Wave> Items, int Total)> SearchAsync(
@@ -106,6 +107,16 @@ public class WaveRepository(CodeSwitchLabelDbContext db) : IWaveRepository
             r.Status == RecordingStatus.PendingReview || r.Status == RecordingStatus.Approved), ct);
         return (total, recorded);
     }
+
+    public Task<int> CountAvailableScriptsAsync(string domain, CancellationToken ct = default) =>
+        db.Scripts.AsNoTracking().CountAsync(s =>
+            s.Domain == domain &&
+            s.Status == ScriptStatus.Validated &&
+            s.WaveId == null &&
+            !s.TaskScripts.Any(ts =>
+                ts.Status == TaskScriptStatus.Pending && ts.Task.Status != WorkTaskStatus.Cancelled) &&
+            !s.Recordings.Any(r =>
+                r.Status == RecordingStatus.PendingReview || r.Status == RecordingStatus.Approved), ct);
 
     public async Task<(IReadOnlyList<Wave> Items, int Total)> SearchAsync(
         WaveStatus? status, long? assignedTo, int page, int pageSize,

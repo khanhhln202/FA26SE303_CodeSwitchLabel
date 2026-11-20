@@ -19,6 +19,8 @@ public record WaveDto(
 
 public record AvailableScriptsDto(string Domain, string TopicName, int ValidatedTotal, int RecordedPairs, int AvailablePairs);
 
+public record AvailableScriptCountDto(string Domain, int Count);
+
 /// <param name="AllocatedTaskQty">Tổng chỉ tiêu đã chia cho các task trong chiến dịch.</param>
 /// <param name="TaskCount">Số task đang gắn; xoá chiến dịch sẽ gỡ đúng số này về task độc lập.</param>
 public record WaveListItemDto(

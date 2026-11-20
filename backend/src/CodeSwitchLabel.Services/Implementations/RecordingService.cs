@@ -220,15 +220,17 @@ public class RecordingService(
                 $"Cặp câu {script.ScriptId} đang có đề xuất chờ Reviewer xử lý nên tạm chưa thu âm được.");
         }
 
-        // Mỗi Speaker được thu độc lập: bản đang chờ duyệt/đạt của người khác
-        // không chặn người này, chỉ bản của chính người này mới chặn.
-        // Bản bị từ chối không chặn: người đọc được thu lại, số lần tiếp theo sau bản từ chối.
+        // QC thất bại chưa phải bản ghi được chấp nhận vào lịch sử nên cho phép thu lại.
+        // Bản đang chờ/đạt hoặc bị Reviewer từ chối đã là một lần thu của Speaker này;
+        // câu bị từ chối phải quay lại task cho Speaker khác.
         if (await recordings.HasActiveRecordingAsync(
-                command.ScriptId, command.SentenceVariant, command.SpeakerId, ct))
+                command.ScriptId, command.SentenceVariant, command.SpeakerId, ct) ||
+            await recordings.GetRejectedTakeAsync(
+                command.ScriptId, command.SentenceVariant, command.SpeakerId, ct) is not null)
         {
             throw new ConflictException(
-                "recording_already_exists",
-                $"Bạn đã có bản {command.SentenceVariant} đang chờ duyệt hoặc đã được duyệt cho cặp câu {command.ScriptId}.");
+                "recording_already_attempted",
+                $"Bạn đã nộp biến thể {command.SentenceVariant} của cặp câu {command.ScriptId}; mỗi Speaker chỉ được thử một lần.");
         }
 
         if (command.TaskId.HasValue)

@@ -6,6 +6,7 @@ namespace CodeSwitchLabel.Services.Abstractions;
 public interface IAuthService
 {
     Task<LoginResponse> LoginAsync(LoginRequest request, CancellationToken ct = default);
+    Task<LoginResponse> GoogleLoginAsync(GoogleLoginRequest request, CancellationToken ct = default);
     Task<LoginResponse> RegisterSpeakerAsync(RegisterSpeakerRequest request, CancellationToken ct = default);
 
     /// <summary>Lưu đồng ý phiên bản điều khoản, kèm bản giấy đã ký nếu có.</summary>
@@ -138,6 +139,7 @@ public interface IStatisticsService
 public interface IWaveService
 {
     Task<AvailableScriptsDto> GetAvailableScriptsAsync(string domain, CancellationToken ct = default);
+    Task<AvailableScriptCountDto> GetAvailableScriptCountAsync(string domain, CancellationToken ct = default);
     Task<PagedResult<WaveListItemDto>> SearchAsync(
         WaveSearchRequest request, long? userId, RoleName? userRole, CancellationToken ct = default);
 

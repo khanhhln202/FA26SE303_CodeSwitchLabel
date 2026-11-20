@@ -126,18 +126,14 @@ public class TaskProgressTracker(
                 }
             }
 
-            // TEAM_010 (yêu cầu 4.2) — TRỪ KPI khi bản ghi bị từ chối.
-            //
-            // Trước đây task_script chỉ đi được Pending → Completed, không có đường lùi.
-            // Nên câu đã tính xong rồi bị từ chối vẫn giữ nguyên Done, task vẫn đứng ở
-            // Completed dù chỉ tiêu thực tế đã tụt. Người nhận không bao giờ được biết
-            // là phải thu bù.
+            // Bản ghi bị từ chối phải quay lại task để Speaker khác nhận thu lại.
             if (finalStatus == RecordingStatus.Rejected)
             {
                 foreach (var item in await tasks.GetCompletedScriptItemsForSpeakerAsync(
                              recording.ScriptId, recording.SpeakerId, ct))
                 {
                     item.Status = TaskScriptStatus.Pending;
+                    item.AssigneeUserId = null;
                     touched.Add(item.TaskId);
                 }
 
@@ -158,6 +154,7 @@ public class TaskProgressTracker(
         {
             await RefreshStatusAsync(id, ct);
         }
+
     }
 
     public async Task OnScriptRejectedAsync(string scriptId, CancellationToken ct = default)

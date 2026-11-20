@@ -2,6 +2,7 @@ using CodeSwitchLabel.Api.Infrastructure;
 using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Dtos;
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -60,6 +61,14 @@ public class WavesController(IWaveService waveService) : ControllerBase
 
         return Ok(await waveService.SearchAsync(request, userId, userRole, ct));
     }
+
+    /// <summary>Đếm script đã duyệt, chưa thuộc wave, chưa được giữ trong task chưa huỷ và chưa có recording chờ duyệt/đạt.</summary>
+    [HttpGet("available-scripts")]
+    [ProducesResponseType(typeof(AvailableScriptCountDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AvailableScriptCountDto>> GetAvailableScriptCount(
+        [FromQuery, Required] string domain, CancellationToken ct)
+        => Ok(await waveService.GetAvailableScriptCountAsync(domain, ct));
 
     /// <summary>
     /// Lấy task thu âm duy nhất của đợt; nếu chưa có thì tạo mới với chỉ tiêu bằng cả đợt.

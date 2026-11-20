@@ -193,6 +193,7 @@ POST /api/auth/login
   hoặc `account_disabled` nếu đang bị khoá.
 - Email đăng nhập **không phân biệt chữ hoa, chữ thường**.
 - `GET /api/auth/me` trả lại thông tin tài khoản — dùng khi tải lại trang.
+- Google login: FE lấy ID token bằng Google Identity Services rồi gửi `POST /api/auth/google` với `{ "credential": "<id-token>", "consentAccepted": true, "consentVersion": "v1" }`. Tài khoản mới chỉ được tạo khi đã đồng ý consent; API trả cùng `LoginResponse` và JWT nội bộ như đăng nhập mật khẩu. Cấu hình client ID bằng biến môi trường `GoogleAuth__ClientId`; để trống thì endpoint trả 503 `google_auth_not_configured`.
 - `role` là một trong bốn chuỗi: **`Speaker`, `Reviewer`, `TaskManager`, `Admin`**. Mỗi người đúng một vai.
 
 ### Dữ liệu
@@ -788,6 +789,7 @@ giao) — các dòng có `canReview: false`, nộp duyệt vẫn trả 403 `task
 |---|---|
 | Danh sách chiến dịch | `GET /api/waves` — lọc tuỳ chọn `status`, `page`, `pageSize`. Mỗi dòng kèm `allocatedTaskQty` (tổng chỉ tiêu đã chia cho các task), `taskCount`, `completedTaskCount`, `assignedTo` |
 | Chi tiết chiến dịch | `GET /api/waves/{id}` |
+| Đếm script trống theo chủ đề | `GET /api/waves/available-scripts?domain=ItTechnology` → `{ "domain": "ItTechnology", "count": 120 }`; chỉ đếm script `Validated` chưa thuộc wave, chưa nằm trong task chưa huỷ, và chưa có recording `PendingReview`/`Approved` |
 | Danh sách task | `GET /api/tasks` — lọc tuỳ chọn: `taskType`, `status`, `assigneeId`, `overdue`, `page`, `pageSize`. Mỗi dòng kèm `waveId`, `waveName` |
 | Tạo task | `POST /api/tasks` `{ "waveId": 2, "taskType": "Recording", "description": "…", "targetQty": 10, "deadline": "2026-09-30T17:00:00+07:00", "assigneeUserIds": [6, 7] }` — `waveId` để trống/`null` = task độc lập; `assigneeUserIds` tuỳ chọn, bỏ qua hoặc `[]` để tạo chưa phân công. Recording tạo kèm người nhận vẫn tạo được khi kho câu ít hơn `targetQty`; mỗi Speaker nhận tối đa số câu còn thu được, nhiều Speaker có thể nhận cùng cặp |
 | Gắn/chuyển/gỡ chiến dịch | `PATCH /api/tasks/{id}/wave` `{ "waveId": 2 }` — `null` = gỡ về độc lập |

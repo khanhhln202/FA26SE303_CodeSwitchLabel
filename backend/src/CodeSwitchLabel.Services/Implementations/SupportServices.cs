@@ -6,7 +6,10 @@ using CodeSwitchLabel.Repositories.Storage;
 using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Common;
 using CodeSwitchLabel.Services.Dtos;
+using CodeSwitchLabel.Services.Options;
+using Google.Apis.Auth;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Npgsql;
 
 namespace CodeSwitchLabel.Services.Implementations;
@@ -16,7 +19,8 @@ public class AuthService(
     IPasswordHasher hasher,
     IAccessTokenIssuer tokens,
     IObjectStorage storage,
-    TimeProvider clock) : IAuthService
+    TimeProvider clock,
+    IOptions<GoogleAuthOptions> googleOptions) : IAuthService
 {
     private static string? _dummyHash;
     // shortcut: the first unknown-email login hashes once; prewarm if cold-start timing matters.
@@ -40,6 +44,51 @@ public class AuthService(
         {
             throw new ForbiddenException("account_disabled", "Tài khoản đã bị vô hiệu hoá.");
         }
+
+        return user.ToLoginResponse(tokens.Issue(user));
+    }
+
+    public async Task<LoginResponse> GoogleLoginAsync(
+        GoogleLoginRequest request, CancellationToken ct = default)
+    {
+        var clientId = googleOptions.Value.ClientId;
+        if (string.IsNullOrWhiteSpace(clientId))
+            throw new ServiceUnavailableException("google_auth_not_configured", "Đăng nhập Google chưa được cấu hình.");
+
+        GoogleJsonWebSignature.Payload payload;
+        try
+        {
+            payload = await GoogleJsonWebSignature.ValidateAsync(
+                request.Credential,
+                new GoogleJsonWebSignature.ValidationSettings { Audience = [clientId] });
+        }
+        catch (InvalidJwtException)
+        {
+            throw new BadRequestException("invalid_google_credential", "Thông tin đăng nhập Google không hợp lệ hoặc đã hết hạn.");
+        }
+
+        if (string.IsNullOrWhiteSpace(payload.Email) || payload.EmailVerified != true ||
+            string.IsNullOrWhiteSpace(payload.Subject))
+            throw new BadRequestException("unverified_google_account", "Tài khoản Google chưa xác thực email.");
+
+        var user = await users.GetByEmailAsync(payload.Email, ct);
+        if (user is null)
+        {
+            if (!request.ConsentAccepted)
+                throw new UnprocessableException("consent_required", "Cần đồng ý điều khoản trước khi tạo tài khoản.");
+
+            return await RegisterSpeakerAsync(new RegisterSpeakerRequest
+            {
+                Email = payload.Email,
+                FullName = string.IsNullOrWhiteSpace(payload.Name) ? payload.Email : payload.Name,
+                Password = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)),
+                ConsentAccepted = true,
+                ConsentVersion = request.ConsentVersion
+            }, ct);
+        }
+
+        if (user.Status != UserStatus.Active)
+            throw new ForbiddenException("account_disabled", "Tài khoản đã bị vô hiệu hoá.");
 
         return user.ToLoginResponse(tokens.Issue(user));
     }

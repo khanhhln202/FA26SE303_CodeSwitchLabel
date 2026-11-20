@@ -989,6 +989,10 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
                          (ts.TaskId == taskId ||
                           (waveId != null && ts.Task.WaveId == waveId)));
 
+        // Bản ghi bị Reviewer từ chối quay lại task cho Speaker khác, không đưa lại cho người đã thu.
+        query = query.Where(ts => !ts.Script.Recordings.Any(r =>
+            r.SpeakerId == speakerId && r.Status == RecordingStatus.Rejected));
+
         // Câu Speaker vừa bỏ qua trong phiên: không trả lại trong lần lấy kế tiếp.
         if (excludedIds.Length > 0)
         {

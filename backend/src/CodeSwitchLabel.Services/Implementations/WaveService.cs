@@ -27,6 +27,16 @@ public class WaveService(
         return new AvailableScriptsDto(domain, topic.Name, total, recorded, total - recorded);
     }
 
+    public async Task<AvailableScriptCountDto> GetAvailableScriptCountAsync(
+        string domain, CancellationToken ct = default)
+    {
+        var topics = await domains.ListAsync(includeInactive: true, ct);
+        if (!topics.Any(d => d.Code == domain))
+            throw new NotFoundException("domain_not_found", $"Không tìm thấy chủ đề {domain}.");
+
+        return new AvailableScriptCountDto(domain, await waves.CountAvailableScriptsAsync(domain, ct));
+    }
+
     public async Task<PagedResult<WaveListItemDto>> SearchAsync(
         WaveSearchRequest request, long? userId, RoleName? userRole, CancellationToken ct = default)
     {

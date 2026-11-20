@@ -2,6 +2,17 @@ using System.ComponentModel.DataAnnotations;
 
 namespace CodeSwitchLabel.Services.Dtos;
 
+public record GoogleLoginRequest
+{
+    [Required]
+    public string Credential { get; init; } = string.Empty;
+
+    public bool ConsentAccepted { get; init; }
+
+    [StringLength(32)]
+    public string? ConsentVersion { get; init; }
+}
+
 public record LoginRequest
 {
     [Required(ErrorMessage = "Email không được để trống.")]

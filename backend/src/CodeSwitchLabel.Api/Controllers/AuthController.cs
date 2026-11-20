@@ -33,6 +33,17 @@ public class AuthController(IAuthService authService) : ControllerBase
         [FromBody] LoginRequest request, CancellationToken ct)
         => Ok(await authService.LoginAsync(request, ct));
 
+    /// <summary>Xác minh Google ID token và đổi token đăng nhập ứng dụng.</summary>
+    [HttpPost("google")]
+    [AllowAnonymous]
+    [EnableRateLimiting("auth")]
+    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<LoginResponse>> GoogleLogin(
+        [FromBody] GoogleLoginRequest request, CancellationToken ct)
+        => Ok(await authService.GoogleLoginAsync(request, ct));
+
     /// <summary>Tình nguyện viên tự đăng ký làm Speaker — hoạt động ngay, không qua duyệt.</summary>
     /// <remarks>
     /// Tạo tài khoản Speaker ở trạng thái Active kèm hồ sơ người đọc (nếu gửi).
