@@ -38,6 +38,12 @@ public interface ITaskProgressTracker
     Task OnRecordingReturnedAsync(Recording recording, long? taskId, CancellationToken ct = default);
 
     /// <summary>
+    /// Bản ghi bị từ chối nhưng câu còn dùng được — tạo mục task_script cho những
+    /// người nhận khác trong cùng đợt chưa thu cặp câu này, trả bài về kho của đợt.
+    /// </summary>
+    Task OnRecordingReturnedToPoolAsync(Recording recording, CancellationToken ct = default);
+
+    /// <summary>
     /// xoá cả cặp (nút "Xóa hoàn toàn") — câu không còn là mục công việc của
     /// task nào nữa, và mọi task chứa nó phải tính lại chỉ tiêu.
     /// </summary>
@@ -120,18 +126,14 @@ public class TaskProgressTracker(
                 }
             }
 
-            // TEAM_010 (yêu cầu 4.2) — TRỪ KPI khi bản ghi bị từ chối.
-            //
-            // Trước đây task_script chỉ đi được Pending → Completed, không có đường lùi.
-            // Nên câu đã tính xong rồi bị từ chối vẫn giữ nguyên Done, task vẫn đứng ở
-            // Completed dù chỉ tiêu thực tế đã tụt. Người nhận không bao giờ được biết
-            // là phải thu bù.
+            // Bản ghi bị từ chối phải quay lại task để Speaker khác nhận thu lại.
             if (finalStatus == RecordingStatus.Rejected)
             {
                 foreach (var item in await tasks.GetCompletedScriptItemsForSpeakerAsync(
                              recording.ScriptId, recording.SpeakerId, ct))
                 {
                     item.Status = TaskScriptStatus.Pending;
+                    item.AssigneeUserId = null;
                     touched.Add(item.TaskId);
                 }
 
@@ -152,6 +154,7 @@ public class TaskProgressTracker(
         {
             await RefreshStatusAsync(id, ct);
         }
+
     }
 
     public async Task OnScriptRejectedAsync(string scriptId, CancellationToken ct = default)
@@ -201,6 +204,41 @@ public class TaskProgressTracker(
         foreach (var id in touched) await RefreshStatusAsync(id, ct);
     }
 
+    public async Task OnRecordingReturnedToPoolAsync(Recording recording, CancellationToken ct = default)
+    {
+        if (recording.TaskId is not { } taskId) return;
+
+        var waveId = await tasks.GetWaveIdAsync(taskId, ct);
+        if (waveId is null) return;
+
+        var speakerIds = await tasks.FindUnassignedSpeakersForScriptInWaveAsync(
+            recording.ScriptId, waveId.Value, recording.SpeakerId, ct);
+        if (speakerIds.Count == 0) return;
+
+        var now = clock.GetUtcNow();
+        var items = speakerIds.Select(userId => new TaskScript
+        {
+            TaskId = taskId,
+            ScriptId = recording.ScriptId,
+            Status = TaskScriptStatus.Pending,
+            IncludedAt = now,
+            AssigneeUserId = userId
+        }).ToList();
+
+        tasks.AddScriptItems(items);
+        await tasks.SaveChangesAsync(ct);
+        await RefreshStatusAsync(taskId, ct);
+
+        // Nếu task Done < TargetQty sau khi trả bài về kho, lấp thêm từ buffer của đợt.
+        var row = await tasks.GetRowAsync(taskId, ct);
+        if (row is not null && row.TaskType == TaskType.Recording && row.UsableItems < row.TargetQty)
+        {
+            var needed = row.TargetQty - row.UsableItems;
+            await tasks.BackfillFromWaveBufferAsync(taskId, needed, ct);
+            await RefreshStatusAsync(taskId, ct);
+        }
+    }
+
     public async Task OnPairDiscardedAsync(string scriptId, CancellationToken ct = default)
     {
         var pending = await tasks.GetPendingScriptItemsAsync(scriptId, ct);
@@ -224,7 +262,19 @@ public class TaskProgressTracker(
 
         await tasks.SaveChangesAsync(ct);
 
-        foreach (var id in taskIds) await RefreshStatusAsync(id, ct);
+        foreach (var id in taskIds)
+        {
+            await RefreshStatusAsync(id, ct);
+
+            // Nếu task Done < TargetQty sau khi xoá cặp, lấp thêm từ buffer của đợt.
+            var row = await tasks.GetRowAsync(id, ct);
+            if (row is not null && row.TaskType == TaskType.Recording && row.UsableItems < row.TargetQty)
+            {
+                var needed = row.TargetQty - row.UsableItems;
+                await tasks.BackfillFromWaveBufferAsync(id, needed, ct);
+                await RefreshStatusAsync(id, ct);
+            }
+        }
     }
 
     public async Task RefreshStatusAsync(long taskId, CancellationToken ct = default)

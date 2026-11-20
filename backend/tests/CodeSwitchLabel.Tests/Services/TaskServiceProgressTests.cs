@@ -20,6 +20,8 @@ public sealed class TaskServiceProgressTests
 
     public TaskServiceProgressTests()
     {
+        _tasks.Setup(t => t.GetActiveRowsForAssigneeAsync(9, TaskType.Contribution, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([]);
         _service = new TaskService(
             _tasks.Object,
             Mock.Of<IWaveRepository>(),

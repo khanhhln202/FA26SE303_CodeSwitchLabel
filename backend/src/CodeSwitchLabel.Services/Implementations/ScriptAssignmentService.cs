@@ -18,9 +18,9 @@ public class ScriptAssignmentService(
     /// <summary>
     /// Cặp câu tiếp theo người này nên thu.
     ///
-    /// Làm trong task: đọc thẳng các dòng task_script giao cho chính người này (hoặc
-    /// chưa gán ai), nên hai Speaker được nhận cùng một câu. Thu ngoài task: vẫn giữ
-    /// chỗ theo hàng đợi chung để hai người không cùng nhận một câu.
+    /// Mọi đường — trong task hay ngoài task — đều đi qua hàng đợi để giữ chỗ ngay
+    /// lúc câu được load lên màn hình. Claim của chính người này được trả lại cho họ
+    /// ở lần lấy kế tiếp, nhờ vậy thu xong bản cs vẫn nhận đúng câu để thu bản vi.
     /// </summary>
     public async Task<NextScriptDto?> GetNextAsync(
         long speakerId, long? taskId, IReadOnlyCollection<string>? exclude = null,
@@ -37,12 +37,11 @@ public class ScriptAssignmentService(
             }
         }
 
-        var excluded = exclude is { Count: > 0 } ? exclude.ToArray() : [];
-        var excludedSet = excluded.ToHashSet(StringComparer.Ordinal);
+        var excludedSet = exclude is { Count: > 0 }
+            ? exclude.ToHashSet(StringComparer.Ordinal)
+            : [];
 
-        var script = taskId.HasValue
-            ? await FindAssignedAsync(speakerId, taskId.Value, excluded, ct)
-            : await ClaimNextRecordableAsync(speakerId, null, excludedSet, ct);
+        var script = await ClaimNextRecordableAsync(speakerId, taskId, excludedSet, ct);
         if (script is null) return null;
 
         var qc = RecordingQcSettings.From(await config.GetAllAsync(ct));
@@ -64,26 +63,20 @@ public class ScriptAssignmentService(
             script.SemanticWarning);
     }
 
-    /// <summary>
-    /// Câu được giao trong task mà người này còn nợ ít nhất một biến thể. Không giữ
-    /// chỗ: nhiều Speaker cùng nhận một câu là hợp lệ, mỗi người thu bản của mình.
-    /// </summary>
-    private async Task<Script?> FindAssignedAsync(
-        long speakerId, long taskId, string[] excludedIds, CancellationToken ct)
+    public async Task<NextScriptDto?> SkipAsync(
+        long speakerId, string scriptId, long? taskId, CancellationToken ct = default)
     {
-        var ids = await taskRepository.GetAssignedScriptIdsAsync(
-            speakerId, taskId, MaxClaimAttempts + excludedIds.Length, excludedIds, ct);
-
-        foreach (var id in ids)
+        if (taskId.HasValue &&
+            !await taskRepository.IsAssignedToRecordingScopeAsync(taskId.Value, speakerId, ct))
         {
-            var script = await repository.GetAsync(id, ct);
-            if (script is null) continue;
-
-            var mine = await repository.GetRecordingsOfSpeakerAsync(id, speakerId, ct);
-            if (RemainingVariants(script, mine).Count > 0) return script;
+            throw new ForbiddenException(
+                "task_not_recordable", $"Task #{taskId} không phải task thu âm đang giao cho bạn.");
         }
 
-        return null;
+        // Chỉ nhả claim của chính mình; người khác đang giữ thì không đụng.
+        await queue.ReleaseClaimOfAsync(scriptId, QueueStage.Recording, speakerId, ct);
+
+        return await GetNextAsync(speakerId, taskId, [scriptId], ct);
     }
 
     /// <summary>
@@ -110,7 +103,7 @@ public class ScriptAssignmentService(
             // tải lại trang thì câu quay lại bình thường.
             if (excluded.Contains(script.ScriptId))
             {
-                await queue.ReleaseAsync(script.ScriptId, QueueStage.Recording, ct);
+                await queue.ReleaseClaimOfAsync(script.ScriptId, QueueStage.Recording, speakerId, ct);
                 continue;
             }
 

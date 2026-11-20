@@ -18,6 +18,25 @@ public class WaveService(
     IDomainService domains,
     TimeProvider clock) : IWaveService
 {
+    public async Task<AvailableScriptsDto> GetAvailableScriptsAsync(string domain, CancellationToken ct = default)
+    {
+        var topics = await domains.ListAsync(includeInactive: true, ct);
+        var topic = topics.FirstOrDefault(d => d.Code == domain)
+            ?? throw new NotFoundException("domain_not_found", $"Không tìm thấy chủ đề {domain}.");
+        var (total, recorded) = await waves.GetAvailableScriptsAsync(domain, ct);
+        return new AvailableScriptsDto(domain, topic.Name, total, recorded, total - recorded);
+    }
+
+    public async Task<AvailableScriptCountDto> GetAvailableScriptCountAsync(
+        string domain, CancellationToken ct = default)
+    {
+        var topics = await domains.ListAsync(includeInactive: true, ct);
+        if (!topics.Any(d => d.Code == domain))
+            throw new NotFoundException("domain_not_found", $"Không tìm thấy chủ đề {domain}.");
+
+        return new AvailableScriptCountDto(domain, await waves.CountAvailableScriptsAsync(domain, ct));
+    }
+
     public async Task<PagedResult<WaveListItemDto>> SearchAsync(
         WaveSearchRequest request, long? userId, RoleName? userRole, CancellationToken ct = default)
     {
@@ -56,7 +75,46 @@ public class WaveService(
         return ToDto(wave);
     }
 
-    // Hỗ trợ Task Manager tạo đợt (auto-assign cho chính mình nếu không phải Admin)
+    public async Task<WaveDashboardDto> GetDashboardAsync(
+        long waveId, long? callerId = null, bool isAdmin = false, CancellationToken ct = default)
+    {
+        var wave = await waves.GetAsync(waveId, ct) ?? throw NotFound(waveId);
+        EnsureWaveOwner(wave, callerId, isAdmin);
+
+        var row = await waves.GetDashboardAsync(waveId, ct) ?? throw NotFound(waveId);
+        var currentYear = clock.GetUtcNow().Year;
+
+        return new WaveDashboardDto(
+            row.WaveId, row.WaveName, row.Domain, row.DomainName,
+            row.Speakers.Count,
+            [.. row.Speakers.Select(s => new WaveSpeakerBriefDto(
+                s.UserId, s.FullName, s.Gender, s.Region, s.BirthYear))],
+            row.SentencePairs,
+            row.ApprovedPairs,
+            Math.Round((double)row.AudioSeconds / 3600, 2),
+            row.Speakers.GroupBy(s => s.Gender?.ToString() ?? "Chưa cập nhật")
+                .ToDictionary(g => g.Key, g => g.Count()),
+            row.Speakers.GroupBy(s => s.Region?.ToString() ?? "Chưa cập nhật")
+                .ToDictionary(g => g.Key, g => g.Count()),
+            row.Speakers.GroupBy(s => AgeGroup(s.BirthYear, currentYear))
+                .ToDictionary(g => g.Key, g => g.Count()));
+    }
+
+    private static string AgeGroup(short? birthYear, int currentYear)
+    {
+        if (birthYear is null) return "Chưa cập nhật";
+
+        var age = currentYear - birthYear.Value;
+        return age switch
+        {
+            < 18 => "Dưới 18",
+            < 25 => "18-24",
+            < 35 => "25-34",
+            < 45 => "35-44",
+            < 55 => "45-54",
+            _ => "55+"
+        };
+    }
     public async Task<WaveDto> CreateAsync(
         CreateWaveRequest request, long createdById, bool isAdmin, CancellationToken ct = default)
     {
@@ -76,6 +134,7 @@ public class WaveService(
                 ? throw new UnprocessableException("domain_required", "Phải chọn chủ đề (domain) cho chiến dịch.")
                 : await domains.ResolveActiveAsync(request.Domain, ct),
             TargetQty = request.TargetQty!.Value,
+            BufferQty = request.BufferQty ?? 0,
             StartDate = start,
             EndDate = end,
             // đợt mới tạo chưa có nhiệm vụ nào nên là Open. Sau đó trạng thái
@@ -196,7 +255,7 @@ public class WaveService(
     }
 
     private static WaveDto ToDto(Wave c) =>
-        new(c.WaveId, c.WaveName, c.Domain, c.TargetQty, c.StartDate, c.EndDate, c.Status, c.CreatedBy, c.AssignedTo, c.CreatedAt);
+        new(c.WaveId, c.WaveName, c.Domain, c.TargetQty, c.StartDate, c.EndDate, c.Status, c.CreatedBy, c.AssignedTo, c.CreatedAt, c.BufferQty, c.ImportedQty);
 
     private static NotFoundException NotFound(long waveId) =>
         new("wave_not_found", $"Không tìm thấy chiến dịch #{waveId}.");

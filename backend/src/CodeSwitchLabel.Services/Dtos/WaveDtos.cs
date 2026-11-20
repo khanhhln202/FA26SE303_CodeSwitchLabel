@@ -13,7 +13,13 @@ public record WaveDto(
     WaveStatus Status,
     long CreatedBy,
     long? AssignedTo,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    int BufferQty,
+    int ImportedQty);
+
+public record AvailableScriptsDto(string Domain, string TopicName, int ValidatedTotal, int RecordedPairs, int AvailablePairs);
+
+public record AvailableScriptCountDto(string Domain, int Count);
 
 /// <param name="AllocatedTaskQty">Tổng chỉ tiêu đã chia cho các task trong chiến dịch.</param>
 /// <param name="TaskCount">Số task đang gắn; xoá chiến dịch sẽ gỡ đúng số này về task độc lập.</param>
@@ -45,6 +51,10 @@ public record CreateWaveRequest
     [Required(ErrorMessage = "Phải đặt chỉ tiêu.")]
     [Range(2000, 5000, ErrorMessage = "Chỉ tiêu chiến dịch phải từ 2000 đến 5000 cặp câu.")]
     public int? TargetQty { get; init; }
+
+    /// <summary>Số câu dự phòng thêm vào đợt khi bài bị từ chối, nhập thêm đè trên chỉ tiêu task.</summary>
+    [Range(0, 10_000, ErrorMessage = "Đệm phải từ 0 đến 10.000 câu.")]
+    public int? BufferQty { get; init; }
 
     [Required(ErrorMessage = "Phải chọn ngày bắt đầu.")]
     public DateOnly? StartDate { get; init; }
@@ -82,3 +92,22 @@ public record WaveSearchRequest : PageRequest
 {
     public WaveStatus? Status { get; init; }
 }
+
+/// <summary>Nhân khẩu rút gọn của một Speaker tham gia chiến dịch.</summary>
+public record WaveSpeakerBriefDto(
+    long UserId, string FullName, Gender? Gender, SpeakerRegion? Region, short? BirthYear);
+
+/// <summary>Dashboard một chiến dịch: quy mô câu, thời lượng và nhân khẩu người đọc.</summary>
+public record WaveDashboardDto(
+    long WaveId,
+    string WaveName,
+    string Domain,
+    string DomainName,
+    int SpeakerCount,
+    IReadOnlyList<WaveSpeakerBriefDto> Speakers,
+    int SentencePairs,
+    int ApprovedPairs,
+    double AudioHours,
+    IReadOnlyDictionary<string, int> GenderCounts,
+    IReadOnlyDictionary<string, int> RegionCounts,
+    IReadOnlyDictionary<string, int> AgeGroups);

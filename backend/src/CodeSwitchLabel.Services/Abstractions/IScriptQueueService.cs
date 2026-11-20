@@ -36,6 +36,9 @@ public interface IScriptQueueService
     Task<PagedResult<ContributionReviewItemDto>> ListPendingContributionsAsync(
         long reviewerId, ContributionSearchRequest request, CancellationToken ct = default);
 
+    Task<PagedResult<PendingItemDto>> ListUnifiedPendingAsync(
+        long reviewerId, string? type, string? domain, int page, int pageSize, CancellationToken ct = default);
+
     /// <summary>Chia lô câu chờ duyệt cho một task (yêu cầu 2.2 — mặc định 100 câu/người).</summary>
     Task<AssignTextBatchResult> ClaimTextBatchAsync(
         long taskId, long userId, int? count, CancellationToken ct = default);
@@ -43,6 +46,10 @@ public interface IScriptQueueService
     /// <summary>Đóng claim: câu xong việc thì <c>done</c>, trả lại hàng đợi thì <c>queued</c>.</summary>
     Task CompleteAsync(string scriptId, QueueStage stage, CancellationToken ct = default);
     Task ReleaseAsync(string scriptId, QueueStage stage, CancellationToken ct = default);
+
+    /// <summary>Nhả claim chỉ khi đúng người này đang giữ; người khác giữ thì trả false.</summary>
+    Task<bool> ReleaseClaimOfAsync(
+        string scriptId, QueueStage stage, long userId, CancellationToken ct = default);
 
     /// <summary>
     /// Đưa câu trở lại hàng đợi sau khi bản ghi bị loại. Khác <c>Release</c> ở chỗ chấp

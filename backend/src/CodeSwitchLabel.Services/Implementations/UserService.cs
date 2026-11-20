@@ -15,7 +15,8 @@ internal static class UserMapper
         new(u.UserId, u.FullName, u.Email, u.Phone, u.Role.RoleName, u.Status, u.CreatedAt);
 
     public static SpeakerProfileDto ToDto(this SpeakerProfile? p) =>
-        new(p?.BirthYear, p?.Province, p?.Region, p?.EnglishLevel, p?.Occupation, p?.Gender, p?.Major);
+        new(p?.BirthYear, p?.BirthPlace, p?.Province, p?.Region, p?.EnglishLevel,
+            p?.Occupation, p?.Gender, p?.Major);
 
     public static SpeakerListItemDto ToSpeakerListItem(this SpeakerListRow r) =>
         new(r.UserId, r.FullName, r.Email, r.Gender, r.Status, r.ApprovedPairs);
@@ -299,6 +300,7 @@ public class UserService(
         var profile = user.SpeakerProfile ??= new SpeakerProfile { UserId = userId };
 
         profile.BirthYear = request.BirthYear;
+        profile.BirthPlace = Clean(request.BirthPlace);
         profile.Province = Clean(request.Province);
         profile.Region = request.Region;
         profile.EnglishLevel = request.EnglishLevel;

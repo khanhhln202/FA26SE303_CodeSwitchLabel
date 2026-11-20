@@ -25,6 +25,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
     public DbSet<SpeakerProfile> SpeakerProfiles => Set<SpeakerProfile>();
     public DbSet<Domain> Domains => Set<Domain>();
     public DbSet<UserDomain> UserDomains => Set<UserDomain>();
+    public DbSet<UserConsent> UserConsents => Set<UserConsent>();
     public DbSet<SystemConfig> SystemConfigs => Set<SystemConfig>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
@@ -175,6 +176,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         {
             e.ToTable("speaker_profile");
             e.HasKey(x => x.UserId);
+            e.Property(x => x.BirthPlace).HasMaxLength(100);
             e.Property(x => x.Province).HasMaxLength(100);
             e.Property(x => x.Major).HasMaxLength(100);
             e.Property(x => x.EnglishLevel).HasPrecision(2, 1);
@@ -189,6 +191,16 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.HasKey(x => new { x.UserId, x.Domain });
 
             e.HasOne(x => x.User).WithMany(u => u.Domains).HasForeignKey(x => x.UserId);
+        });
+
+        modelBuilder.Entity<UserConsent>(e =>
+        {
+            e.ToTable("user_consent");
+            e.HasKey(x => x.UserId);
+            e.Property(x => x.Version).HasMaxLength(32);
+            e.Property(x => x.DocumentName).HasMaxLength(255);
+            e.HasOne(x => x.User).WithOne(u => u.Consent)
+                .HasForeignKey<UserConsent>(x => x.UserId);
         });
     }
 
@@ -209,6 +221,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
 
             e.HasOne(x => x.Creator).WithMany().HasForeignKey(x => x.CreatedBy);
             e.HasOne(x => x.ImportBatch).WithMany(i => i.Scripts).HasForeignKey(x => x.ImportBatchId);
+            e.HasOne<WorkTask>().WithMany().HasForeignKey(x => x.ContributionTaskId);
         });
 
         modelBuilder.Entity<ScriptWord>(e =>

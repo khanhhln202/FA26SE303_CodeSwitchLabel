@@ -30,6 +30,7 @@ public class AppUser
 
     public Role Role { get; set; } = null!;
     public SpeakerProfile? SpeakerProfile { get; set; }
+    public UserConsent? Consent { get; set; }
     public ICollection<UserDomain> Domains { get; set; } = [];
 }
 
@@ -41,6 +42,7 @@ public class SpeakerProfile
 {
     public long UserId { get; set; }
     public short? BirthYear { get; set; }
+    public string? BirthPlace { get; set; }
     public string? Province { get; set; }
 
     /// <summary>
@@ -73,6 +75,21 @@ public class UserDomain
     public long UserId { get; set; }
     public string Domain { get; set; } = string.Empty;
     public DateTimeOffset AssignedAt { get; set; }
+
+    public AppUser User { get; set; } = null!;
+}
+
+/// <summary>
+/// Đồng ý dùng giọng nói cho nghiên cứu khoa học phi thương mại. Một dòng mỗi người,
+/// giữ bản mới nhất; file PDF/ảnh bản đã ký nằm trong object storage.
+/// </summary>
+public class UserConsent
+{
+    public long UserId { get; set; }
+    public string Version { get; set; } = string.Empty;
+    public DateTimeOffset AcceptedAt { get; set; }
+    public string? DocumentKey { get; set; }
+    public string? DocumentName { get; set; }
 
     public AppUser User { get; set; } = null!;
 }

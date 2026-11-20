@@ -2,10 +2,14 @@ using System.Globalization;
 using CodeSwitchLabel.Repositories.Entities;
 using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Repositories.Repositories;
+using CodeSwitchLabel.Repositories.Storage;
 using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Common;
 using CodeSwitchLabel.Services.Dtos;
+using CodeSwitchLabel.Services.Options;
+using Google.Apis.Auth;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Npgsql;
 
 namespace CodeSwitchLabel.Services.Implementations;
@@ -14,7 +18,9 @@ public class AuthService(
     IUserRepository users,
     IPasswordHasher hasher,
     IAccessTokenIssuer tokens,
-    TimeProvider clock) : IAuthService
+    IObjectStorage storage,
+    TimeProvider clock,
+    IOptions<GoogleAuthOptions> googleOptions) : IAuthService
 {
     private static string? _dummyHash;
     // shortcut: the first unknown-email login hashes once; prewarm if cold-start timing matters.
@@ -42,6 +48,51 @@ public class AuthService(
         return user.ToLoginResponse(tokens.Issue(user));
     }
 
+    public async Task<LoginResponse> GoogleLoginAsync(
+        GoogleLoginRequest request, CancellationToken ct = default)
+    {
+        var clientId = googleOptions.Value.ClientId;
+        if (string.IsNullOrWhiteSpace(clientId))
+            throw new ServiceUnavailableException("google_auth_not_configured", "Đăng nhập Google chưa được cấu hình.");
+
+        GoogleJsonWebSignature.Payload payload;
+        try
+        {
+            payload = await GoogleJsonWebSignature.ValidateAsync(
+                request.Credential,
+                new GoogleJsonWebSignature.ValidationSettings { Audience = [clientId] });
+        }
+        catch (InvalidJwtException)
+        {
+            throw new BadRequestException("invalid_google_credential", "Thông tin đăng nhập Google không hợp lệ hoặc đã hết hạn.");
+        }
+
+        if (string.IsNullOrWhiteSpace(payload.Email) || payload.EmailVerified != true ||
+            string.IsNullOrWhiteSpace(payload.Subject))
+            throw new BadRequestException("unverified_google_account", "Tài khoản Google chưa xác thực email.");
+
+        var user = await users.GetByEmailAsync(payload.Email, ct);
+        if (user is null)
+        {
+            if (!request.ConsentAccepted)
+                throw new UnprocessableException("consent_required", "Cần đồng ý điều khoản trước khi tạo tài khoản.");
+
+            return await RegisterSpeakerAsync(new RegisterSpeakerRequest
+            {
+                Email = payload.Email,
+                FullName = string.IsNullOrWhiteSpace(payload.Name) ? payload.Email : payload.Name,
+                Password = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)),
+                ConsentAccepted = true,
+                ConsentVersion = request.ConsentVersion
+            }, ct);
+        }
+
+        if (user.Status != UserStatus.Active)
+            throw new ForbiddenException("account_disabled", "Tài khoản đã bị vô hiệu hoá.");
+
+        return user.ToLoginResponse(tokens.Issue(user));
+    }
+
     public async Task<LoginResponse> RegisterSpeakerAsync(
         RegisterSpeakerRequest request, CancellationToken ct = default)
     {
@@ -65,13 +116,21 @@ public class AuthService(
             SpeakerProfile = new SpeakerProfile
             {
                 BirthYear = profile?.BirthYear,
+                BirthPlace = Clean(profile?.BirthPlace),
                 Province = Clean(profile?.Province),
                 Region = profile?.Region,
                 EnglishLevel = profile?.EnglishLevel,
                 Occupation = profile?.Occupation,
                 Gender = profile?.Gender,
                 Major = Clean(profile?.Major)
-            }
+            },
+            Consent = request.ConsentAccepted
+                ? new UserConsent
+                {
+                    Version = string.IsNullOrWhiteSpace(request.ConsentVersion) ? "v1" : request.ConsentVersion.Trim(),
+                    AcceptedAt = clock.GetUtcNow()
+                }
+                : null
         };
 
         users.Add(user);
@@ -87,6 +146,42 @@ public class AuthService(
         }
 
         return user.ToLoginResponse(tokens.Issue(user));
+    }
+
+    public async Task AcceptConsentAsync(
+        long userId, string version, Stream? document, string? documentName, string? contentType,
+        CancellationToken ct = default)
+    {
+        var user = await users.GetByIdAsync(userId, ct)
+                   ?? throw new NotFoundException("user_not_found", $"Không tìm thấy tài khoản #{userId}.");
+
+        string? key = null;
+        string? storedName = null;
+
+        if (document is not null && !string.IsNullOrWhiteSpace(documentName))
+        {
+            var extension = Path.GetExtension(documentName);
+            var tempPath = Path.Combine(Path.GetTempPath(), $"consent-{Guid.NewGuid():N}{extension}");
+
+            try
+            {
+                await using (var file = File.Create(tempPath))
+                {
+                    await document.CopyToAsync(file, ct);
+                }
+
+                key = $"consent/{user.UserId}/{Guid.NewGuid():N}{extension}";
+                storedName = Path.GetFileName(documentName);
+                await storage.UploadAsync(
+                    key, tempPath, string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType, ct);
+            }
+            finally
+            {
+                try { File.Delete(tempPath); } catch (IOException) { }
+            }
+        }
+
+        await users.UpsertConsentAsync(userId, version.Trim(), clock.GetUtcNow(), key, storedName, ct);
     }
 
     private static string? Clean(string? value) =>

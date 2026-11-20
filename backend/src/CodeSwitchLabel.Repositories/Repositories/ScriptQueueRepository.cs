@@ -44,6 +44,13 @@ public interface IScriptQueueRepository
     Task RequeueAsync(string scriptId, QueueStage stage, CancellationToken ct = default);
 
     /// <summary>
+    /// Nhả claim CHỈ KHI câu đang do đúng người này giữ, và đẩy xuống cuối hàng.
+    /// Dùng cho nút "Bỏ qua câu": người khác đang giữ thì không được nhả hộ.
+    /// </summary>
+    Task<bool> ReleaseClaimOfAsync(
+        string scriptId, QueueStage stage, long userId, CancellationToken ct = default);
+
+    /// <summary>
     /// Nhả các câu người này đang giữ trong phạm vi task/chiến dịch — dùng khi gỡ người
     /// khỏi task. Claim nằm lại sẽ chặn người khác tới khi hết TTL.
     /// </summary>
@@ -73,7 +80,7 @@ public record QueueStatsDto(int Queued, int Claimed);
 /// </summary>
 public record PendingContributionRow(
     string ScriptId, string CsContent, string ViContent, string Domain,
-    DateTimeOffset CreatedAt, long ContributorId, string ContributorName, long? TaskId);
+    DateTimeOffset CreatedAt, long ContributorId, string ContributorName, long? TaskId, string? Comment);
 
 public class ScriptQueueRepository(CodeSwitchLabelDbContext db) : IScriptQueueRepository
 {
@@ -131,6 +138,26 @@ public class ScriptQueueRepository(CodeSwitchLabelDbContext db) : IScriptQueueRe
             .SqlQuery<int>(
                 $"""SELECT fn_queue_requeue({scriptId}, CAST({stageName} AS queue_stage)) AS "Value" """)
             .SingleAsync(ct);
+    }
+
+    public async Task<bool> ReleaseClaimOfAsync(
+        string scriptId, QueueStage stage, long userId, CancellationToken ct = default)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        var affected = await db.ScriptQueue
+            .Where(q => q.ScriptId == scriptId &&
+                        q.Stage == stage &&
+                        q.State == QueueState.Claimed &&
+                        q.ClaimedBy == userId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(q => q.State, QueueState.Queued)
+                .SetProperty(q => q.ClaimedBy, (long?)null)
+                .SetProperty(q => q.ClaimedAt, (DateTimeOffset?)null)
+                .SetProperty(q => q.ClaimExpiresAt, (DateTimeOffset?)null)
+                .SetProperty(q => q.EnqueuedAt, now), ct);
+
+        return affected > 0;
     }
 
     public async Task<int> ReleaseClaimsAsync(
@@ -191,7 +218,7 @@ public class ScriptQueueRepository(CodeSwitchLabelDbContext db) : IScriptQueueRe
                     .Where(q => q.ScriptId == s.ScriptId && q.Stage == QueueStage.TextReview &&
                                 (q.State == QueueState.Queued || q.State == QueueState.Claimed))
                     .Select(q => q.TaskId)
-                    .FirstOrDefault()))
+                    .FirstOrDefault(), s.ContributorComment))
             .ToListAsync(ct);
 
         return (items, total);

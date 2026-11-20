@@ -46,7 +46,7 @@ public class RecordingRepositoryTests : IntegrationTestBase
         await CreateRecordingAsync(script.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching, 7.5m);
 
         // Act
-        var (items, total) = await Recordings.SearchAsync(null, null, null, 1, 10, default, TestContext.Current.CancellationToken);
+        var (items, total) = await Recordings.SearchAsync(null, null, null, null, null, null, 1, 10, default, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(total >= 1);
@@ -89,7 +89,7 @@ public class RecordingRepositoryTests : IntegrationTestBase
         var (speakerId, recordings) = await CreateThreeSortedRecordingsAsync();
 
         var (items, total) = await Recordings.SearchAsync(
-            speakerId, null, null, 1, 10, default, TestContext.Current.CancellationToken);
+            speakerId, null, null, null, null, null, 1, 10, default, TestContext.Current.CancellationToken);
 
         Assert.Equal(3, total);
         Assert.Equal(
@@ -103,11 +103,11 @@ public class RecordingRepositoryTests : IntegrationTestBase
         var (speakerId, recordings) = await CreateThreeSortedRecordingsAsync();
 
         var (asc, _) = await Recordings.SearchAsync(
-            speakerId, null, null, 1, 10,
+            speakerId, null, null, null, null, null, 1, 10,
             SortSpec<RecordingSortField>.From("durationSec", "asc"), TestContext.Current.CancellationToken);
 
         var (desc, _) = await Recordings.SearchAsync(
-            speakerId, null, null, 1, 10,
+            speakerId, null, null, null, null, null, 1, 10,
             SortSpec<RecordingSortField>.From("durationSec", "desc"), TestContext.Current.CancellationToken);
 
         Assert.Equal(
@@ -124,7 +124,7 @@ public class RecordingRepositoryTests : IntegrationTestBase
         var (speakerId, recordings) = await CreateThreeSortedRecordingsAsync();
 
         var (items, _) = await Recordings.SearchAsync(
-            speakerId, null, null, 1, 10,
+            speakerId, null, null, null, null, null, 1, 10,
             SortSpec<RecordingSortField>.From("recordedAt", "asc"), TestContext.Current.CancellationToken);
 
         Assert.Equal(

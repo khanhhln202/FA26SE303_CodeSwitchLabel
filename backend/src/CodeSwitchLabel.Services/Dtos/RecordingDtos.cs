@@ -40,6 +40,13 @@ public record RecordingSearchRequest : PageRequest
 
     /// <summary>Chỉ Admin, Reviewer và Task Manager lọc được theo người đọc.</summary>
     public long? SpeakerId { get; init; }
+
+    /// <summary>Lọc theo mốc thu âm, chính xác đến giờ (UTC hoặc offset bất kỳ).</summary>
+    public DateTimeOffset? From { get; init; }
+    public DateTimeOffset? To { get; init; }
+
+    /// <summary>Mã chủ đề của câu.</summary>
+    public string? Domain { get; init; }
 }
 
 /// <summary>

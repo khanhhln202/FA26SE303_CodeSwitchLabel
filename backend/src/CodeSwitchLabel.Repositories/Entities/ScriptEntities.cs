@@ -48,8 +48,16 @@ public class Script
     /// </summary>
     public string? SemanticWarning { get; set; }
 
+    public string? ContributorComment { get; set; }
+
     /// <summary>Null nghĩa là nhập tay từng câu, không qua file.</summary>
     public long? ImportBatchId { get; set; }
+
+    /// <summary>Task contribution nhận câu này; null với câu nhập/import/tạo tay.</summary>
+    public long? ContributionTaskId { get; set; }
+
+    /// <summary>Chiến dịch nhập câu này; null với câu nhập độc lập.</summary>
+    public long? WaveId { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }

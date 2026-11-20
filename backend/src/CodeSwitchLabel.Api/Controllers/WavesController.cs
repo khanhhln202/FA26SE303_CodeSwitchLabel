@@ -2,6 +2,7 @@ using CodeSwitchLabel.Api.Infrastructure;
 using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Services.Abstractions;
 using CodeSwitchLabel.Services.Dtos;
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -61,6 +62,14 @@ public class WavesController(IWaveService waveService) : ControllerBase
         return Ok(await waveService.SearchAsync(request, userId, userRole, ct));
     }
 
+    /// <summary>Đếm script đã duyệt, chưa thuộc wave, chưa được giữ trong task chưa huỷ và chưa có recording chờ duyệt/đạt.</summary>
+    [HttpGet("available-scripts")]
+    [ProducesResponseType(typeof(AvailableScriptCountDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AvailableScriptCountDto>> GetAvailableScriptCount(
+        [FromQuery, Required] string domain, CancellationToken ct)
+        => Ok(await waveService.GetAvailableScriptCountAsync(domain, ct));
+
     /// <summary>
     /// Lấy task thu âm duy nhất của đợt; nếu chưa có thì tạo mới với chỉ tiêu bằng cả đợt.
     /// </summary>
@@ -87,6 +96,13 @@ public class WavesController(IWaveService waveService) : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<WaveDto>> Get(long id, CancellationToken ct)
         => Ok(await waveService.GetAsync(id, User.GetUserId(), User.IsInRole("Admin"), ct));
+
+    /// <summary>Dashboard chiến dịch: quy mô câu, thời lượng audio và nhân khẩu Speaker.</summary>
+    [HttpGet("{id:long}/dashboard")]
+    [ProducesResponseType(typeof(WaveDashboardDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<WaveDashboardDto>> Dashboard(long id, CancellationToken ct)
+        => Ok(await waveService.GetDashboardAsync(id, User.GetUserId(), User.IsInRole("Admin"), ct));
 
     // TaskManager phụ trách đợt và Admin đều sửa được
     /// <summary>Sửa tên, chủ đề, chỉ tiêu hoặc khoảng ngày. Trường nào để trống thì giữ nguyên.</summary>

@@ -1,6 +1,7 @@
 using CodeSwitchLabel.Api.Infrastructure;
 using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Services.Abstractions;
+using CodeSwitchLabel.Services.Common;
 using CodeSwitchLabel.Services.Dtos;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -8,13 +9,14 @@ using Microsoft.AspNetCore.Mvc;
 namespace CodeSwitchLabel.Api.Controllers;
 
 /// <summary>
-/// Admin quản lý tài khoản: tạo, sửa, đổi vai, khoá, cấp lại mật khẩu.
+/// Admin và Task Manager quản lý tài khoản: tạo, sửa, đổi vai, khoá, cấp lại mật khẩu.
+/// Task Manager chỉ thao tác trên Speaker/Reviewer và không nâng vai lên Admin/TaskManager.
 /// Không có chức năng xoá — bản ghi, lượt duyệt và task đều trỏ tới người dùng, xoá là vỡ dữ liệu.
 /// </summary>
 [ApiController]
 [Route("api/users")]
 [Tags(ApiTags.Users)]
-[Authorize(Roles = "Admin")]
+[Authorize(Roles = "Admin,TaskManager")]
 public class UsersController(IUserService userService) : ControllerBase
 {
     /// <summary>Danh sách tài khoản, lọc theo vai, trạng thái, họ tên hoặc email.</summary>
@@ -60,6 +62,12 @@ public class UsersController(IUserService userService) : ControllerBase
     public async Task<ActionResult<CreateUserResult>> Create(
         [FromBody] CreateUserRequest request, CancellationToken ct)
     {
+        if (!User.IsInRole("Admin") && request.Role is RoleName.Admin or RoleName.TaskManager)
+        {
+            throw new ForbiddenException(
+                "role_escalation_denied", "Chỉ Admin được tạo tài khoản Admin hoặc Task Manager.");
+        }
+
         var created = await userService.CreateAsync(request, ct);
         return CreatedAtAction(nameof(Get), new { id = created.User.UserId }, created);
     }
@@ -70,7 +78,10 @@ public class UsersController(IUserService userService) : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<UserDetailDto>> Update(
         long id, [FromBody] UpdateUserRequest request, CancellationToken ct)
-        => Ok(await userService.UpdateAsync(id, request, ct));
+    {
+        await EnsureCanManageAsync(id, ct);
+        return Ok(await userService.UpdateAsync(id, request, ct));
+    }
 
     /// <summary>Đổi vai.</summary>
     /// <remarks>
@@ -87,7 +98,20 @@ public class UsersController(IUserService userService) : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<UserDetailDto>> ChangeRole(
         long id, [FromBody] ChangeRoleRequest request, CancellationToken ct)
-        => Ok(await userService.ChangeRoleAsync(id, request.Role!.Value, User.GetUserId(), ct));
+    {
+        if (!User.IsInRole("Admin"))
+        {
+            if (request.Role is RoleName.Admin or RoleName.TaskManager)
+            {
+                throw new ForbiddenException(
+                    "role_escalation_denied", "Chỉ Admin được đổi vai sang Admin hoặc Task Manager.");
+            }
+
+            await EnsureCanManageAsync(id, ct);
+        }
+
+        return Ok(await userService.ChangeRoleAsync(id, request.Role!.Value, User.GetUserId(), ct));
+    }
 
     /// <summary>Khoá tài khoản.</summary>
     /// <remarks>
@@ -100,14 +124,20 @@ public class UsersController(IUserService userService) : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<UserDetailDto>> Lock(long id, CancellationToken ct)
-        => Ok(await userService.LockAsync(id, User.GetUserId(), ct));
+    {
+        await EnsureCanManageAsync(id, ct);
+        return Ok(await userService.LockAsync(id, User.GetUserId(), ct));
+    }
 
     /// <summary>Mở khoá tài khoản.</summary>
     [HttpPost("{id:long}/unlock")]
     [ProducesResponseType(typeof(UserDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<UserDetailDto>> Unlock(long id, CancellationToken ct)
-        => Ok(await userService.UnlockAsync(id, ct));
+    {
+        await EnsureCanManageAsync(id, ct);
+        return Ok(await userService.UnlockAsync(id, ct));
+    }
 
     /// <summary>Cấp lại mật khẩu tạm khi người dùng quên mật khẩu, hoặc khi nghi tài khoản bị lộ.</summary>
     /// <remarks>
@@ -118,7 +148,10 @@ public class UsersController(IUserService userService) : ControllerBase
     [ProducesResponseType(typeof(ResetPasswordResult), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ResetPasswordResult>> ResetPassword(long id, CancellationToken ct)
-        => Ok(await userService.ResetPasswordAsync(id, ct));
+    {
+        await EnsureCanManageAsync(id, ct);
+        return Ok(await userService.ResetPasswordAsync(id, ct));
+    }
 
     /// <summary>Chủ đề Reviewer này đủ trình độ duyệt nội dung.</summary>
     /// <remarks>
@@ -140,6 +173,19 @@ public class UsersController(IUserService userService) : ControllerBase
     public async Task<ActionResult<IReadOnlyList<string>>> SetDomains(
         long id, [FromBody] SetDomainsRequest request, CancellationToken ct)
         => Ok(await userService.ReplaceDomainsAsync(id, request.Domains, ct));
+
+    /// <summary>Task Manager không được đụng vào tài khoản Admin/Task Manager khác.</summary>
+    private async Task EnsureCanManageAsync(long id, CancellationToken ct)
+    {
+        if (User.IsInRole("Admin")) return;
+
+        var target = await userService.GetAsync(id, ct);
+        if (target.Role is RoleName.Admin or RoleName.TaskManager)
+        {
+            throw new ForbiddenException(
+                "target_role_denied", "Chỉ Admin được thao tác trên tài khoản Admin hoặc Task Manager.");
+        }
+    }
 }
 
 /// <summary>Người dùng tự quản lý tài khoản của mình.</summary>

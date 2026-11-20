@@ -2,6 +2,17 @@ using System.ComponentModel.DataAnnotations;
 
 namespace CodeSwitchLabel.Services.Dtos;
 
+public record GoogleLoginRequest
+{
+    [Required]
+    public string Credential { get; init; } = string.Empty;
+
+    public bool ConsentAccepted { get; init; }
+
+    [StringLength(32)]
+    public string? ConsentVersion { get; init; }
+}
+
 public record LoginRequest
 {
     [Required(ErrorMessage = "Email không được để trống.")]
@@ -37,6 +48,24 @@ public record RegisterSpeakerRequest
 
     /// <summary>Hồ sơ tình nguyện: điền luôn lúc đăng ký, không qua duyệt admin.</summary>
     public UpdateSpeakerProfileRequest? SpeakerProfile { get; init; }
+
+    /// <summary>
+    /// Đồng ý dùng giọng nói cho nghiên cứu khoa học phi thương mại. Gửi true kèm
+    /// <see cref="ConsentVersion"/> để lưu bằng chứng đồng ý ngay lúc tạo tài khoản.
+    /// Bản giấy đã ký có thể tải lên sau bằng POST /api/auth/consent.
+    /// </summary>
+    public bool ConsentAccepted { get; init; }
+
+    [StringLength(32)]
+    public string? ConsentVersion { get; init; }
+}
+
+/// <summary>Đồng ý phiên bản hiện hành, kèm bản giấy đã ký (PDF/ảnh) nếu có.</summary>
+public record AcceptConsentRequest
+{
+    [Required(ErrorMessage = "Thiếu phiên bản điều khoản.")]
+    [StringLength(32)]
+    public string Version { get; init; } = string.Empty;
 }
 
 /// <summary>ERD cho mỗi người đúng một vai, nên Role là chuỗi đơn chứ không phải mảng.</summary>

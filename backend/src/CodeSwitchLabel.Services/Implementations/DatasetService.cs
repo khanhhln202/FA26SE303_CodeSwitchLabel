@@ -344,15 +344,25 @@ public class DatasetService(
                 "invalid_date_range", "Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.");
         }
 
+        if (request.From is { } exactFrom && request.To is { } exactTo && exactFrom >= exactTo)
+        {
+            throw new UnprocessableException(
+                "invalid_date_range", "Thời điểm bắt đầu phải trước thời điểm kết thúc.");
+        }
+
         // Ngày của cặp = mốc duyệt MUỘN NHẤT của hai bản; tính theo ngày Việt Nam (UTC+7).
-        var fromUtc = request.DateFrom is { } from
+        var dayFromUtc = request.DateFrom is { } from
             ? new DateTimeOffset(from.ToDateTime(TimeOnly.MinValue), TimeSpan.FromHours(7)).ToUniversalTime()
             : (DateTimeOffset?)null;
-        var toExclusiveUtc = request.DateTo is { } to
+        var dayToExclusiveUtc = request.DateTo is { } to
             ? new DateTimeOffset(
                 to.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.FromHours(7)).ToUniversalTime()
             : (DateTimeOffset?)null;
+
+        var fromUtc = Max(dayFromUtc, request.From?.ToUniversalTime());
+        var toExclusiveUtc = Min(dayToExclusiveUtc, request.To?.ToUniversalTime());
         var filteredByDate = fromUtc is not null || toExclusiveUtc is not null;
+        var domain = request.Domain?.Trim();
 
         var recordingIds = request.RecordingIds
             .Where(id => !string.IsNullOrWhiteSpace(id))
@@ -366,11 +376,12 @@ public class DatasetService(
             : request.SpeakerIds.Where(id => id > 0).Distinct().ToList();
         var waveId = scopedToRecordings ? null : request.WaveId;
 
-        if (recordingIds.Count == 0 && speakerIds.Count == 0 && waveId is null && !filteredByDate)
+        if (recordingIds.Count == 0 && speakerIds.Count == 0 && waveId is null &&
+            !filteredByDate && string.IsNullOrEmpty(domain))
         {
             throw new UnprocessableException(
                 "export_scope_required",
-                "Chọn ít nhất một bản ghi, một Speaker, một chiến dịch hoặc một khoảng ngày để tải dữ liệu.");
+                "Chọn ít nhất một bản ghi, một Speaker, một chiến dịch, một chủ đề hoặc một khoảng thời gian để tải dữ liệu.");
         }
 
         var query = db.Recordings.AsNoTracking()
@@ -379,7 +390,8 @@ public class DatasetService(
             .Where(r => r.Status == RecordingStatus.Approved)
             .Where(r => recordingIds.Count == 0 || recordingIds.Contains(r.RecordingId))
             .Where(r => speakerIds.Count == 0 || speakerIds.Contains(r.SpeakerId))
-            .Where(r => waveId == null || (r.Task != null && r.Task.WaveId == waveId));
+            .Where(r => waveId == null || (r.Task != null && r.Task.WaveId == waveId))
+            .Where(r => string.IsNullOrEmpty(domain) || r.Script.Domain == domain);
 
         if (filteredByDate) query = query.Include(r => r.Reviews);
 
@@ -524,6 +536,12 @@ public class DatasetService(
         await using var target = entry.Open();
         await target.WriteAsync(content, ct);
     }
+
+    private static DateTimeOffset? Max(DateTimeOffset? a, DateTimeOffset? b) =>
+        a is null ? b : b is null ? a : a > b ? a : b;
+
+    private static DateTimeOffset? Min(DateTimeOffset? a, DateTimeOffset? b) =>
+        a is null ? b : b is null ? a : a < b ? a : b;
 
     private static string DomainLabel(string domain) => domain switch
     {

@@ -52,6 +52,12 @@ public class UnprocessableException(string code, string message) : AppException(
     public override int StatusCode => StatusCodes.Status422UnprocessableEntity;
 }
 
+/// <summary>503 — tích hợp bên ngoài chưa được cấu hình hoặc tạm thời không dùng được.</summary>
+public class ServiceUnavailableException(string code, string message) : AppException(code, message)
+{
+    public override int StatusCode => StatusCodes.Status503ServiceUnavailable;
+}
+
 /// <summary>
 /// Hằng số mã HTTP để tầng Service không phải tham chiếu ASP.NET Core.
 /// Giữ tầng này thuần, test được mà không cần dựng web host.
@@ -63,4 +69,5 @@ internal static class StatusCodes
     public const int Status404NotFound = 404;
     public const int Status409Conflict = 409;
     public const int Status422UnprocessableEntity = 422;
+    public const int Status503ServiceUnavailable = 503;
 }

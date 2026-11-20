@@ -49,6 +49,7 @@ public class ScriptService(
     IDomainService domains,
     ISystemConfigService config,
     ITaskProgressTracker taskTracker,
+    ITaskRepository tasks,
     ILabelingService labeling,
     TimeProvider clock,
     ILogger<ScriptService> logger) : IScriptService
@@ -123,8 +124,36 @@ public class ScriptService(
         CreateScriptRequest request, long contributorId, CancellationToken ct = default) =>
         CreateInternalAsync(request, contributorId, ScriptStatus.PendingValidation, null, ct);
 
+    /// <summary>Đóng góp (contribution) hoặc báo lỗi (report) thống nhất cho POST /api/speaker/scripts/submit.</summary>
+    public async Task<UnifiedContributionResult> CreateUnifiedAsync(
+        ContributeOrReportRequest request, long userId, CancellationToken ct = default)
+    {
+        var type = (request.Type ?? string.Empty).Trim().ToLowerInvariant();
+        if (type == "contribution")
+        {
+            var detail = await ContributeAsync(new CreateScriptRequest
+            {
+                CsContent = request.CsContent,
+                ViContent = request.ViContent,
+                Domain = request.Domain ?? string.Empty,
+                Alignment = request.Alignment ?? [],
+                TaskId = request.TaskId,
+                Comment = request.Comment
+            }, userId, ct);
+            return new UnifiedContributionResult(detail.ScriptId, "contribution", detail.Status.ToString(), detail.CreatedAt);
+        }
+
+        if (type == "report")
+            throw new UnprocessableException(
+                "report_not_supported_here",
+                $"Báo lỗi câu {request.ScriptId} dùng POST /api/speaker/scripts/{request.ScriptId}/proposals với kind = Report.");
+
+        throw new UnprocessableException(
+            "invalid_type", "Type phải là 'contribution' hoặc 'report'.");
+    }
+
     public async Task<ImportResultDto> ImportAsync(
-        Stream jsonFile, string fileName, long importedById, CancellationToken ct = default)
+        Stream jsonFile, string fileName, long importedById, long? waveId = null, CancellationToken ct = default)
     {
         var cap = await config.GetIntAsync(ConfigKeys.ImportMaxScriptsPerBatch, 100_000, ct);
         var items = await ReadItemsAsync(jsonFile, cap, ct);
@@ -134,11 +163,15 @@ public class ScriptService(
             throw new UnprocessableException("empty_file", "File không có câu nào để nhập.");
         }
 
-        return await ImportCoreAsync(items, [], fileName, importedById, false, ct);
+        return await ImportCoreAsync(items, [], fileName, importedById, false, waveId, ct);
     }
 
+    public Task<ImportResultDto> ImportAsync(
+        Stream jsonFile, string fileName, long importedById, CancellationToken ct) =>
+        ImportAsync(jsonFile, fileName, importedById, null, ct);
+
     public async Task<ImportResultDto> ImportRawAsync(
-        Stream textFile, string fileName, long importedById, string domain,
+        Stream textFile, string fileName, long importedById, string domain, long? waveId = null,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(domain))
@@ -188,12 +221,16 @@ public class ScriptService(
             }
         }
 
-        return await ImportCoreAsync(items, skipped, fileName, importedById, allowEmptyTargets, ct);
+        return await ImportCoreAsync(items, skipped, fileName, importedById, allowEmptyTargets, waveId, ct);
     }
+
+    public Task<ImportResultDto> ImportRawAsync(
+        Stream textFile, string fileName, long importedById, string domain, CancellationToken ct) =>
+        ImportRawAsync(textFile, fileName, importedById, domain, null, ct);
 
     private async Task<ImportResultDto> ImportCoreAsync(
         List<ImportScriptItem> items, List<ImportSkippedDto> skipped,
-        string fileName, long importedById, bool allowEmptyTargets, CancellationToken ct)
+        string fileName, long importedById, bool allowEmptyTargets, long? waveId, CancellationToken ct)
     {
         var maxEnglishWords = await config.GetIntAsync(ConfigKeys.ScriptMaxEnglishWords, 5, ct);
         var safeName = SanitizeFileName(fileName);
@@ -266,6 +303,7 @@ public class ScriptService(
                     Domain = domain,
                     CreatedBy = importedById,
                     ImportBatchId = batch.BatchId,
+                    WaveId = waveId,
                     CreatedAt = now,
                     UpdatedAt = now,
                     SemanticWarning = item.SemanticWarning
@@ -602,6 +640,11 @@ public class ScriptService(
             await taskTracker.OnScriptRejectedAsync(scriptId, ct);
         }
 
+        if (script.ContributionTaskId is { } contributionTaskId)
+        {
+            await taskTracker.RefreshStatusAsync(contributionTaskId, ct);
+        }
+
         var detail = (await repository.GetWithReviewsAsync(scriptId, ct))!.ToDetail();
         if (transaction is not null) await transaction.CommitAsync(ct);
 
@@ -798,6 +841,26 @@ public class ScriptService(
         var scriptId = await repository.GenerateIdAsync(enWordCount, domain, relation, ct);
         var now = clock.GetUtcNow();
 
+        long? contributionTaskId = null;
+        if (status == ScriptStatus.PendingValidation && request.TaskId is { } taskId)
+        {
+            if (!await tasks.IsActiveTaskOfAsync(taskId, userId, TaskType.Contribution, ct))
+            {
+                throw new ForbiddenException(
+                    "task_not_contribution",
+                    $"Task #{taskId} không phải task đóng góp đang giao cho bạn.");
+            }
+
+            if (await tasks.IsHardLockedAsync(taskId, now, ct))
+            {
+                throw new ConflictException(
+                    "task_deadline_passed",
+                    $"Task #{taskId} đã quá hạn và bị khóa nộp. Nhờ Task Manager gia hạn.");
+            }
+
+            contributionTaskId = taskId;
+        }
+
         var autoValidate = status == ScriptStatus.Validated;
 
         // Trigger trg_script_validated_domain (non-defer) chặn INSERT thẳng Validated khi chưa
@@ -813,9 +876,13 @@ public class ScriptService(
             Domain = domain,
             CreatedBy = userId,
             ImportBatchId = batchId,
+            ContributionTaskId = contributionTaskId,
             CreatedAt = now,
             UpdatedAt = now,
-            SemanticWarning = semanticWarning
+            SemanticWarning = semanticWarning,
+            ContributorComment = status == ScriptStatus.PendingValidation && !string.IsNullOrWhiteSpace(request.Comment)
+                ? request.Comment.Trim()
+                : null
         };
 
         foreach (var word in words) word.ScriptId = scriptId;

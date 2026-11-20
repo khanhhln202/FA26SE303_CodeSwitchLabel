@@ -18,7 +18,7 @@ CREATE TYPE audit_action          AS ENUM ('create','update','delete','import','
 CREATE TYPE script_status         AS ENUM ('pending_validation','validated','rejected','deactivated');
 CREATE TYPE script_review_action  AS ENUM ('accepted','edited','rejected');
 CREATE TYPE script_word_relation  AS ENUM ('semantic_equivalent','proper_noun');
-CREATE TYPE task_type             AS ENUM ('recording','review');
+CREATE TYPE task_type             AS ENUM ('recording','review','contribution');
 -- task còn ba trạng thái. Đợt còn ba trạng thái và là HÀM của task, không bấm tay.
 CREATE TYPE wave_status         AS ENUM ('open','in_progress','completed');
 CREATE TYPE task_status           AS ENUM ('in_progress','completed','cancelled');
@@ -101,6 +101,7 @@ CREATE TABLE app_user (
 CREATE TABLE speaker_profile (                    -- 1 : 0..1 with app_user
     user_id       BIGINT PRIMARY KEY REFERENCES app_user(user_id) ON DELETE CASCADE,
     birth_year    SMALLINT CHECK (birth_year BETWEEN 1900 AND 2100),
+    birth_place   VARCHAR(100),                   -- nơi sinh, chữ tự do
     province      VARCHAR(100),                   -- chữ tự do, KHÔNG gom nhóm được (xem region)
     -- Bản ERD đầu định suy vùng miền từ province thay vì lưu. Không làm được: province là ô
     -- chữ tự do và dữ liệu thật đã lệch nhau ('TP. Hồ Chí Minh' vs 'Thành phố Hồ Chí Minh'),
@@ -110,6 +111,18 @@ CREATE TABLE speaker_profile (                    -- 1 : 0..1 with app_user
     occupation    occupation,
     gender        gender,                         -- không bắt buộc (hồ sơ cũ chưa có)
     major         VARCHAR(100)                    -- chuyên ngành: IT | english | business ...
+);
+
+-- Đồng ý trực tuyến (hoặc bản giấy đã ký tải lên) cho phép dùng giọng nói
+-- vào mục đích nghiên cứu khoa học phi thương mại. Mỗi người một bản mới nhất.
+CREATE TABLE user_consent (
+    user_id       BIGINT PRIMARY KEY REFERENCES app_user(user_id) ON DELETE CASCADE,
+    version       VARCHAR(32) NOT NULL,
+    accepted_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    document_key  TEXT,                           -- file PDF/ảnh bản đã ký trong object storage
+    document_name VARCHAR(255),
+    CONSTRAINT ck_user_consent_document
+        CHECK (document_key IS NULL OR document_name IS NOT NULL)
 );
 
 -- Chủ đề (domain) là dữ liệu, không còn là ENUM: Admin tạo, đổi tên, xóa mềm.
@@ -191,12 +204,17 @@ CREATE TABLE script (
     cs_content      TEXT NOT NULL,                 -- code-switching sentence
     vi_content      TEXT NOT NULL,                 -- pure Vietnamese equivalent
     semantic_warning TEXT,                         -- AI báo lệch nghĩa; NULL = không có cảnh báo
+    contributor_comment TEXT,
     status          script_status NOT NULL DEFAULT 'pending_validation',
     word_count      INT NOT NULL DEFAULT 0,
     en_word_count   INT NOT NULL DEFAULT 0,
     domain          TEXT NOT NULL REFERENCES domain(code),
     created_by      BIGINT NOT NULL REFERENCES app_user(user_id),
     import_batch_id BIGINT REFERENCES import_batch(batch_id),  -- NULL = manual entry
+    -- Câu do tình nguyện viên đóng góp cho một task contribution; NULL với mọi nguồn khác.
+    contribution_task_id BIGINT,
+    -- Chiến dịch mà câu này được nhập vào; NULL = nhập độc lập, không thuộc đợt nào.
+    wave_id BIGINT,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     -- Legacy: s_ + 9 digits. New: s_ + 3 meaningful + 9 serial digits.
@@ -221,6 +239,8 @@ CREATE INDEX idx_script_status       ON script (status);        -- review/record
 CREATE INDEX idx_script_domain       ON script (domain);
 CREATE INDEX idx_script_created_by   ON script (created_by);
 CREATE INDEX idx_script_import_batch ON script (import_batch_id);
+CREATE INDEX idx_script_contribution_task ON script (contribution_task_id);
+CREATE INDEX idx_script_wave ON script (wave_id);
 CREATE UNIQUE INDEX uq_script_cs_content_md5 ON script (md5(cs_content));
 
 -- One row per EMBEDDED ENGLISH word of script.cs_content, storing both sides
@@ -338,9 +358,15 @@ CREATE TABLE wave (
     created_by    BIGINT NOT NULL REFERENCES app_user(user_id),
     assigned_to   BIGINT REFERENCES app_user(user_id) ON DELETE SET NULL,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    buffer_qty    INT NOT NULL DEFAULT 0,
+    imported_qty  INT NOT NULL DEFAULT 0,
     CONSTRAINT ck_wave_target_qty CHECK (target_qty BETWEEN 2000 AND 5000),
     CONSTRAINT ck_wave_dates CHECK (start_date <= end_date)
 );
+
+ALTER TABLE script
+    ADD CONSTRAINT fk_script_wave
+    FOREIGN KEY (wave_id) REFERENCES wave(wave_id) ON DELETE SET NULL;
 
 CREATE INDEX idx_wave_created_by ON wave (created_by);
 CREATE INDEX idx_wave_status     ON wave (status);
@@ -372,12 +398,20 @@ CREATE TABLE task (
     description  TEXT,
     target_qty   INT NOT NULL CHECK (target_qty > 0),
     deadline     TIMESTAMPTZ,
+    -- true: quá hạn là chặn nộp (không chỉ cảnh báo). Đổi hạn gia hạn mở lại.
+    enforce_deadline BOOLEAN NOT NULL DEFAULT FALSE,
+    imported_qty     INT NOT NULL DEFAULT 0,
     status       task_status NOT NULL DEFAULT 'in_progress',
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX idx_task_wave ON task (wave_id);
 CREATE INDEX idx_task_domain   ON task (domain);
+
+-- script đứng trước task trong file nên khoá ngoại thêm sau.
+ALTER TABLE script
+    ADD CONSTRAINT fk_script_contribution_task
+    FOREIGN KEY (contribution_task_id) REFERENCES task(task_id) ON DELETE SET NULL;
 
 CREATE TABLE task_assignment (
     assignment_id     BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,  -- surrogate: keeps history
@@ -1344,8 +1378,30 @@ BEGIN
                          WHEN 'text_review' THEN 'pending_validation'::script_status
                          ELSE 'validated'::script_status
                        END
-       -- Chưa ai giữ, hoặc đã giác người và hết hạn.
-       AND (q.state = 'queued' OR (q.state = 'claimed' AND q.claim_expires_at <= now()))
+       -- Chưa ai giữ, đã hết hạn, hoặc chính người này đang giữ: câu đã load lên
+       -- màn hình của họ phải trả lại cho họ để thu nốt biến thể còn thiếu. Chỉ chặng
+       -- ghi âm mới trả claim của chính mình — chặng duyệt văn bản phải đi tiếp.
+       AND (
+            q.state = 'queued'
+            OR (q.state = 'claimed'
+                AND (q.claim_expires_at <= now()
+                     OR (q.stage = 'recording' AND q.claimed_by = p_user_id)))
+       )
+       -- Người này đã có đủ hai bản chờ duyệt/đạt thì câu không còn việc cho họ;
+       -- lọc ngay trong SQL để không đốt hết số lần thử của vòng lặp gọi hàm.
+       AND NOT (
+            q.stage = 'recording'
+            AND EXISTS (SELECT 1 FROM recording r
+                         WHERE r.script_id = q.script_id
+                           AND r.speaker_id = p_user_id
+                           AND r.sentence_variant = 'code_switching'
+                           AND r.status IN ('pending_review', 'approved'))
+            AND EXISTS (SELECT 1 FROM recording r
+                         WHERE r.script_id = q.script_id
+                           AND r.speaker_id = p_user_id
+                           AND r.sentence_variant = 'pure_vietnamese'
+                           AND r.status IN ('pending_review', 'approved'))
+       )
        -- Chặng nào cũng phải tôn trọng p_task_id, nhưng cách "thuộc task" khác nhau:
        --   duyệt văn bản -> task gắn thẳng vào hàng (q.task_id), do lô của Task Manager.
        --   ghi âm       -> task gắn qua bảng trung gian task_script, vì một câu có thể
@@ -2009,5 +2065,44 @@ JOIN recording r ON r.recording_id = dr.recording_id
 GROUP BY dr.dataset_id, r.script_id
 HAVING COUNT(*) FILTER (WHERE r.sentence_variant = 'code_switching') = 0
     OR COUNT(*) FILTER (WHERE r.sentence_variant = 'pure_vietnamese') = 0;
+
+-- Trả bài thu âm bị từ chối về kho của đợt: tạo mục task_script cho người nhận khác
+-- trong cùng đợt chưa thu cặp câu này. ON CONFLICT DO NOTHING an toàn dưới cạnh tranh.
+CREATE OR REPLACE FUNCTION fn_backfill_recording_task_from_wave(p_task_id BIGINT, p_count INT)
+RETURNS INT LANGUAGE plpgsql AS $$
+DECLARE v_added INT := 0; v_wave BIGINT; v_domain TEXT; v_capacity INT; v_assigned INT;
+BEGIN
+  SELECT t.wave_id, t.domain, w.target_qty + w.buffer_qty
+    INTO v_wave, v_domain, v_capacity
+    FROM task t JOIN wave w ON w.wave_id = t.wave_id
+   WHERE t.task_id = p_task_id AND t.task_type = 'recording';
+  IF v_wave IS NULL THEN RETURN 0; END IF;
+
+  SELECT COUNT(DISTINCT ts.script_id) INTO v_assigned
+    FROM task_script ts JOIN task t ON t.task_id = ts.task_id
+   WHERE t.wave_id = v_wave AND t.task_type = 'recording'
+     AND ts.status <> 'rejected';
+  p_count := LEAST(p_count, GREATEST(0, v_capacity - v_assigned));
+  IF p_count <= 0 THEN RETURN 0; END IF;
+
+  INSERT INTO task_script (task_id, script_id, status, included_at, assignee_user_id)
+  SELECT p_task_id, s.script_id, 'pending', now(), NULL
+  FROM script s
+  WHERE s.status = 'validated' AND s.domain = v_domain AND s.wave_id = v_wave
+    AND s.wave_id IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1 FROM task_script ts
+      JOIN task t2 ON t2.task_id = ts.task_id
+      WHERE ts.script_id = s.script_id
+        AND t2.wave_id = v_wave
+        AND t2.task_type = 'recording'
+    )
+  ORDER BY s.created_at, s.script_id
+  LIMIT p_count
+  ON CONFLICT (task_id, script_id) WHERE assignee_user_id IS NULL DO NOTHING;
+
+  GET DIAGNOSTICS v_added = ROW_COUNT;
+  RETURN v_added;
+END $$;
 
 COMMIT;

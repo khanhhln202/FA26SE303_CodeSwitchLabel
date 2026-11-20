@@ -32,7 +32,8 @@ public record TaskRow(
     int Done,
     int SubmittedPairs,
     int UsableItems,
-    int TotalItems);
+    int TotalItems,
+    int ImportedQty = 0);
 
 /// <summary>một người đang nhận task. Trước đây TaskRow chỉ giữ một người đầu tiên.</summary>
 /// <param name="TargetQty">Quota riêng của người này; null = lượt giao cũ chưa có quota.</param>
@@ -93,6 +94,20 @@ public interface ITaskRepository
     Task<long?> GetWaveIdAsync(long taskId, CancellationToken ct = default);
 
     /// <summary>
+    /// Người nhận task thu âm còn hoạt động trong cùng đợt, chưa có bản ghi (bất kỳ biến thể nào)
+    /// cho cặp câu này — dùng để trả bài vào kho khi bài của người đọc bị từ chối.
+    /// </summary>
+    Task<List<long>> FindUnassignedSpeakersForScriptInWaveAsync(
+        string scriptId, long waveId, long excludeSpeakerId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Lấp cặp câu từ kho đợt (buffer) vào task thu âm: lấy FIFO các câu validated trong
+    /// đợt chưa có trong bất kỳ task thu âm nào của đợt. Dùng khi bài bị từ chối làm Done
+    /// tụt xuống dưới TargetQty.
+    /// </summary>
+    Task<int> BackfillFromWaveBufferAsync(long taskId, int count, CancellationToken ct = default);
+
+    /// <summary>
     /// các task duyệt còn nhận việc của một đợt (chưa huỷ), theo thứ tự tạo.
     /// Gồm cả task đã đủ chỉ tiêu — người nhận vẫn duyệt thêm được, KPI không chặn.
     /// </summary>
@@ -134,7 +149,13 @@ public interface ITaskRepository
     Task<Dictionary<long, int>> GetAssigneeSubmittedAsync(long taskId, TaskType type, CancellationToken ct = default);
     Task<List<AssigneeSummaryRow>> GetAssigneeSummaryAsync(DateTimeOffset now, CancellationToken ct = default);
 
+    /// <summary>Task còn mở nhưng đã quá hạn và bật khóa hạn cứng.</summary>
+    Task<bool> IsHardLockedAsync(long taskId, DateTimeOffset now, CancellationToken ct = default);
+
     Task<List<TaskScript>> GetScriptItemsAsync(long taskId, CancellationToken ct = default);
+
+    /// <summary>Câu do tình nguyện viên gửi cho task contribution, mới nhất trước.</summary>
+    Task<List<Script>> GetContributionItemsAsync(long taskId, CancellationToken ct = default);
 
     /// <summary>
     /// mục task_script có theo dõi thay đổi, để đổi người nhận câu khi
@@ -266,7 +287,8 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
 
     public async Task<bool> HasSubmittedWorkAsync(long taskId, CancellationToken ct = default) =>
         await db.Recordings.AnyAsync(r => r.TaskId == taskId, ct)
-            || await db.Reviews.AnyAsync(rv => rv.TaskId == taskId, ct);
+            || await db.Reviews.AnyAsync(rv => rv.TaskId == taskId, ct)
+            || await db.Scripts.AnyAsync(s => s.ContributionTaskId == taskId, ct);
 
     /// <summary>
     /// Khoá dòng task để hai người sửa cùng lúc không ghi đè nhau.
@@ -304,6 +326,40 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
             .Where(t => t.TaskId == taskId)
             .Select(t => t.WaveId)
             .FirstOrDefaultAsync(ct);
+
+    public async Task<List<long>> FindUnassignedSpeakersForScriptInWaveAsync(
+        string scriptId, long waveId, long excludeSpeakerId, CancellationToken ct = default)
+    {
+        // Người nhận đang nhận việc trong các task thu âm còn chạy của đợt này.
+        var assigneeIds = await db.TaskAssignments.AsNoTracking()
+            .Where(a => a.AssignmentStatus != AssignmentStatus.Reassigned && a.AssignmentStatus != AssignmentStatus.Cancelled)
+            .Where(a => db.WorkTasks.Any(t => t.TaskId == a.TaskId && t.WaveId == waveId && t.TaskType == TaskType.Recording && t.Status != WorkTaskStatus.Cancelled))
+            .Select(a => a.UserId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        if (assigneeIds.Count == 0) return [];
+
+        // Loại người đọc đã bị từ chối bài và người này không có bản ghi nào (bất kỳ biến thể nào) cho câu.
+        var result = new List<long>();
+        foreach (var userId in assigneeIds)
+        {
+            if (userId == excludeSpeakerId) continue;
+            var hasRecording = await db.Recordings.AsNoTracking().AnyAsync(r =>
+                r.ScriptId == scriptId && r.SpeakerId == userId, ct);
+            if (!hasRecording) result.Add(userId);
+        }
+        return result;
+    }
+
+    public async Task<int> BackfillFromWaveBufferAsync(
+        long taskId, int count, CancellationToken ct = default)
+    {
+        if (count <= 0) return 0;
+        return await db.Database.SqlQuery<int>(
+                $"SELECT fn_backfill_recording_task_from_wave({taskId}, {count}) AS \"Value\"")
+            .SingleAsync(ct);
+    }
 
     public Task<List<long>> GetReviewTaskIdsForWaveAsync(
         long waveId, CancellationToken ct = default) =>
@@ -427,6 +483,17 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
             return rows.ToDictionary(x => x.UserId, x => x.Submitted);
         }
 
+        if (type == TaskType.Contribution)
+        {
+            var scripts = await db.Scripts.AsNoTracking()
+                .Where(s => s.ContributionTaskId == taskId)
+                .GroupBy(s => s.CreatedBy)
+                .Select(g => new { UserId = g.Key, Submitted = g.Count() })
+                .ToListAsync(ct);
+
+            return scripts.ToDictionary(x => x.UserId, x => x.Submitted);
+        }
+
         // Task duyệt: "nộp" chính là lượt duyệt đã ghi, nên trùng với Done.
         var reviews = await db.Reviews.AsNoTracking()
             .Where(rv => rv.TaskId == taskId)
@@ -474,6 +541,16 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
                     result[speaker] = result.GetValueOrDefault(speaker) + 1;
                 }
             }
+        }
+        else if (type == TaskType.Contribution)
+        {
+            var rows = await db.Scripts.AsNoTracking()
+                .Where(s => s.ContributionTaskId == taskId && s.Status == ScriptStatus.Validated)
+                .GroupBy(s => s.CreatedBy)
+                .Select(g => new { UserId = g.Key, Done = g.Count() })
+                .ToListAsync(ct);
+
+            foreach (var row in rows) result[row.UserId] = row.Done;
         }
         else
         {
@@ -544,16 +621,33 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
             .ToList();
     }
 
-    public Task<List<TaskScript>> GetScriptItemsAsync(long taskId, CancellationToken ct = default) =>
-        db.TaskScripts
+    public Task<List<TaskScript>> GetScriptItemsAsync(long taskId, CancellationToken ct = default) =>        db.TaskScripts
             .AsNoTracking()
             .Include(ts => ts.Script)
             .Where(ts => ts.TaskId == taskId)
             .OrderBy(ts => ts.IncludedAt).ThenBy(ts => ts.ScriptId).ThenBy(ts => ts.TaskScriptId)
             .ToListAsync(ct);
 
-    public Task<List<TaskScript>> GetScriptItemsTrackedAsync(long taskId, CancellationToken ct = default) =>
-        db.TaskScripts
+    public Task<List<Script>> GetContributionItemsAsync(long taskId, CancellationToken ct = default) =>
+        db.Scripts
+            .AsNoTracking()
+            .Include(s => s.Reviews)
+            .Where(s => s.ContributionTaskId == taskId)
+            .OrderByDescending(s => s.CreatedAt)
+            .ToListAsync(ct);
+
+    public Task<bool> IsHardLockedAsync(
+        long taskId, DateTimeOffset now, CancellationToken ct = default) =>
+        db.WorkTasks
+            .AsNoTracking()
+            .Where(t => t.TaskId == taskId &&
+                        t.EnforceDeadline &&
+                        t.Deadline != null &&
+                        t.Deadline < now &&
+                        t.Status != WorkTaskStatus.Cancelled)
+            .AnyAsync(ct);
+
+    public Task<List<TaskScript>> GetScriptItemsTrackedAsync(long taskId, CancellationToken ct = default) =>        db.TaskScripts
             .Where(ts => ts.TaskId == taskId)
             .OrderBy(ts => ts.IncludedAt).ThenBy(ts => ts.ScriptId).ThenBy(ts => ts.TaskScriptId)
             .ToListAsync(ct);
@@ -766,7 +860,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
             .Where(r => ids.Contains(r.RecordingId))
             .ToListAsync(ct);
 
-    public Task<List<string>> FindScriptCandidatesAsync(
+    public async Task<List<string>> FindScriptCandidatesAsync(
         long taskId, long[] assigneeIds, string? domain, int count, string[] excludedIds,
         CancellationToken ct = default)
     {
@@ -809,7 +903,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
                 r.Status != RecordingStatus.QcFailed && r.Status != RecordingStatus.Rejected));
         }
 
-        return query
+        return await query
             // FIFO theo hàng đợi chung (yêu cầu 3.1), không phải theo mã câu.
             .OrderBy(s => s.QueueRows
                 .Where(q => q.Stage == QueueStage.Recording)
@@ -894,6 +988,10 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
             .Where(ts => (ts.AssigneeUserId == null || ts.AssigneeUserId == speakerId) &&
                          (ts.TaskId == taskId ||
                           (waveId != null && ts.Task.WaveId == waveId)));
+
+        // Bản ghi bị Reviewer từ chối quay lại task cho Speaker khác, không đưa lại cho người đã thu.
+        query = query.Where(ts => !ts.Script.Recordings.Any(r =>
+            r.SpeakerId == speakerId && r.Status == RecordingStatus.Rejected));
 
         // Câu Speaker vừa bỏ qua trong phiên: không trả lại trong lần lấy kế tiếp.
         if (excludedIds.Length > 0)
@@ -1017,8 +1115,9 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
     /// Chiếu task sang TaskRow, gồm cả người đang nhận và các con số tiến độ.
     /// Task thu âm đếm theo CẶP CÂU, task duyệt đếm theo bản ghi.
     /// </summary>
-    private IQueryable<TaskRow> ProjectRows(IQueryable<WorkTask> source) =>
-        source.Select(t => new TaskRow(
+    private IQueryable<TaskRow> ProjectRows(IQueryable<WorkTask> source)
+    {
+        return source.Select(t => new TaskRow(
             t.TaskId,
             t.WaveId,
             t.Wave!.WaveName,
@@ -1040,10 +1139,14 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
                 .ToList(),
             t.TaskType == TaskType.Recording
                 ? db.Recordings.Count(r => r.TaskId == t.TaskId && r.Status != RecordingStatus.QcFailed)
-                : db.Reviews.Count(v => v.TaskId == t.TaskId),
+                : t.TaskType == TaskType.Contribution
+                    ? db.Scripts.Count(s => s.ContributionTaskId == t.TaskId)
+                    : db.Reviews.Count(v => v.TaskId == t.TaskId),
             t.TaskType == TaskType.Recording
                 ? t.TaskScripts.Count(ts => ts.Status == TaskScriptStatus.Completed)
-                : t.TaskRecordings.Count(tr => tr.Status == TaskRecordingStatus.Reviewed),
+                : t.TaskType == TaskType.Contribution
+                    ? db.Scripts.Count(s => s.ContributionTaskId == t.TaskId && s.Status == ScriptStatus.Validated)
+                    : t.TaskRecordings.Count(tr => tr.Status == TaskRecordingStatus.Reviewed),
             t.TaskType == TaskType.Recording
                 ? t.TaskScripts.Count(ts =>
                     ts.Status != TaskScriptStatus.Rejected &&
@@ -1051,11 +1154,19 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
                         r.SentenceVariant == SentenceVariant.CodeSwitching && r.Status != RecordingStatus.QcFailed) &&
                     ts.Script.Recordings.Any(r =>
                         r.SentenceVariant == SentenceVariant.PureVietnamese && r.Status != RecordingStatus.QcFailed))
-                : 0,
+                : t.TaskType == TaskType.Contribution
+                    ? db.Scripts.Count(s => s.ContributionTaskId == t.TaskId && s.Status != ScriptStatus.Rejected)
+                    : 0,
             t.TaskType == TaskType.Recording
                 ? t.TaskScripts.Count(ts => ts.Status != TaskScriptStatus.Rejected)
-                : t.TaskRecordings.Count(tr => tr.Status != TaskRecordingStatus.Skipped),
+                : t.TaskType == TaskType.Contribution
+                    ? db.Scripts.Count(s => s.ContributionTaskId == t.TaskId && s.Status != ScriptStatus.Rejected)
+                    : t.TaskRecordings.Count(tr => tr.Status != TaskRecordingStatus.Skipped),
             t.TaskType == TaskType.Recording
                 ? t.TaskScripts.Count
-                : t.TaskRecordings.Count));
+                : t.TaskType == TaskType.Contribution
+                    ? db.Scripts.Count(s => s.ContributionTaskId == t.TaskId)
+                    : t.TaskRecordings.Count,
+            t.ImportedQty));
+    }
 }

@@ -6,7 +6,14 @@ namespace CodeSwitchLabel.Services.Abstractions;
 public interface IAuthService
 {
     Task<LoginResponse> LoginAsync(LoginRequest request, CancellationToken ct = default);
+    Task<LoginResponse> GoogleLoginAsync(GoogleLoginRequest request, CancellationToken ct = default);
     Task<LoginResponse> RegisterSpeakerAsync(RegisterSpeakerRequest request, CancellationToken ct = default);
+
+    /// <summary>Lưu đồng ý phiên bản điều khoản, kèm bản giấy đã ký nếu có.</summary>
+    Task AcceptConsentAsync(
+        long userId, string version, Stream? document, string? documentName, string? contentType,
+        CancellationToken ct = default);
+
     Task<CurrentUserDto> GetCurrentUserAsync(long userId, CancellationToken ct = default);
 }
 
@@ -22,6 +29,9 @@ public interface IScriptService
     /// <summary>Speaker hoặc Reviewer đóng góp một cặp câu — nằm chờ duyệt nội dung.</summary>
     Task<ScriptDetailDto> ContributeAsync(CreateScriptRequest request, long contributorId, CancellationToken ct = default);
 
+    /// <summary>Đóng góp hoặc báo lỗi thống nhất theo Type, dùng cho POST /api/speaker/scripts/submit.</summary>
+    Task<UnifiedContributionResult> CreateUnifiedAsync(ContributeOrReportRequest request, long userId, CancellationToken ct = default);
+
     /// <summary>
     /// Admin sửa nội dung một cặp câu đang chờ duyệt hoặc đã sẵn sàng, không ghi lượt duyệt
     /// và không đổi trạng thái. Câu đã có bản ghi âm thì không sửa được.
@@ -31,7 +41,9 @@ public interface IScriptService
 
     /// <summary>Nhập hàng loạt từ file input_text.json. Câu hợp lệ vào thẳng đã duyệt kèm lượt duyệt tự động; câu hỏng không làm hỏng cả file.</summary>
     Task<ImportResultDto> ImportAsync(
-        Stream jsonFile, string fileName, long importedById, CancellationToken ct = default);
+        Stream jsonFile, string fileName, long importedById, long? waveId = null, CancellationToken ct = default);
+    Task<ImportResultDto> ImportAsync(
+        Stream jsonFile, string fileName, long importedById, CancellationToken ct);
 
     /// <summary>
     /// Nhập file .txt: mỗi cặp đúng hai dòng (câu trộn, câu thuần Việt).
@@ -40,8 +52,10 @@ public interface IScriptService
     /// Câu hợp lệ vào thẳng đã duyệt như luồng import JSON.
     /// </summary>
     Task<ImportResultDto> ImportRawAsync(
-        Stream textFile, string fileName, long importedById, string domain,
+        Stream textFile, string fileName, long importedById, string domain, long? waveId = null,
         CancellationToken ct = default);
+    Task<ImportResultDto> ImportRawAsync(
+        Stream textFile, string fileName, long importedById, string domain, CancellationToken ct);
 
     /// <summary>Chấp nhận hàng loạt câu đang chờ duyệt của một batch nhập.</summary>
     /// <remarks>
@@ -86,6 +100,13 @@ public interface IScriptAssignmentService
     Task<NextScriptDto?> GetNextAsync(
         long speakerId, long? taskId, IReadOnlyCollection<string>? exclude = null,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Bỏ qua câu đang hiển thị: nhả claim của chính Speaker (nếu còn giữ), đẩy câu
+    /// xuống cuối hàng rồi trả câu kế tiếp. Không đánh dấu câu là đã xong.
+    /// </summary>
+    Task<NextScriptDto?> SkipAsync(
+        long speakerId, string scriptId, long? taskId, CancellationToken ct = default);
 }
 
 public interface ISystemConfigService
@@ -117,10 +138,15 @@ public interface IStatisticsService
 /// <summary>Chiến dịch thu thập — task có thể độc lập (wave_id NULL) rồi gắn sau.</summary>
 public interface IWaveService
 {
+    Task<AvailableScriptsDto> GetAvailableScriptsAsync(string domain, CancellationToken ct = default);
+    Task<AvailableScriptCountDto> GetAvailableScriptCountAsync(string domain, CancellationToken ct = default);
     Task<PagedResult<WaveListItemDto>> SearchAsync(
         WaveSearchRequest request, long? userId, RoleName? userRole, CancellationToken ct = default);
 
     Task<WaveDto> GetAsync(
+        long waveId, long? callerId = null, bool isAdmin = false, CancellationToken ct = default);
+
+    Task<WaveDashboardDto> GetDashboardAsync(
         long waveId, long? callerId = null, bool isAdmin = false, CancellationToken ct = default);
 
     Task<WaveDto> CreateAsync(

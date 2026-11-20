@@ -11,7 +11,8 @@ public class ScriptQueueService(
     IScriptQueueRepository queue,
     IScriptRepository scripts,
     ITaskRepository tasks,
-    ISystemConfigService config) : IScriptQueueService
+    ISystemConfigService config,
+    IScriptProposalService proposals) : IScriptQueueService
 {
     public async Task<ScriptDetailDto?> ClaimNextForTextReviewAsync(
         long reviewerId, long? taskId, CancellationToken ct = default)
@@ -86,7 +87,8 @@ public class ScriptQueueService(
                 new ContributorDto(r.ContributorId, r.ContributorName),
                 r.TaskId is null || cuaToi[r.TaskId.Value]
                     ? ContributionBlocker.None
-                    : ContributionBlocker.AssignedToOtherTask))
+                    : ContributionBlocker.AssignedToOtherTask)
+            { Comment = r.Comment })
             .ToList();
 
         // Lọc sau khi tính chặn: phân trang vẫn chạy trên toàn bộ câu chờ duyệt, nên tổng số
@@ -97,6 +99,58 @@ public class ScriptQueueService(
         }
 
         return new PagedResult<ContributionReviewItemDto>(items, request.Page, request.PageSize, total);
+    }
+
+    /// <summary>
+    /// Lấy thống nhất cả hai loại chờ: câu đóng góp (contribution) và đề xuất báo lỗi (report).
+    /// Dùng cho GET /api/reviewer/pending-items.
+    /// </summary>
+    public async Task<PagedResult<PendingItemDto>> ListUnifiedPendingAsync(
+        long reviewerId, string? type, string? domain, int page, int pageSize, CancellationToken ct = default)
+    {
+        var kind = (type ?? "all").Trim().ToLowerInvariant();
+        if (kind is not ("all" or "contribution" or "report"))
+            throw new UnprocessableException("invalid_type", "type phải là contribution, report hoặc all.");
+
+        var request = new PageRequest { Page = page, PageSize = pageSize };
+        page = request.Page;
+        pageSize = request.PageSize;
+        var take = page * pageSize;
+        var items = new List<PendingItemDto>();
+        var total = 0;
+
+        if (kind is "all" or "contribution")
+        {
+            var (rows, count) = await queue.ListPendingContributionsAsync(domain, 1, take, ct);
+            total += count;
+            var cuaToi = new Dictionary<long, bool>();
+            foreach (var taskId in rows.Where(r => r.TaskId is not null).Select(r => r.TaskId!.Value).Distinct())
+                cuaToi[taskId] = await tasks.IsActiveTaskOfAsync(taskId, reviewerId, TaskType.Review, ct);
+
+            items.AddRange(rows.Select(r => new PendingItemDto(
+                r.ScriptId, "contribution", "pending", r.CsContent, r.ViContent, r.Domain, r.CreatedAt,
+                new ContributorDto(r.ContributorId, r.ContributorName),
+                r.TaskId is null || cuaToi[r.TaskId.Value]
+                    ? ContributionBlocker.None
+                    : ContributionBlocker.AssignedToOtherTask) { Comment = r.Comment }));
+        }
+
+        if (kind is "all" or "report")
+        {
+            var result = await proposals.ListAsync(new ProposalQueueQuery
+            {
+                Kind = ProposalKind.Report, Domain = domain, Page = 1, PageSize = take
+            }, ct);
+            total += result.Total;
+            items.AddRange(result.Items.Select(p => new PendingItemDto(
+                p.ScriptId, "report", p.Status.ToString().ToLowerInvariant(), p.Original.CsContent, p.Original.ViContent,
+                p.Domain, p.CreatedAt, new ContributorDto(p.ProposerId, p.ProposerName), ContributionBlocker.None)
+            { Comment = p.Comment }));
+        }
+
+        var pageItems = items.OrderBy(i => i.CreatedAt).ThenBy(i => i.ScriptId, StringComparer.Ordinal)
+            .Skip((page - 1) * pageSize).Take(pageSize).ToList();
+        return new PagedResult<PendingItemDto>(pageItems, page, pageSize, total);
     }
 
     public async Task<AssignTextBatchResult> ClaimTextBatchAsync(
@@ -147,6 +201,9 @@ public class ScriptQueueService(
         queue.ReleaseAsync(scriptId, stage, QueueState.Queued, deferToBack: true, ct);
     public Task RequeueAsync(string scriptId, QueueStage stage, CancellationToken ct = default) =>
         queue.RequeueAsync(scriptId, stage, ct);
+    public Task<bool> ReleaseClaimOfAsync(
+        string scriptId, QueueStage stage, long userId, CancellationToken ct = default) =>
+        queue.ReleaseClaimOfAsync(scriptId, stage, userId, ct);
 
     public Task<QueueStatsDto> GetStatsAsync(QueueStage stage, CancellationToken ct = default) =>
         queue.GetStatsAsync(stage, ct);

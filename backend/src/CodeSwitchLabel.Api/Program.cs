@@ -36,6 +36,9 @@ builder.Services
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
+builder.Services.Configure<GoogleAuthOptions>(
+    builder.Configuration.GetSection(GoogleAuthOptions.SectionName));
+
 builder.Services
     .AddOptions<ObjectStorageOptions>()
     .Bind(builder.Configuration.GetSection(ObjectStorageOptions.SectionName))

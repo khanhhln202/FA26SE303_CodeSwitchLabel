@@ -14,6 +14,7 @@ public record UserListItemDto(
 
 public record SpeakerProfileDto(
     short? BirthYear,
+    string? BirthPlace,
     string? Province,
     SpeakerRegion? Region,
     decimal? EnglishLevel,
@@ -141,6 +142,9 @@ public record UpdateSpeakerProfileRequest
 {
     [Range(1900, 2100, ErrorMessage = "Năm sinh phải từ 1900 đến 2100.")]
     public short? BirthYear { get; init; }
+
+    [StringLength(100)]
+    public string? BirthPlace { get; init; }
 
     [StringLength(100)]
     public string? Province { get; init; }

@@ -71,7 +71,7 @@ public enum ProposalStatus { Pending, Accepted, Rejected, Deleted }
 /// </summary>
 public enum ScriptWordRelation { SemanticEquivalent, ProperNoun }
 
-public enum TaskType { Recording, Review }
+public enum TaskType { Recording, Contribution, Review }
 
 /// <summary>
 /// Ứng với kiểu task_status. Đặt tên WorkTaskStatus để khỏi lẫn với

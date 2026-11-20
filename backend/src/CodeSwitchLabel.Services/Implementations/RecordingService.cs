@@ -25,6 +25,7 @@ public class RecordingService(
     IRecordingRepository recordings,
     IScriptRepository scripts,
     IScriptProposalRepository proposals,
+    ITaskRepository tasks,
     IObjectStorage storage,
     IAudioProcessor audio,
     ISystemConfigService config,
@@ -152,7 +153,9 @@ public class RecordingService(
         var speakerId = ownerOnlyUserId ?? request.SpeakerId;
 
         var (items, total) = await recordings.SearchAsync(
-            speakerId, request.ScriptId, request.Status, request.Page, request.PageSize,
+            speakerId, request.ScriptId, request.Status,
+            request.From, request.To, request.Domain?.Trim(),
+            request.Page, request.PageSize,
             request.ToSort<RecordingSortField>(), ct);
 
         return new PagedResult<RecordingDto>(
@@ -217,29 +220,49 @@ public class RecordingService(
                 $"Cặp câu {script.ScriptId} đang có đề xuất chờ Reviewer xử lý nên tạm chưa thu âm được.");
         }
 
-        // Mỗi Speaker được thu độc lập: bản đang chờ duyệt/đạt của người khác
-        // không chặn người này, chỉ bản của chính người này mới chặn.
+        // QC thất bại chưa phải bản ghi được chấp nhận vào lịch sử nên cho phép thu lại.
+        // Bản đang chờ/đạt hoặc bị Reviewer từ chối đã là một lần thu của Speaker này;
+        // câu bị từ chối phải quay lại task cho Speaker khác.
         if (await recordings.HasActiveRecordingAsync(
-                command.ScriptId, command.SentenceVariant, command.SpeakerId, ct))
+                command.ScriptId, command.SentenceVariant, command.SpeakerId, ct) ||
+            await recordings.GetRejectedTakeAsync(
+                command.ScriptId, command.SentenceVariant, command.SpeakerId, ct) is not null)
         {
             throw new ConflictException(
-                "recording_already_exists",
-                $"Bạn đã có bản {command.SentenceVariant} đang chờ duyệt hoặc đã được duyệt cho cặp câu {command.ScriptId}.");
+                "recording_already_attempted",
+                $"Bạn đã nộp biến thể {command.SentenceVariant} của cặp câu {command.ScriptId}; mỗi Speaker chỉ được thử một lần.");
         }
 
         if (command.TaskId.HasValue)
         {
             // Hàng đợi phát theo chiến dịch nên cặp câu có thể đến từ task khác trong đợt.
             // Gắn bản ghi vào đúng task chứa cặp, không mặc định task client gửi lên.
-            return await recordings.FindRecordableTaskIdAsync(
-                       command.TaskId.Value, command.SpeakerId, command.ScriptId, ct)
-                   ?? throw new ForbiddenException(
-                       "task_not_recordable",
-                       $"Task #{command.TaskId} không phải task thu âm đang giao cho bạn, hoặc cặp câu không thuộc chiến dịch của task.");
+            var taskId = await recordings.FindRecordableTaskIdAsync(
+                               command.TaskId.Value, command.SpeakerId, command.ScriptId, ct)
+                           ?? throw new ForbiddenException(
+                               "task_not_recordable",
+                               $"Task #{command.TaskId} không phải task thu âm đang giao cho bạn, hoặc cặp câu không thuộc chiến dịch của task.");
+
+            return await EnsureBeforeDeadlineAsync(taskId, ct);
         }
 
         // Không gửi taskId nhưng cặp câu lại đang nằm trong task của chính người này thì tự gắn vào task.
-        return await recordings.FindOwnTaskContainingScriptAsync(command.SpeakerId, command.ScriptId, ct);
+        var ownTaskId = await recordings.FindOwnTaskContainingScriptAsync(
+            command.SpeakerId, command.ScriptId, ct);
+
+        return ownTaskId.HasValue ? await EnsureBeforeDeadlineAsync(ownTaskId.Value, ct) : null;
+    }
+
+    private async Task<long?> EnsureBeforeDeadlineAsync(long taskId, CancellationToken ct)
+    {
+        if (await tasks.IsHardLockedAsync(taskId, clock.GetUtcNow(), ct))
+        {
+            throw new ConflictException(
+                "task_deadline_passed",
+                $"Task #{taskId} đã quá hạn và bị khóa nộp. Nhờ Task Manager gia hạn.");
+        }
+
+        return taskId;
     }
 
     private async Task<int> NextTakeAsync(UploadRecordingCommand command, CancellationToken ct)
