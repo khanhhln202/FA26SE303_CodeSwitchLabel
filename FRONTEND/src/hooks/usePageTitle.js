@@ -35,7 +35,6 @@ export const PAGE_TITLES = {
 
   // --- TASK MANAGER ---
   '/task-manager': 'Trang chủ',
-  '/task-manager/dashboard': 'Bảng điều khiển',
   '/task-manager/management': 'Quản lý nhiệm vụ',
   '/task-manager/profile': 'Hồ sơ cá nhân',
 
