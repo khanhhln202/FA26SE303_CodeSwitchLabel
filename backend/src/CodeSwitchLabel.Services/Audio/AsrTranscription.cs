@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
@@ -9,6 +10,11 @@ using Microsoft.Extensions.Options;
 namespace CodeSwitchLabel.Services.Audio;
 
 public record AsrResult(string Text, string Model);
+
+public record AsrSegment(decimal StartSec, decimal EndSec, string Text);
+
+/// <summary>Transcript kèm mốc thời gian. Segments rỗng khi nhà cung cấp chỉ trả text.</summary>
+public record AsrTranscript(string Text, string Model, IReadOnlyList<AsrSegment> Segments);
 
 /// <summary>
 /// Chuyển một file âm thanh thành chữ. Tầng nghiệp vụ chỉ biết interface này, nên đổi
@@ -29,11 +35,24 @@ public interface IAsrClient
 }
 
 /// <summary>
+/// Phiên âm kèm mốc thời gian, dùng cho corpus hội thoại. Cố ý TÁCH khỏi <see cref="IAsrClient"/>:
+/// luồng này chỉ gọi dịch vụ cục bộ đã cấu hình, không lùi sang nhà cung cấp dự phòng.
+/// </summary>
+public interface ITimedAsrClient
+{
+    bool IsConfigured { get; }
+
+    /// <summary>Nhận đường dẫn thay vì byte[] để video dài không phải nằm cả trong bộ nhớ.</summary>
+    Task<AsrTranscript> TranscribeFileAsync(string filePath, CancellationToken ct = default);
+}
+
+/// <summary>
 /// Gọi endpoint OpenAI-compatible <c>/audio/transcriptions</c> bằng HttpClient thuần —
 /// không thêm package nào, cùng cách LabelingService gọi /chat/completions.
 /// </summary>
 public class WhisperAsrClient(
-    HttpClient http, IOptions<AsrOptions> options, ILogger<WhisperAsrClient> logger) : IAsrClient
+    HttpClient http, IOptions<AsrOptions> options, ILogger<WhisperAsrClient> logger)
+    : IAsrClient, ITimedAsrClient
 {
     /// <summary>Chờ bao lâu khi nhà cung cấp không nói rõ.</summary>
     private static readonly TimeSpan DefaultRetryAfter = TimeSpan.FromSeconds(3);
@@ -60,21 +79,10 @@ public class WhisperAsrClient(
 
     public async Task<AsrResult> TranscribeAsync(byte[] audio, string fileName, CancellationToken ct = default)
     {
-        if (!IsConfigured)
-        {
-            throw new UnprocessableException(
-                "asr_not_configured",
-                "Chưa cấu hình Asr:Endpoint và Asr:Model nên không chuyển được âm thanh thành chữ.");
-        }
-
-        if (audio.Length == 0)
-        {
-            throw new UnprocessableException(
-                "asr_empty_audio", "File âm thanh rỗng, không có gì để nhận dạng.");
-        }
+        EnsureUsable(audio.Length == 0);
 
         var url = $"{Options.Endpoint.TrimEnd('/')}/audio/transcriptions";
-        var body = await RequestAsync(url, audio, fileName, ct);
+        var body = await RequestAsync(url, () => new ByteArrayContent(audio), fileName, "json", ct);
         var text = ReadText(body);
 
         if (string.IsNullOrWhiteSpace(text))
@@ -87,8 +95,41 @@ public class WhisperAsrClient(
         return new AsrResult(text ?? string.Empty, Options.Model);
     }
 
+    public async Task<AsrTranscript> TranscribeFileAsync(string filePath, CancellationToken ct = default)
+    {
+        EnsureUsable(emptyAudio: false);
+
+        var url = $"{Options.Endpoint.TrimEnd('/')}/audio/transcriptions";
+        var body = await RequestAsync(
+            url,
+            () => new StreamContent(File.OpenRead(filePath)),
+            Path.GetFileName(filePath),
+            "verbose_json",
+            ct);
+
+        return ReadTranscript(body);
+    }
+
+    private void EnsureUsable(bool emptyAudio)
+    {
+        if (!IsConfigured)
+        {
+            throw new UnprocessableException(
+                "asr_not_configured",
+                "Chưa cấu hình Asr:Endpoint và Asr:Model nên không chuyển được âm thanh thành chữ.");
+        }
+
+        if (emptyAudio)
+        {
+            throw new UnprocessableException(
+                "asr_empty_audio", "File âm thanh rỗng, không có gì để nhận dạng.");
+        }
+    }
+
     /// <summary>Một lần thử lại cho lỗi mạng, quá hạn và 5xx; 4xx là lỗi cấu hình hoặc dữ liệu, không thử.</summary>
-    private async Task<string> RequestAsync(string url, byte[] audio, string fileName, CancellationToken ct)
+    private async Task<string> RequestAsync(
+        string url, Func<HttpContent> createAudio, string fileName, string responseFormat,
+        CancellationToken ct)
     {
         for (var attempt = 1; ; attempt++)
         {
@@ -99,11 +140,11 @@ public class WhisperAsrClient(
             {
                 // Dựng lại form mỗi lượt: HttpContent đã gửi một lần thì không gửi lại được.
                 using var form = new MultipartFormDataContent();
-                var file = new ByteArrayContent(audio);
+                var file = createAudio();
                 file.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
                 AddPart(form, file, "file", fileName);
                 AddPart(form, new StringContent(Options.Model), "model");
-                AddPart(form, new StringContent("json"), "response_format");
+                AddPart(form, new StringContent(responseFormat), "response_format");
 
                 if (!string.IsNullOrWhiteSpace(Options.Language))
                 {
@@ -252,6 +293,58 @@ public class WhisperAsrClient(
             throw new UnprocessableException(
                 "asr_parse_error", $"Phản hồi nhận dạng không phải JSON: {Truncate(body)}");
         }
+    }
+
+    /// <summary>
+    /// Phản hồi verbose_json: {"text":"...","segments":[{"start":0.0,"end":1.2,"text":"..."}]}.
+    /// Nhà cung cấp không trả segments thì để danh sách rỗng — tầng trên tự quyết định.
+    /// </summary>
+    private AsrTranscript ReadTranscript(string body)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            var root = document.RootElement;
+
+            var text = root.TryGetProperty("text", out var textElement)
+                ? textElement.GetString() ?? string.Empty
+                : string.Empty;
+
+            var segments = new List<AsrSegment>();
+            if (root.TryGetProperty("segments", out var array)
+                && array.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in array.EnumerateArray())
+                {
+                    var start = ReadNumber(item, "start");
+                    var end = ReadNumber(item, "end");
+                    var content = item.TryGetProperty("text", out var t) ? t.GetString()?.Trim() : null;
+
+                    if (start is null || end is null || end <= start || string.IsNullOrWhiteSpace(content))
+                        continue;
+
+                    segments.Add(new AsrSegment(start.Value, end.Value, content));
+                }
+            }
+
+            return new AsrTranscript(text, Options.Model, segments);
+        }
+        catch (JsonException)
+        {
+            throw new UnprocessableException(
+                "asr_parse_error", $"Phản hồi nhận dạng không phải JSON: {Truncate(body)}");
+        }
+    }
+
+    private static decimal? ReadNumber(JsonElement element, string name)
+    {
+        if (!element.TryGetProperty(name, out var value)) return null;
+
+        var raw = value.ValueKind == JsonValueKind.String ? value.GetString() : value.GetRawText();
+
+        return decimal.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var number)
+            ? number
+            : null;
     }
 
     private static string Truncate(string value) =>

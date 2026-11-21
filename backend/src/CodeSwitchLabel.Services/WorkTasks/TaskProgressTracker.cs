@@ -265,10 +265,13 @@ public class TaskProgressTracker(
 
         foreach (var id in taskIds)
         {
-            foreach (var item in replacedItems.Where(i => i.TaskId == id))
+            var taskReplacements = replacedItems.Where(i => i.TaskId == id).ToList();
+            foreach (var item in taskReplacements)
                 await tasks.PromoteBufferScriptAsync(id, item.AssigneeUserId, ct);
 
-            await tasks.SaveChangesAsync(ct);
+            if (taskReplacements.Count > 0)
+                await tasks.SaveChangesAsync(ct);
+
             await RefreshStatusAsync(id, ct);
 
             // Nếu task Done < TargetQty sau khi xoá cặp, lấp thêm từ buffer của đợt.

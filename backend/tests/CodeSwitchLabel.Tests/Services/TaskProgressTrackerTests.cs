@@ -486,9 +486,7 @@ public sealed class TaskProgressTrackerTests
         };
         var task8 = Task(id: 8, status: WorkTaskStatus.InProgress);
 
-        _tasks.Setup(t => t.GetPendingScriptItemsAsync(scriptId, It.IsAny<CancellationToken>()))
-            .ReturnsAsync([]);
-        _tasks.Setup(t => t.GetCompletedScriptItemsAsync(scriptId, It.IsAny<CancellationToken>()))
+        _tasks.Setup(t => t.GetTaskScriptItemsAsync(scriptId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
         _tasks.Setup(t => t.GetQueuedRecordingItemsByScriptAsync(scriptId, It.IsAny<CancellationToken>()))
             .ReturnsAsync([queuedItem]);

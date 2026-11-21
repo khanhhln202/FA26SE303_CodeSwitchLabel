@@ -120,6 +120,12 @@ public enum DatasetStatus { Draft, Released, Archived }
 public enum DatasetFileFormat { Json, Csv }
 
 /// <summary>
+/// Vòng đời một video nguồn của corpus hội thoại. Processing là job đang tải/phiên âm;
+/// Failed chỉ sau khi hết số lần thử, Admin hoặc người gửi bấm thử lại để đưa về Queued.
+/// </summary>
+public enum SourceVideoStatus { Queued, Processing, ReadyForReview, InReview, Approved, Failed }
+
+/// <summary>
 /// Vai trò lưu trong bảng role dưới dạng chuỗi ('speaker', 'task_manager'...), không phải kiểu ENUM.
 /// Dùng enum ở tầng code để [Authorize(Roles = "...")] và switch không bị gõ sai chuỗi.
 /// </summary>

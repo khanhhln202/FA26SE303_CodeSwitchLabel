@@ -59,6 +59,11 @@ builder.Services.Configure<LlmOptions>(
 builder.Services.Configure<AsrOptions>(
     builder.Configuration.GetSection(AsrOptions.SectionName));
 
+// Corpus hội thoại: yt-dlp + ffmpeg + ASR cục bộ. Thiếu yt-dlp thì API vẫn chạy,
+// chỉ job tải video ghi lỗi vào hàng của nó.
+builder.Services.Configure<SourceCorpusOptions>(
+    builder.Configuration.GetSection(SourceCorpusOptions.SectionName));
+
 // ---------------------------------------------------------------- dịch vụ
 
 builder.Services.AddCodeSwitchLabel(connectionString);
@@ -119,6 +124,9 @@ builder.Services
 // nhưng nó chỉ thật sự làm gì khi ai_review.auto_enabled = true trong cấu hình hệ thống —
 // nên deploy bản này KHÔNG tự đổi hành vi của máy chủ.
 builder.Services.AddHostedService<AiReviewWorker>();
+
+// Tải audio YouTube + phiên âm cho corpus hội thoại. Chạy tuần tự từng video.
+builder.Services.AddHostedService<SourceVideoWorker>();
 
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();

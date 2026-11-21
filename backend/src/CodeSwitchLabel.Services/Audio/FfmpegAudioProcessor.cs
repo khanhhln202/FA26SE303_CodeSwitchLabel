@@ -19,7 +19,9 @@ public sealed class FfmpegAudioProcessor(
 {
     private readonly AudioOptions _options = options.Value;
 
-    public async Task ConvertToWavAsync(string inputPath, string outputPath, CancellationToken ct = default)
+    public async Task ConvertToWavAsync(
+        string inputPath, string outputPath, CancellationToken ct = default,
+        int? timeoutSeconds = null)
     {
         await RunAsync(_options.FfmpegPath,
         [
@@ -31,11 +33,41 @@ public sealed class FfmpegAudioProcessor(
             "-ar", _options.TargetSampleRate.ToString(CultureInfo.InvariantCulture),
             "-c:a", "pcm_s16le",                    // WAV 16-bit không nén
             outputPath
-        ], ct);
+        ], ct, timeoutSeconds);
 
         if (!File.Exists(outputPath) || new FileInfo(outputPath).Length == 0)
         {
             throw new AudioProcessingException("ffmpeg chạy xong nhưng không sinh ra file WAV.");
+        }
+    }
+
+    public async Task CutAsync(
+        string inputPath, string outputPath, decimal startSec, decimal endSec,
+        CancellationToken ct = default)
+    {
+        if (endSec <= startSec)
+        {
+            throw new AudioProcessingException("Mốc kết thúc phải sau mốc bắt đầu.");
+        }
+
+        // -ss trước -i để tua nhanh; -t là độ dài nên không phụ thuộc mốc tua.
+        await RunAsync(_options.FfmpegPath,
+        [
+            "-hide_banner", "-loglevel", "error",
+            "-y",
+            "-ss", startSec.ToString("0.###", CultureInfo.InvariantCulture),
+            "-i", inputPath,
+            "-t", (endSec - startSec).ToString("0.###", CultureInfo.InvariantCulture),
+            "-vn",
+            "-ac", _options.TargetChannels.ToString(CultureInfo.InvariantCulture),
+            "-ar", _options.TargetSampleRate.ToString(CultureInfo.InvariantCulture),
+            "-c:a", "pcm_s16le",
+            outputPath
+        ], ct);
+
+        if (!File.Exists(outputPath) || new FileInfo(outputPath).Length == 0)
+        {
+            throw new AudioProcessingException("ffmpeg chạy xong nhưng không sinh ra file clip.");
         }
     }
 
@@ -100,15 +132,18 @@ public sealed class FfmpegAudioProcessor(
         return FfmpegOutputParser.ParseSignalMetrics(stderr, durationSec);
     }
 
-    private async Task<string> RunAsync(string fileName, IReadOnlyList<string> arguments, CancellationToken ct) =>
-        (await RunCaptureAsync(fileName, arguments, ct)).Stdout;
+    private async Task<string> RunAsync(
+        string fileName, IReadOnlyList<string> arguments, CancellationToken ct,
+        int? timeoutSeconds = null) =>
+        (await RunCaptureAsync(fileName, arguments, ct, timeoutSeconds)).Stdout;
 
     /// <summary>
     /// Chạy công cụ và trả về CẢ stdout lẫn stderr: ffmpeg in kết quả bộ lọc
     /// (silencedetect, volumedetect) ra stderr nên phải đọc được luồng này.
     /// </summary>
     private async Task<(string Stdout, string Stderr)> RunCaptureAsync(
-        string fileName, IReadOnlyList<string> arguments, CancellationToken ct)
+        string fileName, IReadOnlyList<string> arguments, CancellationToken ct,
+        int? timeoutSeconds = null)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -148,8 +183,10 @@ public sealed class FfmpegAudioProcessor(
         var stdoutTask = process.StandardOutput.ReadToEndAsync(ct);
         var stderrTask = process.StandardError.ReadToEndAsync(ct);
 
+        var limitSeconds = timeoutSeconds ?? _options.ProcessTimeoutSeconds;
+
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(TimeSpan.FromSeconds(_options.ProcessTimeoutSeconds));
+        timeout.CancelAfter(TimeSpan.FromSeconds(limitSeconds));
 
         try
         {
@@ -162,7 +199,7 @@ public sealed class FfmpegAudioProcessor(
             if (ct.IsCancellationRequested) throw;
 
             throw new AudioProcessingException(
-                $"{Path.GetFileName(fileName)} chạy quá {_options.ProcessTimeoutSeconds} giây nên đã bị dừng.");
+                $"{Path.GetFileName(fileName)} chạy quá {limitSeconds} giây nên đã bị dừng.");
         }
 
         var stdout = await stdoutTask;

@@ -23,6 +23,7 @@ public static class ApiTags
     public const string Statistics = "Dashboard & Statistics";
     public const string Users = "Users";
     public const string AiReview = "AI Review";
+    public const string SourceCorpus = "Source Corpus";
 
     /// <summary>Thứ tự các nhóm trên Swagger, kèm một dòng mô tả hiện cạnh tên nhóm.</summary>
     public static readonly IReadOnlyList<(string Name, string Description)> Ordered =
@@ -37,6 +38,7 @@ public static class ApiTags
         (Recordings, "Nộp bản ghi âm, tra cứu, lấy link nghe"),
         (Reviews, "Ba lượt duyệt mù cho mỗi bản ghi, tiến độ người duyệt"),
         (AiReview, "Máy duyệt bản ghi: so transcript ASR với văn bản, bỏ phiếu hoặc bỏ quyền"),
+        (SourceCorpus, "Corpus hội thoại từ YouTube: gửi link, duyệt câu, xuất ZIP"),
         (Tasks, "Tạo task, giao việc, theo dõi tiến độ"),
         (Waves, "Đợt thu thập: đơn vị kế hoạch cha của mọi task"),
         (Statistics, "Số liệu tổng quan và chất lượng dữ liệu"),

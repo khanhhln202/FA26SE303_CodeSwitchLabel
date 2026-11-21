@@ -23,9 +23,19 @@ RUN dotnet publish src/CodeSwitchLabel.Api/CodeSwitchLabel.Api.csproj -c Release
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble AS runtime
 
 # ffmpeg và ffprobe: chuyển mọi định dạng trình duyệt ghi ra sang WAV 16 kHz mono, rồi đo thời lượng.
+# ffmpeg/ffprobe: chuẩn hoá WAV 16 kHz mono và cắt clip corpus.
+# yt-dlp: tải audio YouTube. Cài bản mới nhất vì YouTube đổi liên tục; bản trong apt hay cũ.
+# Deno: runtime JavaScript mà yt-dlp cần để giải mã đầy đủ video YouTube.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg \
+    && apt-get install -y --no-install-recommends ffmpeg curl ca-certificates unzip \
+    && curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
+        -o /usr/local/bin/yt-dlp \
+    && chmod +x /usr/local/bin/yt-dlp \
+    && curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh \
     && rm -rf /var/lib/apt/lists/*
+
+# Người dùng app không có HOME ghi được; đặt cache vào /tmp.
+ENV DENO_DIR=/tmp/deno XDG_CACHE_HOME=/tmp/cache
 
 WORKDIR /app
 COPY --from=build /app .
