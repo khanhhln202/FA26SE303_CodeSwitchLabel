@@ -17,6 +17,7 @@ public sealed class FfmpegAudioProcessor(
     IOptions<AudioOptions> options,
     ILogger<FfmpegAudioProcessor> logger) : IAudioProcessor
 {
+    private static readonly SemaphoreSlim ProcessSlots = new(2, 2);
     private readonly AudioOptions _options = options.Value;
 
     public async Task ConvertToWavAsync(
@@ -144,6 +145,21 @@ public sealed class FfmpegAudioProcessor(
     private async Task<(string Stdout, string Stderr)> RunCaptureAsync(
         string fileName, IReadOnlyList<string> arguments, CancellationToken ct,
         int? timeoutSeconds = null)
+    {
+        await ProcessSlots.WaitAsync(ct);
+        try
+        {
+            return await RunCaptureCoreAsync(fileName, arguments, ct, timeoutSeconds);
+        }
+        finally
+        {
+            ProcessSlots.Release();
+        }
+    }
+
+    private async Task<(string Stdout, string Stderr)> RunCaptureCoreAsync(
+        string fileName, IReadOnlyList<string> arguments, CancellationToken ct,
+        int? timeoutSeconds)
     {
         var startInfo = new ProcessStartInfo
         {
