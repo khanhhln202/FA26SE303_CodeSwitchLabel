@@ -353,7 +353,8 @@ public class SourceVideoService(
                 {
                     start = decimal.ToInt64(decimal.Round(s.StartSec * 1000, 0)),
                     end = decimal.ToInt64(decimal.Round(s.EndSec * 1000, 0)),
-                    text = s.Text
+                    text = s.Text,
+                    language = s.Language
                 }).ToList();
                 var json = JsonSerializer.Serialize(new
                 {

@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Text.Json;
 using CodeSwitchLabel.Repositories.Entities;
 using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Services.Abstractions;
@@ -47,7 +48,7 @@ public sealed class SourceCorpusServiceTests : IntegrationTestBase
     }
 
     [Fact]
-    public async Task Duyet_CatClipRoiMoiXuatHienTrongManifest()
+    public async Task Duyet_CatClipRoiMoiXuatHienTrongExportTheoVideo()
     {
         var ct = TestContext.Current.CancellationToken;
         var video = await SeedReadyVideoAsync("abcdefghijk", ct);
@@ -92,19 +93,21 @@ public sealed class SourceCorpusServiceTests : IntegrationTestBase
         file.Content.Position = 0;
 
         using var zip = new ZipArchive(file.Content, ZipArchiveMode.Read);
-        Assert.NotNull(zip.GetEntry("manifest.jsonl"));
-        Assert.NotNull(zip.GetEntry($"clips/{video.SourceVideoId}_0001.wav"));
-        Assert.NotNull(zip.GetEntry($"clips/{video.SourceVideoId}_0002.wav"));
+        var jsonEntry = zip.Entries.Single(e => e.FullName.EndsWith(
+            $"/{video.SourceVideoId:D3}/video{video.SourceVideoId}.json", StringComparison.Ordinal));
+        var prefix = jsonEntry.FullName[..^5];
+        Assert.NotNull(zip.GetEntry($"{prefix}.srt"));
+        Assert.NotNull(zip.GetEntry($"{prefix}.tsv"));
+        Assert.NotNull(zip.GetEntry($"{prefix}.txt"));
+        Assert.NotNull(zip.GetEntry($"{prefix}.vtt"));
+        Assert.NotNull(zip.GetEntry($"{prefix}.wav"));
 
-        using var reader = new StreamReader(zip.GetEntry("manifest.jsonl")!.Open());
-        var lines = (await reader.ReadToEndAsync(ct))
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries);
-
-        Assert.Equal(2, lines.Length);
-        Assert.Contains("\"language\":\"vi\"", lines[0]);
-        Assert.Contains("\"language\":\"en\"", lines[1]);
-        Assert.Contains(
-            $"\"youtubeUrl\":\"https://www.youtube.com/watch?v=abcdefghijk\"", lines[0]);
+        using var json = await JsonDocument.ParseAsync(jsonEntry.Open(), cancellationToken: ct);
+        var exportedSegments = json.RootElement.GetProperty("segments").EnumerateArray().ToList();
+        Assert.Equal(2, exportedSegments.Count);
+        Assert.Equal("vi", exportedSegments[0].GetProperty("language").GetString());
+        Assert.Equal("en", exportedSegments[1].GetProperty("language").GetString());
+        Assert.Equal("Xin chào", exportedSegments[0].GetProperty("text").GetString());
     }
 
     [Fact]
