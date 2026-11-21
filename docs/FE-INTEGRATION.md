@@ -1284,3 +1284,61 @@ POST /api/reviewer/proposals/12/resolve
 - **Không đổi được số từ tiếng Anh.** Số từ nằm trong mã câu (`en_word_count`), muốn đổi phải tạo cặp câu mới. Bản sửa chỉ nên đổi **lời dịch / lời câu**, giữ nguyên số nhãn `[en]`.
 
 Hàng chờ đề xuất dùng chung nếp đọc trang như các danh sách khác: `?page&pageSize` (max 100) + `?sort=&dir=`.
+
+## 13. Corpus hội thoại từ YouTube (V37)
+
+Tính năng riêng, **không dùng bảng `recording`** và không ép dữ liệu về cặp câu `[cs, vi]`.
+Mỗi video là một hàng `source_video`; mỗi câu đã tách là một hàng `source_segment`.
+
+### 13.1 Luồng
+
+```text
+Speaker/TaskManager/Admin: POST /api/source-videos { youtubeUrl }
+  -> 201 Queued (trả về ngay, không chờ tải)
+  -> worker nền: yt-dlp tải audio -> ffmpeg chuẩn hoá WAV 16 kHz mono
+     -> ASR cục bộ verbose_json -> lưu transcript + segments
+  -> ReadyForReview
+Reviewer: GET /api/reviewer/source-videos/next   (giữ 1 video/lần)
+  -> sửa text / startSec / endSec / language (vi|en)
+  -> PUT /api/reviewer/source-videos/{id}/segments
+  -> POST /api/reviewer/source-videos/{id}/approve
+     (cắt từng clip WAV, đẩy kho, rồi mới Approved)
+Admin: GET /api/admin/source-corpus/export -> ZIP
+  manifest.jsonl + clips/{sourceVideoId}_{position}.wav
+```
+
+### 13.2 Endpoint
+
+| Method | Route | Vai | Ghi chú |
+|---|---|---|---|
+| POST | `/api/source-videos` | Speaker, TaskManager, Admin | Body `{ youtubeUrl }`. Chỉ một video; playlist bị từ chối `422 invalid_youtube_url`. Trùng video `409 source_video_exists`. |
+| GET | `/api/source-videos/{id}` | người gửi, Admin | Tiến độ + lỗi + `audioUrl` (link tạm) + `segments`. |
+| GET | `/api/reviewer/source-videos/next` | Reviewer | `204` khi hàng đợi rỗng. Mỗi Reviewer giữ tối đa một video. |
+| PUT | `/api/reviewer/source-videos/{id}/segments` | Reviewer | Ghi đè toàn bộ danh sách câu. Body `{ segments: [{ startSec, endSec, text, language }] }`; `language` = `"vi"`, `"en"` hoặc `null`. |
+| POST | `/api/reviewer/source-videos/{id}/approve` | Reviewer | Mọi câu phải có nhãn `vi`/`en`, nếu không `422 source_segment_language_required`. |
+| GET | `/api/admin/source-videos` | Admin | `?page&pageSize&status`. `status` là enum PascalCase. |
+| POST | `/api/admin/source-videos/{id}/retry` | Admin | Chỉ job `Failed`; đưa về `Queued`, đặt lại số lần thử. |
+| GET | `/api/admin/source-corpus/export` | Admin | ZIP toàn bộ video `Approved`. |
+
+### 13.3 Trạng thái job
+
+`Queued` → `Processing` → `ReadyForReview` → `InReview` → `Approved`; lỗi quá số lần thử → `Failed`.
+`InReview` quá hạn giữ (`SourceCorpus:ClaimMinutes`) tự quay lại hàng đợi.
+Lỗi hay gặp: `source_video_unavailable` (video riêng tư/bị chặn/đã xoá), `source_download_timeout`,
+`source_transcript_empty`, `asr_not_configured`.
+
+### 13.4 Hợp đồng dữ liệu
+
+- `sourceVideoId`, `sourceSegmentId` là **số**; thời gian là **giây**, tối đa 3 chữ số thập phân.
+- Enum trả **PascalCase**: `"Queued"`, `"Processing"`, `"ReadyForReview"`, `"InReview"`, `"Approved"`, `"Failed"`.
+- `segments` trong `PUT` không có `position`; thứ tự mảng chính là thứ tự câu. Mốc thời gian không được chồng nhau.
+- `audioUrl` là link tạm hết hạn (mặc định 15 phút); hết hạn thì gọi lại `GET` để lấy link mới.
+- ZIP chỉ chứa video đã duyệt; `manifest.jsonl` mỗi dòng một câu:
+  `sourceVideoId, youtubeUrl, title, sourceDurationSec, position, startSec, endSec, text, language, clipFile`.
+
+### 13.5 Triển khai
+
+API cần `yt-dlp`, `ffmpeg` và một JavaScript runtime (mặc định `deno`) trong máy chủ.
+Dockerfile đã cài cả ba; chạy tay thì cài `yt-dlp` + `deno` và để trong PATH, hoặc chỉnh
+`SourceCorpus:YtDlpPath` / `SourceCorpus:JsRuntimes`. Máy chủ cần Internet để tải YouTube;
+ASR vẫn là dịch vụ cục bộ đã cấu hình ở `Asr:Endpoint` — **không** lùi sang nhà cung cấp khác.

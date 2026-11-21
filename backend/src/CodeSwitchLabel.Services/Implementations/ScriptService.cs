@@ -153,7 +153,8 @@ public class ScriptService(
     }
 
     public async Task<ImportResultDto> ImportAsync(
-        Stream jsonFile, string fileName, long importedById, long? waveId = null, CancellationToken ct = default)
+        Stream jsonFile, string fileName, long importedById, long? waveId = null, CancellationToken ct = default,
+        string? batchName = null)
     {
         var cap = await config.GetIntAsync(ConfigKeys.ImportMaxScriptsPerBatch, 100_000, ct);
         var items = await ReadItemsAsync(jsonFile, cap, ct);
@@ -163,7 +164,7 @@ public class ScriptService(
             throw new UnprocessableException("empty_file", "File không có câu nào để nhập.");
         }
 
-        return await ImportCoreAsync(items, [], fileName, importedById, false, waveId, ct);
+        return await ImportCoreAsync(items, [], fileName, batchName, importedById, false, waveId, ct);
     }
 
     public Task<ImportResultDto> ImportAsync(
@@ -172,7 +173,7 @@ public class ScriptService(
 
     public async Task<ImportResultDto> ImportRawAsync(
         Stream textFile, string fileName, long importedById, string domain, long? waveId = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default, string? batchName = null)
     {
         if (string.IsNullOrWhiteSpace(domain))
         {
@@ -221,7 +222,7 @@ public class ScriptService(
             }
         }
 
-        return await ImportCoreAsync(items, skipped, fileName, importedById, allowEmptyTargets, waveId, ct);
+        return await ImportCoreAsync(items, skipped, fileName, batchName, importedById, allowEmptyTargets, waveId, ct);
     }
 
     public Task<ImportResultDto> ImportRawAsync(
@@ -230,10 +231,11 @@ public class ScriptService(
 
     private async Task<ImportResultDto> ImportCoreAsync(
         List<ImportScriptItem> items, List<ImportSkippedDto> skipped,
-        string fileName, long importedById, bool allowEmptyTargets, long? waveId, CancellationToken ct)
+        string fileName, string? batchName, long importedById, bool allowEmptyTargets, long? waveId, CancellationToken ct)
     {
         var maxEnglishWords = await config.GetIntAsync(ConfigKeys.ScriptMaxEnglishWords, 5, ct);
         var safeName = SanitizeFileName(fileName);
+        var safeBatchName = SanitizeBatchName(batchName, safeName);
 
         await using var transaction = await repository.BeginTransactionAsync(ct);
 
@@ -241,6 +243,7 @@ public class ScriptService(
         {
             ImportedBy = importedById,
             FileName = safeName,
+            BatchName = safeBatchName,
             ScriptCount = 0,
             CreatedAt = clock.GetUtcNow()
         };
@@ -378,7 +381,7 @@ public class ScriptService(
             await repository.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
 
-            return new ImportResultDto(batch.BatchId, safeName, 0, imported, skipped);
+            return new ImportResultDto(batch.BatchId, safeBatchName, safeName, 0, imported, skipped);
         }
 
         batch.ScriptCount = imported.Count;
@@ -393,7 +396,7 @@ public class ScriptService(
         await repository.AutoValidateAsync(imported, importedById, clock.GetUtcNow(), ct);
         await transaction.CommitAsync(ct);
 
-        return new ImportResultDto(batch.BatchId, safeName, imported.Count, imported, skipped);
+        return new ImportResultDto(batch.BatchId, safeBatchName, safeName, imported.Count, imported, skipped);
     }
 
     public async Task<PagedResult<ImportBatchDto>> ListBatchesAsync(PageRequest request, CancellationToken ct = default)
@@ -402,7 +405,7 @@ public class ScriptService(
             request.Page, request.PageSize, request.ToSort<ImportBatchSortField>(), ct);
 
         return new PagedResult<ImportBatchDto>(
-            [.. items.Select(b => new ImportBatchDto(b.BatchId, b.FileName, b.ScriptCount, b.ImportedBy, b.CreatedAt))],
+            [.. items.Select(b => new ImportBatchDto(b.BatchId, b.BatchName, b.FileName, b.ScriptCount, b.ImportedBy, b.CreatedAt))],
             request.Page, request.PageSize, total);
     }
 
@@ -413,7 +416,7 @@ public class ScriptService(
 
         var scriptIds = await repository.GetScriptIdsByBatchAsync(batchId, ct);
 
-        return new ImportBatchDetailDto(batch.BatchId, batch.FileName, batch.ScriptCount, batch.ImportedBy, batch.CreatedAt, scriptIds);
+        return new ImportBatchDetailDto(batch.BatchId, batch.BatchName, batch.FileName, batch.ScriptCount, batch.ImportedBy, batch.CreatedAt, scriptIds);
     }
 
     /// <summary>Accept pending scripts in an imported batch.</summary>
@@ -467,6 +470,12 @@ public class ScriptService(
         }
 
         return name;
+    }
+
+    private static string SanitizeBatchName(string? batchName, string fallback)
+    {
+        var name = string.IsNullOrWhiteSpace(batchName) ? fallback : batchName.Trim();
+        return name.Length <= 200 ? name : name[..200];
     }
 
     private static bool IsUniqueViolation(DbUpdateException ex)

@@ -24,7 +24,7 @@ CREATE TYPE wave_status         AS ENUM ('open','in_progress','completed');
 CREATE TYPE task_status           AS ENUM ('in_progress','completed','cancelled');
 -- 'completed' = người nhận đã đạt quota riêng; lượt giao vẫn còn hiệu lực (xem V17).
 CREATE TYPE assignment_status     AS ENUM ('active','completed','reassigned','cancelled');
-CREATE TYPE task_script_status    AS ENUM ('pending','completed','rejected');
+CREATE TYPE task_script_status    AS ENUM ('pending','completed','rejected','buffer');
 CREATE TYPE sentence_variant      AS ENUM ('code_switching','pure_vietnamese');
 CREATE TYPE recording_status      AS ENUM ('qc_failed','pending_review','approved','rejected');
 CREATE TYPE task_recording_status AS ENUM ('queued','reviewed','skipped');
@@ -44,6 +44,11 @@ CREATE TYPE proposal_kind         AS ENUM ('report','edit');
 CREATE TYPE proposal_status       AS ENUM ('pending','accepted','rejected','deleted');
 CREATE TYPE dataset_status        AS ENUM ('draft','released','archived');
 CREATE TYPE dataset_file_format   AS ENUM ('json','csv');
+
+-- Vòng đời một video nguồn của corpus hội thoại. queued/processing do tiến trình nền
+-- chuyển; ready_for_review/in_review/approved do Reviewer; failed sau khi hết số lần thử.
+CREATE TYPE source_video_status   AS ENUM
+    ('queued','processing','ready_for_review','in_review','approved','failed');
 
 -- ============================================================
 -- 2. SEQUENCES
@@ -194,6 +199,7 @@ CREATE TABLE import_batch (
     batch_id     BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     imported_by  BIGINT NOT NULL REFERENCES app_user(user_id),
     file_name    TEXT NOT NULL,
+    batch_name   TEXT NOT NULL,
     script_count INT NOT NULL DEFAULT 0,           -- counts sentence pairs, not file rows
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT ck_import_batch_count CHECK (script_count >= 0)
@@ -671,6 +677,52 @@ CREATE TABLE dataset_recording (
 );
 CREATE INDEX idx_dataset_recording_recording ON dataset_recording (recording_id);
 
+-- ------------------------------------------------------------
+-- SOURCE CORPUS (YouTube conversation audio)
+-- Corpus riêng, KHÔNG ép về cặp câu [cs, vi] như bảng recording.
+-- ------------------------------------------------------------
+CREATE TABLE source_video (
+    source_video_id  BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    youtube_url      VARCHAR(1024) NOT NULL UNIQUE,   -- link đã chuẩn hoá, chống gửi trùng
+    youtube_video_id VARCHAR(32),
+    title            VARCHAR(500),
+    duration_sec     NUMERIC(10,2) CHECK (duration_sec IS NULL OR duration_sec > 0),
+    audio_key        VARCHAR(1024),                   -- file WAV nguồn trong kho S3/MinIO
+    transcript       TEXT,                            -- bản phiên âm gốc của ASR
+    status           source_video_status NOT NULL DEFAULT 'queued',
+    error_message    TEXT,                            -- lỗi gần nhất để Admin xem
+    attempts         INT NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+    submitted_by     BIGINT NOT NULL REFERENCES app_user(user_id),
+    claimed_by       BIGINT REFERENCES app_user(user_id),
+    claim_expires_at TIMESTAMPTZ,                     -- hết hạn thì video quay lại hàng đợi
+    approved_at      TIMESTAMPTZ,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT ck_source_video_approved CHECK (
+        status <> 'approved'
+        OR (approved_at IS NOT NULL AND audio_key IS NOT NULL)),
+    CONSTRAINT ck_source_video_claim CHECK (
+        status <> 'in_review'
+        OR (claimed_by IS NOT NULL AND claim_expires_at IS NOT NULL))
+);
+
+-- Cùng một video có thể được dán bằng watch / youtu.be / shorts; cột id chặn trùng.
+CREATE UNIQUE INDEX uq_source_video_youtube ON source_video (youtube_video_id)
+    WHERE youtube_video_id IS NOT NULL;
+CREATE INDEX idx_source_video_status ON source_video (status, created_at);
+
+CREATE TABLE source_segment (
+    source_segment_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    source_video_id   BIGINT NOT NULL REFERENCES source_video(source_video_id) ON DELETE CASCADE,
+    position          INT NOT NULL CHECK (position > 0),
+    start_sec         NUMERIC(10,3) NOT NULL CHECK (start_sec >= 0),
+    end_sec           NUMERIC(10,3) NOT NULL CHECK (end_sec > start_sec),
+    text              TEXT NOT NULL CHECK (btrim(text) <> ''),
+    language          VARCHAR(8) CHECK (language IN ('vi','en')),  -- NULL = chưa gán nhãn
+    clip_key          VARCHAR(1024),                               -- chỉ có sau khi duyệt
+    UNIQUE (source_video_id, position)
+);
+
 -- ============================================================
 -- 4. AUDIT_LOG MONTHLY PARTITIONS (2025-01 .. 2027-12)
 --    Covers the whole capstone (09/2026 - 03/2027) with room to spare.
@@ -708,6 +760,8 @@ END $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_script_touch        BEFORE UPDATE ON script
     FOR EACH ROW EXECUTE FUNCTION fn_touch_updated_at();
 CREATE TRIGGER trg_system_config_touch BEFORE UPDATE ON system_config
+    FOR EACH ROW EXECUTE FUNCTION fn_touch_updated_at();
+CREATE TRIGGER trg_source_video_touch  BEFORE UPDATE ON source_video
     FOR EACH ROW EXECUTE FUNCTION fn_touch_updated_at();
 
 -- [ERD / WAVE] Wave creators must be Admin or Task Manager.
@@ -1402,6 +1456,20 @@ BEGIN
                            AND r.sentence_variant = 'pure_vietnamese'
                            AND r.status IN ('pending_review', 'approved'))
        )
+       -- Task script đang hoạt động hoặc dự phòng không được lấy từ luồng tự do ngoài task.
+       AND (
+            p_task_id IS NOT NULL
+            OR q.stage <> 'recording'
+            OR NOT EXISTS (
+                SELECT 1
+                  FROM task_script ts
+                  JOIN task t ON t.task_id = ts.task_id
+                 WHERE ts.script_id = q.script_id
+                   AND ts.status IN ('pending', 'buffer')
+                   AND t.task_type = 'recording'
+                   AND t.status <> 'cancelled'
+            )
+       )
        -- Chặng nào cũng phải tôn trọng p_task_id, nhưng cách "thuộc task" khác nhau:
        --   duyệt văn bản -> task gắn thẳng vào hàng (q.task_id), do lô của Task Manager.
        --   ghi âm       -> task gắn qua bảng trung gian task_script, vì một câu có thể
@@ -1785,6 +1853,10 @@ CREATE TRIGGER trg_audit_task
     AFTER INSERT OR UPDATE OR DELETE ON task
     FOR EACH ROW EXECUTE FUNCTION fn_audit('task', 'task_id');
 
+CREATE TRIGGER trg_audit_source_video
+    AFTER INSERT OR UPDATE OR DELETE ON source_video
+    FOR EACH ROW EXECUTE FUNCTION fn_audit('source_video', 'source_video_id');
+
 -- ============================================================
 -- 6. ID GENERATION HELPERS (call from backend/API)
 -- ============================================================
@@ -2103,6 +2175,26 @@ BEGIN
 
   GET DIAGNOSTICS v_added = ROW_COUNT;
   RETURN v_added;
+END $$;
+
+-- Promote one reserved task script when an active script is removed from the pool.
+-- SKIP LOCKED keeps concurrent reports from promoting the same reserve row.
+CREATE OR REPLACE FUNCTION fn_promote_task_script_buffer(p_task_id BIGINT, p_assignee_user_id BIGINT)
+RETURNS BIGINT LANGUAGE plpgsql AS $$
+DECLARE v_task_script_id BIGINT;
+BEGIN
+  UPDATE task_script
+     SET status = 'pending', assignee_user_id = p_assignee_user_id
+   WHERE task_script_id = (
+       SELECT task_script_id
+         FROM task_script
+        WHERE task_id = p_task_id AND status = 'buffer'
+        ORDER BY included_at, task_script_id
+        FOR UPDATE SKIP LOCKED
+        LIMIT 1
+   )
+  RETURNING task_script_id INTO v_task_script_id;
+  RETURN v_task_script_id;
 END $$;
 
 COMMIT;

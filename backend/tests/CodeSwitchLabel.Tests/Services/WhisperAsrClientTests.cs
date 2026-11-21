@@ -162,6 +162,41 @@ public sealed class WhisperAsrClientTests
     }
 
     [Fact]
+    public async Task VerboseJson_DocDuocMocThoiGianVaLocDoanHong()
+    {
+        // Corpus hội thoại cần mốc thời gian để cắt clip. Đoạn thiếu mốc hoặc end <= start
+        // bị bỏ, không làm hỏng cả transcript.
+        var handler = new StubHandler(() => Ok("""
+            {"text":"Xin chào hello","segments":[
+              {"start":0.0,"end":1.25,"text":" Xin chào "},
+              {"start":1.25,"end":2.5,"text":"hello"},
+              {"start":3.0,"end":2.0,"text":"đoạn hỏng"}
+            ]}
+            """));
+
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".wav");
+        await File.WriteAllBytesAsync(path, Audio, TestContext.Current.CancellationToken);
+
+        try
+        {
+            var result = await Create(handler).TranscribeFileAsync(
+                path, TestContext.Current.CancellationToken);
+
+            Assert.Equal("Xin chào hello", result.Text);
+            Assert.Equal(2, result.Segments.Count);
+            Assert.Equal("Xin chào", result.Segments[0].Text);
+            Assert.Equal(0.0m, result.Segments[0].StartSec);
+            Assert.Equal(2.5m, result.Segments[1].EndSec);
+            Assert.Contains("name=\"response_format\"", handler.LastBody);
+            Assert.Contains("verbose_json", handler.LastBody);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public async Task Loi429_ChoTheoRetryAfter_RoiThuLaiMotLan()
     {
         // Gói miễn phí của nhà cung cấp chặn ở vài chục request mỗi phút, mà lượt chạy lô

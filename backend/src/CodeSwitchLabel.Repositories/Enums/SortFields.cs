@@ -71,7 +71,7 @@ public enum DatasetSortField { DatasetId, CreatedAt, Status, DatasetName, Record
 public enum ProposalSortField { ProposalId, CreatedAt, Kind, ScriptId }
 
 /// <summary>Lô nhập: GET /api/scripts/import/batches.</summary>
-public enum ImportBatchSortField { BatchId, CreatedAt, FileName, ScriptCount }
+public enum ImportBatchSortField { BatchId, CreatedAt, BatchName, FileName, ScriptCount }
 
 /// <summary>
 /// Lịch sử duyệt bản ghi: GET /api/reviewer/history/recordings.

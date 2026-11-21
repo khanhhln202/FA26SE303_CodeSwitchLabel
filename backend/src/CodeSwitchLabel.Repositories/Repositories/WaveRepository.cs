@@ -114,7 +114,8 @@ public class WaveRepository(CodeSwitchLabelDbContext db) : IWaveRepository
             s.Status == ScriptStatus.Validated &&
             s.WaveId == null &&
             !s.TaskScripts.Any(ts =>
-                ts.Status == TaskScriptStatus.Pending && ts.Task.Status != WorkTaskStatus.Cancelled) &&
+                (ts.Status == TaskScriptStatus.Pending || ts.Status == TaskScriptStatus.Buffer) &&
+                ts.Task.Status != WorkTaskStatus.Cancelled) &&
             !s.Recordings.Any(r =>
                 r.Status == RecordingStatus.PendingReview || r.Status == RecordingStatus.Approved), ct);
 

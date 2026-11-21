@@ -226,8 +226,8 @@ public class ScriptsController(IScriptService scriptService, ILabelingService la
         }
 
         var result = ext == ".txt"
-            ? await scriptService.ImportRawAsync(stream, fileName, User.GetUserId(), form.Domain!, waveId, ct)
-            : await scriptService.ImportAsync(stream, fileName, User.GetUserId(), waveId, ct);
+            ? await scriptService.ImportRawAsync(stream, fileName, User.GetUserId(), form.Domain!, waveId, ct, form.BatchName)
+            : await scriptService.ImportAsync(stream, fileName, User.GetUserId(), waveId, ct, form.BatchName);
         if (waveId.HasValue)
             await waves.UpdateImportCountsAsync(waveId.Value, bufferQty, result.Imported, ct);
 
@@ -337,6 +337,10 @@ public class ImportScriptsForm
 {
     [Required(ErrorMessage = "Chưa đính kèm file JSON hoặc TXT.")]
     public IFormFile? File { get; set; }
+
+    /// <summary>Tên hiển thị riêng của lô; để trống thì dùng tên file.</summary>
+    [StringLength(200)]
+    public string? BatchName { get; set; }
 
     /// <summary>Bắt buộc với file .txt; file .json lấy chủ đề trong từng câu.</summary>
     public string? Domain { get; set; }

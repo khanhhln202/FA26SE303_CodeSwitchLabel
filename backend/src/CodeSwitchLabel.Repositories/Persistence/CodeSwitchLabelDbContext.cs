@@ -58,6 +58,9 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
     public DbSet<Dataset> Datasets => Set<Dataset>();
     public DbSet<DatasetRecording> DatasetRecordings => Set<DatasetRecording>();
 
+    public DbSet<SourceVideo> SourceVideos => Set<SourceVideo>();
+    public DbSet<SourceSegment> SourceSegments => Set<SourceSegment>();
+
     public DbSet<DashboardSummary> DashboardSummary => Set<DashboardSummary>();
     public DbSet<SpeakerPerformance> SpeakerPerformance => Set<SpeakerPerformance>();
     public DbSet<ReviewerPerformance> ReviewerPerformance => Set<ReviewerPerformance>();
@@ -71,6 +74,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         MapScripts(modelBuilder);
         MapTasks(modelBuilder);
         MapRecordings(modelBuilder);
+        MapSourceCorpus(modelBuilder);
         MapSystem(modelBuilder);
         MapViews(modelBuilder);
 
@@ -135,6 +139,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
         // TEAM_015
         modelBuilder.HasPostgresEnum<ProposalKind>();
         modelBuilder.HasPostgresEnum<ProposalStatus>();
+        modelBuilder.HasPostgresEnum<SourceVideoStatus>();
     }
 
     private static void MapUsers(ModelBuilder modelBuilder)
@@ -460,6 +465,45 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
 
             e.HasOne(x => x.Review).WithMany(r => r.RejectionReasons).HasForeignKey(x => x.ReviewId);
             e.HasOne(x => x.Reason).WithMany().HasForeignKey(x => x.ReasonId);
+        });
+    }
+
+    private static void MapSourceCorpus(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<SourceVideo>(e =>
+        {
+            e.ToTable("source_video");
+            e.HasKey(x => x.SourceVideoId);
+            e.Property(x => x.YoutubeUrl).HasMaxLength(1024);
+            e.Property(x => x.YoutubeVideoId).HasMaxLength(32);
+            e.Property(x => x.Title).HasMaxLength(500);
+            e.Property(x => x.AudioKey).HasMaxLength(1024);
+            e.Property(x => x.DurationSec).HasPrecision(10, 2);
+
+            e.HasIndex(x => x.YoutubeUrl).IsUnique();
+            e.HasIndex(x => x.YoutubeVideoId)
+                .HasDatabaseName("uq_source_video_youtube")
+                .IsUnique()
+                .HasFilter("youtube_video_id IS NOT NULL");
+
+            e.HasOne(x => x.Submitter).WithMany().HasForeignKey(x => x.SubmittedBy);
+            e.HasOne(x => x.ClaimedByUser).WithMany().HasForeignKey(x => x.ClaimedBy);
+            e.HasMany(x => x.Segments).WithOne(s => s.Video)
+                .HasForeignKey(s => s.SourceVideoId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SourceSegment>(e =>
+        {
+            e.ToTable("source_segment");
+            e.HasKey(x => x.SourceSegmentId);
+            e.Property(x => x.Text).IsRequired();
+            e.Property(x => x.Language).HasMaxLength(8);
+            e.Property(x => x.ClipKey).HasMaxLength(1024);
+            e.Property(x => x.StartSec).HasPrecision(10, 3);
+            e.Property(x => x.EndSec).HasPrecision(10, 3);
+
+            e.HasIndex(x => new { x.SourceVideoId, x.Position }).IsUnique();
         });
     }
 

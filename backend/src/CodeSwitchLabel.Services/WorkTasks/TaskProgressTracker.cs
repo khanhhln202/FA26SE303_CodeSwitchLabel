@@ -241,29 +241,37 @@ public class TaskProgressTracker(
 
     public async Task OnPairDiscardedAsync(string scriptId, CancellationToken ct = default)
     {
-        var pending = await tasks.GetPendingScriptItemsAsync(scriptId, ct);
-        var completed = await tasks.GetCompletedScriptItemsAsync(scriptId, ct);
+        var scriptItems = await tasks.GetTaskScriptItemsAsync(scriptId, ct);
+        var replacedItems = scriptItems
+            .Where(i => i.Status is TaskScriptStatus.Pending or TaskScriptStatus.Completed)
+            .ToList();
 
         // xoá cả cặp thì MỌI bản ghi của câu bị loại, nên mục đang chờ ở các task
         // duyệt anh em — nơi bản ghi tự vào lúc Speaker nộp — cũng chết theo. Gác sau khi
         // lấy đủ ba nhóm: câu có thể chỉ nằm trong task duyệt (thêm tay) mà không có mục câu nào.
         var queuedReviews = await tasks.GetQueuedRecordingItemsByScriptAsync(scriptId, ct);
 
-        if (pending.Count == 0 && completed.Count == 0 && queuedReviews.Count == 0) return;
+        if (scriptItems.Count == 0 && queuedReviews.Count == 0) return;
 
         // Gom taskId TRƯỚC khi sửa: sau khi lưu thì truy vấn lại sẽ trả về rỗng.
-        var taskIds = pending.Concat(completed).Select(i => i.TaskId)
+        var taskIds = scriptItems.Select(i => i.TaskId)
             .Concat(queuedReviews.Select(i => i.TaskId))
             .Distinct().ToList();
 
-        foreach (var item in pending) item.Status = TaskScriptStatus.Rejected;
-        foreach (var item in completed) item.Status = TaskScriptStatus.Rejected;
+        foreach (var item in scriptItems) item.Status = TaskScriptStatus.Rejected;
         foreach (var item in queuedReviews) item.Status = TaskRecordingStatus.Skipped;
 
         await tasks.SaveChangesAsync(ct);
 
         foreach (var id in taskIds)
         {
+            var taskReplacements = replacedItems.Where(i => i.TaskId == id).ToList();
+            foreach (var item in taskReplacements)
+                await tasks.PromoteBufferScriptAsync(id, item.AssigneeUserId, ct);
+
+            if (taskReplacements.Count > 0)
+                await tasks.SaveChangesAsync(ct);
+
             await RefreshStatusAsync(id, ct);
 
             // Nếu task Done < TargetQty sau khi xoá cặp, lấp thêm từ buffer của đợt.

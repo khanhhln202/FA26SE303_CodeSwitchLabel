@@ -44,7 +44,14 @@ public record AudioSignalMetrics(
 public interface IAudioProcessor
 {
     /// <summary>Chuyển mọi định dạng đầu vào sang WAV PCM 16-bit theo cấu hình.</summary>
-    Task ConvertToWavAsync(string inputPath, string outputPath, CancellationToken ct = default);
+    Task ConvertToWavAsync(
+        string inputPath, string outputPath, CancellationToken ct = default,
+        int? timeoutSeconds = null);
+
+    /// <summary>Cắt một đoạn [startSec, endSec) ra WAV riêng, tái mã hóa lại để mốc cắt chính xác.</summary>
+    Task CutAsync(
+        string inputPath, string outputPath, decimal startSec, decimal endSec,
+        CancellationToken ct = default);
 
     /// <summary>Đọc thời lượng, tần số lấy mẫu, số kênh của một file âm thanh.</summary>
     Task<AudioProbeResult> ProbeAsync(string filePath, CancellationToken ct = default);

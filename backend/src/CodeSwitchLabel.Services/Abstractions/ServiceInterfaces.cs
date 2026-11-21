@@ -41,7 +41,8 @@ public interface IScriptService
 
     /// <summary>Nhập hàng loạt từ file input_text.json. Câu hợp lệ vào thẳng đã duyệt kèm lượt duyệt tự động; câu hỏng không làm hỏng cả file.</summary>
     Task<ImportResultDto> ImportAsync(
-        Stream jsonFile, string fileName, long importedById, long? waveId = null, CancellationToken ct = default);
+        Stream jsonFile, string fileName, long importedById, long? waveId = null, CancellationToken ct = default,
+        string? batchName = null);
     Task<ImportResultDto> ImportAsync(
         Stream jsonFile, string fileName, long importedById, CancellationToken ct);
 
@@ -53,7 +54,7 @@ public interface IScriptService
     /// </summary>
     Task<ImportResultDto> ImportRawAsync(
         Stream textFile, string fileName, long importedById, string domain, long? waveId = null,
-        CancellationToken ct = default);
+        CancellationToken ct = default, string? batchName = null);
     Task<ImportResultDto> ImportRawAsync(
         Stream textFile, string fileName, long importedById, string domain, CancellationToken ct);
 

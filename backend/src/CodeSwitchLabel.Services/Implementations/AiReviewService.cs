@@ -50,8 +50,59 @@ public class AiReviewService(
     {
         var settings = await LoadSettingsAsync(ct);
         var aiReviewerId = await RequireAiReviewerAsync(ct);
+        var candidate = await repo.GetCandidateAsync(recordingId, ct)
+            ?? throw new NotFoundException("recording_not_found", $"Không tìm thấy bản ghi {recordingId}.");
+        var tiedIds = await repo.GetTiedRecordingIdsForPairAsync(
+            candidate.ScriptId, candidate.SpeakerId, aiReviewerId, ct);
 
-        return await AnalyzeOneAsync(recordingId, aiReviewerId, settings, ct);
+        // Một lần gọi từ queue xử lý cả hai biến thể của cùng câu/người đọc. Giữ nguyên
+        // response cũ: trả kết quả của recording_id được yêu cầu; nếu bản còn lại lỗi thì
+        // ghi log và để lần chạy sau thử lại bản đó.
+        if (!tiedIds.Contains(recordingId, StringComparer.Ordinal))
+            return await AnalyzeOneAsync(recordingId, aiReviewerId, settings, ct);
+
+        AiReviewResultDto? requestedResult = null;
+        var orderedIds = new[] { recordingId }.Concat(tiedIds.Where(id => id != recordingId));
+        foreach (var id in orderedIds)
+        {
+            try
+            {
+                var result = await AnalyzeOneAsync(id, aiReviewerId, settings, ct);
+                if (id == recordingId) requestedResult = result;
+            }
+            catch (AppException ex) when (id != recordingId)
+            {
+                logger.LogWarning(ex, "Không duyệt được bản ghép {RecordingId} cùng cặp với {RequestedId}: {Code}",
+                    id, recordingId, ex.Code);
+            }
+        }
+
+        return requestedResult!;
+    }
+
+    public async Task<AiReviewPairResultDto> AnalyzePairAsync(string recordingId, CancellationToken ct = default)
+    {
+        var settings = await LoadSettingsAsync(ct);
+        var aiReviewerId = await RequireAiReviewerAsync(ct);
+        var pair = await repo.GetCandidateAsync(recordingId, ct)
+            ?? throw new NotFoundException("recording_not_found", $"Không tìm thấy bản ghi {recordingId}.");
+        var ids = await repo.GetTiedRecordingIdsForPairAsync(pair.ScriptId, pair.SpeakerId, aiReviewerId, ct);
+        var results = new List<AiReviewResultDto>(ids.Count);
+        var skipped = new List<AiReviewSkippedDto>();
+
+        foreach (var id in ids)
+        {
+            try
+            {
+                results.Add(await AnalyzeOneAsync(id, aiReviewerId, settings, ct));
+            }
+            catch (AppException ex)
+            {
+                skipped.Add(new AiReviewSkippedDto(id, ex.Code, ex.Message));
+            }
+        }
+
+        return new AiReviewPairResultDto(pair.ScriptId, results, skipped);
     }
 
     public async Task<AiReviewBatchResultDto> RunBatchAsync(int limit, CancellationToken ct = default)

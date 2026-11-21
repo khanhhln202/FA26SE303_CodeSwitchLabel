@@ -50,7 +50,10 @@ public sealed class DatabaseFixture : IAsyncLifetime
     }
 
     /// <summary>Connection string for direct database access (e.g., repositories, EF Core).</summary>
-    public string ConnectionString => _container.GetConnectionString();
+    public string ConnectionString => new NpgsqlConnectionStringBuilder(_container.GetConnectionString())
+    {
+        IncludeErrorDetail = true
+    }.ConnectionString;
 
     /// <summary>HTTP client for API calls (no auth).</summary>
     public HttpClient Client { get; private set; } = null!;

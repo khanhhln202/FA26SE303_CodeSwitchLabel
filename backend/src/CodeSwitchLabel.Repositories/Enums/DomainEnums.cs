@@ -95,7 +95,7 @@ public enum WaveStatus { Open, InProgress, Completed }
 
 public enum AssignmentStatus { Active, Completed, Reassigned, Cancelled }
 
-public enum TaskScriptStatus { Pending, Completed, Rejected }
+public enum TaskScriptStatus { Pending, Completed, Rejected, Buffer }
 
 /// <summary>
 /// Mỗi cặp câu cần hai bản ghi: một bản đọc câu chen tiếng Anh, một bản đọc câu thuần Việt.
@@ -118,6 +118,12 @@ public enum RejectionCategory { Content, AudioQuality, Pronunciation, Other }
 public enum DatasetStatus { Draft, Released, Archived }
 
 public enum DatasetFileFormat { Json, Csv }
+
+/// <summary>
+/// Vòng đời một video nguồn của corpus hội thoại. Processing là job đang tải/phiên âm;
+/// Failed chỉ sau khi hết số lần thử, Admin hoặc người gửi bấm thử lại để đưa về Queued.
+/// </summary>
+public enum SourceVideoStatus { Queued, Processing, ReadyForReview, InReview, Approved, Failed }
 
 /// <summary>
 /// Vai trò lưu trong bảng role dưới dạng chuỗi ('speaker', 'task_manager'...), không phải kiểu ENUM.

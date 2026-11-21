@@ -95,6 +95,29 @@ public static class ServiceRegistration
 
             return new FallbackAsrClient(chinh, lui, loggers.CreateLogger<FallbackAsrClient>());
         });
+        // Corpus hội thoại: CHỈ dùng endpoint ASR cục bộ đã cấu hình, cố ý không bọc
+        // FallbackAsrClient — video nguồn không được lặng lẽ đẩy sang nhà cung cấp khác.
+        services.AddScoped<ITimedAsrClient>(sp =>
+        {
+            var http = sp.GetRequiredService<HttpClient>();
+            var loggers = sp.GetRequiredService<ILoggerFactory>();
+            var asrOptions = sp.GetRequiredService<IOptions<AsrOptions>>().Value;
+            var corpus = sp.GetRequiredService<IOptions<SourceCorpusOptions>>().Value;
+
+            var timed = new AsrOptions
+            {
+                Endpoint = asrOptions.Endpoint,
+                ApiKey = asrOptions.ApiKey,
+                Model = asrOptions.Model,
+                // Để trống: câu trộn Việt–Anh phải được mô hình tự nhận.
+                Language = string.Empty,
+                TimeoutSeconds = corpus.AsrTimeoutSeconds
+            };
+
+            return new WhisperAsrClient(
+                http, timed, loggers.CreateLogger<WhisperAsrClient>());
+        });
+
         services.AddScoped<IAiReviewRepository, AiReviewRepository>();
         services.AddScoped<IAiReviewService, AiReviewService>();
 
@@ -135,6 +158,7 @@ public static class ServiceRegistration
         services.AddScoped<IReviewerStatsService, ReviewerStatsService>();
         services.AddScoped<IAdminRecordingService, AdminRecordingService>();
         services.AddScoped<IDatasetService, DatasetService>();
+        services.AddScoped<ISourceVideoService, SourceVideoService>();
 
         return services;
     }
@@ -172,7 +196,9 @@ public static class ServiceRegistration
         (typeof(QueueState), "queue_state"),
         // TEAM_015
         (typeof(ProposalKind), "proposal_kind"),
-        (typeof(ProposalStatus), "proposal_status")
+        (typeof(ProposalStatus), "proposal_status"),
+        // Corpus hội thoại
+        (typeof(SourceVideoStatus), "source_video_status")
     ];
 
     private static NpgsqlDataSource BuildDataSource(string connectionString)

@@ -9,6 +9,7 @@ public class ImportBatch
     public long BatchId { get; set; }
     public long ImportedBy { get; set; }
     public string FileName { get; set; } = string.Empty;
+    public string BatchName { get; set; } = string.Empty;
 
     /// <summary>Đếm số CẶP CÂU nhập được, không phải số dòng trong file.</summary>
     public int ScriptCount { get; set; }
