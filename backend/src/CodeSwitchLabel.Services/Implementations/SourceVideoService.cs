@@ -28,9 +28,6 @@ public class SourceVideoService(
     TimeProvider clock,
     ILogger<SourceVideoService> logger) : ISourceVideoService
 {
-    private static readonly JsonSerializerOptions ManifestJson =
-        new(JsonSerializerDefaults.Web);
-
     private SourceCorpusOptions Options => options.Value;
 
     public async Task<SourceVideoDto> SubmitAsync(
@@ -317,7 +314,17 @@ public class SourceVideoService(
         var videos = await db.SourceVideos.AsNoTracking()
             .Where(v => v.Status == SourceVideoStatus.Approved)
             .OrderBy(v => v.SourceVideoId)
-            .Select(v => new { v.SourceVideoId, v.YoutubeUrl, v.Title, v.DurationSec })
+            .Select(v => new
+            {
+                v.SourceVideoId,
+                v.YoutubeUrl,
+                v.Title,
+                v.DurationSec,
+                v.YoutubeVideoId,
+                v.AudioKey,
+                SubmitterName = v.Submitter.FullName,
+                v.CreatedAt
+            })
             .ToListAsync(ct);
 
         var ids = videos.Select(v => v.SourceVideoId).ToList();
@@ -337,56 +344,86 @@ public class SourceVideoService(
 
         using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
         {
-            // ZIP chỉ cho mở một entry ghi tại một thời điểm, nên gom manifest lại
-            // rồi ghi sau cùng thay vì vừa ghi manifest vừa thêm clip.
-            var manifestLines = new List<string>();
-
-            foreach (var segment in segments)
+            foreach (var video in videos)
             {
-                var video = videos.First(v => v.SourceVideoId == segment.SourceVideoId);
-                var clipFile = $"clips/{segment.SourceVideoId}_{segment.Position:D4}.wav";
-
-                if (segment.ClipKey is not null)
+                var folder = $"{SanitizeFileNamePart(video.SubmitterName)}/{video.SourceVideoId:D3}";
+                var stem = $"video{video.SourceVideoId.ToString(CultureInfo.InvariantCulture)}";
+                var videoSegments = segments.Where(s => s.SourceVideoId == video.SourceVideoId).ToList();
+                var entries = videoSegments.Select(s => new
                 {
-                    // Đọc hết clip vào buffer trước, rồi mới tạo entry ZIP.
-                    // ZipArchive yêu cầu entry trước phải đóng hẳn mới được tạo entry kế tiếp.
-                    await using var source = await storage.OpenReadAsync(segment.ClipKey, ct);
-                    using var buffer = new MemoryStream();
-                    await source.CopyToAsync(buffer, ct);
+                    start = decimal.ToInt64(decimal.Round(s.StartSec * 1000, 0)),
+                    end = decimal.ToInt64(decimal.Round(s.EndSec * 1000, 0)),
+                    text = s.Text
+                }).ToList();
+                var json = JsonSerializer.Serialize(new
+                {
+                    video_id = video.YoutubeVideoId,
+                    language = videoSegments.Select(s => s.Language).Distinct().Count() == 1
+                        ? videoSegments.FirstOrDefault()?.Language : null,
+                    segments = entries
+                }, new JsonSerializerOptions { WriteIndented = true });
+                await WriteZipTextAsync(zip, $"{folder}/{stem}.json", json, ct);
+                await WriteZipTextAsync(zip, $"{folder}/{stem}.tsv",
+                    "start\tend\ttext\n" + string.Join("\n", videoSegments.Select(s =>
+                        $"{(s.StartSec * 1000).ToString(CultureInfo.InvariantCulture)}\t{(s.EndSec * 1000).ToString(CultureInfo.InvariantCulture)}\t{s.Text}")), ct);
+                await WriteZipTextAsync(zip, $"{folder}/{stem}.srt", BuildSubtitle(videoSegments, vtt: false), ct);
+                await WriteZipTextAsync(zip, $"{folder}/{stem}.vtt", BuildSubtitle(videoSegments, vtt: true), ct);
+                await WriteZipTextAsync(zip, $"{folder}/{stem}.txt",
+                    string.Join(" ", videoSegments.Select(s => s.Text)), ct);
 
-                    var entry = zip.CreateEntry(clipFile, CompressionLevel.NoCompression);
+                if (video.AudioKey is not null)
+                {
+                    await using var source = await storage.OpenReadAsync(video.AudioKey, ct);
+                    var entry = zip.CreateEntry($"{folder}/{stem}.wav", CompressionLevel.NoCompression);
                     await using var target = entry.Open();
-                    buffer.Position = 0;
-                    await buffer.CopyToAsync(target, ct);
+                    await source.CopyToAsync(target, ct);
                 }
-
-                manifestLines.Add(JsonSerializer.Serialize(new
-                {
-                    sourceVideoId = video.SourceVideoId,
-                    youtubeUrl = video.YoutubeUrl,
-                    title = video.Title,
-                    sourceDurationSec = video.DurationSec,
-                    position = segment.Position,
-                    startSec = segment.StartSec,
-                    endSec = segment.EndSec,
-                    text = segment.Text,
-                    language = segment.Language,
-                    clipFile
-                }, ManifestJson));
-            }
-
-            var manifestEntry = zip.CreateEntry("manifest.jsonl");
-            await using var manifest = new StreamWriter(
-                manifestEntry.Open(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-
-            foreach (var line in manifestLines)
-            {
-                await manifest.WriteLineAsync(line);
             }
         }
 
         stream.Position = 0;
         return new DatasetFileDto("source-corpus.zip", "application/zip", stream);
+    }
+
+    private static async Task WriteZipTextAsync(
+        ZipArchive zip, string path, string content, CancellationToken ct)
+    {
+        var entry = zip.CreateEntry(path);
+        await using var output = entry.Open();
+        await using var writer = new StreamWriter(output, new UTF8Encoding(false));
+        await writer.WriteAsync(content.AsMemory(), ct);
+    }
+
+    private static string BuildSubtitle(IReadOnlyList<SourceSegment> segments, bool vtt)
+    {
+        var lines = new List<string>();
+        if (vtt) lines.Add("WEBVTT");
+        for (var i = 0; i < segments.Count; i++)
+        {
+            var segment = segments[i];
+            if (!vtt) lines.Add((i + 1).ToString(CultureInfo.InvariantCulture));
+            lines.Add($"{FormatTimestamp(segment.StartSec, vtt)} --> {FormatTimestamp(segment.EndSec, vtt)}");
+            lines.Add(segment.Text);
+            lines.Add(string.Empty);
+        }
+        return string.Join("\n", lines);
+    }
+
+    private static string FormatTimestamp(decimal seconds, bool vtt)
+    {
+        var milliseconds = decimal.ToInt64(decimal.Round(seconds * 1000, 0));
+        var hours = milliseconds / 3_600_000;
+        var minutes = milliseconds / 60_000 % 60;
+        var remainder = milliseconds % 60_000;
+        var separator = vtt ? '.' : ',';
+        return $"{hours:00}:{minutes:00}:{remainder / 1000:00}{separator}{remainder % 1000:000}";
+    }
+
+    private static string SanitizeFileNamePart(string value)
+    {
+        var invalidChars = Path.GetInvalidFileNameChars();
+        var safe = new string(value.Select(c => invalidChars.Contains(c) ? '_' : c).ToArray()).Trim();
+        return string.IsNullOrWhiteSpace(safe) ? "unknown" : safe;
     }
 
     public async Task<bool> ProcessNextAsync(CancellationToken ct = default)

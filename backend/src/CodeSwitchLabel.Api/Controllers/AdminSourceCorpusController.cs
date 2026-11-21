@@ -34,7 +34,7 @@ public class AdminSourceCorpusController(ISourceVideoService sourceVideos) : Con
         return NoContent();
     }
 
-    /// <summary>ZIP gồm manifest.jsonl và clip WAV của mọi video đã duyệt.</summary>
+    /// <summary>ZIP gồm transcript ở JSON/SRT/TSV/TXT/VTT và âm thanh WAV của video đã duyệt.</summary>
     [HttpGet("source-corpus/export")]
     [ProducesResponseType(typeof(FileStreamResult), StatusCodes.Status200OK)]
     public async Task<IActionResult> Export(CancellationToken ct)
