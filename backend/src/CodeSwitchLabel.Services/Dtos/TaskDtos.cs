@@ -10,7 +10,7 @@ public record CreateTaskRequest
     [Range(1, long.MaxValue, ErrorMessage = "Chiến dịch không hợp lệ.")]
     public long? WaveId { get; init; }
 
-    [Required(ErrorMessage = "Phải chọn loại task: Recording hoặc Review.")]
+    [Required(ErrorMessage = "Phải chọn loại task: Recording, Contribution hoặc Review.")]
     public TaskType? TaskType { get; init; }
 
     /// <summary>
@@ -197,7 +197,7 @@ public record TaskAssignmentDto(
     AssignmentStatus Status,
     DateTimeOffset AssignedAt);
 
-/// <param name="Id">script_id với task thu âm, recording_id với task duyệt.</param>
+/// <param name="Id">script_id với task thu âm/đóng góp, recording_id với task duyệt.</param>
 /// <param name="AssigneeUserId">Speaker được gán cặp câu này; null = chưa gán hoặc task duyệt.</param>
 /// <param name="TaskScriptId">Khoá của dòng task_script; dùng khi một cặp câu có nhiều Speaker.</param>
 public record TaskItemDto(

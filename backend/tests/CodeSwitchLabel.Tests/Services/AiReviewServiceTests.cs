@@ -231,7 +231,7 @@ public sealed class AiReviewServiceTests
     }
 
     private static AiReviewCandidate Candidate(RecordingStatus status) =>
-        new(RecordingId, SentenceVariant.CodeSwitching, status, CloudLink, Expected, SpeakerId: 7);
+        new(RecordingId, "script_001", SentenceVariant.CodeSwitching, status, CloudLink, Expected, SpeakerId: 7);
 
     // ---------------------------------------------------------------- giàn thử
 
@@ -277,7 +277,7 @@ public sealed class AiReviewServiceTests
         public long? AiReviewerId { get; set; } = 99;
 
         public AiReviewCandidate? Candidate { get; set; } =
-            new(RecordingId, SentenceVariant.CodeSwitching, RecordingStatus.PendingReview,
+            new(RecordingId, "script_001", SentenceVariant.CodeSwitching, RecordingStatus.PendingReview,
                 CloudLink, Expected, SpeakerId: 7);
 
         /// <summary>Mặc định là đúng thế cần phá: 2 lượt, 1 đạt / 1 không đạt.</summary>
@@ -306,6 +306,10 @@ public sealed class AiReviewServiceTests
         public Task<List<string>> GetTiedRecordingIdsAsync(
             int limit, long aiReviewerId, CancellationToken ct = default) =>
             Task.FromResult(TiedIds.Take(limit).ToList());
+
+        public Task<List<string>> GetTiedRecordingIdsForPairAsync(
+            string scriptId, long speakerId, long aiReviewerId, CancellationToken ct = default) =>
+            Task.FromResult(TiedIds.ToList());
 
         public Task<List<AiReviewPendingItem>> GetPendingAsync(
             int limit, long aiReviewerId, CancellationToken ct = default) =>

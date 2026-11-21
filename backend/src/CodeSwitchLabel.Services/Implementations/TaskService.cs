@@ -218,7 +218,9 @@ public class TaskService(
         // cùng một câu, nên kho câu ít hơn chỉ tiêu vẫn tạo task — mỗi người chỉ nhận
         // tối đa số câu mình còn thu được.
         List<List<string>>? recordingScriptsByUser = null;
-        if (assigneeUserIds.Count > 0 && request.TaskType == TaskType.Recording)
+        List<string> recordingBufferScripts = [];
+        List<string>? unassignedRecordingScripts = null;
+        if (request.TaskType == TaskType.Recording)
         {
             var selected = request.ScriptIds?
                 .Where(id => !string.IsNullOrWhiteSpace(id))
@@ -242,11 +244,16 @@ public class TaskService(
                         $"Có câu không dùng được (chưa duyệt nội dung hoặc khác chủ đề): {string.Join(", ", invalid)}.");
                 }
 
-                // Chia rời nhau: một câu chỉ thuộc đúng một Speaker trong task này.
-                var pool = selected.Take(targetQty).ToList();
-                recordingScriptsByUser = SplitScripts(pool, assignmentQuotas!);
+                // Chia phần đủ quota cho Speaker; câu dư được giữ làm dự phòng và chỉ
+                // mở khi câu đang làm bị loại khỏi task.
+                var activeScripts = selected.Take(targetQty).ToList();
+                recordingBufferScripts = selected.Skip(targetQty).ToList();
+                if (assigneeUserIds.Count > 0)
+                    recordingScriptsByUser = SplitScripts(activeScripts, assignmentQuotas!);
+                else
+                    unassignedRecordingScripts = activeScripts;
             }
-            else
+            else if (assigneeUserIds.Count > 0)
             {
                 recordingScriptsByUser = [];
                 foreach (var userId in assigneeUserIds)
@@ -315,8 +322,34 @@ public class TaskService(
                 }
             }
 
+            scriptItems.AddRange(recordingBufferScripts.Select(scriptId => new TaskScript
+            {
+                TaskId = task.TaskId,
+                ScriptId = scriptId,
+                Status = TaskScriptStatus.Buffer,
+                IncludedAt = now
+            }));
+
             if (scriptItems.Count > 0) tasks.AddScriptItems(scriptItems);
 
+            await SaveTasksAsync(ct);
+        }
+        else if (unassignedRecordingScripts is { Count: > 0 } || recordingBufferScripts.Count > 0)
+        {
+            tasks.AddScriptItems(
+                (unassignedRecordingScripts ?? []).Select(scriptId => new TaskScript
+                {
+                    TaskId = task.TaskId,
+                    ScriptId = scriptId,
+                    Status = TaskScriptStatus.Pending,
+                    IncludedAt = now
+                }).Concat(recordingBufferScripts.Select(scriptId => new TaskScript
+                {
+                    TaskId = task.TaskId,
+                    ScriptId = scriptId,
+                    Status = TaskScriptStatus.Buffer,
+                    IncludedAt = now
+                })));
             await SaveTasksAsync(ct);
         }
 
@@ -766,13 +799,22 @@ public class TaskService(
                 }
             }
 
-            tasks.AddScriptItems(accepted.Select(id => new TaskScript
+            var existingScripts = await tasks.GetScriptItemsTrackedAsync(taskId, ct);
+            var activeCount = existingScripts.Count(ts =>
+                ts.Status is not (TaskScriptStatus.Buffer or TaskScriptStatus.Rejected));
+            var newItems = new List<TaskScript>(accepted.Count);
+            foreach (var id in accepted)
             {
-                TaskId = taskId,
-                ScriptId = id,
-                Status = TaskScriptStatus.Pending,
-                IncludedAt = now
-            }));
+                newItems.Add(new TaskScript
+                {
+                    TaskId = taskId,
+                    ScriptId = id,
+                    Status = activeCount < task.TargetQty ? TaskScriptStatus.Pending : TaskScriptStatus.Buffer,
+                    IncludedAt = now
+                });
+                if (activeCount < task.TargetQty) activeCount++;
+            }
+            tasks.AddScriptItems(newItems);
         }
         else
         {
@@ -841,7 +883,7 @@ public class TaskService(
                 : await tasks.GetScriptItemAsync(taskId, itemId, ct);
             if (item is null) throw ItemNotFound(taskId, itemId);
 
-            if (item.Status != TaskScriptStatus.Pending)
+            if (item.Status is not (TaskScriptStatus.Pending or TaskScriptStatus.Buffer))
             {
                 throw ItemNotRemovable(item.ScriptId, item.Status.ToString());
             }
@@ -855,7 +897,11 @@ public class TaskService(
                     $"Cặp câu {item.ScriptId} đã có bản ghi nộp và đang chờ duyệt, không gỡ được — gỡ đi là mất dấu công việc đã làm.");
             }
 
-            await EnsureRemovalKeepsTargetAsync(task, item.TaskScriptId.ToString(), ct);
+            if (item.Status == TaskScriptStatus.Pending)
+            {
+                await EnsureRemovalKeepsTargetAsync(task, item.TaskScriptId.ToString(), ct);
+                await tasks.PromoteBufferScriptAsync(taskId, item.AssigneeUserId, ct);
+            }
             tasks.Remove(item);
         }
         else

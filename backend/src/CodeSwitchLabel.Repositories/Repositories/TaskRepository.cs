@@ -189,6 +189,8 @@ public interface ITaskRepository
 
     /// <summary>Mọi mục còn chờ của một cặp câu, ở bất kỳ task nào. Có theo dõi thay đổi.</summary>
     Task<List<TaskScript>> GetPendingScriptItemsAsync(string scriptId, CancellationToken ct = default);
+    Task<List<TaskScript>> GetTaskScriptItemsAsync(string scriptId, CancellationToken ct = default);
+    Task<long?> PromoteBufferScriptAsync(long taskId, long? assigneeUserId, CancellationToken ct = default);
 
     /// <summary>Mục còn chờ của cặp câu thuộc về Speaker này (hoặc chưa gán ai).</summary>
     Task<List<TaskScript>> GetPendingScriptItemsForSpeakerAsync(
@@ -661,7 +663,7 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         var rows = await db.TaskScripts
             .AsNoTracking()
             .Where(ts => ts.TaskId == taskId)
-            .Where(ts => ts.Status != TaskScriptStatus.Pending
+            .Where(ts => ts.Status != TaskScriptStatus.Pending && ts.Status != TaskScriptStatus.Buffer
                          || ts.Script.Recordings.Any(r =>
                              (r.Status == RecordingStatus.PendingReview ||
                               r.Status == RecordingStatus.Approved) &&
@@ -716,6 +718,18 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
         db.TaskScripts
             .Where(ts => ts.ScriptId == scriptId && ts.Status == TaskScriptStatus.Pending)
             .ToListAsync(ct);
+
+    public Task<List<TaskScript>> GetTaskScriptItemsAsync(
+        string scriptId, CancellationToken ct = default) =>
+        db.TaskScripts
+            .Where(ts => ts.ScriptId == scriptId && ts.Status != TaskScriptStatus.Rejected)
+            .ToListAsync(ct);
+
+    public Task<long?> PromoteBufferScriptAsync(
+        long taskId, long? assigneeUserId, CancellationToken ct = default) =>
+        db.Database.SqlQuery<long?>(
+                $"SELECT fn_promote_task_script_buffer({taskId}, {assigneeUserId}) AS \"Value\"")
+            .FirstOrDefaultAsync(ct);
 
     public Task<List<TaskScript>> GetPendingScriptItemsForSpeakerAsync(
         string scriptId, long speakerId, CancellationToken ct = default) =>
@@ -886,8 +900,12 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
                         r.SentenceVariant == SentenceVariant.PureVietnamese &&
                         (r.Status == RecordingStatus.PendingReview || r.Status == RecordingStatus.Approved))) &&
                     !s.TaskScripts.Any(ts =>
-                        ts.TaskId == taskId && ts.AssigneeUserId == userId)))
+                        ts.TaskId == taskId &&
+                        (ts.AssigneeUserId == userId || ts.Status == TaskScriptStatus.Buffer))))
                 // Chưa nằm trong task thu âm khác đang giao cho CHÍNH những người này.
+                .Where(s => !s.TaskScripts.Any(ts =>
+                    ts.Status == TaskScriptStatus.Buffer &&
+                    ts.Task.Status != WorkTaskStatus.Cancelled))
                 .Where(s => !s.TaskScripts.Any(ts =>
                     ts.Status == TaskScriptStatus.Pending &&
                     // task đủ chỉ tiêu vẫn giữ mục chưa xong nên vẫn tính là "đang giữ".
@@ -964,8 +982,8 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
                 (r.Status == RecordingStatus.PendingReview || r.Status == RecordingStatus.Approved)))
             // Đã là việc Pending của chính Speaker này trong task khác còn chạy.
             .Where(s => !s.TaskScripts.Any(ts =>
-                ts.AssigneeUserId == speakerId &&
-                ts.Status == TaskScriptStatus.Pending &&
+                (ts.Status == TaskScriptStatus.Buffer ||
+                 (ts.AssigneeUserId == speakerId && ts.Status == TaskScriptStatus.Pending)) &&
                 ts.Task.TaskType == TaskType.Recording &&
                 ts.Task.Status != WorkTaskStatus.Cancelled))
             .OrderBy(s => s.ScriptId)

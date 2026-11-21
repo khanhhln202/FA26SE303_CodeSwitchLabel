@@ -54,6 +54,7 @@ public record ImportSkippedDto(string? Id, string Code, string Reason);
 
 public record ImportResultDto(
     long BatchId,
+    string BatchName,
     string FileName,
     int Imported,
     IReadOnlyList<string> ScriptIds,
@@ -61,6 +62,7 @@ public record ImportResultDto(
 
 public record ImportBatchDto(
     long BatchId,
+    string BatchName,
     string FileName,
     int ScriptCount,
     long ImportedBy,
@@ -68,6 +70,7 @@ public record ImportBatchDto(
 
 public record ImportBatchDetailDto(
     long BatchId,
+    string BatchName,
     string FileName,
     int ScriptCount,
     long ImportedBy,
@@ -322,7 +325,8 @@ public record UnifiedContributionResult(
     string ScriptId,
     string Type,
     string Status,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    IReadOnlyList<ScriptListItemDto>? ReplacementScripts = null);
 
 /// <summary>
 /// Một mục trong hàng đợi chờ của Reviewer, thống nhất giữa đóng góp (contribution) và báo lỗi (report).

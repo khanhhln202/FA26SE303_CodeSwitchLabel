@@ -11,6 +11,13 @@ namespace CodeSwitchLabel.Api.Controllers;
 [Authorize]
 public class AiReviewController(IAiReviewService aiReview) : ControllerBase
 {
+    /// <summary>Máy xử lý mọi bản ghi của một cặp đang cần AI phá thế.</summary>
+    [HttpPost("api/recordings/{id}/ai-review-pair")]
+    [Authorize(Roles = "TaskManager,Admin")]
+    [ProducesResponseType(typeof(AiReviewPairResultDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<AiReviewPairResultDto>> AnalyzePair(string id, CancellationToken ct) =>
+        Ok(await aiReview.AnalyzePairAsync(id, ct));
+
     /// <summary>Cho máy bỏ phiếu thứ ba để phá thế hai người duyệt lệch nhau.</summary>
     /// <remarks>
     /// **Máy KHÔNG phải nút bấm lúc nào cũng gọi được.** Luật: hai Reviewer người duyệt trước.

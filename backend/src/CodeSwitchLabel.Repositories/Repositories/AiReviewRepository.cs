@@ -15,6 +15,7 @@ namespace CodeSwitchLabel.Repositories.Repositories;
 /// </summary>
 public record AiReviewCandidate(
     string RecordingId,
+    string ScriptId,
     SentenceVariant Variant,
     RecordingStatus Status,
     string CloudLink,
@@ -69,6 +70,8 @@ public interface IAiReviewRepository
     /// </summary>
     Task<List<string>> GetTiedRecordingIdsAsync(
         int limit, long aiReviewerId, CancellationToken ct = default);
+    Task<List<string>> GetTiedRecordingIdsForPairAsync(
+        string scriptId, long speakerId, long aiReviewerId, CancellationToken ct = default);
 
     /// <summary>
     /// Cùng tập bản ghi với <see cref="GetTiedRecordingIdsAsync"/>, nhưng kèm dữ liệu để
@@ -116,6 +119,7 @@ public class AiReviewRepository(CodeSwitchLabelDbContext db) : IAiReviewReposito
             .Where(r => r.RecordingId == recordingId)
             .Join(db.Scripts, r => r.ScriptId, s => s.ScriptId, (r, s) => new AiReviewCandidate(
                 r.RecordingId,
+                r.ScriptId,
                 r.SentenceVariant,
                 r.Status,
                 r.CloudLink,
@@ -147,6 +151,13 @@ public class AiReviewRepository(CodeSwitchLabelDbContext db) : IAiReviewReposito
         TiedRecordings(aiReviewerId)
             .Select(r => r.RecordingId)
             .Take(limit)
+            .ToListAsync(ct);
+
+    public Task<List<string>> GetTiedRecordingIdsForPairAsync(
+        string scriptId, long speakerId, long aiReviewerId, CancellationToken ct = default) =>
+        TiedRecordings(aiReviewerId)
+            .Where(r => r.ScriptId == scriptId && r.SpeakerId == speakerId)
+            .Select(r => r.RecordingId)
             .ToListAsync(ct);
 
     public Task<List<AiReviewPendingItem>> GetPendingAsync(

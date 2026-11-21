@@ -24,7 +24,7 @@ CREATE TYPE wave_status         AS ENUM ('open','in_progress','completed');
 CREATE TYPE task_status           AS ENUM ('in_progress','completed','cancelled');
 -- 'completed' = người nhận đã đạt quota riêng; lượt giao vẫn còn hiệu lực (xem V17).
 CREATE TYPE assignment_status     AS ENUM ('active','completed','reassigned','cancelled');
-CREATE TYPE task_script_status    AS ENUM ('pending','completed','rejected');
+CREATE TYPE task_script_status    AS ENUM ('pending','completed','rejected','buffer');
 CREATE TYPE sentence_variant      AS ENUM ('code_switching','pure_vietnamese');
 CREATE TYPE recording_status      AS ENUM ('qc_failed','pending_review','approved','rejected');
 CREATE TYPE task_recording_status AS ENUM ('queued','reviewed','skipped');
@@ -194,6 +194,7 @@ CREATE TABLE import_batch (
     batch_id     BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     imported_by  BIGINT NOT NULL REFERENCES app_user(user_id),
     file_name    TEXT NOT NULL,
+    batch_name   TEXT NOT NULL,
     script_count INT NOT NULL DEFAULT 0,           -- counts sentence pairs, not file rows
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT ck_import_batch_count CHECK (script_count >= 0)
@@ -1402,6 +1403,20 @@ BEGIN
                            AND r.sentence_variant = 'pure_vietnamese'
                            AND r.status IN ('pending_review', 'approved'))
        )
+       -- Task script đang hoạt động hoặc dự phòng không được lấy từ luồng tự do ngoài task.
+       AND (
+            p_task_id IS NOT NULL
+            OR q.stage <> 'recording'
+            OR NOT EXISTS (
+                SELECT 1
+                  FROM task_script ts
+                  JOIN task t ON t.task_id = ts.task_id
+                 WHERE ts.script_id = q.script_id
+                   AND ts.status IN ('pending', 'buffer')
+                   AND t.task_type = 'recording'
+                   AND t.status <> 'cancelled'
+            )
+       )
        -- Chặng nào cũng phải tôn trọng p_task_id, nhưng cách "thuộc task" khác nhau:
        --   duyệt văn bản -> task gắn thẳng vào hàng (q.task_id), do lô của Task Manager.
        --   ghi âm       -> task gắn qua bảng trung gian task_script, vì một câu có thể
@@ -2103,6 +2118,26 @@ BEGIN
 
   GET DIAGNOSTICS v_added = ROW_COUNT;
   RETURN v_added;
+END $$;
+
+-- Promote one reserved task script when an active script is removed from the pool.
+-- SKIP LOCKED keeps concurrent reports from promoting the same reserve row.
+CREATE OR REPLACE FUNCTION fn_promote_task_script_buffer(p_task_id BIGINT, p_assignee_user_id BIGINT)
+RETURNS BIGINT LANGUAGE plpgsql AS $$
+DECLARE v_task_script_id BIGINT;
+BEGIN
+  UPDATE task_script
+     SET status = 'pending', assignee_user_id = p_assignee_user_id
+   WHERE task_script_id = (
+       SELECT task_script_id
+         FROM task_script
+        WHERE task_id = p_task_id AND status = 'buffer'
+        ORDER BY included_at, task_script_id
+        FOR UPDATE SKIP LOCKED
+        LIMIT 1
+   )
+  RETURNING task_script_id INTO v_task_script_id;
+  RETURN v_task_script_id;
 END $$;
 
 COMMIT;

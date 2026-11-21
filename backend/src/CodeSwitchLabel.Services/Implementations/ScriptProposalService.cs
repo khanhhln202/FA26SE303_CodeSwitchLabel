@@ -154,6 +154,9 @@ public class ScriptProposalService(
                 $"Cặp câu {request.ScriptId} đang có một đề xuất chờ Reviewer xử lý. Chờ đề xuất đó xong rồi gửi tiếp.");
         }
 
+        var replacements = await repository.GetReportReplacementCandidatesAsync(
+            script.ScriptId, proposerId, script.Domain, 4, ct);
+
         var proposal = new ScriptProposal
         {
             ScriptId = request.ScriptId,
@@ -180,7 +183,8 @@ public class ScriptProposalService(
         }
 
         return new UnifiedContributionResult(
-            proposal.ScriptId, "report", proposal.Status.ToString(), proposal.CreatedAt);
+            proposal.ScriptId, "report", proposal.Status.ToString(), proposal.CreatedAt,
+            [.. replacements.Select(ScriptMapper.ToListItem)]);
     }
 
     public async Task<PagedResult<ProposalQueueItemDto>> ListAsync(

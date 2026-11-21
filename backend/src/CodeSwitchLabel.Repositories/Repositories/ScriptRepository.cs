@@ -54,6 +54,9 @@ public interface IScriptRepository
     /// <summary>Script đã có bản ghi âm nào chưa — dùng để chặn sửa nội dung sau khi đã thu.</summary>
     Task<bool> HasRecordingsAsync(string scriptId, CancellationToken ct = default);
 
+    Task<List<Script>> GetReportReplacementCandidatesAsync(
+        string scriptId, long speakerId, string domain, int count, CancellationToken ct = default);
+
     /// <summary>các bản ghi của CHÍNH người đọc này.</summary>
     Task<List<Recording>> GetRecordingsOfSpeakerAsync(
         string scriptId, long speakerId, CancellationToken ct = default);
@@ -235,6 +238,9 @@ public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
             ImportBatchSortField.CreatedAt => sort.Descending
                 ? query.OrderByDescending(b => b.CreatedAt)
                 : query.OrderBy(b => b.CreatedAt),
+            ImportBatchSortField.BatchName => sort.Descending
+                ? query.OrderByDescending(b => b.BatchName)
+                : query.OrderBy(b => b.BatchName),
             ImportBatchSortField.FileName => sort.Descending
                 ? query.OrderByDescending(b => b.FileName)
                 : query.OrderBy(b => b.FileName),
@@ -262,6 +268,21 @@ public class ScriptRepository(CodeSwitchLabelDbContext db) : IScriptRepository
 
     public Task<bool> HasRecordingsAsync(string scriptId, CancellationToken ct = default) =>
         db.Recordings.AsNoTracking().AnyAsync(r => r.ScriptId == scriptId, ct);
+
+    public Task<List<Script>> GetReportReplacementCandidatesAsync(
+        string scriptId, long speakerId, string domain, int count, CancellationToken ct = default) =>
+        db.Scripts.AsNoTracking()
+            .Where(s => s.ScriptId != scriptId && s.Status == ScriptStatus.Validated && s.Domain == domain)
+            .Where(s => !s.Proposals.Any(p => p.Status == ProposalStatus.Pending))
+            .Where(s => !s.Recordings.Any(r => r.SpeakerId == speakerId &&
+                (r.Status == RecordingStatus.PendingReview || r.Status == RecordingStatus.Approved)))
+            .Where(s => s.QueueRows.Any(q => q.Stage == QueueStage.Recording && q.State == QueueState.Queued))
+            .OrderBy(s => s.QueueRows
+                .Where(q => q.Stage == QueueStage.Recording && q.State == QueueState.Queued)
+                .Min(q => q.EnqueuedAt))
+            .ThenBy(s => s.ScriptId)
+            .Take(count)
+            .ToListAsync(ct);
 
     public Task<List<Recording>> GetRecordingsOfSpeakerAsync(
         string scriptId, long speakerId, CancellationToken ct = default) =>

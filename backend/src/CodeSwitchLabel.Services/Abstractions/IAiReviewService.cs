@@ -33,6 +33,11 @@ public record AiReviewBatchResultDto(
     IReadOnlyList<AiReviewResultDto> Items,
     IReadOnlyList<AiReviewSkippedDto> Skipped);
 
+public record AiReviewPairResultDto(
+    string ScriptId,
+    IReadOnlyList<AiReviewResultDto> Results,
+    IReadOnlyList<AiReviewSkippedDto> Skipped);
+
 /// <summary>
 /// Một bản ghi đang chờ máy phán, kèm đủ dữ liệu để giao diện dựng bảng ngay.
 /// </summary>
@@ -63,6 +68,8 @@ public interface IAiReviewService
     /// Chưa tới lượt máy thì ném <c>ai_review_not_tiebreak</c> và KHÔNG gọi ASR.
     /// </summary>
     Task<AiReviewResultDto> AnalyzeAsync(string recordingId, CancellationToken ct = default);
+
+    Task<AiReviewPairResultDto> AnalyzePairAsync(string recordingId, CancellationToken ct = default);
 
     /// <summary>
     /// Chạy lô trên các bản đang ở thế lệch mà máy chưa phán. Mỗi bản là một lần gọi ASR có

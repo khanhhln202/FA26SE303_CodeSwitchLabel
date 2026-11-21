@@ -95,7 +95,7 @@ public enum WaveStatus { Open, InProgress, Completed }
 
 public enum AssignmentStatus { Active, Completed, Reassigned, Cancelled }
 
-public enum TaskScriptStatus { Pending, Completed, Rejected }
+public enum TaskScriptStatus { Pending, Completed, Rejected, Buffer }
 
 /// <summary>
 /// Mỗi cặp câu cần hai bản ghi: một bản đọc câu chen tiếng Anh, một bản đọc câu thuần Việt.
