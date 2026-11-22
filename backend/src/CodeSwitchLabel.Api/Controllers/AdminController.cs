@@ -26,6 +26,10 @@ public class ReasonsController(IReasonService reasonService) : ControllerBase
         => Ok(await reasonService.GetRejectionReasonsAsync(activeOnly, ct));
 
     /// <summary>Lý do từ chối NỘI DUNG CÂU, dùng khi duyệt văn bản trước lúc thu.</summary>
+    /// <remarks>
+    /// Chỉ Reviewer và Task Manager cần dùng: lý do này gắn vào câu khi duyệt văn bản
+    /// trước khi câu được phép thu âm. Mật khẩu không liên quan đến chất lượng âm thanh.
+    /// </remarks>
     [HttpGet("api/script-error-reasons")]
     [ProducesResponseType(typeof(IEnumerable<ReasonDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<ReasonDto>>> ScriptErrorReasons(
@@ -41,6 +45,10 @@ public class ReasonsController(IReasonService reasonService) : ControllerBase
 public class SystemConfigController(ISystemConfigService configService) : ControllerBase
 {
     /// <summary>Đổi giá trị một tham số.</summary>
+    /// <remarks>
+    /// Chỉ Admin được gọi. Tham số được áp dụng ngay lập tức, không cần khởi động lại API.
+    /// Trả 404 nếu khoá không tồn tại.
+    /// </remarks>
     [HttpPut("{key}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -63,30 +71,46 @@ public class SystemConfigController(ISystemConfigService configService) : Contro
 public class StatisticsController(IStatisticsService statistics) : ControllerBase
 {
     /// <summary>Bảng tổng quan: số câu, số bản ghi, tổng thời lượng đã duyệt đạt, số người tham gia.</summary>
+    /// <remarks>
+    /// Số liệu đọc thẳng từ view có sẵn trong lược đồ, nên luôn khớp với báo cáo SQL.
+    /// Chỉ Admin được xem.
+    /// </remarks>
     [HttpGet("dashboard")]
     [ProducesResponseType(typeof(DashboardDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<DashboardDto>> Dashboard(CancellationToken ct)
         => Ok(await statistics.GetDashboardAsync(ct));
 
     /// <summary>Chất lượng theo từng người đọc: số bản nộp, số đạt, số bị từ chối, tỉ lệ đạt.</summary>
+    /// <remarks>
+    /// Chỉ Admin được xem. Tỉ lệ đạt = số bản duyệt đạt / tổng số bản nộp của người đọc đó.
+    /// </remarks>
     [HttpGet("statistics/speakers")]
     [ProducesResponseType(typeof(IEnumerable<SpeakerQualityDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<SpeakerQualityDto>>> Speakers(CancellationToken ct)
         => Ok(await statistics.GetSpeakerQualityAsync(ct));
 
     /// <summary>Số lượt duyệt của từng Reviewer, tách theo đạt và từ chối.</summary>
+    /// <remarks>
+    /// Chỉ Admin được xem. Dùng để đánh giá năng suất và độ nghiêm của từng Reviewer.
+    /// </remarks>
     [HttpGet("statistics/reviewers")]
     [ProducesResponseType(typeof(IEnumerable<ReviewerQualityDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<ReviewerQualityDto>>> Reviewers(CancellationToken ct)
         => Ok(await statistics.GetReviewerQualityAsync(ct));
 
     /// <summary>Nguyên nhân từ chối phổ biến — xếp theo số lần bị dùng.</summary>
+    /// <remarks>
+    /// Chỉ Admin được xem. Giúp nhóm quản trị biết lỗi thường gặp nhất để điều chỉnh hướng dẫn người đọc.
+    /// </remarks>
     [HttpGet("statistics/rejection-reasons")]
     [ProducesResponseType(typeof(IEnumerable<RejectionStatDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<RejectionStatDto>>> RejectionStats(CancellationToken ct)
         => Ok(await statistics.GetRejectionStatsAsync(ct));
 
     /// <summary>Tiến độ từng đợt: chỉ tiêu, phần đã chia cho task, phần còn lại, số task đã xong.</summary>
+    /// <remarks>
+    /// Chỉ Admin được xem. Phần còn lại = chỉ tiêu đợt − tổng chỉ tiêu task đã chia trong đợt.
+    /// </remarks>
     [HttpGet("statistics/waves")]
     [ProducesResponseType(typeof(IEnumerable<WaveProgressDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<WaveProgressDto>>> Waves(CancellationToken ct)

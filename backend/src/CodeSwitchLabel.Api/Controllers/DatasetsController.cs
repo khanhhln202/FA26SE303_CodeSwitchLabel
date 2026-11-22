@@ -14,6 +14,10 @@ namespace CodeSwitchLabel.Api.Controllers;
 public class DatasetsController(IDatasetService datasets) : ControllerBase
 {
     /// <summary>Tạo dataset nháp từ bản duyệt đạt (chọn tay và/hoặc theo đợt).</summary>
+    /// <remarks>
+    /// Dataset mới tạo ở trạng thái nháp. Mỗi cặp câu phải đủ cả hai bản cs và vi trước khi phát hành.
+    /// Trả 409 nếu tên dataset đã tồn tại, 422 nếu không có bản duyệt đạt nào phù hợp.
+    /// </remarks>
     [HttpPost]
     [ProducesResponseType(typeof(CreateDatasetResult), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
@@ -37,6 +41,9 @@ public class DatasetsController(IDatasetService datasets) : ControllerBase
         => Ok(await datasets.SearchAsync(request, ct));
 
     /// <summary>Chi tiết dataset, kèm các cặp câu còn thiếu một biến thể.</summary>
+    /// <remarks>
+    /// Dùng để Reviewer/Admin biết còn thiếu bản ghi nào để hoàn tất dataset. Trả 404 nếu dataset không tồn tại.
+    /// </remarks>
     [HttpGet("{id:long}")]
     [ProducesResponseType(typeof(DatasetDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -44,6 +51,10 @@ public class DatasetsController(IDatasetService datasets) : ControllerBase
         => Ok(await datasets.GetAsync(id, ct));
 
     /// <summary>Phát hành dataset. Mỗi cặp câu phải đủ cả hai bản cs và vi.</summary>
+    /// <remarks>
+    /// Sau khi phát hành, dataset không được sửa nữa. Trả 409 nếu còn cặp thiếu biến thể
+    /// hoặc dataset không ở trạng thái nháp.
+    /// </remarks>
     [HttpPost("{id:long}/release")]
     [ProducesResponseType(typeof(DatasetDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -54,6 +65,10 @@ public class DatasetsController(IDatasetService datasets) : ControllerBase
         => Ok(await datasets.ReleaseAsync(id, request, User.GetUserId(), ct));
 
     /// <summary>Lưu trữ dataset đã phát hành.</summary>
+    /// <remarks>
+    /// Chỉ dataset đã phát hành mới lưu trữ được. Dataset lưu trữ vẫn giữ dữ liệu, chỉ
+    /// biến khỏi danh sách đang dùng.
+    /// </remarks>
     [HttpPost("{id:long}/archive")]
     [ProducesResponseType(typeof(DatasetDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -61,6 +76,9 @@ public class DatasetsController(IDatasetService datasets) : ControllerBase
         => Ok(await datasets.ArchiveAsync(id, ct));
 
     /// <summary>Xoá dataset nháp. Dataset đã phát hành hoặc lưu trữ thì không xoá được.</summary>
+    /// <remarks>
+    /// Trả 409 nếu dataset đã phát hành hoặc đã lưu trữ. Việc xoá không khôi phục được.
+    /// </remarks>
     [HttpDelete("{id:long}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]

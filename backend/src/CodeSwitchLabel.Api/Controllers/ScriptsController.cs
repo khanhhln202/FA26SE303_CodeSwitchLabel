@@ -33,6 +33,10 @@ public class ScriptsController(IScriptService scriptService, ILabelingService la
         => Ok(await scriptService.SearchAsync(request, ct));
 
     /// <summary>Chi tiết một cặp câu, kèm bản đã bỏ nhãn, alignment và lịch sử duyệt nội dung.</summary>
+    /// <remarks>
+    /// Trả cả hai phiên bản câu (cs và vi) kèm nhãn ngôn ngữ và alignment từng đoạn.
+    /// Trả 404 nếu câu không tồn tại.
+    /// </remarks>
     [HttpGet("{id}")]
     [ProducesResponseType(typeof(ScriptDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -244,6 +248,10 @@ public class ScriptsController(IScriptService scriptService, ILabelingService la
         => Ok(await scriptService.ListBatchesAsync(request, ct));
 
     /// <summary>Chi tiết một batch: file, số câu nhập được, danh sách mã câu.</summary>
+    /// <remarks>
+    /// Trả danh sách mã câu của batch kèm trạng thái từng câu (đã duyệt, lỗi, chờ duyệt).
+    /// Trả 404 nếu batch không tồn tại. Chỉ Admin được xem.
+    /// </remarks>
     [HttpGet("import/batches/{batchId:long}")]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(ImportBatchDetailDto), StatusCodes.Status200OK)]
@@ -324,6 +332,10 @@ public class ScriptsController(IScriptService scriptService, ILabelingService la
         => Ok(await scriptService.DeactivateAsync(id, ct));
 
     /// <summary>Khôi phục câu đã bị loại/ngừng dùng về chờ duyệt nội dung.</summary>
+    /// <remarks>
+    /// Chỉ nhận câu đang `Deactivated`; câu đã có bản ghi âm trả 409. Câu được khôi phục về
+    /// `PendingValidation` để Reviewer duyệt lại nội dung.
+    /// </remarks>
     [HttpPost("{id}/reactivate")]
     [Authorize(Roles = "Admin,TaskManager")]
     [ProducesResponseType(typeof(ScriptDetailDto), StatusCodes.Status200OK)]

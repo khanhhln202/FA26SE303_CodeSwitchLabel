@@ -17,6 +17,10 @@ namespace CodeSwitchLabel.Api.Controllers;
 public class ReviewerSourceVideosController(ISourceVideoService sourceVideos) : ControllerBase
 {
     /// <summary>Nhận video kế tiếp. 204 khi không còn video nào chờ duyệt.</summary>
+    /// <remarks>
+    /// Mỗi Reviewer chỉ giữ được một video một lúc. Video bị khoá cho đến khi duyệt,
+    /// bỏ qua hoặc hết hạn giữ (TTL). Trả 204 nếu không còn video nào.
+    /// </remarks>
     [HttpGet("next")]
     [ProducesResponseType(typeof(SourceVideoDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -27,6 +31,10 @@ public class ReviewerSourceVideosController(ISourceVideoService sourceVideos) : 
     }
 
     /// <summary>Ghi đè toàn bộ danh sách câu của video đang giữ.</summary>
+    /// <remarks>
+    /// Chỉ Reviewer đang giữ video đó mới gọi được. Đầu vào là toàn bộ danh sách segment,
+    /// các segment không nằm trong danh sách sẽ bị xoá. Trả 409 nếu video không còn được giữ.
+    /// </remarks>
     [HttpPut("{id:long}/segments")]
     [ProducesResponseType(typeof(SourceVideoDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
@@ -38,6 +46,10 @@ public class ReviewerSourceVideosController(ISourceVideoService sourceVideos) : 
     }
 
     /// <summary>Cắt clip WAV từng câu và đánh dấu video đã duyệt.</summary>
+    /// <remarks>
+    /// Sau khi duyệt, video được gắn dấu hoàn tất và rút khỏi hàng đợi của Reviewer.
+    /// Trả 409 nếu video đã được duyệt hoặc không còn được giữ.
+    /// </remarks>
     [HttpPost("{id:long}/approve")]
     [ProducesResponseType(typeof(SourceVideoDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]

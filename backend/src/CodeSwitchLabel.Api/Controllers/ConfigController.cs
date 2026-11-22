@@ -21,12 +21,19 @@ public class ConfigController(
     IDomainService domainService) : ControllerBase
 {
     /// <summary>Toàn bộ tham số hệ thống (đọc).</summary>
+    /// <remarks>
+    /// Mọi vai được đọc, nhưng ghi vẫn chỉ Admin qua `PUT /api/admin/config/{key}`.
+    /// Dùng để FE nạp cấu hình khi khởi động.
+    /// </remarks>
     [HttpGet]
     [ProducesResponseType(typeof(IEnumerable<SystemConfigDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<SystemConfigDto>>> GetAll(CancellationToken ct)
         => Ok(await configService.GetAllAsync(ct));
 
     /// <summary>Một tham số theo khoá.</summary>
+    /// <remarks>
+    /// Trả 404 nếu khoá không tồn tại. Ghi vẫn chỉ Admin qua `PUT /api/admin/config/{key}`.
+    /// </remarks>
     [HttpGet("{key}")]
     [ProducesResponseType(typeof(SystemConfigDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
