@@ -1,4 +1,4 @@
--- Contribution tasks do not allocate recording pairs, so they must not consume
+-- V38: contribution tasks do not allocate recording pairs, so they must not consume
 -- a wave's pair quota or cause recording task creation to fail.
 BEGIN;
 
