@@ -11,12 +11,15 @@ BEGIN
 
     definition := replace(
         definition,
-        E'BEGIN\n    IF TG_OP',
-        E'BEGIN\n    IF NEW.task_type = ''contribution'' THEN\n        RETURN NEW;\n    END IF;\n\n    IF TG_OP');
+        E'IF TG_OP = ''DELETE'' THEN',
+        E'IF NEW.task_type = ''contribution'' THEN\n        RETURN NEW;\n    END IF;\n\n    IF TG_OP = ''DELETE'' THEN');
     definition := replace(
         definition,
         'WHERE t.wave_id = NEW.wave_id',
         'WHERE t.wave_id = NEW.wave_id AND t.task_type <> ''contribution''');
+    IF position('IF NEW.task_type = ''contribution'' THEN' IN definition) = 0 THEN
+        RAISE EXCEPTION 'Could not update fn_validate_wave_task_target for contribution tasks';
+    END IF;
     EXECUTE definition;
 END $$;
 
