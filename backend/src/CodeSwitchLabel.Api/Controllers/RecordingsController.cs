@@ -76,6 +76,10 @@ public class RecordingsController(
         => Ok(await recordingService.SearchAsync(request, OwnerFilter(), ct));
 
     /// <summary>Thông tin một bản ghi.</summary>
+    /// <remarks>
+    /// Speaker chỉ xem được bản của chính mình; Reviewer, Task Manager và Admin xem tất cả.
+    /// Trả 404 nếu bản ghi không tồn tại hoặc không thuộc quyền xem của người gọi.
+    /// </remarks>
     [HttpGet("{id}")]
     [ProducesResponseType(typeof(RecordingDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -136,11 +140,12 @@ public class RecordingsController(
         string id, [FromBody] DiscardPairRequest request, CancellationToken ct)
         => Ok(await reviewService.DiscardPairAsync(id, User.GetUserId(), request, ct));
 
-    /// <summary>
-    /// Admin xem bản ghi theo CẶP; trạng thái cặp do BE chốt bằng cùng luật với lịch sử
-    /// Reviewer/Speaker: một bản bị từ chối thì cả cặp từ chối; đủ cả hai bản đạt mới là đạt;
-    /// còn lại là đang chờ. Mỗi biến thể chỉ lấy lần thu MỚI NHẤT; lượt duyệt trả kèm tên người duyệt.
-    /// </summary>
+    /// <summary>Admin xem bản ghi theo CẶP.</summary>
+    /// <remarks>
+    /// Trạng thái cặp do BE chốt bằng cùng luật với lịch sử Reviewer/Speaker: một bản bị từ chối
+    /// thì cả cặp từ chối; đủ cả hai bản đạt mới là đạt; còn lại là đang chờ. Mỗi biến thể chỉ
+    /// lấy lần thu MỚI NHẤT; lượt duyệt trả kèm tên người duyệt. Chỉ Admin được gọi.
+    /// </remarks>
     [HttpGet("/api/admin/recordings")]
     [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(PagedResult<AdminRecordingPairDto>), StatusCodes.Status200OK)]

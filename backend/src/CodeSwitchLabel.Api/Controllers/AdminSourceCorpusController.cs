@@ -14,6 +14,11 @@ namespace CodeSwitchLabel.Api.Controllers;
 [Authorize(Roles = "Admin")]
 public class AdminSourceCorpusController(ISourceVideoService sourceVideos) : ControllerBase
 {
+    /// <summary>Danh sách video nguồn, có lọc theo trạng thái và phân trang.</summary>
+    /// <remarks>
+    /// Chỉ Admin và Reviewer mới xem được. `?sort=` nhận `sourceVideoId`, `url`, `status`, `createdAt`;
+    /// `?dir=asc|desc` (mặc định `asc`). Bỏ trống `sort` thì ra video mới nhất trước.
+    /// </remarks>
     [HttpGet("source-videos")]
     [ProducesResponseType(typeof(PagedResult<SourceVideoListItem>), StatusCodes.Status200OK)]
     public async Task<PagedResult<SourceVideoListItem>> List(

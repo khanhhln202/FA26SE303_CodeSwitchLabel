@@ -28,6 +28,10 @@ public class WavesController(IWaveService waveService) : ControllerBase
     // TaskManager và Admin đều tạo được đợt; TaskManager tự gán đợt cho mình
     /// <summary>Tạo đợt mới — ở trạng thái Open (chưa có nhiệm vụ nào).
     /// Chỉ tiêu từ 2000 đến 5000 cặp câu.</summary>
+    /// <remarks>
+    /// TaskManager và Admin đều tạo được đợt; TaskManager tự gán đợt cho mình. Trả 422 nếu
+    /// chỉ tiêu ngoài khoảng 2000–5000 hoặc ngày không hợp lệ.
+    /// </remarks>
     [HttpPost]
     [ProducesResponseType(typeof(WaveDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
@@ -63,6 +67,10 @@ public class WavesController(IWaveService waveService) : ControllerBase
     }
 
     /// <summary>Đếm script đã duyệt, chưa thuộc wave, chưa được giữ trong task chưa huỷ và chưa có recording chờ duyệt/đạt.</summary>
+    /// <remarks>
+    /// Dùng để Task Manager biết còn đủ câu nào để lập đợt mới. `domain` là mã chủ đề, bắt buộc.
+    /// Trả 404 nếu chủ đề không tồn tại.
+    /// </remarks>
     [HttpGet("available-scripts")]
     [ProducesResponseType(typeof(AvailableScriptCountDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -91,6 +99,10 @@ public class WavesController(IWaveService waveService) : ControllerBase
             id, autoFill, User.GetUserId(), User.IsInRole("Admin"), ct));
 
     /// <summary>Chi tiết một đợt.</summary>
+    /// <remarks>
+    /// Trả thông tin đợt kèm tiến độ: tổng chỉ tiêu đã chia, số task, số task đã xong.
+    /// Task Manager chỉ xem được đợt được giao cho mình. Trả 404 nếu đợt không tồn tại.
+    /// </remarks>
     [HttpGet("{id:long}")]
     [ProducesResponseType(typeof(WaveDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -98,6 +110,10 @@ public class WavesController(IWaveService waveService) : ControllerBase
         => Ok(await waveService.GetAsync(id, User.GetUserId(), User.IsInRole("Admin"), ct));
 
     /// <summary>Dashboard chiến dịch: quy mô câu, thời lượng audio và nhân khẩu Speaker.</summary>
+    /// <remarks>
+    /// Thống kê tổng quan cho màn hình quản lý đợt: số câu, tổng thời lượng audio, số người đọc tham gia.
+    /// Trả 404 nếu đợt không tồn tại.
+    /// </remarks>
     [HttpGet("{id:long}/dashboard")]
     [ProducesResponseType(typeof(WaveDashboardDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -125,6 +141,10 @@ public class WavesController(IWaveService waveService) : ControllerBase
 
     // Xoá đợt — các task con tự động thành task độc lập nhờ ON DELETE SET NULL
     /// <summary>Xoá đợt. Task đang gắn tự động thành task độc lập (wave_id = null).</summary>
+    /// <remarks>
+    /// Chỉ Admin được gọi. Task trong đợt không bị xoá, chỉ chuyển thành task độc lập (wave_id = null).
+    /// Trả 404 nếu đợt không tồn tại, 403 nếu không phải Admin.
+    /// </remarks>
     [HttpDelete("{id:long}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]

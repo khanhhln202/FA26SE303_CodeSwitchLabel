@@ -14,6 +14,10 @@ namespace CodeSwitchLabel.Api.Controllers;
 public class DomainsController(IDomainService domainService) : ControllerBase
 {
     /// <summary>Tạo chủ đề mới. Backend tự sinh `code` và chữ số trong mã câu.</summary>
+    /// <remarks>
+    /// Trả 409 nếu chủ đề đã tồn tại. Mã chủ đề (`code`) dùng để gắn vào mã câu, không đổi
+    /// sau khi tạo.
+    /// </remarks>
     [HttpPost]
     [ProducesResponseType(typeof(TopicDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
@@ -26,6 +30,9 @@ public class DomainsController(IDomainService domainService) : ControllerBase
     }
 
     /// <summary>Đổi tên hiển thị. `code` và chữ số trong mã câu không đổi.</summary>
+    /// <remarks>
+    /// Trả 404 nếu chủ đề không tồn tại, 409 nếu tên mới đã trùng với chủ đề khác.
+    /// </remarks>
     [HttpPut("{code}")]
     [ProducesResponseType(typeof(TopicDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -35,6 +42,10 @@ public class DomainsController(IDomainService domainService) : ControllerBase
         => Ok(await domainService.RenameAsync(code, request.Name, ct));
 
     /// <summary>Xóa mềm: chủ đề biến khỏi danh sách chọn, dữ liệu cũ giữ nguyên code.</summary>
+    /// <remarks>
+    /// Trả 404 nếu chủ đề không tồn tại, 409 nếu chủ đề đang được dùng bởi câu nào đó.
+    /// Dữ liệu cũ giữ nguyên code để truy vết.
+    /// </remarks>
     [HttpDelete("{code}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]

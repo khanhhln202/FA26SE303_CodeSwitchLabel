@@ -34,6 +34,10 @@ public class AuthController(IAuthService authService) : ControllerBase
         => Ok(await authService.LoginAsync(request, ct));
 
     /// <summary>Xác minh Google ID token và đổi token đăng nhập ứng dụng.</summary>
+    /// <remarks>
+    /// Cho phép đăng nhập bằng tài khoản Google mà không cần mật khẩu ứng dụng. Nếu dịch vụ
+    /// Google chưa cấu hình thì trả 503. Chép accessToken rồi bấm **Authorize** để gọi các endpoint khác.
+    /// </remarks>
     [HttpPost("google")]
     [AllowAnonymous]
     [EnableRateLimiting("auth")]

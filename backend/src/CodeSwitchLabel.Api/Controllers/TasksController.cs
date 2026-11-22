@@ -70,6 +70,10 @@ public class TasksController(ITaskService taskService) : ControllerBase
         => Ok(await taskService.SearchAsync(request, User.GetUserId(), User.IsInRole("Admin"), ct));
 
     /// <summary>Chi tiết task: tiến độ, toàn bộ lịch sử giao việc, và từng mục.</summary>
+    /// <remarks>
+    /// Trả toàn bộ mục của task kèm trạng thái từng mục và người nhận. Trả 404 nếu task không tồn tại.
+    /// Task Manager/Admin xem được mọi task; người nhận chỉ xem task đang giao cho mình.
+    /// </remarks>
     [HttpGet("{id:long}")]
     [ProducesResponseType(typeof(TaskDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -221,6 +225,10 @@ public class TasksController(ITaskService taskService) : ControllerBase
 
     // Xoá cứng nhiệm vụ đã gỡ khỏi đợt (chưa có dữ liệu nộp thật)
     /// <summary>Xoá nhiệm vụ. Chỉ xoá được task đã gỡ khỏi đợt và chưa có dữ liệu nộp/duyệt thật.</summary>
+    /// <remarks>
+    /// Việc xoá không khôi phục được. Trả 403 nếu người gọi không phải Admin hoặc không được phép,
+    /// 409 nếu task đã có dữ liệu nộp/duyệt thật hoặc chưa được gỡ khỏi đợt.
+    /// </remarks>
     [HttpDelete("{id:long}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
@@ -255,6 +263,10 @@ public class TasksController(ITaskService taskService) : ControllerBase
         => Ok(await taskService.GetAssigneeSummaryAsync(ct));
 
     /// <summary>Tổng quan trang chủ Task Manager: đợt phụ trách, tải từng người, task còn chạy.</summary>
+    /// <remarks>
+    /// Dùng cho dashboard của Task Manager/Admin: danh sách đợt phụ trách, khối lượng của từng người
+    /// và số task còn chạy. Trả 403 nếu không phải Task Manager/Admin.
+    /// </remarks>
     [HttpGet("/api/task-manager/overview")]
     [ProducesResponseType(typeof(TaskManagerOverviewDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<TaskManagerOverviewDto>> Overview(CancellationToken ct)

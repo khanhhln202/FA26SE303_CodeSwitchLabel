@@ -12,6 +12,12 @@ namespace CodeSwitchLabel.Api.Controllers;
 public class AiReviewController(IAiReviewService aiReview) : ControllerBase
 {
     /// <summary>Máy xử lý mọi bản ghi của một cặp đang cần AI phá thế.</summary>
+    /// <remarks>
+    /// Chỉ Task Manager và Admin được gọi. Máy lấy audio từ kho, gọi ASR chuyển thành chữ,
+    /// so với văn bản đáng ra phải đọc và tính tỉ lệ sai từ (WER). Hai kết quả có thể: `approved`
+    /// (WER dưới ranh giới) hoặc `rejected` (WER trên ngưỡng, lý do `content_mismatch`).
+    /// Trả 409 nếu chưa tới lượt máy hoặc máy đã phán rồi.
+    /// </remarks>
     [HttpPost("api/recordings/{id}/ai-review-pair")]
     [Authorize(Roles = "TaskManager,Admin")]
     [ProducesResponseType(typeof(AiReviewPairResultDto), StatusCodes.Status200OK)]

@@ -16,6 +16,11 @@ namespace CodeSwitchLabel.Api.Controllers;
 [Authorize(Roles = "Speaker,TaskManager,Admin")]
 public class SourceVideosController(ISourceVideoService sourceVideos) : ControllerBase
 {
+    /// <summary>Gửi một video YouTube vào corpus hội thoại.</summary>
+    /// <remarks>
+    /// Chỉ ghi hàng đợi rồi trả về ngay; việc tải và phiên âm do BackgroundJobs làm nền.
+    /// Người gửi phải là Speaker, Task Manager hoặc Admin. Video trùng URL đã từng gửi thì trả 409.
+    /// </remarks>
     [HttpPost]
     [ProducesResponseType(typeof(SourceVideoDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
@@ -28,6 +33,10 @@ public class SourceVideosController(ISourceVideoService sourceVideos) : Controll
     }
 
     /// <summary>Người gửi xem tiến độ; Admin xem được mọi video.</summary>
+    /// <remarks>
+    /// Trả trạng thái tải (Pending/Processing/Completed/Failed), số lần thử và liên kết
+    /// với corpus nếu đã duyệt. Speaker chỉ xem video của chính mình.
+    /// </remarks>
     [HttpGet("{id:long}")]
     [ProducesResponseType(typeof(SourceVideoDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]

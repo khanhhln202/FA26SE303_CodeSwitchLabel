@@ -147,12 +147,12 @@ public class SpeakerController(
     public async Task<ActionResult<SpeakerProgressDto>> Progress(CancellationToken ct)
         => Ok(await taskService.GetSpeakerProgressAsync(User.GetUserId(), ct));
 
-    /// <summary>
-    /// Đợt đang tham gia. 204 = chưa tham gia đợt nào.
+    /// <summary>Đợt đang tham gia của chính mình. 204 = chưa tham gia đợt nào.</summary>
+    /// <remarks>
     /// <c>target</c> là chỉ tiêu RIÊNG của người gọi — tổng quota trên các lượt giao task thu âm
     /// trong đợt, không phải chỉ tiêu cả đợt. <c>submitted</c> là số bản đã nộp thật và
     /// có thể vượt <c>target</c>.
-    /// </summary>
+    /// </remarks>
     [HttpGet("rounds/current")]
     [ProducesResponseType(typeof(SpeakerRoundDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -259,6 +259,9 @@ public class SpeakerController(
         => Ok(await proposalService.ListForProposerAsync(User.GetUserId(), query, ct));
 
     /// <summary>Tổng hợp số bản đã nộp / đạt / bị từ chối / đang chờ của chính mình.</summary>
+    /// <remarks>
+    /// Thống kê cá nhân của Speaker, không cần phân quyền thêm. Dùng cho màn hình cá nhân của người đọc.
+    /// </remarks>
     [HttpGet("stats")]
     [ProducesResponseType(typeof(SpeakerStatsDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<SpeakerStatsDto>> Stats(CancellationToken ct)

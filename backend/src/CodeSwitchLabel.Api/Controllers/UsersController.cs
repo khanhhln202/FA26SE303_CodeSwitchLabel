@@ -42,6 +42,10 @@ public class UsersController(IUserService userService) : ControllerBase
         => Ok(await userService.SearchSpeakersAsync(request, ct));
 
     /// <summary>Chi tiết một tài khoản, kèm hồ sơ người đọc và các task đang nhận.</summary>
+    /// <remarks>
+    /// Trả 404 nếu tài khoản không tồn tại. Chỉ Admin/TaskManager được gọi; Task Manager
+    /// không được xem tài khoản Admin/Task Manager khác.
+    /// </remarks>
     [HttpGet("{id:long}")]
     [ProducesResponseType(typeof(UserDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -73,6 +77,9 @@ public class UsersController(IUserService userService) : ControllerBase
     }
 
     /// <summary>Sửa họ tên hoặc số điện thoại. Trường nào không gửi thì giữ nguyên; gửi chuỗi rỗng để xoá số điện thoại.</summary>
+    /// <remarks>
+    /// Trả 404 nếu tài khoản không tồn tại, 403 nếu Task Manager thao tác trên Admin/Task Manager khác.
+    /// </remarks>
     [HttpPatch("{id:long}")]
     [ProducesResponseType(typeof(UserDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -130,6 +137,10 @@ public class UsersController(IUserService userService) : ControllerBase
     }
 
     /// <summary>Mở khoá tài khoản.</summary>
+    /// <remarks>
+    /// Có hiệu lực ngay, người đó có thể đăng nhập lại. Trả 404 nếu tài khoản không tồn tại,
+    /// 403 nếu Task Manager mở khoá Admin/Task Manager khác.
+    /// </remarks>
     [HttpPost("{id:long}/unlock")]
     [ProducesResponseType(typeof(UserDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -210,6 +221,10 @@ public class MeController(IUserService userService) : ControllerBase
         => Ok(await userService.ChangeOwnPasswordAsync(User.GetUserId(), request, ct));
 
     /// <summary>Sửa họ tên, số điện thoại của chính mình. Trường nào không gửi thì giữ nguyên; gửi chuỗi rỗng để xoá số điện thoại.</summary>
+    /// <remarks>
+    /// Chỉ ảnh hưởng đến tài khoản của người đang đăng nhập. Gửi chuỗi rỗng trong `phoneNumber`
+    /// để xoá số điện thoại.
+    /// </remarks>
     [HttpPatch]
     [ProducesResponseType(typeof(UserDetailDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<UserDetailDto>> UpdateOwn(
@@ -244,6 +259,10 @@ public class MeController(IUserService userService) : ControllerBase
         => Ok(await userService.UpdateOwnSpeakerProfileAsync(User.GetUserId(), request, ct));
 
     /// <summary>Chủ đề mình đủ trình độ duyệt — để Reviewer biết mình duyệt được câu thuộc chủ đề nào.</summary>
+    /// <remarks>
+    /// Chỉ Reviewer được gọi. Danh sách chủ đề dùng để Reviewer biết mình được duyệt câu thuộc
+    /// chủ đề nào trong màn duyệt nội dung.
+    /// </remarks>
     [HttpGet("domains")]
     [Authorize(Roles = "Reviewer")]
     [ProducesResponseType(typeof(IReadOnlyList<string>), StatusCodes.Status200OK)]
