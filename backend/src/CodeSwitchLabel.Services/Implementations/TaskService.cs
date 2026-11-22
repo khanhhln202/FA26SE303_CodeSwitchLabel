@@ -201,7 +201,7 @@ public class TaskService(
             // Tổng chỉ tiêu các task không được vượt chỉ tiêu chiến dịch.
             var allocated = await waves.SumAllocatedAsync(waveId, ct);
 
-            if (allocated + targetQty > wave.TargetQty)
+            if (request.TaskType != TaskType.Contribution && allocated + targetQty > wave.TargetQty)
             {
                 throw new UnprocessableException(
                     "task_target_exceeds_wave",
@@ -635,7 +635,7 @@ public class TaskService(
             var wave = task.WaveId.HasValue
                 ? await waves.GetAsync(task.WaveId.Value, ct)
                 : null;
-            if (wave is not null)
+            if (wave is not null && task.TaskType != TaskType.Contribution)
             {
                 var allocated = await waves.SumAllocatedAsync(task.WaveId!.Value, ct);
                 var withoutThis = allocated - task.TargetQty;

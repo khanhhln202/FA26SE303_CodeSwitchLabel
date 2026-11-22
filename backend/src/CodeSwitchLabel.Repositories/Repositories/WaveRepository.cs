@@ -161,7 +161,7 @@ public class WaveRepository(CodeSwitchLabelDbContext db) : IWaveRepository
     }
 
     public Task<long> SumAllocatedAsync(long waveId, CancellationToken ct = default) =>
-        db.WorkTasks.Where(t => t.WaveId == waveId)
+        db.WorkTasks.Where(t => t.WaveId == waveId && t.TaskType != TaskType.Contribution)
             .SumAsync(t => (long)t.TargetQty, ct);
 
     public Task<List<WaveProgress>> GetProgressAsync(
