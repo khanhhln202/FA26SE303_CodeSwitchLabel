@@ -236,6 +236,7 @@ public sealed class ScriptRawImportTests
             .ReturnsAsync(100_000);
 
         var service = new ScriptService(
+            null!,
             repo.Object,
             Mock.Of<IScriptQueueService>(),
             Mock.Of<IReasonRepository>(),

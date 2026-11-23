@@ -36,7 +36,7 @@ public sealed class TaskWaveIndependentTests : IntegrationTestBase
             Description = "Task độc lập",
             TargetQty = 5,
             Deadline = DateTimeOffset.UtcNow.AddDays(7)
-        }, ManagerUserId, TestContext.Current.CancellationToken);
+        }, ManagerUserId, false, TestContext.Current.CancellationToken);
 
         Assert.Null(detail.Summary.WaveId);
         Assert.Null(detail.Summary.WaveName);
@@ -52,7 +52,7 @@ public sealed class TaskWaveIndependentTests : IntegrationTestBase
             Description = "Gắn sau",
             TargetQty = 1,
             Deadline = DateTimeOffset.UtcNow.AddDays(7)
-        }, ManagerUserId, TestContext.Current.CancellationToken);
+        }, ManagerUserId, false, TestContext.Current.CancellationToken);
 
         var attached = await TaskService.AttachAsync(
             standalone.Summary.TaskId, WaveId, TestContext.Current.CancellationToken,
@@ -73,7 +73,7 @@ public sealed class TaskWaveIndependentTests : IntegrationTestBase
             Description = "Lấp đầy",
             TargetQty = 2000,
             Deadline = DateTimeOffset.UtcNow.AddDays(7)
-        }, ManagerUserId, TestContext.Current.CancellationToken);
+        }, ManagerUserId, false, TestContext.Current.CancellationToken);
 
         var standalone = await TaskService.CreateAsync(new CreateTaskRequest
         {
@@ -82,7 +82,7 @@ public sealed class TaskWaveIndependentTests : IntegrationTestBase
             Description = "Vượt quota",
             TargetQty = 1,
             Deadline = DateTimeOffset.UtcNow.AddDays(7)
-        }, ManagerUserId, TestContext.Current.CancellationToken);
+        }, ManagerUserId, false, TestContext.Current.CancellationToken);
 
         var ex = await Assert.ThrowsAsync<UnprocessableException>(() =>
             TaskService.AttachAsync(standalone.Summary.TaskId, WaveId,
@@ -102,7 +102,7 @@ public sealed class TaskWaveIndependentTests : IntegrationTestBase
             Description = "Hạn ngoài khung",
             TargetQty = 1,
             Deadline = DateTimeOffset.UtcNow.AddDays(7)
-        }, ManagerUserId, TestContext.Current.CancellationToken);
+        }, ManagerUserId, false, TestContext.Current.CancellationToken);
 
         var future = await CreateWaveAsync(
             $"Khung xa {Guid.NewGuid():N}", 2000,
@@ -133,7 +133,7 @@ public sealed class TaskWaveIndependentTests : IntegrationTestBase
             Description = "Xoá vĩnh viễn task thu âm",
             TargetQty = 1,
             Deadline = DateTimeOffset.UtcNow.AddDays(7)
-        }, ManagerUserId, TestContext.Current.CancellationToken);
+        }, ManagerUserId, false, TestContext.Current.CancellationToken);
 
         await TaskService.AddItemsAsync(recordingTask.Summary.TaskId,
             new AddTaskItemsRequest { Ids = [script.ScriptId] },
@@ -149,7 +149,7 @@ public sealed class TaskWaveIndependentTests : IntegrationTestBase
             Description = "Xoá vĩnh viễn task duyệt",
             TargetQty = 1,
             Deadline = DateTimeOffset.UtcNow.AddDays(7)
-        }, ManagerUserId, TestContext.Current.CancellationToken);
+        }, ManagerUserId, false, TestContext.Current.CancellationToken);
 
         var recording = await CreateRecordingAsync(
             script.ScriptId, SpeakerUserId, SentenceVariant.CodeSwitching);
@@ -269,7 +269,7 @@ public sealed class TaskWaveIndependentTests : IntegrationTestBase
             Description = "Task của manager khác",
             TargetQty = 1,
             Deadline = DateTimeOffset.UtcNow.AddDays(7)
-        }, ManagerUserId, TestContext.Current.CancellationToken);
+        }, ManagerUserId, false, TestContext.Current.CancellationToken);
 
         var ex = await Assert.ThrowsAsync<ForbiddenException>(() =>
             WaveService.DeleteTaskAsync(WaveId, created.Summary.TaskId,
@@ -289,7 +289,7 @@ public sealed class TaskWaveIndependentTests : IntegrationTestBase
             Description = "Xoá wave giữ task",
             TargetQty = 1,
             Deadline = DateTimeOffset.UtcNow.AddDays(7)
-        }, ManagerUserId, TestContext.Current.CancellationToken);
+        }, ManagerUserId, false, TestContext.Current.CancellationToken);
 
         // Xoá wave bằng SQL trực tiếp (không endpoint xoá wave):
         // FK ON DELETE SET NULL phải giữ lại task.
@@ -319,7 +319,7 @@ public sealed class TaskWaveIndependentTests : IntegrationTestBase
             Description = "Đóng thay vì xoá",
             TargetQty = 1,
             Deadline = DateTimeOffset.UtcNow.AddDays(7)
-        }, ManagerUserId, TestContext.Current.CancellationToken);
+        }, ManagerUserId, false, TestContext.Current.CancellationToken);
 
         await TaskService.AddItemsAsync(created.Summary.TaskId,
             new AddTaskItemsRequest { Ids = [script.ScriptId] },
@@ -349,7 +349,7 @@ public sealed class TaskWaveIndependentTests : IntegrationTestBase
             Description = "Route đã gỡ",
             TargetQty = 1,
             Deadline = DateTimeOffset.UtcNow.AddDays(7)
-        }, ManagerUserId, TestContext.Current.CancellationToken);
+        }, ManagerUserId, false, TestContext.Current.CancellationToken);
 
         var token = await _fixture.GetManagerTokenAsync();
         using var client = _fixture.CreateClientWithAuth(token);
@@ -374,7 +374,7 @@ public sealed class TaskWaveIndependentTests : IntegrationTestBase
             Description = "Hiện trong tiến độ",
             TargetQty = 2,
             Deadline = DateTimeOffset.UtcNow.AddDays(7)
-        }, ManagerUserId, TestContext.Current.CancellationToken);
+        }, ManagerUserId, false, TestContext.Current.CancellationToken);
 
         var row = await Tasks.GetRowAsync(created.Summary.TaskId, TestContext.Current.CancellationToken);
         Assert.NotNull(row);
@@ -410,7 +410,7 @@ public sealed class TaskWaveIndependentTests : IntegrationTestBase
             Description = "Chuyển đợt",
             TargetQty = 1,
             Deadline = DateTimeOffset.UtcNow.AddDays(7)
-        }, ManagerUserId, TestContext.Current.CancellationToken);
+        }, ManagerUserId, false, TestContext.Current.CancellationToken);
 
         var moved = await TaskService.AttachAsync(
             created.Summary.TaskId, second.WaveId,
