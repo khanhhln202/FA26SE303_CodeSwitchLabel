@@ -189,6 +189,7 @@ export default function TaskManagerManagement() {
     selectedBatchId: "",
     taskTitle: "",
     targetRole: "Speaker",
+    speakerTaskType: "Recording",
     assignedUserIds: []
   });
 
@@ -300,7 +301,8 @@ export default function TaskManagerManagement() {
           else if (rawStatus === "cancelled" || rawStatus === "canceled" || rawStatus === "đã hủy") calculatedStatus = "Đã hủy";
 
           const rawType = String(currentTaskData.taskType || currentTaskData.summary?.taskType || "").toLowerCase();
-          const isSpeaker = rawType === "recording" || rawType === "speaker" || rawType === "0";
+          const isContribution = rawType === "contribution" || rawType === "2";
+          const isSpeaker = rawType === "recording" || rawType === "speaker" || rawType === "0" || isContribution;
 
           let usersList = [];
           const userTargetsMap = {};
@@ -338,6 +340,8 @@ export default function TaskManagerManagement() {
             taskId: taskId,
             title: currentTaskData.description || currentTaskData.title || currentTaskData.summary?.description || "Nhiệm vụ",
             role: isSpeaker ? "Speaker" : "Reviewer",
+            taskType: isContribution ? "Contribution" : isSpeaker ? "Recording" : "Review",
+            isContribution,
             waveId: Number(currentTaskData.waveId || currentTaskData.summary?.waveId),
             topic: mapDomainToTopicVN(currentTaskData.domain || currentTaskData.summary?.domain),
             rawTargetQty: actualTaskQty,
@@ -446,6 +450,7 @@ export default function TaskManagerManagement() {
       selectedBatchId: initialBatch ? initialBatch.id : "",
       taskTitle: "",
       targetRole: "Speaker",
+      speakerTaskType: "Recording",
       assignedUserIds: []
     });
     setIsAssignModalOpen(true);
@@ -494,6 +499,7 @@ export default function TaskManagerManagement() {
 
       const userIdsToAssign = assignFormData.assignedUserIds.map(Number);
       const isSpeaker = assignFormData.targetRole === "Speaker";
+      const isContribution = isSpeaker && assignFormData.speakerTaskType === "Contribution";
       let endDateClean = formatDateToISO(batchObj.rawEndDateIso || batchObj.endDate);
       const domainMap = {
         "Công nghệ thông tin": "ItTechnology",
@@ -524,7 +530,7 @@ export default function TaskManagerManagement() {
       let newCreatedTask;
       const payload = {
         waveId: targetBatchId,
-        taskType: isSpeaker ? "Recording" : "Review",
+        taskType: isContribution ? "Contribution" : isSpeaker ? "Recording" : "Review",
         domain: targetDomain,
         description: assignFormData.taskTitle.trim(),
         targetQty: newTaskTarget,
@@ -567,7 +573,7 @@ export default function TaskManagerManagement() {
           await taskService.assignTask(taskId, userIdsToAssign).catch(e => console.warn(e));
         }
 
-        if (isSpeaker) {
+        if (isSpeaker && !isContribution) {
           try {
             await taskService.addTaskItems(taskId, {
               autoFill: {
@@ -578,7 +584,7 @@ export default function TaskManagerManagement() {
           } catch (autoFillErr) {
             console.warn("Cảnh báo từ kho script (BE đã hỗ trợ reuse):", autoFillErr);
           }
-        } else {
+        } else if (!isSpeaker) {
           await Promise.all(
             userIdsToAssign.map(uId =>
               taskService.addTextItems(taskId, {
@@ -597,17 +603,24 @@ export default function TaskManagerManagement() {
       const latestTaskRes = await taskService.getTasks({ pageSize: 1000 }).catch(() => ({ items: [] }));
       const rawTasks = latestTaskRes?.items || latestTaskRes?.data || (Array.isArray(latestTaskRes) ? latestTaskRes : []);
 
-      const tempTasks = rawTasks.map(t => ({
-        id: Number(t.taskId || t.id),
-        taskId: Number(t.taskId || t.id),
-        title: t.description || t.title || "Nhiệm vụ",
-        role: (String(t.taskType).toLowerCase() === "recording" || String(t.taskType) === "0") ? "Speaker" : "Reviewer",
-        waveId: Number(t.waveId),
-        targetQty: Number(t.targetQty || 2000),
-        assignedUserIds: (t.assignees || []).map(a => Number(a.userId || a.id || a)),
-        assignedUsers: (t.assignees || []).map(a => a.fullName || a.userName || `User ${a.userId || a.id}`),
-        status: t.status === "Completed" ? "Hoàn thành" : t.status === "Cancelled" ? "Đã hủy" : "Đang thực hiện"
-      }));
+      const tempTasks = rawTasks.map(t => {
+        const rawT = String(t.taskType).toLowerCase();
+        const isContrib = rawT === "contribution" || rawT === "2";
+        const isSpk = rawT === "recording" || rawT === "0" || isContrib;
+        return {
+          id: Number(t.taskId || t.id),
+          taskId: Number(t.taskId || t.id),
+          title: t.description || t.title || "Nhiệm vụ",
+          role: isSpk ? "Speaker" : "Reviewer",
+          taskType: isContrib ? "Contribution" : isSpk ? "Recording" : "Review",
+          isContribution: isContrib,
+          waveId: Number(t.waveId),
+          targetQty: Number(t.targetQty || 2000),
+          assignedUserIds: (t.assignees || []).map(a => Number(a.userId || a.id || a)),
+          assignedUsers: (t.assignees || []).map(a => a.fullName || a.userName || `User ${a.userId || a.id}`),
+          status: t.status === "Completed" ? "Hoàn thành" : t.status === "Cancelled" ? "Đã hủy" : "Đang thực hiện"
+        };
+      });
 
       const rebalanced = await rebalanceBatchTaskTargets(targetBatchId, tempTasks);
       setAssignTasks(rebalanced);
@@ -1289,6 +1302,29 @@ export default function TaskManagerManagement() {
                 </div>
               </div>
 
+              {assignFormData.targetRole === "Speaker" && (
+                <div>
+                  <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
+                    Loại nhiệm vụ Speaker
+                  </label>
+                  <div className="relative flex items-center">
+                    <select
+                      value={assignFormData.speakerTaskType}
+                      onChange={(e) => setAssignFormData({ ...assignFormData, speakerTaskType: e.target.value })}
+                      className="w-full h-11 appearance-none border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl type-body outline-none font-bold transition-all font-sans truncate pl-3.5 pr-8 py-2.5 cursor-pointer"
+                    >
+                      <option value="Recording" className="bg-white text-[#16171C] dark:bg-[#1C1D22] dark:text-white">
+                        Thu âm câu có sẵn
+                      </option>
+                      <option value="Contribution" className="bg-white text-[#16171C] dark:bg-[#1C1D22] dark:text-white">
+                        Đóng góp câu mới
+                      </option>
+                    </select>
+                    <ChevronDown className="w-4 h-4 absolute right-3 pointer-events-none text-[#9A9CA3]" />
+                  </div>
+                </div>
+              )}
+
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="block type-label text-[#2B2C31] dark:text-gray-200">
@@ -1592,7 +1628,7 @@ export default function TaskManagerManagement() {
               <div className="flex items-center gap-2">
                 <Users style={{ color: TASK_MANAGER_ACCENT }} className="w-4 h-4" />
                 <h3 className="type-section text-[#16171C] dark:text-gray-100">
-                  Danh sách phân công ({viewingAssignedTask.role || "Người thực hiện"})
+                  Danh sách phân công ({viewingAssignedTask.role || "Người thực hiện"}{viewingAssignedTask.isContribution ? " - Đóng góp câu" : ""})
                 </h3>
               </div>
               <button
@@ -1936,7 +1972,17 @@ export default function TaskManagerManagement() {
                             {index + 1}
                           </td>
                           <td className="py-2 px-3">
-                            <p className="font-bold text-[#16171C] dark:text-white type-ui leading-snug">{task.title}</p>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-bold text-[#16171C] dark:text-white type-ui leading-snug">{task.title}</p>
+                              {task.isContribution && (
+                                <span
+                                  style={{ backgroundColor: `${TASK_MANAGER_ACCENT}1A`, color: TASK_MANAGER_ACCENT, borderColor: `${TASK_MANAGER_ACCENT}40` }}
+                                  className="type-caption font-label px-2 py-0.5 rounded-md border whitespace-nowrap"
+                                >
+                                  Đóng góp câu
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="py-2 px-3 text-center">
                             <span

@@ -134,7 +134,12 @@ export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
           const parentWave = waveMap[waveId];
 
           const rawType = String(currentTaskData.taskType || currentTaskData.summary?.taskType || "").toLowerCase();
-          const isSpeaker = rawType === "recording" || rawType === "speaker" || rawType === "0";
+          const isSpeaker =
+            rawType === "recording" ||
+            rawType === "speaker" ||
+            rawType === "0" ||
+            rawType === "contribution" ||
+            rawType === "2";
 
           let rawAssignees =
             currentTaskData.assignees ||
