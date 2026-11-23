@@ -6,7 +6,8 @@ import { ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 // Reviewer -> "#6366D8", Task Manager / Admin -> màu tương ứng.
 // variant: "solid" (mặc định, tô đặc + bóng) | "soft" (nền nhạt + viền + chữ màu, không bóng) - dùng khi
 // phân trang không nên là thứ nổi nhất màn hình. accent phải là mã hex 6 số (#RRGGBB).
-export default function Pagination({ currentPage = 1, totalPages = 3, onPageChange, accent = '#FF4B2E', variant = 'solid', pageSize, onPageSizeChange, showPageSize = true }) {
+// compact: rút gọn còn trang đầu, trang cuối và 1 trang mỗi bên trang hiện tại (vd. 1 … 3 4 5 … 7). Mặc định tắt để không đổi các trang khác.
+export default function Pagination({ currentPage = 1, totalPages = 3, onPageChange, accent = '#FF4B2E', variant = 'solid', pageSize, onPageSizeChange, showPageSize = true, compact = false }) {
   const soft = variant === 'soft';
   const [internalSize, setInternalSize] = useState(10);
   const [isOpen, setIsOpen] = useState(false);
@@ -44,7 +45,30 @@ export default function Pagination({ currentPage = 1, totalPages = 3, onPageChan
 
   // đổi hex -> rgba cho box-shadow theo accent
   // Hàm tạo dãy số trang có rút gọn (...)
+  const getCompactPageNumbers = () => {
+    if (totalPages <= 5) return Array.from({ length: totalPages }, (_, i) => i + 1);
+    let start;
+    let end;
+    if (currentPage <= 3) {
+      start = 2;
+      end = Math.max(3, currentPage + 1);
+    } else if (currentPage >= totalPages - 2) {
+      start = Math.min(totalPages - 2, currentPage - 1);
+      end = totalPages - 1;
+    } else {
+      start = currentPage - 1;
+      end = currentPage + 1;
+    }
+    const pages = [1];
+    if (start > 2) pages.push('...');
+    for (let i = start; i <= end; i++) pages.push(i);
+    if (end < totalPages - 1) pages.push('...');
+    pages.push(totalPages);
+    return pages;
+  };
+
   const getPageNumbers = () => {
+    if (compact) return getCompactPageNumbers();
     const pages = [];
     const maxVisiblePages = 5;
 

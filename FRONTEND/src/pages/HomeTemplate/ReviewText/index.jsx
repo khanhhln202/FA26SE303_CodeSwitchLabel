@@ -34,7 +34,7 @@ import {
 import Loading from "../../../components/Loading/Loading";
 import ErrorState from "../../../components/ErrorState/ErrorState";
 import EmptyState from "../../../components/EmptyState/EmptyState";
-import { getSpeakerProgressApi, getNextScriptApi, createScriptProposalApi } from "../../../services/speakerApi";
+import { getSpeakerProgressApi, getNextScriptApi, createScriptProposalApi, skipScriptApi, submitScriptApi } from "../../../services/speakerApi";
 import { getScriptDetailApi, getScriptErrorReasonsApi } from "../../../services/scriptApi";
 import {
   GET_SPEAKER_PROGRESS_API,
@@ -42,6 +42,8 @@ import {
   GET_SCRIPT_DETAIL_API,
   GET_SCRIPT_ERROR_REASONS_API,
   CREATE_SCRIPT_PROPOSAL_API,
+  SKIP_SCRIPT_API,
+  SUBMIT_SCRIPT_API,
 } from "../../../utils/queryKey";
 
 // "2026-10-20T00:00:00Z" -> "20/10/2026"
@@ -132,23 +134,34 @@ export default function ReviewText() {
     onError: (error) => toast.error(error.message),
   });
 
+  // Mutation báo lỗi câu qua endpoint thống nhất POST /api/speaker/scripts/submit (type = report).
+  // Câu tạm rút khỏi hàng ghi âm trong lúc chờ duyệt -> tải lại câu tiếp theo và tiến độ
+  const { mutate: sendReport, isPending: isReporting } = useMutation({
+    mutationKey: [SUBMIT_SCRIPT_API],
+    mutationFn: submitScriptApi,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [GET_NEXT_SCRIPT_API] });
+      queryClient.invalidateQueries({ queryKey: [GET_SPEAKER_PROGRESS_API] });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   const handleTaskChange = (e) => setSearchParams({ taskId: e.target.value });
 
   const handleNextStep = () => navigate(`/speaker/record-speech?taskId=${taskId}`);
-  // Bỏ qua = gọi lại GET /api/speaker/scripts/next. Backend giữ câu đang giao cho mình (mỗi cặp câu một người đọc)
-  // nên có thể trả lại đúng câu cũ -> báo cho người dùng biết thay vì im lặng
-  const handleSkip = async () => {
-    const currentId = sentence?.scriptId;
-    const { data: next, isError } = await refetchScript();
-    if (isError) return;
-    if (!next) {
-      toast.info("Đã hết câu trong nhiệm vụ này.");
-    } else if (next.scriptId === currentId) {
-      toast.info("Hệ thống vẫn giao lại câu này", {
-        description: "Câu chưa bỏ qua được. Nếu câu có lỗi, hãy dùng Báo lỗi câu này.",
-      });
-    }
-  };
+  // Mutation bỏ qua câu: POST /api/speaker/scripts/{scriptId}/skip trả luôn câu kế tiếp
+  // -> ghi thẳng vào cache câu hiện tại, không cần gọi lại GET /scripts/next
+  const { mutate: skipScript, isPending: isSkipping } = useMutation({
+    mutationKey: [SKIP_SCRIPT_API],
+    mutationFn: skipScriptApi,
+    onSuccess: (next) => {
+      queryClient.setQueryData([GET_NEXT_SCRIPT_API, taskId], next);
+      if (!next) toast.info("Đã hết câu trong nhiệm vụ này.");
+      else toast.success("Đã bỏ qua câu này.", { description: "Đã chuyển sang câu tiếp theo." });
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const handleSkip = () => skipScript({ scriptId: sentence.scriptId, taskId });
 
   const openEditModal = async () => {
     setEditCs(sentence.csContent);
@@ -193,10 +206,10 @@ export default function ReviewText() {
 
   const handleSubmitReport = () => {
     if (!reportReason) return;
-    sendProposal(
+    sendReport(
       {
+        type: "report",
         scriptId: sentence.scriptId,
-        kind: "Report",
         errorReasonCode: reportReason,
         comment: reportOther.trim() || null,
       },
@@ -398,11 +411,11 @@ export default function ReviewText() {
       <div className="relative z-10 flex items-center justify-center gap-2.5 flex-wrap mt-3 [@media(min-height:900px)]:mt-4">
         <button
           onClick={handleSkip}
-          disabled={isFetchingScript}
+          disabled={isSkipping || isFetchingScript}
           className={SECONDARY_BTN}
           style={{ border: `1px solid ${BORDER_LIGHT}`, color: TEXT_BODY }}
         >
-          <SkipForward className="w-4 h-4" /> {isFetchingScript ? "Đang lấy câu..." : "Bỏ qua câu này"}
+          <SkipForward className="w-4 h-4" /> {isSkipping || isFetchingScript ? "Đang lấy câu..." : "Bỏ qua câu này"}
         </button>
         <button
           onClick={() => setShowReportModal(true)}
@@ -787,14 +800,14 @@ export default function ReviewText() {
                 </button>
                 <button
                   onClick={handleSubmitReport}
-                  disabled={!reportReason || isReviewing}
+                  disabled={!reportReason || isReporting}
                   className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-full text-white type-button disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                   style={{
                     background: DANGER,
                     boxShadow: `0 4px 10px ${DANGER}4D`,
                   }}
                 >
-                  <Flag className="w-4 h-4" /> {isReviewing ? "Đang gửi..." : "Gửi báo lỗi"}
+                  <Flag className="w-4 h-4" /> {isReporting ? "Đang gửi..." : "Gửi báo lỗi"}
                 </button>
               </div>
             </div>

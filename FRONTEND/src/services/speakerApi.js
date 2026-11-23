@@ -58,6 +58,20 @@ export const getNextScriptApi = async (taskId) => {
   }
 };
 
+// Bỏ qua câu đang hiển thị: POST /api/speaker/scripts/{scriptId}/skip?taskId=
+// Backend nhả chỗ giữ câu này, đẩy câu xuống cuối hàng rồi trả câu kế tiếp (204 = hết câu)
+export const skipScriptApi = async ({ scriptId, taskId }) => {
+  try {
+    const response = await httpClient.post(`/api/speaker/scripts/${scriptId}/skip`, null, { params: { taskId } });
+    return response.status === 204 ? null : response.data;
+  } catch (error) {
+    const message =
+      error.response?.data?.title ||
+      "Không bỏ qua được câu này!";
+    throw new Error(message, { cause: error });
+  }
+};
+
 // Lịch sử ghi âm của chính mình: GET /api/speaker/recordings/history?page=&pageSize= (tối đa 100/trang)
 // Mỗi phần tử là MỘT CẶP câu (bản Việt-Anh + bản tiếng Việt), mới nhất trước, phân trang theo cặp:
 // { scriptId, taskTitle, csText, viText, csRecordingId, viRecordingId (null = chưa ghi bản đó),
@@ -146,6 +160,22 @@ export const createScriptProposalApi = async ({ scriptId, ...values }) => {
     const message =
       error.response?.data?.title ||
       "Gửi đề xuất thất bại, vui lòng thử lại!";
+    throw new Error(message, { cause: error });
+  }
+};
+
+// Endpoint thống nhất đóng góp / báo lỗi: POST /api/speaker/scripts/submit
+// Báo lỗi: { type: "report", scriptId, errorReasonCode, comment }
+// Đóng góp: { type: "contribution", csContent, viContent, domain, alignment, taskId, comment } - câu phải có nhãn [vi]/[en]
+// Trả về { scriptId, type, status, createdAt }
+export const submitScriptApi = async (values) => {
+  try {
+    const response = await httpClient.post("/api/speaker/scripts/submit", values);
+    return response.data;
+  } catch (error) {
+    const message =
+      error.response?.data?.title ||
+      "Gửi thất bại, vui lòng thử lại!";
     throw new Error(message, { cause: error });
   }
 };

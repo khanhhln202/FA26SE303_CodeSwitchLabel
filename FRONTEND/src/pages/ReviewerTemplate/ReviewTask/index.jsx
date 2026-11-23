@@ -143,6 +143,8 @@ export default function ReviewTasks() {
             }}
             accent={ACCENT}
             variant="soft"
+
+            compact
           />
         </div>
       </div>

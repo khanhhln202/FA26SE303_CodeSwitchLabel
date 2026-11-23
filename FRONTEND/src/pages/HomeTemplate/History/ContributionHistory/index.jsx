@@ -308,6 +308,8 @@ export default function ContributionHistory() {
             }}
             accent={ACCENT}
             variant="soft"
+
+            compact
           />
         </div>
       </div>
