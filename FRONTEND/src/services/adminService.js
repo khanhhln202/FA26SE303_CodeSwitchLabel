@@ -170,5 +170,25 @@ export const adminService = {
       responseType: "blob"
     });
     return res.data;
+  },
+
+  // 8. Quản lý Nguồn Video YouTube (Source Corpus)
+  submitSourceVideo: async (youtubeUrl) => {
+    const res = await httpClient.post("/api/source-videos", { youtubeUrl });
+    return res.data;
+  },
+  getAdminSourceVideos: async (params) => {
+    const res = await httpClient.get("/api/admin/source-videos", { params });
+    return res.data;
+  },
+  retrySourceVideo: async (id) => {
+    const res = await httpClient.post(`/api/admin/source-videos/${id}/retry`);
+    return res.data;
+  },
+  exportSourceCorpus: async () => {
+    const res = await httpClient.get("/api/admin/source-corpus/export", {
+      responseType: "blob"
+    });
+    return res;
   }
 };

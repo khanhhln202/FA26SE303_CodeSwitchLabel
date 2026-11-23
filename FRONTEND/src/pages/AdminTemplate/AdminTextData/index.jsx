@@ -10,7 +10,12 @@ import {
   AlertTriangle,
   Upload,
   FileText,
-  Loader2
+  Loader2,
+  Video,
+  RefreshCw,
+  ExternalLink,
+  Clock,
+  XCircle
 } from "lucide-react";
 import { toast } from "sonner";
 import Pagination from "../../../components/Pagination/Pagination";
@@ -20,6 +25,9 @@ import {
   CHIP_SUCCESS_BG,
   CHIP_SUCCESS_BORDER,
   CHIP_SUCCESS_TEXT,
+  CHIP_WARNING_BG,
+  CHIP_WARNING_BORDER,
+  CHIP_WARNING_TEXT,
   AUDIO_PRIMARY
 } from "../../../constants/theme";
 import { adminService } from "../../../services/adminService";
@@ -90,6 +98,69 @@ function HighlightCsText({ rawText }) {
   );
 }
 
+// Chuẩn hóa trạng thái SourceVideoStatus từ BE (hỗ trợ cả string và số enum)
+const getSourceVideoStatusInfo = (status) => {
+  const raw = String(status ?? "").toLowerCase();
+  if (raw === "completed" || raw === "2") {
+    return {
+      label: "Hoàn thành",
+      key: "Completed",
+      bg: CHIP_SUCCESS_BG,
+      border: CHIP_SUCCESS_BORDER,
+      color: CHIP_SUCCESS_TEXT,
+      icon: CheckCircle2
+    };
+  }
+  if (raw === "approved" || raw === "4") {
+    return {
+      label: "Đã duyệt",
+      key: "Approved",
+      bg: CHIP_SUCCESS_BG,
+      border: CHIP_SUCCESS_BORDER,
+      color: CHIP_SUCCESS_TEXT,
+      icon: CheckCircle2
+    };
+  }
+  if (raw === "failed" || raw === "3") {
+    return {
+      label: "Thất bại",
+      key: "Failed",
+      bg: `${DANGER}1A`,
+      border: `${DANGER}40`,
+      color: DANGER,
+      icon: XCircle
+    };
+  }
+  if (raw === "processing" || raw === "1") {
+    return {
+      label: "Đang xử lý",
+      key: "Processing",
+      bg: `${ADMIN_ACCENT}1A`,
+      border: `${ADMIN_ACCENT}40`,
+      color: ADMIN_ACCENT,
+      icon: Loader2,
+      spin: true
+    };
+  }
+  return {
+    label: "Chờ xử lý",
+    key: "Pending",
+    bg: CHIP_WARNING_BG,
+    border: CHIP_WARNING_BORDER,
+    color: CHIP_WARNING_TEXT,
+    icon: Clock
+  };
+};
+
+const formatDurationSec = (sec) => {
+  if (sec === null || sec === undefined) return "---";
+  const total = Math.round(Number(sec));
+  if (Number.isNaN(total)) return "---";
+  const mins = Math.floor(total / 60);
+  const secs = total % 60;
+  return `${mins}:${String(secs).padStart(2, "0")}`;
+};
+
 export default function AdminTextData() {
   const [textList, setTextList] = useState([]);
   const [searchInput, setSearchInput] = useState("");
@@ -116,6 +187,16 @@ export default function AdminTextData() {
   const [fileLoading, setFileLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+
+  // State phục vụ Modal "Thêm văn bản từ video YouTube"
+  const [showVideoModal, setShowVideoModal] = useState(false);
+  const [youtubeUrlInput, setYoutubeUrlInput] = useState("");
+  const [isSubmittingVideo, setIsSubmittingVideo] = useState(false);
+  const [videoList, setVideoList] = useState([]);
+  const [videoLoading, setVideoLoading] = useState(false);
+  const [videoStatusFilter, setVideoStatusFilter] = useState("");
+  const [retryingVideoId, setRetryingVideoId] = useState(null);
+  const [isExportingCorpus, setIsExportingCorpus] = useState(false);
 
   const mapScriptItem = (item) => ({
     id: item.scriptId || item.id,
@@ -212,6 +293,136 @@ export default function AdminTextData() {
   useEffect(() => {
     fetchTexts();
   }, [currentPage, pageSize, activeSearchTerm, selectedTopic]);
+
+  const fetchSourceVideos = async (silent = false) => {
+    try {
+      if (!silent) setVideoLoading(true);
+      const params = {
+        page: 1,
+        pageSize: 50
+      };
+      if (videoStatusFilter) {
+        params.status = videoStatusFilter;
+      }
+      const res = await adminService.getAdminSourceVideos(params);
+      const items = res?.items || (Array.isArray(res) ? res : []);
+      setVideoList(items);
+    } catch (err) {
+      console.error("Lỗi lấy danh sách video nguồn:", err);
+      if (!silent) {
+        toast.error("Không thể tải danh sách video nguồn!");
+      }
+    } finally {
+      if (!silent) setVideoLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!showVideoModal) return;
+    fetchSourceVideos(false);
+  }, [showVideoModal, videoStatusFilter]);
+
+  // Tự động cập nhật trạng thái khi đang có video ở hàng đợi Pending hoặc Processing
+  useEffect(() => {
+    if (!showVideoModal) return;
+    const hasPendingOrProcessing = videoList.some((v) => {
+      const key = getSourceVideoStatusInfo(v.status).key;
+      return key === "Pending" || key === "Processing";
+    });
+    if (!hasPendingOrProcessing) return;
+
+    const timer = setInterval(() => {
+      fetchSourceVideos(true);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [showVideoModal, videoList, videoStatusFilter]);
+
+  const handleOpenVideoModal = () => {
+    setYoutubeUrlInput("");
+    setVideoStatusFilter("");
+    setShowVideoModal(true);
+  };
+
+  const handleCloseVideoModal = () => {
+    setShowVideoModal(false);
+    fetchTexts();
+  };
+
+  const handleSubmitYoutubeVideo = async (e) => {
+    e.preventDefault();
+    const url = youtubeUrlInput.trim();
+    if (!url) {
+      toast.error("Vui lòng nhập link video YouTube!");
+      return;
+    }
+
+    try {
+      setIsSubmittingVideo(true);
+      await adminService.submitSourceVideo(url);
+      toast.success("Đã đưa video vào hàng đợi xử lý!");
+      setYoutubeUrlInput("");
+      fetchSourceVideos(false);
+    } catch (err) {
+      console.error("Lỗi gửi video YouTube:", err);
+      const status = err?.response?.status;
+      const errData = err?.response?.data;
+      if (status === 409) {
+        toast.error("Video YouTube này đã từng được gửi lên hệ thống trước đó!");
+      } else {
+        const msg =
+          errData?.errors?.YoutubeUrl?.[0] ||
+          errData?.detail ||
+          errData?.title ||
+          errData?.message ||
+          "Không thể gửi video YouTube. Vui lòng kiểm tra lại đường dẫn!";
+        toast.error(msg);
+      }
+    } finally {
+      setIsSubmittingVideo(false);
+    }
+  };
+
+  const handleRetryVideo = async (videoId) => {
+    try {
+      setRetryingVideoId(videoId);
+      await adminService.retrySourceVideo(videoId);
+      toast.success("Đã đưa video vào hàng đợi chạy lại!");
+      fetchSourceVideos(true);
+    } catch (err) {
+      console.error("Lỗi retry video:", err);
+      const msg = err?.response?.data?.detail || err?.response?.data?.title || "Không thể thử lại video này!";
+      toast.error(msg);
+    } finally {
+      setRetryingVideoId(null);
+    }
+  };
+
+  const handleExportSourceCorpus = async () => {
+    try {
+      setIsExportingCorpus(true);
+      const res = await adminService.exportSourceCorpus();
+      const blob = new Blob([res.data], { type: "application/zip" });
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+
+      const disposition = res.headers?.["content-disposition"] || "";
+      const filenameMatch = disposition.match(/filename\*?=(?:UTF-8'')?["']?([^;"']+)/i);
+      const fileName = filenameMatch ? decodeURIComponent(filenameMatch[1]) : `source-corpus-${Date.now()}.zip`;
+
+      link.href = downloadUrl;
+      link.setAttribute("download", fileName);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+      toast.success("Đã tải xuống file ZIP corpus thành công!");
+    } catch (err) {
+      console.error("Lỗi export source corpus:", err);
+      toast.error("Xuất file ZIP thất bại hoặc chưa có dữ liệu được duyệt!");
+    } finally {
+      setIsExportingCorpus(false);
+    }
+  };
 
   const handleSearch = () => {
     setActiveSearchTerm(searchInput);
@@ -435,6 +646,16 @@ export default function AdminTextData() {
             </div>
 
             <button
+              type="button"
+              onClick={handleOpenVideoModal}
+              style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 10px 24px ${ADMIN_ACCENT}40` }}
+              className="px-3.5 py-2 text-white rounded-xl type-button flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer whitespace-nowrap"
+            >
+              <Video className="w-4 h-4 text-white" />
+              <span>Thêm văn bản từ video YouTube</span>
+            </button>
+
+            <button
               onClick={handleOpenAddModal}
               style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 10px 24px ${ADMIN_ACCENT}40` }}
               className="px-3.5 py-2 text-white rounded-xl type-button flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer whitespace-nowrap"
@@ -581,7 +802,7 @@ export default function AdminTextData() {
 
                   {Array.from({ length: emptyRowsCount }).map((_, idx) => (
                     <tr key={`empty-${idx}`} className="border-b border-transparent">
-                      <td colSpan={6} className="py-0.5"> </td>
+                      <td colSpan={6} className="py-0.5"> </td>
                     </tr>
                   ))}
                 </>
@@ -612,6 +833,237 @@ export default function AdminTextData() {
           />
         </div>
       </div>
+
+      {/* MODAL THÊM VĂN BẢN TỪ VIDEO YOUTUBE (GOM CHUNG GỬI LINK + THEO DÕI + RETRY + EXPORT CORPUS) */}
+      {showVideoModal && (
+        <div className="fixed inset-0 bg-[#16171C]/55 backdrop-blur-xs flex items-center justify-center p-4 z-50" onClick={handleCloseVideoModal}>
+          <div
+            className="bg-white dark:bg-[#1C1D22] rounded-[24px] w-full max-w-4xl max-h-[88vh] flex flex-col shadow-[0_20px_50px_rgba(16,17,20,0.25)] overflow-hidden border border-[#E5E2D8] dark:border-gray-800 animate-in fade-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="h-1.5 w-full shrink-0" style={{ backgroundColor: ADMIN_ACCENT }} />
+
+            {/* Header Modal */}
+            <div className="px-6 py-4 border-b border-[#E5E2D8] dark:border-gray-800 flex items-center justify-between gap-3 shrink-0">
+              <h3 className="type-section text-[#16171C] dark:text-gray-100">
+                Thêm văn bản từ video YouTube
+              </h3>
+
+              <button
+                type="button"
+                onClick={handleCloseVideoModal}
+                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#F0EEE6] dark:hover:bg-gray-800 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4 text-[#6E7078]" />
+              </button>
+            </div>
+
+            {/* Body Modal */}
+            <div className="p-6 space-y-4 overflow-y-auto flex-1">
+              {/* Form nhập link YouTube */}
+              <form onSubmit={handleSubmitYoutubeVideo} className="bg-[#F7F5EF] dark:bg-[#25272E] p-4 rounded-2xl border border-[#E5E2D8] dark:border-gray-700 space-y-2.5">
+                <label className="block type-label text-[#2B2C31] dark:text-gray-200 font-label">
+                  Đường dẫn video YouTube <span className="text-red-500">*</span>
+                </label>
+                <div className="flex flex-col sm:flex-row gap-2.5">
+                  <input
+                    type="url"
+                    required
+                    value={youtubeUrlInput}
+                    onChange={(e) => setYoutubeUrlInput(e.target.value)}
+                    placeholder="https://www.youtube.com/watch?v=... hoặc https://youtu.be/..."
+                    className="flex-1 h-10 px-3.5 bg-white dark:bg-[#1C1D22] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-ui text-[#16171C] dark:text-white outline-none transition-all placeholder:text-[#9A9CA3]"
+                    onFocus={(e) => {
+                      e.target.style.borderColor = ADMIN_ACCENT;
+                      e.target.style.boxShadow = `0 0 0 4px ${ADMIN_ACCENT}1A`;
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.borderColor = '';
+                      e.target.style.boxShadow = 'none';
+                    }}
+                  />
+                  <button
+                    type="submit"
+                    disabled={isSubmittingVideo || !youtubeUrlInput.trim()}
+                    style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 6px 16px ${ADMIN_ACCENT}35` }}
+                    className="h-10 px-4 text-white rounded-xl type-button inline-flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer disabled:opacity-50 shrink-0"
+                  >
+                    {isSubmittingVideo && <Loader2 className="w-4 h-4 animate-spin" />}
+                    <span>{isSubmittingVideo ? "Đang gửi..." : "Gửi"}</span>
+                  </button>
+                </div>
+                <p className="type-caption text-[#6E7078] dark:text-gray-400">
+                  Hỗ trợ link dạng watch, youtu.be hoặc shorts (không hỗ trợ playlist). Video sẽ được xử lý ngầm và tự động cập nhật trạng thái bên dưới.
+                </p>
+              </form>
+
+              {/* Thanh lọc & làm mới danh sách video + Xuất Corpus */}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="type-label text-[#16171C] dark:text-gray-200 font-label">
+                  Danh sách video đã gửi ({videoList.length})
+                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={videoStatusFilter}
+                    onChange={(e) => setVideoStatusFilter(e.target.value)}
+                    className="px-3 py-1.5 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-meta font-label text-[#16171C] dark:text-white outline-none cursor-pointer"
+                  >
+                    <option value="">Tất cả trạng thái</option>
+                    <option value="Pending">Chờ xử lý (Pending)</option>
+                    <option value="Processing">Đang xử lý (Processing)</option>
+                    <option value="Completed">Hoàn thành (Completed)</option>
+                    <option value="Failed">Thất bại (Failed)</option>
+                    <option value="Approved">Đã duyệt (Approved)</option>
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={() => fetchSourceVideos(false)}
+                    disabled={videoLoading}
+                    className="px-3 py-1.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] hover:bg-[#F7F5EF] dark:hover:bg-gray-800 type-meta font-label text-[#6E7078] dark:text-gray-300 inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                    title="Làm mới danh sách"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${videoLoading ? "animate-spin" : ""}`} />
+                    <span>Làm mới</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleExportSourceCorpus}
+                    disabled={isExportingCorpus}
+                    style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 6px 16px ${ADMIN_ACCENT}35` }}
+                    className="h-10 px-4 text-white rounded-xl type-button inline-flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer disabled:opacity-50 shrink-0"
+                  >
+                    {isExportingCorpus && <Loader2 className="w-4 h-4 animate-spin" />}
+                    <span>{isExportingCorpus ? "Đang xuất..." : "Xuất Corpus (.zip)"}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Bảng danh sách video nguồn */}
+              <div className="rounded-2xl border border-[#E5E2D8] dark:border-gray-800 overflow-hidden">
+                <div className="overflow-x-auto max-h-[300px]">
+                  <table className="w-full text-left border-collapse type-ui min-w-[700px]">
+                    <thead>
+                      <tr className="bg-[#F7F5EF] dark:bg-[#25272E] type-label text-[#9A9CA3] dark:text-gray-400 border-b border-[#E5E2D8] dark:border-gray-800 h-9 sticky top-0 z-10">
+                        <th className="px-3 py-2 font-label">Video / Link YouTube</th>
+                        <th className="px-3 py-2 text-center font-label w-[90px] whitespace-nowrap">Thời lượng</th>
+                        <th className="px-3 py-2 text-center font-label w-[85px] whitespace-nowrap">Số câu</th>
+                        <th className="px-3 py-2 text-center font-label w-[135px] whitespace-nowrap">Trạng thái</th>
+                        <th className="px-3 py-2 text-center font-label w-[100px] whitespace-nowrap">Thao tác</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#F0EEE6] dark:divide-gray-800">
+                      {videoLoading && videoList.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="py-10 text-center text-[#9A9CA3]">
+                            <Loader2 className="w-6 h-6 animate-spin mx-auto mb-1.5" style={{ color: ADMIN_ACCENT }} />
+                            <span className="type-meta">Đang tải danh sách video...</span>
+                          </td>
+                        </tr>
+                      ) : videoList.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="py-10 text-center text-[#9A9CA3] dark:text-gray-500 type-ui">
+                            Chưa có video YouTube nào được gửi lên hệ thống.
+                          </td>
+                        </tr>
+                      ) : (
+                        videoList.map((video) => {
+                          const vId = video.sourceVideoId || video.id;
+                          const statusInfo = getSourceVideoStatusInfo(video.status);
+                          const StatusIcon = statusInfo.icon;
+
+                          return (
+                            <tr key={vId} className="hover:bg-[#F7F5EF]/70 dark:hover:bg-[#25272E]/50 transition-colors">
+                              <td className="px-3 py-2.5 min-w-0 max-w-[300px]">
+                                <p className="font-bold text-[#16171C] dark:text-gray-100 truncate">
+                                  {video.title || "Video đang chờ lấy tiêu đề..."}
+                                </p>
+                                <a
+                                  href={video.youtubeUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 type-caption text-[#6E7078] dark:text-gray-400 hover:underline max-w-full truncate mt-0.5"
+                                >
+                                  <span className="truncate">{video.youtubeUrl}</span>
+                                  <ExternalLink className="w-3 h-3 shrink-0" />
+                                </a>
+                                {video.errorMessage && (
+                                  <p className="type-caption mt-0.5 break-words" style={{ color: DANGER }}>
+                                    Lỗi: {video.errorMessage}
+                                  </p>
+                                )}
+                              </td>
+
+                              <td className="px-3 py-2.5 text-center text-[#6E7078] dark:text-gray-300 font-medium whitespace-nowrap">
+                                {formatDurationSec(video.durationSec)}
+                              </td>
+
+                              <td className="px-3 py-2.5 text-center font-bold text-[#16171C] dark:text-white whitespace-nowrap">
+                                {video.segmentCount ?? 0}
+                              </td>
+
+                              <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                                <span
+                                  style={{
+                                    backgroundColor: statusInfo.bg,
+                                    borderColor: statusInfo.border,
+                                    color: statusInfo.color
+                                  }}
+                                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full type-caption font-label border"
+                                >
+                                  <StatusIcon
+                                    className={`w-3 h-3 shrink-0 ${statusInfo.spin ? "animate-spin" : ""}`}
+                                    style={{ color: statusInfo.color }}
+                                  />
+                                  <span>{statusInfo.label}</span>
+                                </span>
+                                {video.attempts > 0 && (
+                                  <span className="block type-caption text-[#9A9CA3] mt-0.5">
+                                    Lần thử: {video.attempts}
+                                  </span>
+                                )}
+                              </td>
+
+                              <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                                {statusInfo.key === "Failed" ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRetryVideo(vId)}
+                                    disabled={retryingVideoId === vId}
+                                    style={{ color: ADMIN_ACCENT, borderColor: `${ADMIN_ACCENT}40`, backgroundColor: `${ADMIN_ACCENT}12` }}
+                                    className="px-2.5 py-1 rounded-lg border type-caption font-label inline-flex items-center gap-1 hover:opacity-85 transition-opacity cursor-pointer disabled:opacity-50"
+                                  >
+                                    <RefreshCw className={`w-3 h-3 ${retryingVideoId === vId ? "animate-spin" : ""}`} />
+                                    <span>Thử lại</span>
+                                  </button>
+                                ) : (
+                                  <span className="type-caption text-[#9A9CA3]">---</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Modal */}
+            <div className="px-6 py-3.5 border-t border-[#E5E2D8] dark:border-gray-800 bg-[#F7F5EF]/50 dark:bg-[#25272E]/50 flex justify-end shrink-0">
+              <button
+                type="button"
+                onClick={handleCloseVideoModal}
+                className="px-5 py-2 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#1C1D22] type-button text-[#16171C] dark:text-gray-200 hover:bg-[#F7F5EF] dark:hover:bg-gray-800 cursor-pointer transition-colors"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL THÊM & CHỈNH SỬA VĂN BẢN */}
       {showModal && (
