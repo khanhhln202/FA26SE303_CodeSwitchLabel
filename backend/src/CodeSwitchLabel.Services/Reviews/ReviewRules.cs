@@ -107,4 +107,47 @@ public static class ReviewRules
 
         return ReviewBlocker.None;
     }
+
+    /// <summary>
+    /// Thế hoà 1–1 nào có lượt duyệt gần nhất MỚI hơn mốc trả về thì coi như máy duyệt đang lo,
+    /// nên giấu khỏi danh sách của người duyệt. Trả <c>null</c> nghĩa là KHÔNG giấu bản nào.
+    ///
+    /// <para>
+    /// Vì sao cần giấu: từ khi bật máy duyệt tự động, vòng ba của một thế hoà thuộc về máy.
+    /// Mời người vào vòng đó là mời họ làm một việc mà một phút sau máy cũng làm.
+    /// </para>
+    ///
+    /// <para>
+    /// VÌ SAO LÀ MỐC THỜI GIAN chứ không phải "máy đã bỏ cuộc chưa": bộ đếm
+    /// <c>AiReviewRetryBudget</c> nằm trong bộ nhớ của tiến trình nền, không có trong database
+    /// và mất khi API khởi động lại, nên câu truy vấn danh sách không hỏi nó được. Mốc thời
+    /// gian thì nằm sẵn trong <c>review.reviewed_at</c>, và nó bắt được MỌI kiểu hỏng chứ
+    /// không riêng hết lượt thử: có người tắt công tắc, nhà cung cấp nhận dạng chết, tiến
+    /// trình nền treo, container dừng. Thế hoà nào nằm đó quá lâu thì hiện lại cho người,
+    /// bất kể vì lý do gì.
+    /// </para>
+    ///
+    /// <para>
+    /// Thời gian ân hạn suy ra từ chính nhịp quét: máy có <c>maxAttempts</c> lần thử, mỗi lượt
+    /// quét một lần, cộng thêm một nhịp dự phòng. Ai đổi nhịp quét thì ân hạn tự đổi theo —
+    /// không có con số rời nào để quên đồng bộ.
+    /// </para>
+    /// </summary>
+    /// <param name="aiReviewEnabled"><c>ai_review.enabled</c> — tắt thì máy không phán được gì.</param>
+    /// <param name="autoEnabled"><c>ai_review.auto_enabled</c> — tắt thì không ai nhặt thế hoà.</param>
+    /// <param name="scanInterval"><c>ai_review.auto_interval_seconds</c>.</param>
+    /// <param name="maxAttempts">Số lần máy thử một bản ghi trước khi bỏ qua.</param>
+    public static DateTimeOffset? HideTiesNewerThan(
+        bool aiReviewEnabled,
+        bool autoEnabled,
+        TimeSpan scanInterval,
+        int maxAttempts,
+        DateTimeOffset now)
+    {
+        // Thiếu một trong hai công tắc là không có ai nhặt thế hoà. Giấu lúc đó là tạo ra
+        // bản ghi không ai chạm được — đúng thứ van này sinh ra để chặn.
+        if (!aiReviewEnabled || !autoEnabled) return null;
+
+        return now - scanInterval * (maxAttempts + 1);
+    }
 }

@@ -4,6 +4,7 @@ using CodeSwitchLabel.Repositories.Persistence;
 using CodeSwitchLabel.Repositories.Repositories;
 using CodeSwitchLabel.Repositories.Storage;
 using CodeSwitchLabel.Services.Abstractions;
+using CodeSwitchLabel.Services.Audio;
 using CodeSwitchLabel.Services.Common;
 using CodeSwitchLabel.Services.Dtos;
 using CodeSwitchLabel.Services.Reviews;
@@ -50,7 +51,8 @@ public class ReviewService(
         var roundsRequired = await RoundsRequiredAsync(ct);
 
         var recording = await reviews.GetNextForReviewerAsync(
-            reviewerId, taskId, speakerId, random, roundsRequired, ct);
+            reviewerId, taskId, speakerId, random, roundsRequired,
+            await HideTiesNewerThanAsync(ct), ct);
 
         if (recording is null) return null;
 
@@ -78,16 +80,22 @@ public class ReviewService(
         int total;
         List<TaskReviewPairKey>? thuTuCap = null;
 
+        // Cùng một mốc cho cả hai nhánh VÀ cho GET next: đọc hai lần ở hai thời điểm thì mốc
+        // lệch nhau vài mili giây, đủ để một bản ghi hiện ở chỗ này mà mất ở chỗ kia.
+        var anHoaMoiHon = await HideTiesNewerThanAsync(ct);
+
         if (query.GroupBy == TaskReviewGrouping.Pair)
         {
             (rows, total, thuTuCap) = await reviews.GetTaskReviewPairsAsync(
-                taskId, reviewerId, query.OnlyReviewable, roundsRequired, query.Page, query.PageSize,
+                taskId, reviewerId, query.OnlyReviewable, roundsRequired, anHoaMoiHon,
+                query.Page, query.PageSize,
                 query.ToSort<TaskReviewSortField>(), ct);
         }
         else
         {
             (rows, total) = await reviews.GetTaskReviewRowsAsync(
-                taskId, reviewerId, query.OnlyReviewable, roundsRequired, query.Page, query.PageSize,
+                taskId, reviewerId, query.OnlyReviewable, roundsRequired, anHoaMoiHon,
+                query.Page, query.PageSize,
                 query.ToSort<TaskReviewSortField>(), ct);
         }
 
@@ -718,6 +726,26 @@ public class ReviewService(
     /// </summary>
     private Task<int> RoundsRequiredAsync(CancellationToken ct) =>
         config.GetIntAsync(ConfigKeys.ReviewRoundsRequired, ReviewRules.DefaultRoundsRequired, ct);
+
+    /// <summary>
+    /// Mốc để giấu thế hoà khỏi người duyệt, đọc từ công tắc của máy duyệt.
+    /// Xem <see cref="ReviewRules.HideTiesNewerThan"/> cho lý do và cho cái van an toàn.
+    /// </summary>
+    private async Task<DateTimeOffset?> HideTiesNewerThanAsync(CancellationToken ct)
+    {
+        // Một lần đọc cho cả hai nhóm cấu hình: GetAllAsync trả về trọn bảng system_config.
+        var cauHinh = await config.GetAllAsync(ct);
+
+        var mayDuyet = AiReviewSettings.From(cauHinh);
+        var tuDong = AiReviewAutoSettings.From(cauHinh);
+
+        return ReviewRules.HideTiesNewerThan(
+            mayDuyet.Enabled,
+            tuDong.Enabled,
+            tuDong.Interval,
+            AiReviewRetryBudget.DefaultMaxAttempts,
+            clock.GetUtcNow());
+    }
 
     private async Task<TaskRecording?> ResolveTaskAsync(
         long? taskId, long reviewerId, string recordingId, CancellationToken ct)

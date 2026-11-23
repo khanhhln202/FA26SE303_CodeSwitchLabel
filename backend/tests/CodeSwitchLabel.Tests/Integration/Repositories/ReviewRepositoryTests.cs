@@ -50,7 +50,10 @@ public class ReviewRepositoryTests : IntegrationTestBase
 
         // Act
         var result = await Reviews.GetNextForReviewerAsync(
-            ReviewerUserId, null, speaker.UserId, false, 3, TestContext.Current.CancellationToken);
+            ReviewerUserId, null, speaker.UserId, false, 3,
+            // null = không giấu thế hoà nào; bản ghi này chưa ai duyệt nên không liên quan,
+            // nhưng truyền tường minh để test không phụ thuộc vào giá trị mặc định.
+            null, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(result);
