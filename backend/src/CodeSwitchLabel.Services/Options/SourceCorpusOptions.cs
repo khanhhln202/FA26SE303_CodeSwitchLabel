@@ -17,6 +17,13 @@ public class SourceCorpusOptions
     /// </summary>
     public string JsRuntimes { get; set; } = "deno";
 
+    /// <summary>
+    /// File cookie Netscape cho yt-dlp. YouTube chặn IP máy chủ bằng "Sign in to confirm
+    /// you're not a bot"; có cookie của tài khoản phụ thì tải được. Để trống hoặc file
+    /// không tồn tại thì bỏ qua.
+    /// </summary>
+    public string CookiesPath { get; set; } = "";
+
     /// <summary>Tải video dài có thể mất hàng chục phút; đây là trần cho cả tiến trình tải.</summary>
     public int ProcessTimeoutSeconds { get; set; } = 1800;
 

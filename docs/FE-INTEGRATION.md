@@ -1324,8 +1324,8 @@ Admin: GET /api/admin/source-corpus/export -> ZIP
 
 `Queued` → `Processing` → `ReadyForReview` → `InReview` → `Approved`; lỗi quá số lần thử → `Failed`.
 `InReview` quá hạn giữ (`SourceCorpus:ClaimMinutes`) tự quay lại hàng đợi.
-Lỗi hay gặp: `source_video_unavailable` (video riêng tư/bị chặn/đã xoá), `source_download_timeout`,
-`source_transcript_empty`, `asr_not_configured`.
+Lỗi hay gặp: `source_video_unavailable` (video riêng tư/bị chặn/đã xoá, hoặc YouTube chặn IP máy chủ),
+`source_download_timeout`, `source_transcript_empty`, `asr_not_configured`.
 
 ### 13.4 Hợp đồng dữ liệu
 
@@ -1341,4 +1341,6 @@ Lỗi hay gặp: `source_video_unavailable` (video riêng tư/bị chặn/đã x
 API cần `yt-dlp`, `ffmpeg`, Python 3 và một JavaScript runtime (mặc định `deno`) trong máy chủ.
 Dockerfile đã cài các runtime này; chạy tay thì cài `yt-dlp` + Python 3 + `deno` và để trong PATH, hoặc chỉnh
 `SourceCorpus:YtDlpPath` / `SourceCorpus:JsRuntimes`. Máy chủ cần Internet để tải YouTube;
-ASR vẫn là dịch vụ cục bộ đã cấu hình ở `Asr:Endpoint` — **không** lùi sang nhà cung cấp khác.
+IP datacenter có thể bị YouTube chặn (`Sign in to confirm you're not a bot`) — đặt cookie Netscape ở
+`deploy/secrets/youtube-cookies.txt` (xem `deploy/README.md`). ASR vẫn là dịch vụ cục bộ đã cấu hình ở
+`Asr:Endpoint` — **không** lùi sang nhà cung cấp khác.
