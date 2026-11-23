@@ -177,9 +177,12 @@ Google **phụ** — đừng dùng tài khoản chính. Xuất cookie định d�
 yt-dlp --cookies-from-browser chrome --cookies youtube-cookies.txt --skip-download "<video>"
 # Không có yt-dlp trên máy? Dùng extension "Get cookies.txt LOCALLY" để xuất file Netscape.
 scp youtube-cookies.txt azureuser@<ip>:~/FA26SE303_CodeSwitchLabel/deploy/secrets/
-# Container chạy uid 1654; nhóm 1654 cần đọc được file, còn ngoài container chỉ azureuser đọc.
-ssh azureuser@<ip> 'sudo chown azureuser:1654 ~/FA26SE303_CodeSwitchLabel/deploy/secrets/youtube-cookies.txt \
-  && sudo chmod 640 ~/FA26SE303_CodeSwitchLabel/deploy/secrets/youtube-cookies.txt'
+# Container chạy uid 1654; nhóm 1654 cần đi qua được thư mục và đọc file.
+ssh azureuser@<ip> 'cd ~/FA26SE303_CodeSwitchLabel/deploy \
+  && sudo chgrp 1654 secrets \
+  && sudo chmod 750 secrets \
+  && sudo chown azureuser:1654 secrets/youtube-cookies.txt \
+  && sudo chmod 640 secrets/youtube-cookies.txt'
 ```
 
 Dựng lại API (không cần build image):
