@@ -91,9 +91,15 @@ public interface IReviewRepository
     /// Bản ghi tiếp theo người này được duyệt: còn chờ duyệt, không phải bản của chính mình,
     /// mình chưa duyệt lần nào, và chưa đủ số vòng yêu cầu.
     /// </summary>
+    /// <param name="hideTiesNewerThan">
+    /// Bỏ qua thế hoà 1–1 có lượt duyệt gần nhất mới hơn mốc này — máy duyệt đang lo chúng.
+    /// Null là không bỏ qua bản nào. Xem <c>ReviewRules.HideTiesNewerThan</c>.
+    /// PHẢI truyền cùng giá trị với <see cref="GetTaskReviewRowsAsync"/>, nếu không nút
+    /// "bản tiếp theo" sẽ phát ra đúng thứ danh sách vừa giấu đi.
+    /// </param>
     Task<Recording?> GetNextForReviewerAsync(
         long reviewerId, long? taskId, long? speakerId, bool random,
-        int roundsRequired, CancellationToken ct = default);
+        int roundsRequired, DateTimeOffset? hideTiesNewerThan, CancellationToken ct = default);
 
     /// <summary>Một bản ghi kèm câu của nó, để Reviewer mở thẳng bản chọn từ danh sách.</summary>
     Task<Recording?> GetWithScriptAsync(string recordingId, CancellationToken ct = default);
@@ -103,8 +109,13 @@ public interface IReviewRepository
     /// giao cho người này không — ở đây không kiểm quyền.
     /// </summary>
     /// <param name="sort">rỗng (Field = null) là thứ tự mặc định.</param>
+    /// <param name="hideTiesNewerThan">
+    /// Chỉ có tác dụng khi <paramref name="onlyReviewable"/> bật. Xem
+    /// <see cref="GetNextForReviewerAsync"/>.
+    /// </param>
     Task<(List<TaskReviewRow> Rows, int Total)> GetTaskReviewRowsAsync(
         long taskId, long reviewerId, bool onlyReviewable, int roundsRequired,
+        DateTimeOffset? hideTiesNewerThan,
         int page, int pageSize, SortSpec<TaskReviewSortField> sort, CancellationToken ct = default);
 
     /// <summary>
@@ -114,6 +125,7 @@ public interface IReviewRepository
     /// </summary>
     Task<(List<TaskReviewRow> Rows, int Total, List<TaskReviewPairKey> PairOrder)> GetTaskReviewPairsAsync(
         long taskId, long reviewerId, bool onlyReviewable, int roundsRequired,
+        DateTimeOffset? hideTiesNewerThan,
         int page, int pageSize, SortSpec<TaskReviewSortField> sort, CancellationToken ct = default);
 
     Task<List<Recording>> GetByScriptAsync(
@@ -138,6 +150,26 @@ public interface IReviewRepository
 
 public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
 {
+    /// <summary>
+    /// Hình dạng của một thế hoà: đúng hai lượt người, một đạt một trượt.
+    ///
+    /// <para>
+    /// PHẢI TRÙNG với <see cref="ReviewTally.IsTie"/> và với bộ lọc
+    /// <c>AiReviewRepository.TiedRecordings</c> — đó là nơi máy duyệt nhặt việc. Giấu một
+    /// hình dạng mà máy KHÔNG nhặt là tạo ra bản ghi không ai chạm được: người không thấy nó
+    /// nữa, còn máy thì không bao giờ lấy nó.
+    /// </para>
+    ///
+    /// <para>
+    /// Hai con số này cố định cho <c>rounds_required = 3</c> chứ không suy ra từ tham số, vì
+    /// chính <see cref="ReviewTally.IsTie"/> cũng cố định như vậy. Đổi số vòng thì phải sửa cả
+    /// ba chỗ cùng lúc, và chừng nào chưa sửa thì để nguyên vẫn an toàn — cùng lắm là người
+    /// duyệt thấy thừa một bản, chứ không mất bản nào.
+    /// </para>
+    /// </summary>
+    private const int TieReviewCount = 2;
+    private const int TieApprovedCount = 1;
+
     public Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken ct = default) =>
         db.Database.BeginTransactionAsync(ct);
 
@@ -211,7 +243,7 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
 
     public Task<Recording?> GetNextForReviewerAsync(
         long reviewerId, long? taskId, long? speakerId, bool random,
-        int roundsRequired, CancellationToken ct = default)
+        int roundsRequired, DateTimeOffset? hideTiesNewerThan, CancellationToken ct = default)
     {
         var query = db.Recordings
             .AsNoTracking()
@@ -220,6 +252,17 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
             .Where(r => r.SpeakerId != reviewerId)                        // không tự duyệt bản của mình
             .Where(r => !r.Reviews.Any(v => v.ReviewerId == reviewerId))  // mỗi người chỉ duyệt một lần
             .Where(r => r.Reviews.Count < roundsRequired);
+
+        // Thế hoà còn tươi thuộc về máy duyệt. Điều kiện phải TRÙNG KHÍT với
+        // TaskReviewQueryable, nếu không nút "bản tiếp theo" sẽ phát ra đúng thứ danh sách
+        // vừa giấu đi.
+        if (hideTiesNewerThan is { } mocNext)
+        {
+            query = query.Where(r => !(
+                r.Reviews.Count == TieReviewCount
+                && r.Reviews.Count(v => v.Decision == ReviewDecision.Approved) == TieApprovedCount
+                && r.Reviews.Max(v => v.ReviewedAt) > mocNext));
+        }
 
         if (speakerId.HasValue) query = query.Where(r => r.SpeakerId == speakerId.Value);
 
@@ -246,9 +289,11 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
 
     public async Task<(List<TaskReviewRow> Rows, int Total)> GetTaskReviewRowsAsync(
         long taskId, long reviewerId, bool onlyReviewable, int roundsRequired,
+        DateTimeOffset? hideTiesNewerThan,
         int page, int pageSize, SortSpec<TaskReviewSortField> sort, CancellationToken ct = default)
     {
-        var query = TaskReviewQueryable(taskId, reviewerId, onlyReviewable, roundsRequired);
+        var query = TaskReviewQueryable(
+            taskId, reviewerId, onlyReviewable, roundsRequired, hideTiesNewerThan);
 
         var total = await query.CountAsync(ct);
 
@@ -287,18 +332,32 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
 
     /// <summary>Bộ lọc dùng chung cho danh sách theo bản ghi và danh sách theo cặp.</summary>
     private IQueryable<TaskRecording> TaskReviewQueryable(
-        long taskId, long reviewerId, bool onlyReviewable, int roundsRequired)
+        long taskId, long reviewerId, bool onlyReviewable, int roundsRequired,
+        DateTimeOffset? hideTiesNewerThan)
     {
         var query = db.TaskRecordings.AsNoTracking().Where(tr => tr.TaskId == taskId);
 
         if (!onlyReviewable) return query;
 
         // Giống hệt bộ lọc của GetNextForReviewerAsync, để danh sách và GET next không nói khác nhau.
-        return query
+        query = query
             .Where(tr => tr.Recording.Status == RecordingStatus.PendingReview)
             .Where(tr => tr.Recording.SpeakerId != reviewerId)
             .Where(tr => !tr.Recording.Reviews.Any(v => v.ReviewerId == reviewerId))
             .Where(tr => tr.Recording.Reviews.Count < roundsRequired);
+
+        // Hai phiếu TRÙNG nhau đã bị trigger chốt ở trên (hết pending_review), nên thứ còn
+        // lọt tới đây với hai phiếu chỉ có thể là thế hoà 1–1 — vòng ba của nó thuộc về máy.
+        if (hideTiesNewerThan is { } moc)
+        {
+            query = query.Where(tr => !(
+                tr.Recording.Reviews.Count == TieReviewCount
+                && tr.Recording.Reviews.Count(v => v.Decision == ReviewDecision.Approved)
+                   == TieApprovedCount
+                && tr.Recording.Reviews.Max(v => v.ReviewedAt) > moc));
+        }
+
+        return query;
     }
 
     private static IQueryable<TaskReviewRow> TaskReviewRows(
@@ -319,9 +378,11 @@ public class ReviewRepository(CodeSwitchLabelDbContext db) : IReviewRepository
 
     public async Task<(List<TaskReviewRow> Rows, int Total, List<TaskReviewPairKey> PairOrder)> GetTaskReviewPairsAsync(
         long taskId, long reviewerId, bool onlyReviewable, int roundsRequired,
+        DateTimeOffset? hideTiesNewerThan,
         int page, int pageSize, SortSpec<TaskReviewSortField> sort, CancellationToken ct = default)
     {
-        var query = TaskReviewQueryable(taskId, reviewerId, onlyReviewable, roundsRequired);
+        var query = TaskReviewQueryable(
+            taskId, reviewerId, onlyReviewable, roundsRequired, hideTiesNewerThan);
 
         // Một cặp là hai biến thể của CÙNG một người đọc. Hai người cùng đọc một câu là hai cặp.
         var total = await query

@@ -243,4 +243,62 @@ public class ReviewRulesTests
         // Assert
         Assert.Equal(ReviewBlocker.RoundsFull, blocker);
     }
+
+    // ----------------------------------------------------------------- giấu thế hoà
+    //
+    // Thế hoà 1–1 là việc của máy duyệt, nên giấu khỏi danh sách của người. Thứ đáng test
+    // nhất ở đây KHÔNG phải "có giấu được không" mà là "KHÔNG giấu khi không có ai nhặt":
+    // giấu sai lúc đó tạo ra bản ghi người không thấy mà máy cũng không lấy.
+
+    private static readonly DateTimeOffset BayGio = new(2026, 11, 23, 10, 0, 0, TimeSpan.Zero);
+    private static readonly TimeSpan NhipQuet = TimeSpan.FromSeconds(60);
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public void ThieuMotCongTac_ThiKHONG_GiauBanNao(bool mayDuyetBat, bool tuDongBat)
+    {
+        var moc = ReviewRules.HideTiesNewerThan(
+            mayDuyetBat, tuDongBat, NhipQuet, maxAttempts: 3, BayGio);
+
+        Assert.Null(moc);
+    }
+
+    [Fact]
+    public void BatCaHaiCongTac_ThiGiauTheHoaConTuoi()
+    {
+        var moc = ReviewRules.HideTiesNewerThan(
+            aiReviewEnabled: true, autoEnabled: true, NhipQuet, maxAttempts: 3, BayGio);
+
+        // 60 giây × (3 lần thử + 1 nhịp dự phòng) = 4 phút.
+        Assert.Equal(BayGio.AddMinutes(-4), moc);
+    }
+
+    [Fact]
+    public void AnHan_DaiRa_KhiNhipQuetDaiRa()
+    {
+        // Ai nới nhịp quét thì ân hạn phải nới theo, nếu không thế hoà hiện lại cho người
+        // đúng lúc máy vẫn đang xếp hàng xử lý nó.
+        var moc = ReviewRules.HideTiesNewerThan(
+            aiReviewEnabled: true, autoEnabled: true,
+            TimeSpan.FromSeconds(300), maxAttempts: 3, BayGio);
+
+        Assert.Equal(BayGio.AddMinutes(-20), moc);
+    }
+
+    [Fact]
+    public void TheHoaCu_Hon_AnHan_Thi_HIEN_LAI_ChoNguoi()
+    {
+        // Đây là cái van an toàn. Máy tắt giữa chừng, nhà cung cấp chết, hay máy bỏ cuộc sau
+        // ba lần thử — kiểu gì thì thế hoà nằm quá lâu cũng phải quay lại tay người.
+        var moc = ReviewRules.HideTiesNewerThan(
+            aiReviewEnabled: true, autoEnabled: true, NhipQuet, maxAttempts: 3, BayGio);
+
+        var hoaVuaXong = BayGio.AddMinutes(-1);
+        var hoaBoQuenLau = BayGio.AddMinutes(-30);
+
+        Assert.True(hoaVuaXong > moc);       // còn tươi -> giấu
+        Assert.False(hoaBoQuenLau > moc);    // quá hạn -> hiện lại
+    }
 }

@@ -76,6 +76,16 @@ public class ReviewsController(IReviewService reviewService, IReviewerStatsServi
     /// Mặc định trả cả task; đặt `onlyReviewable=true` để chỉ còn những bản duyệt được.
     /// Bấm vào một bản thì gọi `GET /api/reviewer/recordings/{id}` để lấy câu và link nghe.
     ///
+    /// **`onlyReviewable=true` ẩn luôn bản ghi đang hoà 1–1 chờ máy duyệt.** Từ khi bật
+    /// `ai_review.auto_enabled`, vòng ba của một thế hoà thuộc về máy, nên mời người vào đó là
+    /// mời họ làm một việc mà một phút sau máy cũng làm. Chỉ ẩn khi máy THỰC SỰ đang làm được:
+    /// cả `ai_review.enabled` lẫn `ai_review.auto_enabled` đều bật, và thế hoà đó còn trong hạn
+    /// máy xử lý. Tắt công tắc, nhà cung cấp nhận dạng chết, hay máy bỏ cuộc sau mấy lần thử thì
+    /// bản ghi **hiện lại** cho người — không có bản nào bị kẹt giữa hai bên.
+    ///
+    /// `GET .../recordings/next` ẩn đúng những bản này, nên nút "bản tiếp theo" không bao giờ
+    /// phát ra thứ danh sách vừa giấu đi.
+    ///
     /// `?sort=` nhận `recordedAt`, `status`, `reviewCount`, `scriptId`. Bỏ trống `sort`
     /// thì ra bản gần đủ lượt duyệt trước — cùng thứ tự với `GET .../recordings/next`.
     /// </remarks>
