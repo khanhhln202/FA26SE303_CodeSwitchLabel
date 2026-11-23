@@ -5,6 +5,7 @@ import { CheckCircle2, XCircle, PencilLine, Search, X, FileText, ArrowRight } fr
 import { SPEAKER_ACCENT_ACTIVE_ICON as ACCENT, AUDIO_PRIMARY } from "../../../../constants/theme"; // ACCENT = xanh lá thương hiệu, AUDIO_PRIMARY = màu phần tiếng Anh
 import Loading from "../../../../components/Loading/Loading";
 import ErrorState from "../../../../components/ErrorState/ErrorState";
+import PairSentences from "../../../../components/PairSentences/PairSentences";
 import { getReviewerContributionHistoryApi } from "../../../../services/reviewerApi";
 import { getTopicsApi } from "../../../../services/configApi";
 import { GET_REVIEWER_CONTRIBUTION_HISTORY_API, GET_TOPICS_API } from "../../../../utils/queryKey";
@@ -22,7 +23,6 @@ const tagOf = (kind) => TYPE_TAG[kind] ?? TYPE_TAG.contribution;
 const TYPE_FILTERS = [
   { value: "", label: "Tất cả" },
   { value: "contribution", label: "Đóng góp" },
-  { value: "edit", label: "Đề xuất sửa" },
   { value: "report", label: "Báo lỗi" },
 ];
 
@@ -40,14 +40,6 @@ function MyDecision({ action }) {
   return (
     <span className={`w-[92px] h-6 inline-flex items-center justify-center gap-1 rounded-full type-caption border whitespace-nowrap ${a.className}`}>
       <Icon className="w-3 h-3" style={{ color: a.iconColor }} /> {a.label}
-    </span>
-  );
-}
-
-function InlineLabel({ variant }) {
-  return (
-    <span className="text-tag font-emphasis w-9 h-4 text-center shrink-0 rounded inline-flex items-center justify-center" style={variant === "cs" ? { background: `${AUDIO_PRIMARY}1A`, color: AUDIO_PRIMARY, letterSpacing: "0.02em" } : { background: "#F0EEE6", color: "#6E7078", letterSpacing: "0.02em" }}>
-      {variant === "cs" ? "VI-EN" : "VI"}
     </span>
   );
 }
@@ -84,7 +76,7 @@ export default function ReviewHistoryContribution() {
 
   // Call API lấy 1 trang lịch sử (lọc loại / chủ đề / từ khoá ở phía server)
   const { data: history, isLoading, isError, error, refetch } = useQuery({
-    queryKey: [GET_REVIEWER_CONTRIBUTION_HISTORY_API, typeFilter, categoryFilter, search, currentPage],
+    queryKey: [GET_REVIEWER_CONTRIBUTION_HISTORY_API, typeFilter, categoryFilter, search, currentPage, pageSize],
     queryFn: () => getReviewerContributionHistoryApi({ kind: typeFilter, category: categoryFilter, search, page: currentPage, pageSize }),
     placeholderData: keepPreviousData,
   });
@@ -204,6 +196,8 @@ export default function ReviewHistoryContribution() {
             }}
             accent={ACCENT}
             variant="soft"
+
+            compact
           />
         </div>
       </div>
@@ -237,16 +231,13 @@ export default function ReviewHistoryContribution() {
                   {detailItem.speakerName && <span className="font-label text-[#16171C]">· {detailItem.speakerName}</span>}
                 </div>
 
-                <div className="rounded-xl border border-[#E5E2D8] overflow-hidden">
-                  <div className="flex items-start gap-2.5 px-3 py-2.5">
-                    <InlineLabel variant="cs" />
-                    <p className="type-body text-[#16171C] break-words min-w-0">{detailItem.csTranscript}</p>
-                  </div>
-                  <div className="flex items-start gap-2.5 px-3 py-2.5 border-t border-[#F0EEE6]">
-                    <InlineLabel variant="vi" />
-                    <p className="type-body text-[#16171C] break-words min-w-0">{detailItem.viEquivalent}</p>
-                  </div>
-                </div>
+                {/* Đủ 4 câu API trả về: câu thường + câu gắn nhãn của từng câu */}
+                <PairSentences
+                  csTagged={detailItem.csTranscript}
+                  csPlain={detailItem.csPlain}
+                  viTagged={detailItem.viEquivalent}
+                  viPlain={detailItem.viPlain}
+                />
 
                 {/* Nghĩa từ tiếng Anh (alignment) */}
                 {detailItem.alignment?.length > 0 && (

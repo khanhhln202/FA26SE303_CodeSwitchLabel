@@ -19,6 +19,7 @@ import {
 } from "../../../../constants/theme";
 import Loading from "../../../../components/Loading/Loading";
 import ErrorState from "../../../../components/ErrorState/ErrorState";
+import PairSentences from "../../../../components/PairSentences/PairSentences";
 import AiReviewVerdict from "../../../../components/AiReview/AiReviewVerdict";
 import { getReviewerProgressApi, getReviewerRecordingHistoryApi } from "../../../../services/reviewerApi";
 import { GET_REVIEWER_PROGRESS_API, GET_REVIEWER_RECORDING_HISTORY_API } from "../../../../utils/queryKey";
@@ -172,8 +173,8 @@ export default function ReviewHistoryRecording() {
 
   // Call API lấy 1 trang lịch sử (lọc nhiệm vụ / trạng thái / từ khoá ở phía server)
   const { data: history, isLoading, isError, error, refetch } = useQuery({
-    queryKey: [GET_REVIEWER_RECORDING_HISTORY_API, taskFilter, statusFilter, search, currentPage],
-    queryFn: () => getReviewerRecordingHistoryApi({ taskId: taskFilter, status: statusFilter, search, page: currentPage, pageSize: ITEMS_PER_PAGE }),
+    queryKey: [GET_REVIEWER_RECORDING_HISTORY_API, taskFilter, statusFilter, search, currentPage, pageSize],
+    queryFn: () => getReviewerRecordingHistoryApi({ taskId: taskFilter, status: statusFilter, search, page: currentPage, pageSize }),
     placeholderData: keepPreviousData,
   });
 
@@ -440,6 +441,8 @@ export default function ReviewHistoryRecording() {
             }}
             accent={ACCENT}
             variant="soft"
+
+            compact
           />
         </div>
       </section>
@@ -476,16 +479,12 @@ export default function ReviewHistoryRecording() {
                   <X className="w-[18px] h-[18px] text-[#6E7078]" />
                 </button>
               </div>
-              <div className="bg-[#F7F5EF] p-3.5 rounded-xl border border-[#E5E2D8] mb-2.5 flex items-center gap-2.5">
-                <InlineLabel variant="cs" />
-                <p className="type-body text-[#16171C] break-words min-w-0">
-                  <TaggedText text={sentenceItem.csText} />
-                </p>
-              </div>
-              <div className="bg-[#F7F5EF] p-3.5 rounded-xl border border-[#E5E2D8] flex items-center gap-2.5">
-                <InlineLabel variant="vi" />
-                <p className="type-body text-[#16171C] break-words min-w-0"><TaggedText text={sentenceItem.viText} /></p>
-              </div>
+              <PairSentences
+                csTagged={sentenceItem.csText}
+                csPlain={sentenceItem.csPlain}
+                viTagged={sentenceItem.viText}
+                viPlain={sentenceItem.viPlain}
+              />
               <button
                 onClick={() => setSentenceItem(null)}
                 className="w-full mt-5 py-3 text-white rounded-xl text-body font-label transition-all hover:opacity-90 active:scale-[0.98] cursor-pointer"
@@ -549,13 +548,14 @@ export default function ReviewHistoryRecording() {
                     <span className="font-label text-meta text-[#16171C]">{detailItem.speakerName}</span>
                     <span className="type-meta text-[#9A9CA3]">{splitDateTime(detailItem.reviewedAt).join(" - ")}</span>
                   </div>
-                  <div className="bg-[#F7F5EF] p-3.5 rounded-xl border border-[#E5E2D8] mb-2.5 flex items-center gap-2.5">
-                    <InlineLabel variant="cs" />
-                    <p className="type-body text-[#16171C] break-words min-w-0"><TaggedText text={detailItem.csText} /></p>
-                  </div>
-                  <div className="bg-[#F7F5EF] p-3.5 rounded-xl border border-[#E5E2D8] mb-4 flex items-center gap-2.5">
-                    <InlineLabel variant="vi" />
-                    <p className="type-body text-[#16171C] break-words min-w-0"><TaggedText text={detailItem.viText} /></p>
+                  {/* Đủ 4 câu API trả về: câu thường + câu gắn nhãn của từng câu */}
+                  <div className="mb-4">
+                    <PairSentences
+                      csTagged={detailItem.csText}
+                      csPlain={detailItem.csPlain}
+                      viTagged={detailItem.viText}
+                      viPlain={detailItem.viPlain}
+                    />
                   </div>
                   {/* Lịch sử cho Reviewer hiện các lượt của cả hai bản thu trong cặp. */}
                   <div className="flex items-center gap-2 mb-2.5">

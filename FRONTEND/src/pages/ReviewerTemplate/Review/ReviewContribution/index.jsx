@@ -490,7 +490,7 @@ export default function ReviewContribution() {
                 })}
               </ul>
               <div className="shrink-0 border-t border-[#F0EEE6] px-2 flex justify-center">
-                <Pagination currentPage={page} totalPages={totalPages} onPageChange={(value) => { setPage(value); setSelectedId(null); }} accent={ACCENT} variant="soft" showPageSize={false} />
+                <Pagination currentPage={page} totalPages={totalPages} onPageChange={(value) => { setPage(value); setSelectedId(null); }} accent={ACCENT} variant="soft" showPageSize={false} compact />
               </div>
             </aside>
 
@@ -574,7 +574,7 @@ export default function ReviewContribution() {
                 })}
               </ul>
               <div className="shrink-0 border-t border-[#F0EEE6] px-2 flex justify-center">
-                <Pagination currentPage={currentScriptPage} totalPages={scriptTotalPages} onPageChange={(value) => { setScriptPage(value); setSelectedScriptId(null); }} accent={ACCENT} variant="soft" />
+                <Pagination currentPage={currentScriptPage} totalPages={scriptTotalPages} onPageChange={(value) => { setScriptPage(value); setSelectedScriptId(null); }} accent={ACCENT} variant="soft" showPageSize={false} compact />
               </div>
             </aside>
 

@@ -33,6 +33,8 @@ export const GET_SCRIPT_ERROR_REASONS_API = 'GET_SCRIPT_ERROR_REASONS_API'
 export const REVIEW_SCRIPT_API = 'REVIEW_SCRIPT_API'
 // Speaker gửi đề xuất báo lỗi / sửa câu (POST /api/speaker/scripts/{scriptId}/proposals)
 export const CREATE_SCRIPT_PROPOSAL_API = 'CREATE_SCRIPT_PROPOSAL_API'
+export const SKIP_SCRIPT_API = 'SKIP_SCRIPT_API'
+export const SUBMIT_SCRIPT_API = 'SUBMIT_SCRIPT_API'
 
 // ===== Recording (bản ghi âm) =====
 // Nộp bản ghi âm (POST /api/recordings)
