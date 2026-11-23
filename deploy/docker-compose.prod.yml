@@ -152,6 +152,7 @@ services:
       Jwt__Audience: "https://${API_DOMAIN}"
       Jwt__Key: ${JWT_KEY}
       Jwt__ExpiryMinutes: ${JWT_EXPIRY_MINUTES:-120}
+      GoogleAuth__ClientId: ${GOOGLE_AUTH_CLIENT_ID:-}
 
       # ServiceUrl: API gọi MinIO trong mạng nội bộ. PublicUrl: địa chỉ trình duyệt tải file,
       # bắt buộc https vì trang frontend chạy https.

@@ -1338,7 +1338,7 @@ Lỗi hay gặp: `source_video_unavailable` (video riêng tư/bị chặn/đã x
 
 ### 13.5 Triển khai
 
-API cần `yt-dlp`, `ffmpeg` và một JavaScript runtime (mặc định `deno`) trong máy chủ.
-Dockerfile đã cài cả ba; chạy tay thì cài `yt-dlp` + `deno` và để trong PATH, hoặc chỉnh
+API cần `yt-dlp`, `ffmpeg`, Python 3 và một JavaScript runtime (mặc định `deno`) trong máy chủ.
+Dockerfile đã cài các runtime này; chạy tay thì cài `yt-dlp` + Python 3 + `deno` và để trong PATH, hoặc chỉnh
 `SourceCorpus:YtDlpPath` / `SourceCorpus:JsRuntimes`. Máy chủ cần Internet để tải YouTube;
 ASR vẫn là dịch vụ cục bộ đã cấu hình ở `Asr:Endpoint` — **không** lùi sang nhà cung cấp khác.

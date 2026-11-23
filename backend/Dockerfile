@@ -27,7 +27,7 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble AS runtime
 # yt-dlp: tải audio YouTube. Cài bản mới nhất vì YouTube đổi liên tục; bản trong apt hay cũ.
 # Deno: runtime JavaScript mà yt-dlp cần để giải mã đầy đủ video YouTube.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg curl ca-certificates unzip \
+    && apt-get install -y --no-install-recommends ffmpeg curl ca-certificates unzip python3 \
     && curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
         -o /usr/local/bin/yt-dlp \
     && chmod +x /usr/local/bin/yt-dlp \
