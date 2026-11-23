@@ -87,7 +87,15 @@ public record ScriptListItemDto(
     string Domain,
     int WordCount,
     int EnWordCount,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    /// <summary>Mã lô nhập câu (nếu câu được nhập từ file).</summary>
+    long? ImportBatchId,
+    /// <summary>Tên lô nhập câu.</summary>
+    string? BatchName,
+    /// <summary>Mã đợt (wave) mà câu thuộc về (nếu có).</summary>
+    long? WaveId,
+    /// <summary>Tên đợt (wave) mà câu thuộc về.</summary>
+    string? WaveName);
 
 /// <param name="CsPlain">Câu chen tiếng Anh đã bỏ nhãn — dùng để hiển thị cho người đọc.</param>
 public record ScriptDetailDto(
@@ -289,6 +297,12 @@ public record ScriptSearchRequest : PageRequest
     public ScriptStatus? Status { get; init; }
     public string? Domain { get; init; }
     public string? Keyword { get; init; }
+
+    /// <summary>Lọc theo mã lô nhập câu.</summary>
+    public long? ImportBatchId { get; init; }
+
+    /// <summary>Lọc theo mã đợt (wave).</summary>
+    public long? WaveId { get; init; }
 }
 
 public record ReasonDto(short ReasonId, string ReasonCode, string? Category, string? Description, bool IsActive);

@@ -18,7 +18,8 @@ internal static class ScriptMapper
     public static ScriptListItemDto ToListItem(this Script s) =>
         new(s.ScriptId, s.CsContent, ScriptPairRules.SafeStrip(s.CsContent),
             s.ViContent, ScriptPairRules.SafeStrip(s.ViContent),
-            s.Status, s.Domain, s.WordCount, s.EnWordCount, s.CreatedAt);
+            s.Status, s.Domain, s.WordCount, s.EnWordCount, s.CreatedAt,
+            s.ImportBatchId, s.ImportBatch?.BatchName, s.WaveId, s.Wave?.WaveName);
 
     public static ScriptDetailDto ToDetail(this Script s) =>
         new(s.ScriptId,
@@ -42,6 +43,7 @@ internal static class ScriptMapper
 }
 
 public class ScriptService(
+    CodeSwitchLabelDbContext db,
     IScriptRepository repository,
     IScriptQueueService queue,
     IReasonRepository reasonRepository,
@@ -54,12 +56,54 @@ public class ScriptService(
     TimeProvider clock,
     ILogger<ScriptService> logger) : IScriptService
 {
+    private readonly CodeSwitchLabelDbContext _db = db;
+
     public async Task<PagedResult<ScriptListItemDto>> SearchAsync(
         ScriptSearchRequest request, CancellationToken ct = default)
     {
-        var (items, total) = await repository.SearchAsync(
-            request.Status, request.Domain, request.Keyword, request.Page, request.PageSize,
-            request.ToSort<ScriptSortField>(), ct);
+        var query = _db.Scripts.AsNoTracking();
+
+        if (request.Status.HasValue) query = query.Where(s => s.Status == request.Status.Value);
+        if (request.Domain is not null) query = query.Where(s => s.Domain == request.Domain);
+        if (request.ImportBatchId.HasValue)
+            query = query.Where(s => s.ImportBatchId == request.ImportBatchId.Value);
+        if (request.WaveId.HasValue) query = query.Where(s => s.WaveId == request.WaveId.Value);
+
+        if (!string.IsNullOrWhiteSpace(request.Keyword))
+        {
+            var needle = request.Keyword.Trim();
+            query = query.Where(s =>
+                EF.Functions.ILike(s.CsContent, $"%{needle}%") ||
+                EF.Functions.ILike(s.ViContent, $"%{needle}%"));
+        }
+
+        var total = await query.CountAsync(ct);
+
+        var sort = request.ToSort<ScriptSortField>();
+        var ordered = sort.Field switch
+        {
+            ScriptSortField.ScriptId => sort.Descending
+                ? query.OrderByDescending(s => s.ScriptId)
+                : query.OrderBy(s => s.ScriptId),
+            ScriptSortField.CreatedAt => sort.Descending
+                ? query.OrderByDescending(s => s.CreatedAt)
+                : query.OrderBy(s => s.CreatedAt),
+            ScriptSortField.Domain => sort.Descending
+                ? query.OrderByDescending(s => s.Domain)
+                : query.OrderBy(s => s.Domain),
+            ScriptSortField.Status => sort.Descending
+                ? query.OrderByDescending(s => s.Status)
+                : query.OrderBy(s => s.Status),
+            _ => query.OrderByDescending(s => s.CreatedAt)
+        };
+
+        var items = await ordered
+            .ThenBy(s => s.ScriptId)
+            .Skip((request.Page - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .Include(s => s.ImportBatch)
+            .Include(s => s.Wave)
+            .ToListAsync(ct);
 
         return new PagedResult<ScriptListItemDto>(
             [.. items.Select(s => s.ToListItem())], request.Page, request.PageSize, total);

@@ -204,8 +204,32 @@ public class UsersController(IUserService userService) : ControllerBase
 [Route("api/me")]
 [Tags(ApiTags.Account)]
 [Authorize]
-public class MeController(IUserService userService) : ControllerBase
+public class MeController(IUserService userService, IConsentService consentService) : ControllerBase
 {
+    /// <summary>Ghi nhận đồng ý cam kết sử dụng dữ liệu sinh trắc âm thanh của chính mình.</summary>
+    /// <remarks>
+    /// Lưu vào bảng <c>user_consent</c> trong Database. Yêu cầu <c>consentAccepted = true</c>
+    /// (checkbox xác nhận tự nguyện) và <c>consentVersion</c> (phiên bản bản cam kết).
+    /// </remarks>
+    [HttpPost("consent")]
+    [ProducesResponseType(typeof(ConsentDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ConsentDto>> RecordConsent(
+        [FromBody] RecordConsentRequest request, CancellationToken ct)
+        => Ok(await consentService.RecordConsentAsync(User.GetUserId(), request, ct));
+
+    /// <summary>Lấy thông tin đồng ý cam kết hiện tại của chính mình.</summary>
+    /// <remarks>Trả 204 nếu chưa từng đồng ý.</remarks>
+    [HttpGet("consent")]
+    [ProducesResponseType(typeof(ConsentDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<ActionResult<ConsentDto>> GetConsent(CancellationToken ct)
+    {
+        var consent = await consentService.GetConsentAsync(User.GetUserId(), ct);
+        return consent is null ? NoContent() : Ok(consent);
+    }
+
     /// <summary>Đổi mật khẩu của chính mình — trả về token mới.</summary>
     /// <remarks>
     /// Phải nhập đúng mật khẩu hiện tại. Mật khẩu mới từ 8 ký tự và khác mật khẩu cũ.

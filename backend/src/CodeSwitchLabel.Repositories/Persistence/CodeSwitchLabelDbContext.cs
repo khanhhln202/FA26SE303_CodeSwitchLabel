@@ -226,6 +226,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
 
             e.HasOne(x => x.Creator).WithMany().HasForeignKey(x => x.CreatedBy);
             e.HasOne(x => x.ImportBatch).WithMany(i => i.Scripts).HasForeignKey(x => x.ImportBatchId);
+            e.HasOne(x => x.Wave).WithMany().HasForeignKey(x => x.WaveId);
             e.HasOne<WorkTask>().WithMany().HasForeignKey(x => x.ContributionTaskId);
         });
 

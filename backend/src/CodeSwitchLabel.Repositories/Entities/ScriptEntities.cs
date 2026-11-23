@@ -65,6 +65,7 @@ public class Script
 
     public AppUser Creator { get; set; } = null!;
     public ImportBatch? ImportBatch { get; set; }
+    public Wave? Wave { get; set; }
     public ICollection<ScriptWord> Words { get; set; } = [];
     public ICollection<ScriptReview> Reviews { get; set; } = [];
     public ICollection<Recording> Recordings { get; set; } = [];
