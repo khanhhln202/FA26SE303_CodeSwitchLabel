@@ -343,7 +343,7 @@ public sealed class ScriptQueueAndMultiAssigneeTests(DatabaseFixture fixture)
             Description = "Duyệt độc lập, hàng chờ trống",
             TargetQty = 3,
             Deadline = DateTimeOffset.UtcNow.AddDays(7)
-        }, ManagerUserId, TestContext.Current.CancellationToken);
+        }, ManagerUserId, false, TestContext.Current.CancellationToken);
 
         var reviewer = await CreateUserAsync($"rv-alone-{Guid.NewGuid():N}@test.local", RoleName.Reviewer);
 

@@ -150,6 +150,7 @@ public static class ServiceRegistration
         services.AddScoped<ITaskService, TaskService>();
         services.AddScoped<IWaveService, WaveService>();
 
+        services.AddScoped<IConsentService, ConsentService>();
         services.AddScoped<ISystemConfigService, SystemConfigService>();
         services.AddScoped<IDomainService, DomainService>();
         services.AddScoped<IReasonService, ReasonService>();

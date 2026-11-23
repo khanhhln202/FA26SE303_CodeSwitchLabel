@@ -260,7 +260,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
             Description = "Quota riêng cho Speaker",
             TargetQty = 4,
             Deadline = DateTimeOffset.UtcNow.AddDays(7)
-        }, ManagerUserId, ct);
+        }, ManagerUserId, false, ct);
 
         await TaskService.AddItemsAsync(
             created.Summary.TaskId,
@@ -307,7 +307,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
             TargetQty = 10,
             Deadline = DateTimeOffset.UtcNow.AddDays(7),
             AssigneeUserIds = [speakers[0].UserId, speakers[1].UserId, speakers[2].UserId]
-        }, ManagerUserId, ct);
+        }, ManagerUserId, false, ct);
 
         Assert.Equal(10, detail.Summary.Progress.TargetQty);
         Assert.Equal(3, detail.Assignments.Count(a => a.Status == AssignmentStatus.Active));
@@ -342,7 +342,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
             TargetQty = 10,
             Deadline = DateTimeOffset.UtcNow.AddDays(7),
             AssigneeUserIds = [reviewers[0].UserId, reviewers[1].UserId, reviewers[2].UserId]
-        }, ManagerUserId, ct);
+        }, ManagerUserId, false, ct);
 
         Assert.Equal(3, detail.Assignments.Count(a => a.Status == AssignmentStatus.Active));
         Assert.Equal(4, QuotaOf(detail, reviewers[0].UserId));
@@ -372,7 +372,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
             TargetQty = targetQty,
             Deadline = DateTimeOffset.UtcNow.AddDays(7),
             AssigneeUserIds = [speaker.UserId]
-        }, ManagerUserId, ct);
+        }, ManagerUserId, false, ct);
 
         var items = await Db.TaskScripts
             .Where(ts => ts.TaskId == detail.Summary.TaskId)
@@ -406,7 +406,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
             TargetQty = 6,
             Deadline = DateTimeOffset.UtcNow.AddDays(7),
             AssigneeUserIds = [speakers[0].UserId, speakers[1].UserId]
-        }, ManagerUserId, ct);
+        }, ManagerUserId, false, ct);
 
         var items = await Db.TaskScripts
             .Where(ts => ts.TaskId == detail.Summary.TaskId)
@@ -441,7 +441,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
                 TargetQty = 1,
                 Deadline = DateTimeOffset.UtcNow.AddDays(7),
                 AssigneeUserIds = [speaker.UserId, speaker2.UserId]
-            }, ManagerUserId, ct));
+            }, ManagerUserId, false, ct));
         Assert.Equal("target_less_than_assignees", ex.Code);
     }
 
@@ -458,7 +458,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
                 TargetQty = 5,
                 Deadline = DateTimeOffset.UtcNow.AddDays(7),
                 AssigneeUserIds = [reviewer.UserId]
-            }, ManagerUserId, ct));
+            }, ManagerUserId, false, ct));
         Assert.Equal("assignee_role_mismatch", ex.Code);
     }
 
@@ -486,7 +486,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
             TargetQty = 4,
             Deadline = DateTimeOffset.UtcNow.AddDays(7),
             AssigneeUserIds = [speakers[0].UserId, speakers[1].UserId]
-        }, ManagerUserId, ct);
+        }, ManagerUserId, false, ct);
 
         await TaskService.AddItemsAsync(
             task.Summary.TaskId, new AddTaskItemsRequest { Ids = scriptIds }, ct, ManagerUserId, isAdmin: false);
@@ -529,7 +529,7 @@ public sealed class TaskAssignmentQuotaTests : IntegrationTestBase
             Description = "Legacy no assignee",
             TargetQty = 5,
             Deadline = DateTimeOffset.UtcNow.AddDays(7)
-        }, ManagerUserId, ct);
+        }, ManagerUserId, false, ct);
         Assert.Empty(result.Assignments);
         Assert.Equal(5, result.Summary.Progress.TargetQty);
     }

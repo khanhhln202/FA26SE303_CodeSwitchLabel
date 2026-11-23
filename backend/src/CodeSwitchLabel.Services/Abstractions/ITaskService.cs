@@ -5,7 +5,7 @@ namespace CodeSwitchLabel.Services.Abstractions;
 
 public interface ITaskService
 {
-    Task<TaskDetailDto> CreateAsync(CreateTaskRequest request, long createdById, CancellationToken ct = default);
+    Task<TaskDetailDto> CreateAsync(CreateTaskRequest request, long createdById, bool isAdmin = false, CancellationToken ct = default);
 
     Task<PagedResult<TaskListItemDto>> SearchAsync(
         TaskSearchRequest request, long? callerId = null, bool isAdmin = false, CancellationToken ct = default);

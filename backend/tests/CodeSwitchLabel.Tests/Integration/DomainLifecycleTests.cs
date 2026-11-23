@@ -99,7 +99,7 @@ public sealed class DomainLifecycleTests(DatabaseFixture fixture) : IntegrationT
                 TaskType = TaskType.Recording,
                 TargetQty = 1,
                 Deadline = DateTimeOffset.UtcNow.AddDays(1)
-            }, ManagerUserId, ct));
+            }, ManagerUserId, false, ct));
 
         Assert.Equal("domain_inactive", ex.Code);
     }
@@ -116,7 +116,7 @@ public sealed class DomainLifecycleTests(DatabaseFixture fixture) : IntegrationT
                 TaskType = TaskType.Recording,
                 TargetQty = 1,
                 Deadline = DateTimeOffset.UtcNow.AddDays(7)
-            }, ManagerUserId, ct));
+            }, ManagerUserId, false, ct));
 
         Assert.Equal("domain_inactive", ex.Code);
     }
@@ -134,7 +134,7 @@ public sealed class DomainLifecycleTests(DatabaseFixture fixture) : IntegrationT
             Domain = current,
             TargetQty = 1,
             Deadline = DateTimeOffset.UtcNow.AddDays(7)
-        }, ManagerUserId, ct);
+        }, ManagerUserId, false, ct);
 
         var wave = await WaveService.CreateAsync(WaveRequest(current), ManagerUserId, false, ct);
 

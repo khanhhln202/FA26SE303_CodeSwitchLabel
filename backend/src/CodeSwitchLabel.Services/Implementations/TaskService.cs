@@ -111,7 +111,7 @@ public class TaskService(
     private static DateOnly ToVietnamDate(DateTimeOffset dt) => DateOnly.FromDateTime(dt.ToOffset(VietnamOffset).DateTime);
 
     public async Task<TaskDetailDto> CreateAsync(
-        CreateTaskRequest request, long createdById, CancellationToken ct = default)
+        CreateTaskRequest request, long createdById, bool isAdmin = false, CancellationToken ct = default)
     {
         // Keep task, assignments, and selected recording pairs atomic. The repository
         // locks candidate script rows until commit so another create cannot pick them.
@@ -161,9 +161,9 @@ public class TaskService(
                 ?? throw new NotFoundException("wave_not_found", $"Không tìm thấy chiến dịch #{waveId}.");
 
             // ERD — Task Manager chỉ tạo được task trong chiến dịch Admin đã giao cho chính
-            // mình; chiến dịch chưa giao thì chưa nhận task. Trigger trg_task_creator_assigned của
-            // database chặn lần nữa ở tầng sâu.
-            if (wave.AssignedTo != createdById)
+            // mình; Admin tạo được trong mọi đợt. Chiến dịch chưa giao thì chưa nhận task.
+            // Trigger trg_task_creator_assigned của database chặn lần nữa ở tầng sâu.
+            if (!isAdmin && wave.AssignedTo != createdById)
             {
                 throw new UnprocessableException(
                     "wave_not_assigned_to_manager",

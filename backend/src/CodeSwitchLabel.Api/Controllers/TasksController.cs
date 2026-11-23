@@ -44,13 +44,13 @@ public class TasksController(ITaskService taskService) : ControllerBase
     /// <c>task_target_exceeds_wave</c> / <c>task_deadline_outside_wave</c> (422).
     /// </remarks>
     [HttpPost]
-    [Authorize(Roles = "TaskManager")]
+    [Authorize(Roles = "TaskManager,Admin")]
     [ProducesResponseType(typeof(TaskDetailDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<TaskDetailDto>> Create(
         [FromBody] CreateTaskRequest request, CancellationToken ct)
     {
-        var created = await taskService.CreateAsync(request, User.GetUserId(), ct);
+        var created = await taskService.CreateAsync(request, User.GetUserId(), User.IsInRole("Admin"), ct);
         return CreatedAtAction(nameof(Get), new { id = created.Summary.TaskId }, created);
     }
 

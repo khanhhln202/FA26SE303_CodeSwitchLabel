@@ -48,6 +48,7 @@ public sealed class ScriptImportDedupeTests
             .ReturnsAsync(100_000);
 
         var service = new ScriptService(
+            null!,
             repo.Object,
             Mock.Of<IScriptQueueService>(),
             Mock.Of<IReasonRepository>(),
@@ -143,6 +144,7 @@ public sealed class ScriptImportDedupeTests
             .ReturnsAsync(100_000);
 
         var service = new ScriptService(
+            null!,
             repo.Object,
             Mock.Of<IScriptQueueService>(),
             Mock.Of<IReasonRepository>(),

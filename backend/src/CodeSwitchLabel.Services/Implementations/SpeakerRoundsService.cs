@@ -265,7 +265,10 @@ public class SpeakerRoundsService(
             .Include(r => r.Script)
             .Include(r => r.Task)
             .Include(r => r.Reviews).ThenInclude(v => v.RejectionReasons).ThenInclude(rr => rr.Reason)
-            .Where(r => r.SpeakerId == speakerId);
+            .Where(r => r.SpeakerId == speakerId)
+            // Bản ghi trượt kiểm tra tự động (qc_failed) không được tính vào lịch sử thu âm
+            // của người đọc — tránh để rác dữ liệu khi nộp bị lỗi/bị hệ thống chặn.
+            .Where(r => r.Status != RecordingStatus.QcFailed);
 
         // Cùng tham số mà ReviewService và trigger trg_review_majority đọc, nên "x/3" ở đây
         // không thể lệch với số vòng thật.
