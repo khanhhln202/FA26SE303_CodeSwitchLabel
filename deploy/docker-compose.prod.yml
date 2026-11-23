@@ -185,6 +185,11 @@ services:
       Asr__Fallback__Language: ${ASR_FALLBACK_LANGUAGE:-}
       Asr__Fallback__TimeoutSeconds: ${ASR_FALLBACK_TIMEOUT_SECONDS:-180}
 
+      # YouTube chặn IP datacenter bằng "Sign in to confirm you're not a bot".
+      # File cookie Netscape ở deploy/secrets/youtube-cookies.txt (không commit).
+      # Thiếu file thì yt-dlp chạy như cũ; xem deploy/README.md.
+      SourceCorpus__CookiesPath: /run/secrets/youtube-cookies.txt
+
       # Trình duyệt chỉ cho frontend gọi API nếu origin nằm trong danh sách này.
       Cors__AllowedOrigins__0: ${FE_ORIGIN}
       Cors__AllowedOrigins__1: ${FE_ORIGIN_PREVIEW:-${FE_ORIGIN}}
@@ -196,6 +201,8 @@ services:
       # Khi chuyển sang bản chạy thật, đặt Swagger__Enabled=false và bỏ trống Seed__DefaultPassword.
       Swagger__Enabled: ${SWAGGER_ENABLED:-true}
       Seed__DefaultPassword: ${SEED_PASSWORD}
+    volumes:
+      - ./secrets:/run/secrets:ro
     logging: *logging
     depends_on:
       postgres:

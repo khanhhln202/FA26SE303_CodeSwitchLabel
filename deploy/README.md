@@ -165,6 +165,33 @@ Kiểm tra container đã nhận cấu hình:
 docker exec csl-api printenv Llm__Model
 ```
 
+### Tải video YouTube khi máy chủ bị chặn (tuỳ chọn)
+
+YouTube chặn IP máy chủ bằng `Sign in to confirm you're not a bot`, nên video công khai vẫn báo
+`source_video_unavailable` (câu lỗi nói "YouTube yêu cầu đăng nhập"). Sửa bằng cookie của một tài khoản
+Google **phụ** — đừng dùng tài khoản chính. Xuất cookie định dạng Netscape rồi đặt vào
+`deploy/secrets/youtube-cookies.txt` trên máy chủ. Thư mục này bị gitignore và được mount read-only vào API.
+
+```bash
+# Trên máy có trình duyệt đã đăng nhập tài khoản phụ; đóng trình duyệt trước khi chạy:
+yt-dlp --cookies-from-browser chrome --cookies youtube-cookies.txt --skip-download "<video>"
+# Không có yt-dlp trên máy? Dùng extension "Get cookies.txt LOCALLY" để xuất file Netscape.
+scp youtube-cookies.txt azureuser@<ip>:~/FA26SE303_CodeSwitchLabel/deploy/secrets/
+# Container chạy uid 1654; nhóm 1654 cần đọc được file, còn ngoài container chỉ azureuser đọc.
+ssh azureuser@<ip> 'sudo chown azureuser:1654 ~/FA26SE303_CodeSwitchLabel/deploy/secrets/youtube-cookies.txt \
+  && sudo chmod 640 ~/FA26SE303_CodeSwitchLabel/deploy/secrets/youtube-cookies.txt'
+```
+
+Dựng lại API (không cần build image):
+
+```bash
+docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d api
+docker exec csl-api ls -l /run/secrets/youtube-cookies.txt
+```
+
+Cookie hết hạn thì lỗi quay lại; xuất file mới rồi `up -d api`. Cookie cho phép dùng tài khoản đó,
+nên không commit và không dùng tài khoản chính.
+
 ### Bật máy duyệt bản ghi (tuỳ chọn)
 
 Service `asr` (faster-whisper, CPU int8) nằm sẵn trong `deploy/docker-compose.prod.yml`; `deploy/.env.example`

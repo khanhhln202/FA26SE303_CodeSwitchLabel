@@ -607,6 +607,18 @@ public class SourceVideoService(
             Add(Options.JsRuntimes);
         }
 
+        // Thiếu file cookie thì bỏ qua: máy chủ chưa cấu hình vẫn tải như trước.
+        // yt-dlp ghi đè file cookie khi thoát, nên chép sang thư mục tạm: file nguồn
+        // được mount read-only và container không sửa được cookie trên máy chủ.
+        if (!string.IsNullOrWhiteSpace(Options.CookiesPath)
+            && File.Exists(Options.CookiesPath))
+        {
+            var cookies = Path.Combine(directory, "cookies.txt");
+            File.Copy(Options.CookiesPath, cookies, overwrite: true);
+            Add("--cookies");
+            Add(cookies);
+        }
+
         Add(video.YoutubeUrl);
 
         using var process = new Process { StartInfo = startInfo };
@@ -675,8 +687,16 @@ public class SourceVideoService(
     {
         var lower = stderr.ToLowerInvariant();
 
-        if (lower.Contains("sign in to confirm")
-            || lower.Contains("private video")
+        // IP datacenter bị YouTube chặn: nói rõ để người trực biết phải làm mới cookie,
+        // không phải đi tìm link khác.
+        if (lower.Contains("sign in to confirm"))
+        {
+            return new UnprocessableException(
+                "source_video_unavailable",
+                "YouTube yêu cầu đăng nhập từ máy chủ. Cookie yt-dlp thiếu hoặc đã hết hạn.");
+        }
+
+        if (lower.Contains("private video")
             || lower.Contains("video unavailable")
             || lower.Contains("not available in your country")
             || lower.Contains("this video is unavailable"))
