@@ -101,14 +101,24 @@ function HighlightCsText({ rawText }) {
 // Chuẩn hóa trạng thái SourceVideoStatus từ BE (hỗ trợ cả string và số enum)
 const getSourceVideoStatusInfo = (status) => {
   const raw = String(status ?? "").toLowerCase();
-  if (raw === "completed" || raw === "2") {
+  if (raw === "readyforreview" || raw === "ready_for_review" || raw === "2") {
     return {
-      label: "Hoàn thành",
-      key: "Completed",
-      bg: CHIP_SUCCESS_BG,
-      border: CHIP_SUCCESS_BORDER,
-      color: CHIP_SUCCESS_TEXT,
-      icon: CheckCircle2
+      label: "Chờ duyệt",
+      key: "ReadyForReview",
+      bg: CHIP_WARNING_BG,
+      border: CHIP_WARNING_BORDER,
+      color: CHIP_WARNING_TEXT,
+      icon: Clock
+    };
+  }
+  if (raw === "inreview" || raw === "in_review" || raw === "3") {
+    return {
+      label: "Đang duyệt",
+      key: "InReview",
+      bg: `${ADMIN_ACCENT}1A`,
+      border: `${ADMIN_ACCENT}40`,
+      color: ADMIN_ACCENT,
+      icon: Clock
     };
   }
   if (raw === "approved" || raw === "4") {
@@ -121,7 +131,7 @@ const getSourceVideoStatusInfo = (status) => {
       icon: CheckCircle2
     };
   }
-  if (raw === "failed" || raw === "3") {
+  if (raw === "failed" || raw === "5") {
     return {
       label: "Thất bại",
       key: "Failed",
@@ -144,7 +154,7 @@ const getSourceVideoStatusInfo = (status) => {
   }
   return {
     label: "Chờ xử lý",
-    key: "Pending",
+    key: "Queued",
     bg: CHIP_WARNING_BG,
     border: CHIP_WARNING_BORDER,
     color: CHIP_WARNING_TEXT,
@@ -871,7 +881,7 @@ export default function AdminTextData() {
                     required
                     value={youtubeUrlInput}
                     onChange={(e) => setYoutubeUrlInput(e.target.value)}
-                    placeholder="https://www.youtube.com/watch?v=... hoặc https://youtu.be/..."
+                    placeholder="https://www.youtube.com/watch?v=..."
                     className="flex-1 h-10 px-3.5 bg-white dark:bg-[#1C1D22] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-ui text-[#16171C] dark:text-white outline-none transition-all placeholder:text-[#9A9CA3]"
                     onFocus={(e) => {
                       e.target.style.borderColor = ADMIN_ACCENT;
@@ -892,9 +902,6 @@ export default function AdminTextData() {
                     <span>{isSubmittingVideo ? "Đang gửi..." : "Gửi"}</span>
                   </button>
                 </div>
-                <p className="type-caption text-[#6E7078] dark:text-gray-400">
-                  Hỗ trợ link dạng watch, youtu.be hoặc shorts (không hỗ trợ playlist). Video sẽ được xử lý ngầm và tự động cập nhật trạng thái bên dưới.
-                </p>
               </form>
 
               {/* Thanh lọc & làm mới danh sách video + Xuất Corpus */}
@@ -909,11 +916,12 @@ export default function AdminTextData() {
                     className="px-3 py-1.5 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-meta font-label text-[#16171C] dark:text-white outline-none cursor-pointer"
                   >
                     <option value="">Tất cả trạng thái</option>
-                    <option value="Pending">Chờ xử lý (Pending)</option>
-                    <option value="Processing">Đang xử lý (Processing)</option>
-                    <option value="Completed">Hoàn thành (Completed)</option>
-                    <option value="Failed">Thất bại (Failed)</option>
-                    <option value="Approved">Đã duyệt (Approved)</option>
+                    <option value="Queued">Chờ xử lý</option>
+                    <option value="Processing">Đang xử lý</option>
+                    <option value="ReadyForReview">Chờ duyệt</option>
+                    <option value="InReview">Đang duyệt</option>
+                    <option value="Approved">Đã duyệt</option>
+                    <option value="Failed">Thất bại</option>
                   </select>
 
                   <button
@@ -935,7 +943,7 @@ export default function AdminTextData() {
                     className="h-10 px-4 text-white rounded-xl type-button inline-flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer disabled:opacity-50 shrink-0"
                   >
                     {isExportingCorpus && <Loader2 className="w-4 h-4 animate-spin" />}
-                    <span>{isExportingCorpus ? "Đang xuất..." : "Xuất Corpus (.zip)"}</span>
+                    <span>{isExportingCorpus ? "Đang xuất..." : "Tải corpus"}</span>
                   </button>
                 </div>
               </div>
