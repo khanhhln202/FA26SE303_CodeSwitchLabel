@@ -87,7 +87,7 @@ public sealed class DomainLifecycleTests(DatabaseFixture fixture) : IntegrationT
     {
         var ct = TestContext.Current.CancellationToken;
         var domain = await NewDomainAsync("Đợt xóa");
-        var wave = await WaveService.CreateAsync(WaveRequest(domain), ManagerUserId, false, ct);
+        var wave = await WaveService.CreateAsync(WaveRequest(domain) with { AssignedToUserId = ManagerUserId }, ManagerUserId, ct);
 
         await Domains.DeleteAsync(domain, ct);
 
@@ -136,7 +136,7 @@ public sealed class DomainLifecycleTests(DatabaseFixture fixture) : IntegrationT
             Deadline = DateTimeOffset.UtcNow.AddDays(7)
         }, ManagerUserId, false, ct);
 
-        var wave = await WaveService.CreateAsync(WaveRequest(current), ManagerUserId, false, ct);
+        var wave = await WaveService.CreateAsync(WaveRequest(current) with { AssignedToUserId = ManagerUserId }, ManagerUserId, ct);
 
         await Domains.DeleteAsync(current, ct);
         await Domains.DeleteAsync(other, ct);

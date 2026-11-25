@@ -149,17 +149,8 @@ public sealed class TaskStatusApiTests(DatabaseFixture fixture) : ApiTestBase(fi
     {
         var token = await GetManagerTokenAsync();
 
-        var res = await PostAsync("/api/waves", new
-        {
-            waveName = $"Đổi trạng thái tay {Guid.NewGuid():N}",
-            domain = "ItTechnology",
-            targetQty = 2000,
-            startDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
-            endDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30))
-        }, token);
-
-        Assert.Equal(HttpStatusCode.Created, res.StatusCode);
-        var id = (await Doc(res)).GetProperty("waveId").GetInt64();
+        // Manager không tự mở được đợt nữa — Admin mở rồi giao xuống. Xem TaoDotChoManagerAsync.
+        var id = await TaoDotChoManagerAsync(token);
 
         return new ChuBi(token, id);
     }

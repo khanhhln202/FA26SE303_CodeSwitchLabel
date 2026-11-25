@@ -116,7 +116,7 @@ public class WaveService(
         };
     }
     public async Task<WaveDto> CreateAsync(
-        CreateWaveRequest request, long createdById, bool isAdmin, CancellationToken ct = default)
+        CreateWaveRequest request, long createdById, CancellationToken ct = default)
     {
         var start = request.StartDate!.Value;
         var end = request.EndDate!.Value;
@@ -126,6 +126,11 @@ public class WaveService(
             throw new UnprocessableException(
                 "wave_dates_invalid", "Ngày bắt đầu chiến dịch phải trước hoặc bằng ngày kết thúc.");
         }
+
+        // Giao ngay lúc tạo nếu Admin chọn người. Trước đây chỗ này tự gán đợt cho chính người
+        // tạo khi người đó không phải Admin — nay chỉ Admin tạo được đợt nên nhánh đó không còn
+        // nghĩa, và "tạo nhiệm vụ CHO manager" phải là một hành động chứ không phải hai.
+        await RequireTaskManagerAsync(request.AssignedToUserId, ct);
 
         var wave = new Wave
         {
@@ -141,8 +146,7 @@ public class WaveService(
             // đợt là hàm của các task, tự tính lại ở WaveRepository.RefreshStatusAsync.
             Status = WaveStatus.Open,
             CreatedBy = createdById,
-            // Task Manager tự tạo đợt thì tự động gán cho chính mình để có quyền tạo/gắn task
-            AssignedTo = isAdmin ? null : createdById,
+            AssignedTo = request.AssignedToUserId,
             CreatedAt = clock.GetUtcNow()
         };
 
@@ -150,6 +154,26 @@ public class WaveService(
         await waves.SaveChangesAsync(ct);
 
         return ToDto(wave);
+    }
+
+    /// <summary>
+    /// Đợt chỉ giao được cho người giữ vai Task Manager.
+    ///
+    /// <para>
+    /// Dùng chung cho lúc tạo và lúc giao lại, để hai đường không thể lệch luật: giao được một
+    /// Speaker ở đường này mà không giao được ở đường kia là lỗ hổng phân quyền.
+    /// </para>
+    /// </summary>
+    private async Task RequireTaskManagerAsync(long? userId, CancellationToken ct)
+    {
+        if (userId is not { } id) return;
+
+        if (!await waves.IsTaskManagerAsync(id, ct))
+        {
+            throw new UnprocessableException(
+                "assigned_to_invalid_role",
+                "Chỉ giao được chiến dịch cho Task Manager. Người bạn chọn đang giữ vai khác.");
+        }
     }
 
     // Kiểm tra quyền sở hữu khi sửa đợt (TaskManager chỉ sửa đợt của mình)
@@ -217,16 +241,7 @@ public class WaveService(
     {
         var wave = await waves.GetForUpdateAsync(waveId, ct) ?? throw NotFound(waveId);
 
-        if (assignedToUserId.HasValue)
-        {
-            var isTaskManager = await waves.IsTaskManagerAsync(assignedToUserId.Value, ct);
-            if (!isTaskManager)
-            {
-                throw new UnprocessableException(
-                    "assigned_to_invalid_role",
-                    "Chỉ giao được chiến dịch cho Task Manager. Người bạn chọn đang giữ vai khác.");
-            }
-        }
+        await RequireTaskManagerAsync(assignedToUserId, ct);
 
         wave.AssignedTo = assignedToUserId;
 

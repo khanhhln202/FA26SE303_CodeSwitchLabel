@@ -61,6 +61,21 @@ public record CreateWaveRequest
 
     [Required(ErrorMessage = "Phải chọn ngày kết thúc.")]
     public DateOnly? EndDate { get; init; }
+
+    /// <summary>
+    /// Task Manager nhận đợt này. Để trống thì đợt tạo xong chưa có ai nhận, và phải giao sau
+    /// bằng <c>POST /api/waves/{id}/assign</c>.
+    ///
+    /// <para>
+    /// Có mặt ở đây để Admin giao ngay trong một lần gọi — "tạo nhiệm vụ CHO manager" là một
+    /// hành động, không phải hai. Đợt chưa có người nhận thì không Task Manager nào nhìn thấy
+    /// nó, nên để trống là cố ý tạo một khoảng thời gian đợt nằm im.
+    /// </para>
+    ///
+    /// <para>Người được chọn phải giữ vai Task Manager, nếu không trả 422 <c>assigned_to_invalid_role</c>.</para>
+    /// </summary>
+    [Range(1, long.MaxValue, ErrorMessage = "Người nhận không hợp lệ.")]
+    public long? AssignedToUserId { get; init; }
 }
 
 /// <summary>Trường nào để trống thì giữ nguyên.</summary>

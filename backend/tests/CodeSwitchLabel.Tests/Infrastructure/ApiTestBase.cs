@@ -1,6 +1,7 @@
 using CodeSwitchLabel.Repositories.Enums;
 using CodeSwitchLabel.Services.Abstractions;
 using Microsoft.AspNetCore.Mvc.Testing;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -49,6 +50,51 @@ public abstract class ApiTestBase
     protected async Task<string> GetReviewer2TokenAsync() => await LoginAsync("reviewer2@codeswitchlabel.local", "Codeswitch@2026");
     protected async Task<string> GetReviewer3TokenAsync() => await LoginAsync("reviewer3@codeswitchlabel.local", "Codeswitch@2026");
     protected async Task<string> GetSpeakerTokenAsync() => await LoginAsync("speaker1@codeswitchlabel.local", "Codeswitch@2026");
+
+    protected async Task<long> LayUserIdAsync(string accessToken)
+    {
+        using var client = CreateAuthenticatedClient(accessToken);
+        var me = await client.GetFromJsonAsync<JsonElement>(
+            "/api/auth/me", JsonOptions, TestContext.Current.CancellationToken);
+        return me.GetProperty("userId").GetInt64();
+    }
+
+    /// <summary>
+    /// Một đợt do Admin mở và giao cho Task Manager cầm <paramref name="managerToken"/>.
+    ///
+    /// <para>
+    /// Nằm ở lớp nền vì đây là đường DUY NHẤT để một Task Manager có đợt: chỉ Admin mở được
+    /// đợt, nên test nào tự gọi <c>POST /api/waves</c> bằng token của manager sẽ nhận 403.
+    /// Hai lớp test đã vấp đúng chỗ này; để helper ở đây thì lớp thứ ba không chép lại lối cũ.
+    /// </para>
+    /// </summary>
+    protected async Task<long> TaoDotChoManagerAsync(
+        string managerToken, string domain = "ItTechnology")
+    {
+        var adminToken = await GetAdminTokenAsync();
+        var managerId = await LayUserIdAsync(managerToken);
+
+        var res = await PostAsync("/api/waves", new
+        {
+            waveName = $"Đợt test {domain} {Guid.NewGuid():N}",
+            domain,
+            targetQty = 2000,
+            startDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
+            endDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
+            assignedToUserId = managerId
+        }, adminToken);
+
+        Assert.Equal(HttpStatusCode.Created, res.StatusCode);
+
+        using var doc = JsonDocument.Parse(
+            await res.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+
+        // Giao ngay trong lần tạo: thiếu vế này thì đợt không thuộc về ai, và các test về
+        // quyền sở hữu phía sau sẽ xanh vì lý do sai.
+        Assert.Equal(managerId, doc.RootElement.GetProperty("assignedTo").GetInt64());
+
+        return doc.RootElement.GetProperty("waveId").GetInt64();
+    }
 
     // Client dùng chung của fixture KHÔNG được dispose — chỉ dispose client tạo riêng cho token.
     protected async Task<HttpResponseMessage> GetAsync(string url, string? accessToken = null)
