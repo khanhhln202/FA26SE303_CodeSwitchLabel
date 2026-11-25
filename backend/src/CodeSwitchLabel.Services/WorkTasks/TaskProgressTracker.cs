@@ -211,8 +211,10 @@ public class TaskProgressTracker(
         var waveId = await tasks.GetWaveIdAsync(taskId, ct);
         if (waveId is null) return;
 
+        // taskId đi kèm vì mục mới được chèn vào CHÍNH task này, và khoá duy nhất của
+        // task_script tính theo task — xem chú thích của hàm.
         var speakerIds = await tasks.FindUnassignedSpeakersForScriptInWaveAsync(
-            recording.ScriptId, waveId.Value, recording.SpeakerId, ct);
+            taskId, recording.ScriptId, waveId.Value, recording.SpeakerId, ct);
         if (speakerIds.Count == 0) return;
 
         var now = clock.GetUtcNow();

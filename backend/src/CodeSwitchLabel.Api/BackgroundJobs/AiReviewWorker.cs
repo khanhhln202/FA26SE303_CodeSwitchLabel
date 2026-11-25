@@ -109,17 +109,27 @@ public sealed class AiReviewWorker(
                     "Máy duyệt tự động: {RecordingId} -> {Verdict}, WER {Wer}.",
                     result.RecordingId, result.Verdict, result.EffectiveWer);
             }
-            catch (AppException ex)
+            // Bắt MỌI lỗi của một bản, không riêng AppException.
+            //
+            // Trước đây chỉ bắt AppException, nên một DbUpdateException thoát ra ngoài vòng lặp:
+            // nó giết cả lượt quét, ba bản lành phía sau không ai xử, VÀ không bao giờ chạm tới
+            // RecordFailure — ngân sách thử lại đứng yên nên worker lặp lại vô hạn. Ngày
+            // 24/11/2026 lỗi đó chạy 880 lượt liên tiếp trong 15 tiếng mà không có gì chặn lại.
+            //
+            // OperationCanceledException lúc đang dừng thì KHÔNG nuốt: đó là tín hiệu tắt máy
+            // chứ không phải bản ghi hỏng, đếm nó vào ngân sách là sai.
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
             {
-                // Lỗi nghiệp vụ của MỘT bản không được làm đổ cả lượt: có người vừa bỏ phiếu
-                // xong làm bản ghi hết hoà, hoặc ASR trục trặc. Đếm rồi đi tiếp.
+                // Lỗi của MỘT bản không được làm đổ cả lượt: có người vừa bỏ phiếu xong làm bản
+                // ghi hết hoà, ASR trục trặc, hoặc database từ chối ghi. Đếm rồi đi tiếp.
                 var attempts = _budget.RecordFailure(item.RecordingId);
+                var ma = ex is AppException app ? app.Code : ex.GetType().Name;
 
                 logger.Log(
                     _budget.CanTry(item.RecordingId) ? LogLevel.Warning : LogLevel.Error,
                     ex,
                     "Máy duyệt tự động bỏ qua {RecordingId} (lần {Attempts}): {Code}.{GiveUp}",
-                    item.RecordingId, attempts, ex.Code,
+                    item.RecordingId, attempts, ma,
                     _budget.CanTry(item.RecordingId)
                         ? string.Empty
                         : " Đã quá số lần cho phép, sẽ không thử lại — cần người xử lý tay.");
