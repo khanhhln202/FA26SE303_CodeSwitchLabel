@@ -137,13 +137,6 @@ public sealed class WaveRuleTests(DatabaseFixture fixture) : ApiTestBase(fixture
         return waveId;
     }
 
-    private async Task<long> LayUserIdAsync(string accessToken)
-    {
-        using var client = CreateAuthenticatedClient(accessToken);
-        var me = await client.GetFromJsonAsync<JsonElement>("/api/auth/me", JsonOptions, TestContext.Current.CancellationToken);
-        return me.GetProperty("userId").GetInt64();
-    }
-
     private static async Task<string?> LayMaLoiAsync(HttpResponseMessage response)
     {
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
