@@ -417,47 +417,10 @@ public sealed class WaveTaskPermissionAndDomainTests(DatabaseFixture fixture) : 
 
     // ----------------------------------------------------------------- Trợ giúp
 
-    /// <summary>
-    /// Một đợt mà Task Manager này sở hữu.
-    ///
-    /// <para>
-    /// Từ khi chỉ Admin được mở đợt, đường DUY NHẤT để một Task Manager có đợt là Admin tạo
-    /// rồi giao xuống. Helper phải đi đúng đường đó: để nó tự tạo bằng token của manager thì
-    /// mọi test dưới đây đang kiểm một luồng không còn tồn tại.
-    /// </para>
-    /// </summary>
-    private async Task<long> TaoChienDichChoManagerAsync(string managerToken, string domain = "ItTechnology")
-    {
-        var adminToken = await GetAdminTokenAsync();
-        var managerId = await LayUserIdAsync(managerToken);
-
-        var response = await PostAsync("/api/waves", new
-        {
-            waveName = $"Đợt test {domain} {Guid.NewGuid():N}",
-            domain,
-            targetQty = 2000,
-            startDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
-            endDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
-            assignedToUserId = managerId
-        }, adminToken);
-
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-
-        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
-
-        // Giao ngay trong lần tạo: thiếu vế này thì đợt không thuộc về ai và các test sở hữu
-        // phía dưới sẽ xanh vì lý do sai.
-        Assert.Equal(managerId, doc.RootElement.GetProperty("assignedTo").GetInt64());
-
-        return doc.RootElement.GetProperty("waveId").GetInt64();
-    }
-
-    private async Task<long> LayUserIdAsync(string accessToken)
-    {
-        using var client = CreateAuthenticatedClient(accessToken);
-        var me = await client.GetFromJsonAsync<JsonElement>("/api/auth/me", JsonOptions, TestContext.Current.CancellationToken);
-        return me.GetProperty("userId").GetInt64();
-    }
+    // Đợt do Admin mở rồi giao cho manager — xem ApiTestBase.TaoDotChoManagerAsync. Để ở lớp
+    // nền vì hai lớp test đã cùng vấp chỗ này, và lớp thứ ba sẽ còn vấp nữa.
+    private Task<long> TaoChienDichChoManagerAsync(string managerToken, string domain = "ItTechnology")
+        => TaoDotChoManagerAsync(managerToken, domain);
 
     private static async Task<string?> LayMaLoiAsync(HttpResponseMessage response)
     {
