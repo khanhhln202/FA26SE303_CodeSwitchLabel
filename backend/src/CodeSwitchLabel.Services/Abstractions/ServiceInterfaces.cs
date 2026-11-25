@@ -150,8 +150,13 @@ public interface IWaveService
     Task<WaveDashboardDto> GetDashboardAsync(
         long waveId, long? callerId = null, bool isAdmin = false, CancellationToken ct = default);
 
+    /// <summary>
+    /// Tạo đợt. Không còn tham số <c>isAdmin</c>: endpoint đã là Admin-only, nên nhánh
+    /// "người tạo không phải Admin thì tự gán cho chính mình" không còn tồn tại.
+    /// Giao cho ai thì đặt ở <see cref="CreateWaveRequest.AssignedToUserId"/>.
+    /// </summary>
     Task<WaveDto> CreateAsync(
-        CreateWaveRequest request, long createdById, bool isAdmin, CancellationToken ct = default);
+        CreateWaveRequest request, long createdById, CancellationToken ct = default);
 
     Task<WaveDto> UpdateAsync(
         long waveId, UpdateWaveRequest request, long? callerId, bool isAdmin, CancellationToken ct = default);
