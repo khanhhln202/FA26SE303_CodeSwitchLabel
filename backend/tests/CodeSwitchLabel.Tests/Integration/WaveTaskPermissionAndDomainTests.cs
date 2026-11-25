@@ -14,11 +14,19 @@ namespace CodeSwitchLabel.Tests.Integration;
 [Trait("Category", "Integration")]
 public sealed class WaveTaskPermissionAndDomainTests(DatabaseFixture fixture) : ApiTestBase(fixture)
 {
+    /// <summary>
+    /// Task Manager KHÔNG còn mở được đợt.
+    ///
+    /// <para>
+    /// Trước đây test này khoá hành vi ngược lại: manager tạo đợt thì service tự gán đợt cho
+    /// chính họ. Điều đó đi vòng qua Admin, trong khi đợt là tầng Admin giao việc xuống —
+    /// manager tự cấp việc cho mình thì chuỗi uỷ quyền chỉ còn trên giấy.
+    /// </para>
+    /// </summary>
     [Fact]
-    public async Task TaskManager_TaoChienDich_TuDongGanChoChinhMinh()
+    public async Task TaskManager_KhongConMoDuocChienDich_Tra403()
     {
         var managerToken = await GetManagerTokenAsync();
-        var managerId = await LayUserIdAsync(managerToken);
 
         var response = await PostAsync("/api/waves", new
         {
@@ -29,20 +37,50 @@ public sealed class WaveTaskPermissionAndDomainTests(DatabaseFixture fixture) : 
             endDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30))
         }, managerToken);
 
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    /// <summary>
+    /// Admin mở đợt và giao luôn cho Task Manager trong CÙNG một lần gọi.
+    ///
+    /// <para>
+    /// Đây là đường thay thế cho hành vi tự gán đã bỏ. Tách làm hai lần gọi thì giữa chúng
+    /// đợt không thuộc về ai và không manager nào nhìn thấy.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Admin_TaoChienDich_VaGiaoLuonChoManager()
+    {
+        var adminToken = await GetAdminTokenAsync();
+        var managerToken = await GetManagerTokenAsync();
+        var managerId = await LayUserIdAsync(managerToken);
+
+        var response = await PostAsync("/api/waves", new
+        {
+            waveName = $"Đợt Admin giao {Guid.NewGuid():N}",
+            domain = "ItTechnology",
+            targetQty = 2000,
+            startDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
+            endDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
+            assignedToUserId = managerId
+        }, adminToken);
+
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         var created = doc.RootElement;
         Assert.Equal(managerId, created.GetProperty("assignedTo").GetInt64());
-        Assert.Equal(managerId, created.GetProperty("createdBy").GetInt64());
         Assert.Equal("ItTechnology", created.GetProperty("domain").GetString());
+
+        // Người tạo vẫn là Admin — giao việc không phải là chuyển quyền sở hữu bản ghi.
+        Assert.NotEqual(managerId, created.GetProperty("createdBy").GetInt64());
     }
 
     [Fact]
     public async Task TaskManager_TaoTaskTrongChienDichChinhMinh_ThanhCong()
     {
         var managerToken = await GetManagerTokenAsync();
-        var waveId = await TaoChienDichBoiManagerAsync(managerToken, "ItTechnology");
+        var waveId = await TaoChienDichChoManagerAsync(managerToken, "ItTechnology");
 
         var response = await PostAsync("/api/tasks", new
         {
@@ -61,7 +99,7 @@ public sealed class WaveTaskPermissionAndDomainTests(DatabaseFixture fixture) : 
     public async Task TaskManager_SuaVaXoaChienDichCuaChinhMinh_ThanhCong()
     {
         var managerToken = await GetManagerTokenAsync();
-        var waveId = await TaoChienDichBoiManagerAsync(managerToken, "ItTechnology");
+        var waveId = await TaoChienDichChoManagerAsync(managerToken, "ItTechnology");
 
         // 1. Sửa
         var patchRes = await PatchAsync($"/api/waves/{waveId}", new
@@ -135,7 +173,7 @@ public sealed class WaveTaskPermissionAndDomainTests(DatabaseFixture fixture) : 
     public async Task XoaChienDich_TaskConTuDongThanhDocLap()
     {
         var managerToken = await GetManagerTokenAsync();
-        var waveId = await TaoChienDichBoiManagerAsync(managerToken, "ItTechnology");
+        var waveId = await TaoChienDichChoManagerAsync(managerToken, "ItTechnology");
 
         // Tạo task trong đợt
         var taskRes = await PostAsync("/api/tasks", new
@@ -169,7 +207,7 @@ public sealed class WaveTaskPermissionAndDomainTests(DatabaseFixture fixture) : 
     public async Task GanTaskLechChuDeVaoChienDich_BaoLoi422()
     {
         var managerToken = await GetManagerTokenAsync();
-        var eduWaveId = await TaoChienDichBoiManagerAsync(managerToken, "Education");
+        var eduWaveId = await TaoChienDichChoManagerAsync(managerToken, "Education");
 
         // 1. Tạo trực tiếp task lệch chủ đề vào đợt -> 422
         var createMismatchedRes = await PostAsync("/api/tasks", new
@@ -241,7 +279,7 @@ public sealed class WaveTaskPermissionAndDomainTests(DatabaseFixture fixture) : 
     public async Task XoaTask_DangTrongChienDich_BaoLoi409()
     {
         var managerToken = await GetManagerTokenAsync();
-        var waveId = await TaoChienDichBoiManagerAsync(managerToken, "ItTechnology");
+        var waveId = await TaoChienDichChoManagerAsync(managerToken, "ItTechnology");
 
         var createRes = await PostAsync("/api/tasks", new
         {
@@ -323,7 +361,7 @@ public sealed class WaveTaskPermissionAndDomainTests(DatabaseFixture fixture) : 
     public async Task XoaTaskKhoiDot_TaskDaHoanThanh_XoaDuoc()
     {
         var managerToken = await GetManagerTokenAsync();
-        var waveId = await TaoChienDichBoiManagerAsync(managerToken, "ItTechnology");
+        var waveId = await TaoChienDichChoManagerAsync(managerToken, "ItTechnology");
 
         var createRes = await PostAsync("/api/tasks", new
         {
@@ -353,8 +391,8 @@ public sealed class WaveTaskPermissionAndDomainTests(DatabaseFixture fixture) : 
     public async Task XoaTaskKhoiDot_TaskKhongThuocDot_Tra404VaTaskCon()
     {
         var managerToken = await GetManagerTokenAsync();
-        var waveA = await TaoChienDichBoiManagerAsync(managerToken, "ItTechnology");
-        var waveB = await TaoChienDichBoiManagerAsync(managerToken, "ItTechnology");
+        var waveA = await TaoChienDichChoManagerAsync(managerToken, "ItTechnology");
+        var waveB = await TaoChienDichChoManagerAsync(managerToken, "ItTechnology");
 
         var createRes = await PostAsync("/api/tasks", new
         {
@@ -379,20 +417,38 @@ public sealed class WaveTaskPermissionAndDomainTests(DatabaseFixture fixture) : 
 
     // ----------------------------------------------------------------- Trợ giúp
 
-    private async Task<long> TaoChienDichBoiManagerAsync(string managerToken, string domain = "ItTechnology")
+    /// <summary>
+    /// Một đợt mà Task Manager này sở hữu.
+    ///
+    /// <para>
+    /// Từ khi chỉ Admin được mở đợt, đường DUY NHẤT để một Task Manager có đợt là Admin tạo
+    /// rồi giao xuống. Helper phải đi đúng đường đó: để nó tự tạo bằng token của manager thì
+    /// mọi test dưới đây đang kiểm một luồng không còn tồn tại.
+    /// </para>
+    /// </summary>
+    private async Task<long> TaoChienDichChoManagerAsync(string managerToken, string domain = "ItTechnology")
     {
+        var adminToken = await GetAdminTokenAsync();
+        var managerId = await LayUserIdAsync(managerToken);
+
         var response = await PostAsync("/api/waves", new
         {
             waveName = $"Đợt test {domain} {Guid.NewGuid():N}",
             domain,
             targetQty = 2000,
             startDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1)),
-            endDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30))
-        }, managerToken);
+            endDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(30)),
+            assignedToUserId = managerId
+        }, adminToken);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+
+        // Giao ngay trong lần tạo: thiếu vế này thì đợt không thuộc về ai và các test sở hữu
+        // phía dưới sẽ xanh vì lý do sai.
+        Assert.Equal(managerId, doc.RootElement.GetProperty("assignedTo").GetInt64());
+
         return doc.RootElement.GetProperty("waveId").GetInt64();
     }
 
