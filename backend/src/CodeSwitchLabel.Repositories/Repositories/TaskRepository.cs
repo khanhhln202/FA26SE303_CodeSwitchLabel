@@ -95,10 +95,18 @@ public interface ITaskRepository
 
     /// <summary>
     /// Người nhận task thu âm còn hoạt động trong cùng đợt, chưa có bản ghi (bất kỳ biến thể nào)
-    /// cho cặp câu này — dùng để trả bài vào kho khi bài của người đọc bị từ chối.
+    /// cho cặp câu này, VÀ chưa có sẵn mục trong <c>task_script</c> của task
+    /// <paramref name="taskId"/> — dùng để trả bài vào kho khi bài của người đọc bị từ chối.
     /// </summary>
+    /// <param name="taskId">
+    /// Task sẽ nhận mục mới. BẮT BUỘC có mặt ở đây: chỉ mục duy nhất
+    /// <c>uq_task_script_assignee</c> đặt trên <c>(task_id, script_id, assignee_user_id)</c>, nên
+    /// lọc mà không biết task là lọc nhầm bảng — đúng lỗi đã làm máy duyệt chết 15 tiếng
+    /// ngày 24/11/2026.
+    /// </param>
     Task<List<long>> FindUnassignedSpeakersForScriptInWaveAsync(
-        string scriptId, long waveId, long excludeSpeakerId, CancellationToken ct = default);
+        long taskId, string scriptId, long waveId, long excludeSpeakerId,
+        CancellationToken ct = default);
 
     /// <summary>
     /// Lấp cặp câu từ kho đợt (buffer) vào task thu âm: lấy FIFO các câu validated trong
@@ -330,7 +338,8 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
             .FirstOrDefaultAsync(ct);
 
     public async Task<List<long>> FindUnassignedSpeakersForScriptInWaveAsync(
-        string scriptId, long waveId, long excludeSpeakerId, CancellationToken ct = default)
+        long taskId, string scriptId, long waveId, long excludeSpeakerId,
+        CancellationToken ct = default)
     {
         // Người nhận đang nhận việc trong các task thu âm còn chạy của đợt này.
         var assigneeIds = await db.TaskAssignments.AsNoTracking()
@@ -342,11 +351,25 @@ public class TaskRepository(CodeSwitchLabelDbContext db) : ITaskRepository
 
         if (assigneeIds.Count == 0) return [];
 
+        // Người đã có sẵn mục cho câu này trong CHÍNH task sắp nhận mục mới.
+        //
+        // Thiếu vế này là lỗi đã làm máy duyệt chết 15 tiếng ngày 24/11/2026: hàm chỉ hỏi bảng
+        // `recording`, trong khi ràng buộc `uq_task_script_assignee` lại đặt trên `task_script`.
+        // Một cặp câu có HAI biến thể dùng chung `script_id`; từ chối bản thứ nhất thì chèn mục,
+        // từ chối bản thứ hai thì chèn lại y hệt và vỡ khoá 23505.
+        var daCoMuc = await db.TaskScripts.AsNoTracking()
+            .Where(ts => ts.TaskId == taskId && ts.ScriptId == scriptId && ts.AssigneeUserId != null)
+            .Select(ts => ts.AssigneeUserId!.Value)
+            .ToListAsync(ct);
+
+        var daCo = daCoMuc.ToHashSet();
+
         // Loại người đọc đã bị từ chối bài và người này không có bản ghi nào (bất kỳ biến thể nào) cho câu.
         var result = new List<long>();
         foreach (var userId in assigneeIds)
         {
             if (userId == excludeSpeakerId) continue;
+            if (daCo.Contains(userId)) continue;
             var hasRecording = await db.Recordings.AsNoTracking().AnyAsync(r =>
                 r.ScriptId == scriptId && r.SpeakerId == userId, ct);
             if (!hasRecording) result.Add(userId);
