@@ -805,6 +805,12 @@ export default function AdminTaskManagement() {
         return;
       }
 
+      const newWaveTarget = Number(batchFormData.target);
+      if (newWaveTarget < 2000 || newWaveTarget > 5000) {
+        toast.error("Chỉ tiêu đợt phải từ 2000 đến 5000 cặp câu!");
+        return;
+      }
+
       const domainMap = {
         "Công nghệ thông tin": "ItTechnology",
         "Giáo dục": "Education",
@@ -813,7 +819,6 @@ export default function AdminTaskManagement() {
 
       const startIso = `${cleanStart}T00:00:00`;
       const endIso = `${cleanEnd}T23:59:59`;
-      const newWaveTarget = Number(batchFormData.target);
 
       const wavePayload = {
         title: String(batchFormData.name).trim(),
@@ -825,15 +830,14 @@ export default function AdminTaskManagement() {
         StartDate: cleanStart,
         EndDate: cleanEnd,
         startDateIso: startIso,
-        endDateIso: endIso
+        endDateIso: endIso,
+        ...(modalMode === "CREATE" && batchFormData.assignedToUserId
+          ? { assignedToUserId: Number(batchFormData.assignedToUserId) }
+          : {})
       };
 
       if (modalMode === "CREATE") {
-        const createdWave = await taskService.createWave(wavePayload);
-        const createdId = Number(createdWave?.waveId || createdWave?.id);
-        if (createdId && batchFormData.assignedToUserId) {
-          await taskService.assignWave(createdId, Number(batchFormData.assignedToUserId)).catch((err) => console.warn(err));
-        }
+        await taskService.createWave(wavePayload);
         toast.success(`Đã tạo thành công ${batchFormData.name}!`);
       } else {
         const targetWaveId = Number(modalTargetBatchId);
@@ -1014,7 +1018,7 @@ export default function AdminTaskManagement() {
     const targetWaveId = Number(selectedBatchId);
 
     try {
-      await taskService.detachTaskFromWave(targetWaveId, targetTaskId);
+      await taskService.detachTaskFromWave(targetTaskId);
       toast.success(`Đã gỡ nhiệm vụ khỏi đợt thành công!`);
     } catch (err) {
       toast.success(`Đã gỡ nhiệm vụ khỏi đợt!`);
@@ -1361,7 +1365,8 @@ export default function AdminTaskManagement() {
                   </label>
                   <input
                     type="number"
-                    min="1"
+                    min="2000"
+                    max="5000"
                     required
                     value={batchFormData.target}
                     onChange={(e) => setBatchFormData({ ...batchFormData, target: e.target.value })}

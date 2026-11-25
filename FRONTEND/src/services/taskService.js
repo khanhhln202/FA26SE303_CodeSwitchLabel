@@ -36,7 +36,18 @@ export const taskService = {
   },
 
   createWave: async (data) => {
-    const res = await apiClient.post('/api/waves', data);
+    const payload = {
+      ...data,
+      ...(data?.assignedToUserId !== undefined
+        ? { assignedToUserId: data.assignedToUserId ? Number(data.assignedToUserId) : null }
+        : {})
+    };
+    const res = await apiClient.post('/api/waves', payload);
+    return res.data;
+  },
+
+  deleteTaskFromWave: async (waveId, taskId) => {
+    const res = await apiClient.delete(`/api/waves/${waveId}/tasks/${taskId}`);
     return res.data;
   },
 
@@ -57,8 +68,11 @@ export const taskService = {
     return res.data;
   },
 
-  detachTaskFromWave: async (waveId, taskId) => {
-    const res = await apiClient.delete(`/api/waves/${waveId}/tasks/${taskId}`);
+  detachTaskFromWave: async (waveIdOrTaskId, maybeTaskId) => {
+    const targetTaskId = maybeTaskId !== undefined ? Number(maybeTaskId) : Number(waveIdOrTaskId);
+    const res = await apiClient.patch(`/api/tasks/${targetTaskId}/wave`, {
+      waveId: null
+    });
     return res.data;
   },
 
