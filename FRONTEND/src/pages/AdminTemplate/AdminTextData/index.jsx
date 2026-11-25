@@ -89,7 +89,7 @@ function HighlightCsText({ rawText }) {
       {segments.map((segment, i) => (
         <span 
           key={i} 
-          style={segment.lang === "en" ? { color: AUDIO_PRIMARY, fontWeight: 600 } : undefined}
+          style={segment.lang === "en" ? { color: AUDIO_PRIMARY } : undefined}
         >
           {segment.text}
         </span>

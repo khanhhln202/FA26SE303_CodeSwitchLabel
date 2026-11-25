@@ -1435,7 +1435,7 @@ export default function TaskManagerManagement() {
                   type="button"
                   onClick={handleConfirmDeleteBatch}
                   style={{ backgroundColor: DANGER, boxShadow: `0 10px 24px ${DANGER}40` }}
-                  className="flex-1 py-2.5 text-[#16171C] dark:text-white rounded-xl type-button hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer"
+                  className="flex-1 py-2.5 text-white rounded-xl type-button hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer"
                 >
                   Xóa ngay
                 </button>

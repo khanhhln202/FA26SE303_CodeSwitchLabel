@@ -44,10 +44,6 @@ export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
   const [loading, setLoading] = useState(true);
   const [waves, setWaves] = useState([]);
   const [assignTasks, setAssignTasks] = useState([]);
-  const [adminTargets, setAdminTargets] = useState({
-    speaker: { target: 0, completed: 0 },
-    reviewer: { target: 0, completed: 0 }
-  });
   const [stats, setStats] = useState({
     speakerTasksCount: 0,
     reviewerTasksCount: 0,
@@ -61,24 +57,10 @@ export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [overviewData, waveData, taskData] = await Promise.all([
-        taskService.getOverview().catch(() => null),
+      const [waveData, taskData] = await Promise.all([
         taskService.getWaves({ pageSize: 1000 }).catch(() => ({ items: [] })),
         taskService.getTasks({ pageSize: 1000 }).catch(() => ({ items: [] }))
       ]);
-
-      if (overviewData) {
-        setAdminTargets({
-          speaker: {
-            target: overviewData.speakerTarget || overviewData.totalSpeakerTarget || 0,
-            completed: overviewData.speakerCompleted || overviewData.totalSpeakerCompleted || 0
-          },
-          reviewer: {
-            target: overviewData.reviewerTarget || overviewData.totalReviewerTarget || 0,
-            completed: overviewData.reviewerCompleted || overviewData.totalReviewerCompleted || 0
-          }
-        });
-      }
 
       const rawWaves = waveData?.items || waveData?.data || (Array.isArray(waveData) ? waveData : []);
       
@@ -254,73 +236,6 @@ export default function TaskManagerHome({ onNavigateToManagement, navigate }) {
 
   return (
     <div className="w-full h-full flex flex-col gap-4 text-left font-sans p-1 overflow-y-auto transition-colors">
-
-      {/* Cards Chỉ tiêu từ Admin */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-        {/* Chỉ tiêu Speaker */}
-        <div className="rounded-2xl border border-[#E5E2D8] dark:border-gray-800 bg-white dark:bg-[#1C1D22] p-5 shadow-[0_1px_3px_rgba(16,17,20,0.04)] relative overflow-hidden transition-all hover:shadow-[0_4px_12px_rgba(16,17,20,0.06)]">
-          <div className="flex items-center gap-3 mb-3">
-            <div 
-              className="w-10 h-10 rounded-2xl shrink-0 flex items-center justify-center"
-              style={{ 
-                backgroundColor: `${speakerColor}1F`, 
-                color: speakerColor 
-              }}
-            >
-              <ListTodo className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="type-card-title text-[#16171C] dark:text-white">Chỉ tiêu Speaker</h3>
-              <p className="type-meta text-[#6E7078] dark:text-gray-400">Admin giao cho Task Manager</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 mt-3 bg-[#F7F5EF] dark:bg-[#25272E] p-3.5 rounded-xl border border-[#E5E2D8]/80 dark:border-gray-800">
-            <div>
-              <span className="type-label text-[#9A9CA3] uppercase block">Chỉ tiêu giao</span>
-              <p className="type-stat text-[#16171C] dark:text-white mt-0.5">{adminTargets.speaker.target.toLocaleString()} <span className="type-label font-normal text-[#6E7078]">câu</span></p>
-            </div>
-            <div>
-              <span className="type-label text-[#9A9CA3] uppercase block">Đã thu âm</span>
-              <p className="type-stat mt-0.5" style={{ color: speakerColor }}>
-                {adminTargets.speaker.completed.toLocaleString()} <span className="type-label font-normal text-[#6E7078]">câu</span>
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Chỉ tiêu Reviewer */}
-        <div className="rounded-2xl border border-[#E5E2D8] dark:border-gray-800 bg-white dark:bg-[#1C1D22] p-5 shadow-[0_1px_3px_rgba(16,17,20,0.04)] relative overflow-hidden transition-all hover:shadow-[0_4px_12px_rgba(16,17,20,0.06)]">
-          <div className="flex items-center gap-3 mb-3">
-            <div 
-              className="w-10 h-10 rounded-2xl shrink-0 flex items-center justify-center"
-              style={{ 
-                backgroundColor: `${reviewerColor}1F`, 
-                color: reviewerColor 
-              }}
-            >
-              <ListTodo className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="type-card-title text-[#16171C] dark:text-white">Chỉ tiêu Reviewer</h3>
-              <p className="type-meta text-[#6E7078] dark:text-gray-400">Admin giao cho Task Manager</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 mt-3 bg-[#F7F5EF] dark:bg-[#25272E] p-3.5 rounded-xl border border-[#E5E2D8]/80 dark:border-gray-800">
-            <div>
-              <span className="type-label text-[#9A9CA3] uppercase block">Chỉ tiêu duyệt</span>
-              <p className="type-stat text-[#16171C] dark:text-white mt-0.5">{adminTargets.reviewer.target.toLocaleString()} <span className="type-label font-normal text-[#6E7078]">câu</span></p>
-            </div>
-            <div>
-              <span className="type-label text-[#9A9CA3] uppercase block">Đã kiểm duyệt</span>
-              <p className="type-stat mt-0.5" style={{ color: reviewerColor }}>
-                {adminTargets.reviewer.completed.toLocaleString()} <span className="type-label font-normal text-[#6E7078]">câu</span>
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* TOÀN BỘ NỘI DUNG TỪ TASKMANAGERDASHBOARD */}
       <div className="w-full space-y-4 text-left font-sans transition-colors">

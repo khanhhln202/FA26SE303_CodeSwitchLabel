@@ -45,6 +45,13 @@ export const taskService = {
     return res.data;
   },
 
+  assignWave: async (id, assignedToUserId) => {
+    const res = await apiClient.post(`/api/waves/${id}/assign`, {
+      assignedToUserId: assignedToUserId ? Number(assignedToUserId) : null
+    });
+    return res.data;
+  },
+
   deleteWave: async (id) => {
     const res = await apiClient.delete(`/api/waves/${id}`);
     return res.data;
