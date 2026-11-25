@@ -41,6 +41,7 @@ export const PAGE_TITLES = {
   // --- ADMIN ---
   '/admin': 'Bảng điều khiển',
   '/admin/users': 'Quản lý người dùng',
+  '/admin/tasks': 'Quản lý nhiệm vụ',
   '/admin/text-data': 'Quản lý dữ liệu văn bản',
   '/admin/recordings': 'Quản lý bản thu và bộ dữ liệu',
   '/admin/configuration/topic': 'Chủ đề',
