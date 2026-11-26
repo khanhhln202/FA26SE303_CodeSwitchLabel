@@ -191,29 +191,12 @@ export default function AdminSourceVideos() {
 
   return (
     <div className="w-full h-full flex flex-col gap-2.5 text-left font-sans p-1 overflow-hidden">
-      {/* Thêm video */}
-      <form onSubmit={handleSubmit} className={`${CARD} shrink-0 px-4 py-3`}>
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <label htmlFor="youtube-url" className="type-label font-label text-[#16171C] dark:text-gray-200">
-              Thêm video
-            </label>
-            <p className="type-caption text-[#9A9CA3]">
-              Hệ thống tự tải và phiên âm video, thường mất vài phút. Video đã duyệt được gom vào corpus.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={handleExport}
-            disabled={isExporting}
-            style={{ backgroundColor: ADMIN_ACCENT, boxShadow: `0 6px 16px ${ADMIN_ACCENT}35` }}
-            className="h-9 px-3.5 text-white rounded-xl type-button inline-flex items-center gap-1.5 hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer disabled:opacity-50 shrink-0"
-          >
-            {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-            <span>{isExporting ? "Đang tải..." : "Tải corpus"}</span>
-          </button>
-        </div>
-        <div className="mt-2 flex flex-col sm:flex-row gap-2">
+      {/* Thêm video - gọn 1 hàng: nhãn, ô link, Gửi, Tải corpus; mô tả là chú thích nhỏ bên dưới */}
+      <form onSubmit={handleSubmit} className={`${CARD} shrink-0 px-4 py-2.5`}>
+        <div className="flex flex-wrap items-center gap-2">
+          <label htmlFor="youtube-url" className="type-label font-label text-[#16171C] dark:text-gray-200 whitespace-nowrap mr-1">
+            Thêm video
+          </label>
           <input
             id="youtube-url"
             type="url"
@@ -221,18 +204,32 @@ export default function AdminSourceVideos() {
             value={urlInput}
             onChange={(e) => setUrlInput(e.target.value)}
             placeholder="https://www.youtube.com/watch?v=..."
-            className="flex-1 h-10 px-3.5 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-ui text-[#16171C] dark:text-white outline-none transition-all placeholder:text-[#9A9CA3] focus:border-[#0052CC] focus:shadow-[0_0_0_4px_rgba(0,82,204,0.1)]"
+            className="flex-1 min-w-[220px] h-9 px-3.5 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-ui text-[#16171C] dark:text-white outline-none transition-all placeholder:text-[#9A9CA3] focus:border-[#0052CC] focus:shadow-[0_0_0_4px_rgba(0,82,204,0.1)]"
           />
           <button
             type="submit"
             disabled={submitMutation.isPending || !urlInput.trim()}
             style={{ backgroundColor: ADMIN_ACCENT }}
-            className="h-10 px-5 text-white rounded-xl type-button inline-flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer disabled:opacity-50 shrink-0"
+            className="h-9 px-4 text-white rounded-xl type-button inline-flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer disabled:opacity-50 shrink-0"
           >
             {submitMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
             {submitMutation.isPending ? "Đang gửi..." : "Gửi"}
           </button>
+          <span className="hidden sm:block w-px h-6 bg-[#E5E2D8] dark:bg-gray-700 mx-1" aria-hidden="true" />
+          {/* Nút phụ (viền) để không tranh với nút Gửi */}
+          <button
+            type="button"
+            onClick={handleExport}
+            disabled={isExporting}
+            className="h-9 px-3.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] type-button text-[#4A4C53] dark:text-gray-200 inline-flex items-center gap-1.5 hover:border-[#0052CC] hover:text-[#0052CC] transition-colors cursor-pointer disabled:opacity-50 shrink-0"
+          >
+            {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            <span>{isExporting ? "Đang tải..." : "Tải corpus"}</span>
+          </button>
         </div>
+        <p className="mt-1 type-caption text-[#9A9CA3]">
+          Hệ thống tự tải và phiên âm video, thường mất vài phút. Video đã duyệt được gom vào corpus.
+        </p>
       </form>
 
       {/* Danh sách video */}
@@ -266,14 +263,15 @@ export default function AdminSourceVideos() {
         </div>
 
         <div className="flex-1 min-h-0 overflow-auto">
-          <table className="w-full min-w-[780px] text-left border-collapse type-ui">
+          {/* Trang đủ hàng thì bảng cao full khung -> 10 dòng giãn đều, giống trang Giao task */}
+          <table className={`w-full min-w-[780px] text-left border-collapse type-ui ${items.length === pageSize ? "h-full" : ""}`}>
             <thead>
               <tr className="bg-[#F7F5EF] dark:bg-[#25272E] type-label text-[#9A9CA3] dark:text-gray-400 border-b border-[#E5E2D8] dark:border-gray-800 sticky top-0 z-10">
                 <th className="px-3 py-2 font-label w-[60px]">ID</th>
                 <th className="px-3 py-2 font-label">Video</th>
                 <th className="px-3 py-2 font-label text-center w-[90px] whitespace-nowrap">Thời lượng</th>
                 <th className="px-3 py-2 font-label text-center w-[70px] whitespace-nowrap">Số câu</th>
-                <th className="px-3 py-2 font-label w-[150px]">Trạng thái</th>
+                <th className="px-3 py-2 font-label w-[170px]">Trạng thái</th>
                 <th className="px-3 py-2 font-label w-[150px] whitespace-nowrap">Ngày gửi</th>
                 <th className="px-3 py-2 font-label text-center w-[110px]"></th>
               </tr>
@@ -307,60 +305,66 @@ export default function AdminSourceVideos() {
                   const info = statusInfo(v.status);
                   const failed = info.key === "Failed";
                   const expanded = expandedErrors.has(id);
-                  const longError = (v.errorMessage?.length || 0) > 120;
                   return (
-                    <tr key={id} className="align-top hover:bg-[#F7F5EF]/70 dark:hover:bg-[#25272E]/50 transition-colors">
-                      <td className="px-3 py-2.5 text-[#6E7078] dark:text-gray-400 tabular-nums">{id}</td>
-                      <td className="px-3 py-2.5 min-w-0 max-w-[360px]">
-                        <p className={`font-bold truncate ${v.title ? "text-[#16171C] dark:text-gray-100" : "text-[#9A9CA3] italic font-normal"}`}>
-                          {v.title || "(chưa có tiêu đề)"}
-                        </p>
-                        <a
-                          href={v.youtubeUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 max-w-full type-caption text-[#6E7078] dark:text-gray-400 hover:underline mt-0.5"
-                        >
-                          <span className="truncate">{v.youtubeUrl}</span>
-                          <ExternalLink className="w-3 h-3 shrink-0" />
-                        </a>
-                        {v.errorMessage && (
-                          <div className="mt-1 flex items-start gap-1 type-caption" style={{ color: CHIP_DANGER_TEXT }}>
-                            <AlertTriangle className="w-3.5 h-3.5 mt-px shrink-0" />
-                            <p className={`break-words min-w-0 ${expanded ? "" : "line-clamp-2"}`}>
-                              {v.errorMessage}
-                              {longError && (
-                                <button
-                                  type="button"
-                                  onClick={() => toggleError(id)}
-                                  className="ml-1 underline font-label cursor-pointer"
-                                >
-                                  {expanded ? "Thu gọn" : "Xem thêm"}
-                                </button>
-                              )}
-                            </p>
-                          </div>
+                    <tr key={id} className="hover:bg-[#F7F5EF]/70 dark:hover:bg-[#25272E]/50 transition-colors">
+                      <td className="px-3 py-1.5 text-[#6E7078] dark:text-gray-400 tabular-nums">{id}</td>
+                      <td className="px-3 py-1.5 min-w-0 max-w-[360px]">
+                        {/* Link YouTube thu vào icon cạnh tiêu đề (rê chuột thấy URL) để mỗi dòng gọn, đủ 10 video/trang */}
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <p className={`font-bold truncate ${v.title ? "text-[#16171C] dark:text-gray-100" : "text-[#9A9CA3] italic font-normal"}`}>
+                            {v.title || "(chưa có tiêu đề)"}
+                          </p>
+                          <a
+                            href={v.youtubeUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={v.youtubeUrl}
+                            aria-label={`Mở video trên YouTube: ${v.youtubeUrl}`}
+                            className="shrink-0 p-0.5 rounded text-[#9A9CA3] hover:text-[#0052CC] transition-colors"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                          {/* Lỗi thu thành nút nhỏ cạnh tiêu đề, bấm mới xổ nội dung -> mỗi dòng 1 hàng chữ, đủ 10 video/trang */}
+                          {v.errorMessage && (
+                            <button
+                              type="button"
+                              onClick={() => toggleError(id)}
+                              aria-expanded={expanded}
+                              title={expanded ? "Ẩn lỗi" : v.errorMessage}
+                              className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md type-caption font-label hover:bg-[#FDECEC] cursor-pointer transition-colors"
+                              style={{ color: CHIP_DANGER_TEXT }}
+                            >
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                              {expanded ? "Ẩn lỗi" : "Xem lỗi"}
+                            </button>
+                          )}
+                        </div>
+                        {v.errorMessage && expanded && (
+                          <p className="mt-1 type-caption break-words" style={{ color: CHIP_DANGER_TEXT }}>
+                            {v.errorMessage}
+                          </p>
                         )}
                       </td>
-                      <td className="px-3 py-2.5 text-center tabular-nums text-[#16171C] dark:text-gray-200">
+                      <td className="px-3 py-1.5 text-center tabular-nums text-[#16171C] dark:text-gray-200">
                         {formatDuration(v.durationSec)}
                       </td>
-                      <td className="px-3 py-2.5 text-center tabular-nums text-[#16171C] dark:text-gray-200">
+                      <td className="px-3 py-1.5 text-center tabular-nums text-[#16171C] dark:text-gray-200">
                         {v.segmentCount ?? 0}
                       </td>
-                      <td className="px-3 py-2.5">
-                        <StatusChip status={v.status} />
-                        {failed && v.attempts > 0 && (
-                          <p className="mt-1 type-caption text-[#9A9CA3]">Đã thử {v.attempts} lần</p>
-                        )}
-                        {info.key === "Approved" && v.approvedAt && (
-                          <p className="mt-1 type-caption text-[#9A9CA3]">{formatDateTime(v.approvedAt)}</p>
-                        )}
+                      <td className="px-3 py-1.5">
+                        {/* Số lần thử nằm cùng hàng với chip; ngày duyệt hiện khi rê chuột -> dòng không cao thêm */}
+                        <div
+                          className="flex items-center gap-1.5 whitespace-nowrap"
+                          title={info.key === "Approved" && v.approvedAt ? `Duyệt lúc ${formatDateTime(v.approvedAt)}` : undefined}
+                        >
+                          <StatusChip status={v.status} />
+                          {failed && v.attempts > 0 && <span className="type-caption text-[#9A9CA3]">thử {v.attempts} lần</span>}
+                        </div>
                       </td>
-                      <td className="px-3 py-2.5 whitespace-nowrap text-[#6E7078] dark:text-gray-400 tabular-nums">
+                      <td className="px-3 py-1.5 whitespace-nowrap text-[#6E7078] dark:text-gray-400 tabular-nums">
                         {formatDateTime(v.createdAt)}
                       </td>
-                      <td className="px-3 py-2.5 text-center">
+                      <td className="px-3 py-1.5 text-center">
                         {failed && (
                           <button
                             type="button"
@@ -386,7 +390,7 @@ export default function AdminSourceVideos() {
           </table>
         </div>
 
-        <div className="px-4 py-1 border-t border-[#E5E2D8] dark:border-gray-800 shrink-0">
+        <div className="shrink-0 border-t border-[#F0EEE6] dark:border-gray-800 px-4 sm:px-5">
           <Pagination
             currentPage={page}
             totalPages={totalPages}
@@ -398,6 +402,7 @@ export default function AdminSourceVideos() {
             }}
             accent={ADMIN_ACCENT}
             variant="soft"
+            compact
           />
         </div>
       </div>

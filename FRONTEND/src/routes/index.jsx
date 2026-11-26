@@ -168,6 +168,11 @@ const routes = [
         element: lazy(() => import("../pages/TaskManagerTemplate/TaskManagerManagement/index")),
       },
       {
+        // Trang mẫu (chỉ UI): nhận task admin giao và chia cho speaker + reviewer
+        path: "received-tasks",
+        element: lazy(() => import("../pages/TaskManagerTemplate/TaskManagerReceivedTasks/index")),
+      },
+      {
         path: "help-center",
         element: HelpCenterLazy,
       },
@@ -211,6 +216,18 @@ const routes = [
       {
         path: "source-videos",
         element: lazy(() => import("../pages/AdminTemplate/AdminSourceVideos/index")),
+      },
+      {
+        path: "recording-batches",
+        element: lazy(() => import("../pages/AdminTemplate/AdminRecordingBatches/index")),
+      },
+      {
+        path: "recording-batches/:batchId",
+        element: lazy(() => import("../pages/AdminTemplate/AdminRecordingBatchDetail/index")),
+      },
+      {
+        path: "assign-tasks",
+        element: lazy(() => import("../pages/AdminTemplate/AdminAssignTasks/index")),
       },
       // ROUTE MỚI: Quản lý Chủ đề tiêu chuẩn
       {

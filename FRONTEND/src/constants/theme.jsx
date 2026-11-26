@@ -55,9 +55,10 @@ export const REVIEWER_ACCENT_SOFT_BG = 'rgba(0,82,204,0.14)';
 export const ADMIN_ACCENT = "#0052CC"; 
 export const ADMIN_ACCENT_ACTIVE_ICON = "#5B8DEF";
 export const ADMIN_ACCENT_SOFT_BG = "rgba(0,82,204,0.14)";
-export const TASK_MANAGER_ACCENT = "#0052CC"; 
-export const TASK_MANAGER_ACCENT_ACTIVE_ICON = "#5B8DEF";
-export const TASK_MANAGER_ACCENT_SOFT_BG = "rgba(0,82,204,0.14)";
+// Task Manager dùng xanh lá giống Reviewer/Speaker (cùng màu logo); chữ/nút dùng tông đậm để đủ tương phản
+export const TASK_MANAGER_ACCENT = "#15803D";
+export const TASK_MANAGER_ACCENT_ACTIVE_ICON = "#16A34A";
+export const TASK_MANAGER_ACCENT_SOFT_BG = "rgba(22,163,74,0.10)";
 // ═══════════════════════════════════════════════════
 // SIDEBAR
 // ═══════════════════════════════════════════════════

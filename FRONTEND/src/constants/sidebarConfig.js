@@ -3,7 +3,7 @@ import {
   History, Home, PlusCircle, Mic, FileText, FileSearch, FolderKanban, Users, Sliders,
   UserCheck,
   User, 
-  ListTodo, Clapperboard
+  ListTodo, Clapperboard, Boxes, ClipboardList, Inbox
 } from 'lucide-react';
 import {
   SIDEBAR_BG_SPEAKER,
@@ -133,6 +133,7 @@ export const SIDEBAR_CONFIG = {
     items: [
       { name: "Trang chủ", to: "/task-manager", icon: Home, end: true },
       { name: "Quản lý nhiệm vụ", to: "/task-manager/management", icon: ListTodo },
+      { name: "Task được giao", to: "/task-manager/received-tasks", icon: Inbox },
     ],
     promo: null,
   },
@@ -159,6 +160,8 @@ export const SIDEBAR_CONFIG = {
       { name: "Quản lý dữ liệu văn bản", to: "/admin/text-data", icon: FileText },
       { name: "Quản lý bản thu và bộ dữ liệu", to: "/admin/recordings", icon: Headphones },
       { name: "Quản lý video hội thoại", to: "/admin/source-videos", icon: Clapperboard },
+      { name: "Kho câu theo đợt nhập", to: "/admin/recording-batches", icon: Boxes },
+      { name: "Giao task", to: "/admin/assign-tasks", icon: ClipboardList },
       {
         name: "Thiết lập cấu hình",
         icon: Sliders,
