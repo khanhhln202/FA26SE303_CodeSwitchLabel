@@ -3,7 +3,7 @@ import {
   History, Home, PlusCircle, Mic, FileText, FileSearch, FolderKanban, Users, Sliders,
   UserCheck,
   User, 
-  ListTodo
+  ListTodo, Clapperboard
 } from 'lucide-react';
 import {
   SIDEBAR_BG_SPEAKER,
@@ -100,6 +100,8 @@ export const SIDEBAR_CONFIG = {
           { name: 'Duyệt ghi âm', to: '/reviewer/recording', icon: Headphones },
           // Đề xuất câu = 1 hàng chờ chung: câu đóng góp + câu có vấn đề (báo lỗi / đề xuất sửa).
           { name: 'Duyệt đề xuất câu', to: '/reviewer/contribution', icon: FileText },
+          // Corpus hội thoại từ YouTube: nhận video đã phiên âm, sửa câu, gắn nhãn vi/en rồi duyệt
+          { name: 'Duyệt hội thoại', to: '/reviewer/source-video', icon: Clapperboard },
         ],
       },
       {
@@ -155,6 +157,7 @@ export const SIDEBAR_CONFIG = {
       { name: "Quản lý người dùng", to: "/admin/users", icon: Users },
       { name: "Quản lý dữ liệu văn bản", to: "/admin/text-data", icon: FileText },
       { name: "Quản lý bản thu và bộ dữ liệu", to: "/admin/recordings", icon: Headphones },
+      { name: "Quản lý video hội thoại", to: "/admin/source-videos", icon: Clapperboard },
       {
         name: "Thiết lập cấu hình",
         icon: Sliders,

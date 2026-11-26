@@ -1,6 +1,7 @@
 // ===== Auth =====
 // Đăng nhập (POST /api/auth/login)
 export const LOGIN_API = 'LOGIN_API'
+export const GOOGLE_LOGIN_API = 'GOOGLE_LOGIN_API'
 // Tự đăng ký làm Speaker (POST /api/auth/register-speaker)
 export const REGISTER_SPEAKER_API = 'REGISTER_SPEAKER_API'
 // Tài khoản đang đăng nhập (GET /api/auth/me)
@@ -89,3 +90,10 @@ export const GET_REVIEWER_PROPOSALS_API = 'GET_REVIEWER_PROPOSALS_API'
 export const RESOLVE_PROPOSAL_API = 'RESOLVE_PROPOSAL_API'
 // Câu đóng góp chờ duyệt của Reviewer (GET /api/reviewer/contributions)
 export const GET_REVIEWER_CONTRIBUTIONS_API = 'GET_REVIEWER_CONTRIBUTIONS_API'
+export const CLAIM_SOURCE_VIDEO_API = 'CLAIM_SOURCE_VIDEO_API'
+export const SAVE_SOURCE_SEGMENTS_API = 'SAVE_SOURCE_SEGMENTS_API'
+export const APPROVE_SOURCE_VIDEO_API = 'APPROVE_SOURCE_VIDEO_API'
+// Admin - video hội thoại YouTube (GET /api/admin/source-videos, retry, export)
+export const GET_ADMIN_SOURCE_VIDEOS_API = 'GET_ADMIN_SOURCE_VIDEOS_API'
+export const SUBMIT_SOURCE_VIDEO_API = 'SUBMIT_SOURCE_VIDEO_API'
+export const RETRY_SOURCE_VIDEO_API = 'RETRY_SOURCE_VIDEO_API'

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Send, Check, Trash2 } from 'lucide-react';
+import { Send, Check, Trash2, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { contributeScriptApi } from '../../../services/speakerApi';
@@ -14,7 +14,7 @@ import {
   CHIP_SUCCESS_TEXT,
   CHIP_DANGER_BG, CHIP_DANGER_BORDER, CHIP_DANGER_TEXT,
   TEXT_HEADING, TEXT_BODY, TEXT_FAINT,
-  BORDER_LIGHT, SURFACE_PAGE,
+  BORDER_LIGHT, SURFACE_PAGE, SURFACE_MUTED,
 } from '../../../constants/theme';
 
 // Màn hình cao >= 900px dùng biến thể [@media(min-height:900px)] để giãn ô nhập/khoảng cách; màn thấp (laptop 768px) giữ bản gọn vừa 1 màn hình
@@ -83,7 +83,68 @@ function RadioGroup({ label, options, value, onChange, renderLabel = (o) => o })
   );
 }
 
+// TODO: dữ liệu mẫu - chưa có API nhiệm vụ đóng góp. Khi có API thì thay bằng các task taskType "Contribution"
+// của GET /api/speaker/progress ({ taskId, description, deadline, myProgress: { targetQty, done } })
+// và gửi kèm taskId khi đóng góp. Mảng rỗng -> ẩn thẻ nhiệm vụ.
+const MOCK_CONTRIBUTION_TASKS = [
+  { taskId: 1, description: 'Đóng góp câu chủ đề Công nghệ thông tin', deadline: '2026-11-30T00:00:00Z', myProgress: { targetQty: 20, done: 3 } },
+  { taskId: 2, description: 'Đóng góp câu hội thoại hằng ngày', deadline: '2026-12-15T00:00:00Z', myProgress: { targetQty: 10, done: 6 } },
+];
+
+const formatDate = (iso) => (iso ? new Date(iso).toLocaleDateString('vi-VN') : '—');
+
+// Thẻ nhiệm vụ đóng góp: chọn nhiệm vụ · tiến độ · hạn chót (cùng kiểu trang ghi âm)
+function ContributionTaskBar({ tasks, selectedTask, onChange }) {
+  const targetQty = selectedTask.myProgress?.targetQty ?? 0;
+  const done = selectedTask.myProgress?.done ?? 0;
+  const percent = targetQty ? Math.min(100, Math.round((done / targetQty) * 100)) : 0;
+  const barColor = percent >= 50 ? SUCCESS : WARNING;
+
+  return (
+    <div
+      className="relative z-10 rounded-2xl shadow-[0_1px_3px_rgba(16,17,20,0.04)] p-4 flex flex-col sm:flex-row sm:items-center gap-4"
+      style={{ background: '#FFFFFF', border: `1px solid ${BORDER_LIGHT}` }}
+    >
+      <div className="relative min-w-0 sm:w-[38%] sm:pr-4 sm:border-r" style={{ borderColor: BORDER_LIGHT }}>
+        <select
+          value={selectedTask.taskId}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full appearance-none bg-transparent text-ui font-label pr-6 outline-none cursor-pointer truncate"
+          style={{ color: TEXT_HEADING }}
+        >
+          {tasks.map((t) => (
+            <option key={t.taskId} value={t.taskId}>
+              {t.description || `Nhiệm vụ #${t.taskId}`}
+            </option>
+          ))}
+        </select>
+        <ChevronDown className="w-4 h-4 absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: TEXT_BODY }} />
+        <p className="text-caption font-label mt-1.5" style={{ color: TEXT_FAINT }}>Nhấn để đổi nhiệm vụ</p>
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex justify-between text-caption font-label mb-1.5">
+          <span style={{ color: TEXT_BODY }}>Tiến độ</span>
+          <span className="tabular-nums" style={{ color: TEXT_HEADING }}>{done}/{targetQty} · {percent}%</span>
+        </div>
+        <div className="h-2 rounded-full overflow-hidden" style={{ background: SURFACE_MUTED }}>
+          <div className="h-full rounded-full transition-all duration-500" style={{ width: `${percent}%`, background: barColor }} />
+        </div>
+      </div>
+
+      <div className="sm:text-right shrink-0 sm:pl-4 sm:border-l" style={{ borderColor: BORDER_LIGHT }}>
+        <p className="text-caption font-label" style={{ color: TEXT_BODY }}>Hạn chót</p>
+        <p className="text-ui font-label tabular-nums" style={{ color: TEXT_HEADING }}>{formatDate(selectedTask.deadline)}</p>
+      </div>
+    </div>
+  );
+}
+
 export default function ContributeText() {
+  const contributionTasks = MOCK_CONTRIBUTION_TASKS;
+  const [selectedTaskId, setSelectedTaskId] = useState(contributionTasks[0]?.taskId);
+  const selectedTask = contributionTasks.find((t) => String(t.taskId) === String(selectedTaskId)) ?? contributionTasks[0];
+
   const queryClient = useQueryClient();
 
   // Call API lấy danh sách chủ đề (cố định, ít khi đổi nên giữ cache suốt phiên)
@@ -188,6 +249,10 @@ export default function ContributeText() {
           Viết một câu tiếng Việt có xen từ tiếng Anh và câu tiếng Việt tương đương. Không cần gắn thẻ, hệ thống tự gắn.
         </p>
       </div>
+
+      {selectedTask && (
+        <ContributionTaskBar tasks={contributionTasks} selectedTask={selectedTask} onChange={setSelectedTaskId} />
+      )}
 
       {/* Form dọc: Chủ đề → 2 câu */}
       <div className="rounded-2xl overflow-hidden" style={{ background: '#FFFFFF', border: `1px solid ${BORDER_LIGHT}`, boxShadow: '0 1px 3px rgba(16,17,20,0.04)' }}>
