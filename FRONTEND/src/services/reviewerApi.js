@@ -20,9 +20,13 @@ export const getReviewerProgressApi = async () => {
 //   reviewsDone, roundsRequired, myReviewDone, blocker, canReview,
 //   sibling: { recordingId, sentenceVariant, scriptText, status, reviewsDone, myReviewDone, blocker, canReview } | null }
 // groupBy = "Pair": mỗi cặp câu đúng 1 dòng (phân trang theo cặp), dòng là bản đang cần bạn duyệt, sibling là bản còn lại
-export const getReviewTaskRecordingsApi = async ({ taskId, page = 1, pageSize = 100, groupBy }) => {
+// onlyReviewable = true: chỉ trả bản bấm vào duyệt được ngay (chờ duyệt, không phải của mình, mình chưa duyệt, chưa đủ lượt)
+//   - cùng bộ lọc với GET .../recordings/next; bỏ trống thì trả cả task
+export const getReviewTaskRecordingsApi = async ({ taskId, page = 1, pageSize = 100, groupBy, onlyReviewable }) => {
   try {
-    const response = await httpClient.get(`/api/reviewer/tasks/${taskId}/recordings`, { params: { page, pageSize, groupBy } });
+    const response = await httpClient.get(`/api/reviewer/tasks/${taskId}/recordings`, {
+      params: { page, pageSize, groupBy, onlyReviewable: onlyReviewable || undefined },
+    });
     return response.data;
   } catch (error) {
     const message =
@@ -213,5 +217,47 @@ export const getReviewerContributionsApi = async ({ domain, onlyReviewable, page
   } catch (error) {
     const message = error.response?.data?.title || "Không lấy được danh sách câu đóng góp!";
     throw new Error(message, { cause: error });
+  }
+};
+
+// ===== Corpus hội thoại từ YouTube (Source Corpus) =====
+// Video: { sourceVideoId, youtubeUrl, title, durationSec, status, errorMessage, attempts, audioUrl, audioUrlExpiresAt,
+//   transcript, segments: [{ sourceSegmentId, position, startSec, endSec, text, language: "vi" | "en" | null }],
+//   submittedBy, createdAt, approvedAt }
+// Lỗi giữ video: 409 source_video_not_in_review / source_video_not_claimed (hết giờ giữ hoặc người khác đã nhận)
+const sourceCorpusError = (error, fallback) => {
+  const message = error.response?.data?.title || fallback;
+  return new Error(message, { cause: error });
+};
+
+// Nhận video kế tiếp: GET /api/reviewer/source-videos/next - 204 (trả null) khi không còn video chờ duyệt
+// Lưu ý: đang giữ 1 video thì API cũng trả 204 (mỗi người chỉ giữ 1 video, giữ 60 phút)
+export const claimNextSourceVideoApi = async () => {
+  try {
+    const response = await httpClient.get("/api/reviewer/source-videos/next");
+    return response.status === 204 ? null : response.data;
+  } catch (error) {
+    throw sourceCorpusError(error, "Không nhận được video, vui lòng thử lại!");
+  }
+};
+
+// Ghi đè toàn bộ câu của video đang giữ: PUT /api/reviewer/source-videos/{id}/segments
+// segments: [{ startSec, endSec, text, language }] - thứ tự mảng là thứ tự trong video; câu không gửi sẽ bị xoá
+export const saveSourceSegmentsApi = async ({ sourceVideoId, segments }) => {
+  try {
+    const response = await httpClient.put(`/api/reviewer/source-videos/${sourceVideoId}/segments`, { segments });
+    return response.data;
+  } catch (error) {
+    throw sourceCorpusError(error, "Lưu danh sách câu thất bại!");
+  }
+};
+
+// Duyệt video (cắt clip WAV từng câu): POST /api/reviewer/source-videos/{id}/approve
+export const approveSourceVideoApi = async (sourceVideoId) => {
+  try {
+    const response = await httpClient.post(`/api/reviewer/source-videos/${sourceVideoId}/approve`);
+    return response.data;
+  } catch (error) {
+    throw sourceCorpusError(error, "Duyệt video thất bại!");
   }
 };

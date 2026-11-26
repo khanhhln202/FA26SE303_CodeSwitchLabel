@@ -6,13 +6,14 @@ import { toast } from "sonner";
 import * as Yup from "yup";
 import { AlertCircle } from "lucide-react";
 import { getPostLoginPath, ONBOARDING_PATH, ROLE_HOME_PATH } from "../../../constants/auth";
-import { loginApi } from "../../../services/authApi";
+import { googleLoginApi, loginApi } from "../../../services/authApi";
 import { getCurrentUser, saveSession } from "../../../utils/authStorage";
-import { LOGIN_API, GET_ME_API } from "../../../utils/queryKey";
+import { LOGIN_API, GOOGLE_LOGIN_API, GET_ME_API } from "../../../utils/queryKey";
 import AuthSplitLayout from "../../../components/Auth/AuthSplitLayout";
 import AuthTabs from "../../../components/Auth/AuthTabs";
+import GoogleSignInButton from "../../../components/Auth/GoogleSignInButton";
 import {
-  FormField, TextInput, PasswordInput, PrimaryButton,
+  FormField, TextInput, PasswordInput, PrimaryButton, Divider,
 } from "../../../components/Auth/FormControls";
 
 const loginSchema = Yup.object({
@@ -62,6 +63,25 @@ export default function Login({ onLoginSuccess }) {
     // Sai email/mật khẩu, tài khoản bị khoá, máy chủ không phản hồi... -> hiện khung lỗi ngay trên form (loginError), không dùng toast
   });
 
+  // Đăng nhập bằng Google - email chưa có tài khoản thì backend tự tạo tài khoản Speaker
+  // (dưới form đã ghi "Bằng việc tiếp tục, bạn đồng ý với Điều khoản..." nên gửi consentAccepted)
+  const { mutate: googleLogin, isPending: isGoogleLoggingIn, error: googleError, reset: clearGoogleError } = useMutation({
+    mutationKey: [GOOGLE_LOGIN_API],
+    mutationFn: googleLoginApi,
+    onSuccess: (data) => {
+      saveSession(data);
+      queryClient.setQueryData([GET_ME_API], data.user);
+      toast.success(`Chào mừng ${data.user.fullName}!`);
+      if (onLoginSuccess) onLoginSuccess(data.user);
+      navigate(getRedirectPath(data.user, from), { replace: true });
+    },
+  });
+  const handleGoogleCredential = (credential) => {
+    if (loginError) clearLoginError();
+    googleLogin({ credential, consentAccepted: true, consentVersion: "v1" });
+  };
+  const authError = loginError || googleError;
+
   const formik = useFormik({
     initialValues: { email: "", password: "" },
     validationSchema: loginSchema,
@@ -79,6 +99,7 @@ export default function Login({ onLoginSuccess }) {
   // Gõ lại vào ô nào thì ẩn khung lỗi đăng nhập
   const handleChange = (e) => {
     if (loginError) clearLoginError();
+    if (googleError) clearGoogleError();
     formik.handleChange(e);
   };
 
@@ -92,11 +113,11 @@ export default function Login({ onLoginSuccess }) {
 
       <form onSubmit={formik.handleSubmit} noValidate className="mt-7 flex flex-col gap-3.5">
         {/* Lỗi đăng nhập hiện ngay trong form như các trang lớn (không tự biến mất) */}
-        {loginError && (
+        {authError && (
           <div role="alert" className="flex items-start gap-2 rounded-xl border border-[#F3C9C9] bg-[#FDEAEA] px-3 py-2.5 text-[#9F2D2D]">
             <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
             <div className="type-meta">
-              <p className="font-emphasis">{loginError.message}</p>
+              <p className="font-emphasis">{authError.message}</p>
               <p>Kiểm tra lại rồi thử lần nữa.</p>
             </div>
           </div>
@@ -129,10 +150,12 @@ export default function Login({ onLoginSuccess }) {
           />
         </FormField>
 
-        <PrimaryButton type="submit" disabled={isLoggingIn} className="mt-1">
+        <PrimaryButton type="submit" disabled={isLoggingIn || isGoogleLoggingIn} className="mt-1">
           {isLoggingIn ? "Đang đăng nhập..." : "Đăng nhập"}
         </PrimaryButton>
       </form>
+      <Divider>hoặc</Divider>
+      <GoogleSignInButton onCredential={handleGoogleCredential} pending={isGoogleLoggingIn} />
       <p className="type-meta mt-5 text-center text-[var(--auth-body)]">
         Cần trợ giúp? Liên hệ quản trị viên.
       </p>

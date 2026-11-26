@@ -17,6 +17,24 @@ export const loginApi = async (values) => {
   }
 };
 
+// Đăng nhập bằng Google: POST /api/auth/google
+// values: { credential (ID token Google trả về), consentAccepted, consentVersion }
+// Email đã có tài khoản -> đăng nhập; chưa có + consentAccepted -> backend tự tạo tài khoản Speaker.
+// Trả về { accessToken, expiresAt, user } giống đăng nhập thường
+export const googleLoginApi = async (values) => {
+  try {
+    const response = await httpClient.post("/api/auth/google", values, {
+      skipAuthRedirect: true,
+    });
+    return response.data;
+  } catch (error) {
+    const message =
+      error.response?.data?.title ||
+      "Không đăng nhập được bằng Google, vui lòng thử lại!";
+    throw new Error(message, { cause: error });
+  }
+};
+
 // Tự đăng ký làm Speaker: POST /api/auth/register-speaker
 // values: { fullName, email, password } - hồ sơ người đọc điền sau ở màn Onboarding
 // Trả về { accessToken, expiresAt, user } giống đăng nhập (tài khoản hoạt động ngay); trùng email -> 409

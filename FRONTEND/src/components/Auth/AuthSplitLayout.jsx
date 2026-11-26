@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Sun, Moon } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import Logo from '../Logo/Logo';
 import AuthBrandPanel from './AuthBrandPanel';
 import authWave from '../../assets/auth-wave.webp';
@@ -11,29 +11,17 @@ import {
 } from '../../constants/theme';
 
 export default function AuthSplitLayout({ headerLeft, headerRight, footer, showHomeLink = true, centeredCard = false, children }) {
-  // 1. Quản lý Dark/Light Mode đồng bộ với localStorage/HTML
-  const [darkMode, setDarkMode] = useState(() => {
-    if (typeof window !== "undefined") {
-      const savedTheme = localStorage.getItem("theme");
-      if (savedTheme) return savedTheme === "dark";
-      return document.documentElement.classList.contains("dark");
-    }
-    return true;
-  });
-
+  // 1. Trang xác thực luôn dùng giao diện sáng (đã bỏ nút gạt sáng/tối).
+  // Tạm gỡ class "dark" khi đang ở trang này, rời trang thì trả lại; không đổi theme đã lưu của người dùng.
+  const darkMode = false;
   useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
-    }
-  }, [darkMode]);
-
-  const toggleDarkMode = () => {
-    setDarkMode((prev) => !prev);
-  };
+    const root = document.documentElement;
+    const hadDark = root.classList.contains('dark');
+    root.classList.remove('dark');
+    return () => {
+      if (hadDark) root.classList.add('dark');
+    };
+  }, []);
 
   // 2. Biến CSS: Định nghĩa màu sắc chuẩn theo chế độ
   const authCssVars = {
@@ -90,29 +78,6 @@ export default function AuthSplitLayout({ headerLeft, headerRight, footer, showH
         <main className="relative z-10 flex w-full max-w-[1000px] flex-col items-center justify-center">
           <div className="relative flex w-full overflow-hidden rounded-[18px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#1C1D22] shadow-[0_18px_54px_rgba(25,75,43,0.08)] transition-colors duration-300">
             
-            {/* NÚT CHUYỂN SÁNG TỐI NẰM BÊN TRONG KHUNG CARD, RÌA BÊN PHẢI GÓC TRÊN */}
-            <div className="absolute top-4 right-4 z-30">
-              <button
-                onClick={toggleDarkMode}
-                type="button"
-                className={`relative w-12 h-6 flex items-center rounded-full p-0.5 cursor-pointer transition-colors duration-300 focus:outline-none shadow-sm ${
-                  darkMode ? "bg-slate-700 border border-slate-600" : "bg-slate-300"
-                }`}
-                title={darkMode ? "Gạt sang trái: Chế độ sáng" : "Gạt sang phải: Chế độ tối"}
-              >
-                <div
-                  className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-300 flex items-center justify-center ${
-                    darkMode ? "translate-x-6" : "translate-x-0"
-                  }`}
-                >
-                  {darkMode ? (
-                    <Moon className="w-2.5 h-2.5 text-slate-900" />
-                  ) : (
-                    <Sun className="w-2.5 h-2.5 text-amber-500" />
-                  )}
-                </div>
-              </button>
-            </div>
 
             <aside className="relative hidden min-h-[620px] w-[38%] shrink-0 overflow-hidden bg-[#CFE7D6] dark:bg-[#0C3528] md:block" aria-label="Minh họa sóng âm">
               <img src={authWave} alt="" className="absolute inset-0 h-full w-full object-cover object-center opacity-90 dark:opacity-75" />
@@ -208,26 +173,6 @@ export default function AuthSplitLayout({ headerLeft, headerRight, footer, showH
             <div className="flex items-center gap-3 shrink-0 type-ui text-[var(--auth-body)]">
               {headerRight}
 
-              <button
-                onClick={toggleDarkMode}
-                type="button"
-                className={`relative w-12 h-6 flex items-center rounded-full p-0.5 cursor-pointer transition-colors duration-300 focus:outline-none shadow-sm ${
-                  darkMode ? "bg-slate-700 border border-slate-600" : "bg-slate-300"
-                }`}
-                title={darkMode ? "Gạt sang trái: Chế độ sáng" : "Gạt sang phải: Chế độ tối"}
-              >
-                <div
-                  className={`w-4 h-4 bg-white rounded-full shadow-md transform transition-transform duration-300 flex items-center justify-center ${
-                    darkMode ? "translate-x-6" : "translate-x-0"
-                  }`}
-                >
-                  {darkMode ? (
-                    <Moon className="w-2.5 h-2.5 text-slate-900" />
-                  ) : (
-                    <Sun className="w-2.5 h-2.5 text-amber-500" />
-                  )}
-                </div>
-              </button>
             </div>
           </header>
 

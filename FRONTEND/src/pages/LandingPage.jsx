@@ -1,323 +1,308 @@
-import React, { useState, useEffect } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { 
-  ArrowRight, 
-  Volume2, 
-  ShieldCheck, 
-  Sparkles,
-  Sun,
-  Moon,
-  FileText,
-  Mic,
-  CheckSquare,
-  Database
-} from 'lucide-react';
-
+import { ArrowRight, Languages, MapPin, BookOpen, Lock, UserX, Hand, X } from 'lucide-react';
 import Logo from '../components/Logo/Logo';
+import CodeSwitchText from '../components/CodeSwitchText/CodeSwitchText';
 import { getPostLoginPath } from '../constants/auth';
 import { getCurrentUser } from '../utils/authStorage';
+import { CONSENT_SECTIONS, CONSENT_TITLE, CONSENT_VERSION } from '../constants/consent';
+
+/**
+ * Landing chỉ để giới thiệu cho tình nguyện viên (không nói quy trình nội bộ):
+ * Hero (thông điệp + câu chêm minh hoạ) -> Vì sao cần bạn -> Bảo mật & cam kết -> Kêu gọi cuối -> Footer.
+ * Luôn giao diện sáng; không có số liệu vì backend chưa có API thống kê công khai.
+ */
+
+const BRAND = '#15803D';
+const BRAND_BRIGHT = '#1DB954';
+
+// Câu mẫu ở hero - cùng dạng dữ liệu API trả về ở bước "Xem câu" của speaker (csContent / viContent).
+const SAMPLE_PARTS = [
+  {
+    key: 'cs',
+    label: 'Việt – Anh',
+    chipCls: 'bg-[#1DB954]/15 text-[#15803D]',
+    tagged: '[vi]Em nhớ [en]upload [vi]tài liệu trước [en]deadline [vi]nhé!',
+    codeSwitch: true,
+  },
+  {
+    key: 'vi',
+    label: 'Tiếng Việt',
+    chipCls: 'bg-slate-100 text-slate-500',
+    tagged: '[vi]Em nhớ tải tài liệu lên trước hạn chót nhé!',
+    plain: 'Em nhớ tải tài liệu lên trước hạn chót nhé!',
+  },
+];
+
+const REASONS = [
+  {
+    icon: Languages,
+    title: 'Máy không hiểu khi ta nói chêm',
+    body: 'Trợ lý ảo và phụ đề tự động thường nghe sai khi câu tiếng Việt xen từ tiếng Anh như "meeting", "deadline".',
+  },
+  {
+    icon: MapPin,
+    title: 'Cần giọng thật, đủ vùng miền',
+    body: 'Mỗi giọng Bắc, Trung, Nam giúp mô hình nghe hiểu người Việt tự nhiên hơn.',
+  },
+  {
+    icon: BookOpen,
+    title: 'Dữ liệu cho nghiên cứu',
+    body: 'Giọng nói bạn đóng góp chỉ dùng cho nghiên cứu khoa học, phi thương mại.',
+  },
+];
+
+const PROMISES = [
+  { icon: UserX, text: 'Không công khai họ tên, email' },
+  { icon: Lock, text: 'Chỉ dùng cho nghiên cứu phi thương mại' },
+  { icon: Hand, text: 'Có thể ngừng đóng góp bất cứ lúc nào' },
+];
+
+// Bản thu nhỏ của thẻ "Xem câu" (bước 1 của speaker) để người mới thấy trước đúng giao diện sẽ gặp.
+function SampleCard() {
+  return (
+    <div className="relative w-full max-w-[580px] mx-auto pb-3">
+      <div className="absolute -inset-6 bg-gradient-to-br from-[#1DB954]/20 to-emerald-300/10 blur-3xl rounded-[40px] pointer-events-none" />
+      {/* Thẻ giấy phía sau ló đều ở cạnh dưới -> nhìn ra ngay là "một chồng câu" */}
+      <div className="absolute inset-x-4 top-4 bottom-0 rounded-[24px] bg-[#F1EFE7] border border-[#E2DFD3]" />
+      <div className="relative bg-white rounded-[24px] overflow-hidden border border-slate-200 shadow-[0_24px_60px_rgba(21,128,61,0.12)]">
+        <div className="h-1.5 w-full" style={{ background: BRAND_BRIGHT }} />
+        {SAMPLE_PARTS.map((part, i) => (
+          <div key={part.key}>
+            {i > 0 && <div className="h-px mx-6 bg-slate-200" />}
+            <div className="px-5 sm:px-6 py-6 text-center">
+              <span className={`inline-block text-xs font-semibold px-2.5 py-0.5 rounded-full mb-3 ${part.chipCls}`}>
+                {part.label}
+              </span>
+              <p className="text-lg sm:text-xl font-bold leading-snug text-slate-900" style={{ textWrap: 'balance' }}>
+                {part.codeSwitch ? <CodeSwitchText transcript={part.tagged} accent={BRAND} /> : part.plain}
+              </p>
+              {/* 2 ô chuỗi nhãn cùng rộng, cùng cao tối thiểu, chữ căn giữa -> hai khối đối xứng, đường kẻ nằm giữa thẻ */}
+              <div className="mt-4 min-h-[52px] flex items-center justify-center px-4 py-2.5 rounded-xl bg-[#F7F6F1]">
+              <p
+                className="text-[13px] leading-relaxed text-slate-700 break-words"
+                style={{ textWrap: 'balance' }}
+              >
+                {/* Đoạn [nhãn]chữ ngắn giữ trên một dòng (không tách "tài / liệu"); đoạn dài vẫn được xuống dòng để không tràn ở mobile */}
+                {part.tagged.split(/(?=\[(?:vi|en)\])/).map((seg, i) => (
+                  <Fragment key={i}>
+                    {i > 0 && ' '}
+                    <span className={seg.length <= 24 ? "whitespace-nowrap" : undefined}>{seg.trim()}</span>
+                  </Fragment>
+                ))}
+              </p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ConsentModal({ onClose }) {
+  useEffect(() => {
+    const onKey = (e) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={CONSENT_TITLE}>
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-lg max-h-[85vh] flex flex-col rounded-3xl bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-4 px-6 pt-6 pb-4 border-b border-slate-100">
+          <div>
+            <h3 className="text-lg font-bold text-slate-900">{CONSENT_TITLE}</h3>
+            <p className="text-xs text-slate-400 mt-0.5">Phiên bản {CONSENT_VERSION} · ký khi tạo tài khoản</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Đóng" className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <ol className="px-6 py-5 overflow-y-auto space-y-3 list-decimal pl-10 text-sm leading-relaxed text-slate-600">
+          {CONSENT_SECTIONS.map((s) => (
+            <li key={s.title}>
+              <span className="font-semibold text-slate-900">{s.title}: </span>
+              {s.body}
+            </li>
+          ))}
+        </ol>
+      </div>
+    </div>
+  );
+}
 
 export default function LandingPage() {
   const navigate = useNavigate();
+  const [showConsent, setShowConsent] = useState(false);
 
-  // Khởi tạo trạng thái dark mode đồng bộ từ localStorage hoặc class trên html
-  const [darkMode, setDarkMode] = useState(() => {
-    if (typeof window !== "undefined") {
-      const savedTheme = localStorage.getItem("theme");
-      if (savedTheme) return savedTheme === "dark";
-      return document.documentElement.classList.contains("dark");
-    }
-    return true;
-  });
-
-  // Tự động khôi phục và sync class 'dark' lên thẻ html khi render / toggle
+  // Landing luôn giao diện sáng: tạm gỡ class "dark", rời trang thì trả lại (không đổi theme đã lưu)
   useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
-    }
-  }, [darkMode]);
+    const root = document.documentElement;
+    const hadDark = root.classList.contains('dark');
+    root.classList.remove('dark');
+    return () => {
+      if (hadDark) root.classList.add('dark');
+    };
+  }, []);
 
-  const toggleDarkMode = () => {
-    setDarkMode((prev) => !prev);
-  };
-
-  // Hàm hỗ trợ cuộn mượt đến phần mong muốn
-  const scrollToSection = (id) => {
-    const element = document.getElementById(id);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
-
-  // Cuộn về đầu trang khi bấm Logo trên Navbar
-  const scrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  // Landing chỉ dành cho người chưa đăng nhập (như Facebook, GitHub): đã đăng nhập thì "/" là trang làm việc của vai.
-  // replace -> không để lại mục "/" trong lịch sử, bấm Back không bị đẩy qua lại.
+  // Landing chỉ dành cho người chưa đăng nhập: đã đăng nhập thì "/" là trang làm việc của vai.
   const sessionUser = getCurrentUser();
   if (sessionUser) return <Navigate to={getPostLoginPath(sessionUser)} replace />;
 
-  // Mở trang đăng nhập bằng replace: đăng nhập xong lịch sử chỉ còn trang làm việc, Back là rời khỏi web
-  // thay vì quay về landing rồi lại bị chuyển vào.
+  // replace: đăng nhập / đăng ký xong, bấm Back không quay lại landing
   const goToLogin = () => navigate('/login', { replace: true });
+  const goToRegister = () => navigate('/register', { replace: true });
+  const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#0F172A] text-slate-800 dark:text-white font-sans selection:bg-[#1DB954] selection:text-white flex flex-col justify-between transition-colors duration-300 relative">
-      
-      {/* Dynamic Moving Background Effect */}
-      <style>{`
-        @keyframes dynamicGlow {
-          0% { transform: translate(0px, 0px) scale(1); }
-          33% { transform: translate(60px, -80px) scale(1.15); }
-          66% { transform: translate(-50px, 50px) scale(0.9); }
-          100% { transform: translate(0px, 0px) scale(1); }
-        }
-        @keyframes dynamicGlowReverse {
-          0% { transform: translate(0px, 0px) scale(1); }
-          33% { transform: translate(-70px, 60px) scale(1.2); }
-          66% { transform: translate(50px, -40px) scale(0.85); }
-          100% { transform: translate(0px, 0px) scale(1); }
-        }
-        .animate-blob-1 { animation: dynamicGlow 12s infinite ease-in-out; }
-        .animate-blob-2 { animation: dynamicGlowReverse 15s infinite ease-in-out; }
-      `}</style>
+    <div className="min-h-screen bg-[#FAFAF7] text-slate-800 font-sans selection:bg-[#1DB954] selection:text-white flex flex-col">
 
-      {/* BACKGROUND MOVING BLOBS */}
-      <div className="fixed top-[-10%] left-[-10%] w-[500px] sm:w-[700px] h-[500px] sm:h-[700px] bg-[#1DB954]/20 dark:bg-[#1DB954]/25 blur-[130px] rounded-full pointer-events-none animate-blob-1 z-0" />
-      <div className="fixed bottom-[-10%] right-[-10%] w-[500px] sm:w-[700px] h-[500px] sm:h-[700px] bg-emerald-500/20 dark:bg-emerald-500/20 blur-[140px] rounded-full pointer-events-none animate-blob-2 z-0" />
 
-      {/* 1. FIXED NAVBAR */}
-      <header className="fixed top-0 left-0 w-full z-50 bg-white/80 dark:bg-[#0F172A]/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/60 transition-colors shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 h-20 grid grid-cols-3 items-center">
-          
-          {/* CỘT 1 (BÊN TRÁI): Logo LandingPage (Cố định size khi hover) */}
-          <div className="flex justify-start">
-            <div 
-              className="inline-flex cursor-pointer" 
-              onClick={scrollToTop}
-              title="Cuộn về đầu trang"
-            >
-              <Logo variant={darkMode ? 'light' : 'dark'} size={48} />
-            </div>
-          </div>
-
-          {/* CỘT 2 (CHÍNH GIỮA): Navigation Links */}
-          <nav className="hidden md:flex items-center justify-center gap-10 text-sm font-semibold text-slate-600 dark:text-slate-300">
-            <button 
-              type="button"
-              onClick={() => scrollToSection('about')} 
-              className="hover:text-[#1DB954] dark:hover:text-white transition-colors cursor-pointer whitespace-nowrap"
-            >
-              Giới thiệu
-            </button>
-            <button 
-              type="button"
-              onClick={() => scrollToSection('workflow')} 
-              className="hover:text-[#1DB954] dark:hover:text-white transition-colors cursor-pointer whitespace-nowrap"
-            >
-              Quy trình
-            </button>
-          </nav>
-
-          {/* CỘT 3 (BÊN PHẢI): Switch Gạt Sáng/Tối bên trái -> Nút Đăng nhập bên phải */}
-          <div className="flex justify-end items-center gap-4">
-            <button
-              onClick={toggleDarkMode}
-              type="button"
-              className={`relative w-14 h-7 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300 focus:outline-none ${
-                darkMode ? "bg-slate-700 border border-slate-600" : "bg-slate-300"
-              }`}
-              title={darkMode ? "Gạt sang trái: Chế độ sáng" : "Gạt sang phải: Chế độ tối"}
-            >
-              <div
-                className={`w-5 h-5 bg-white rounded-full shadow-md transform transition-transform duration-300 flex items-center justify-center ${
-                  darkMode ? "translate-x-7" : "translate-x-0"
-                }`}
-              >
-                {darkMode ? (
-                  <Moon className="w-3.5 h-3.5 text-slate-900" />
-                ) : (
-                  <Sun className="w-3.5 h-3.5 text-amber-500" />
-                )}
-              </div>
-            </button>
-
+      {/* NAVBAR */}
+      <header className="sticky top-0 z-50 bg-[#FAFAF7]/85 backdrop-blur-md border-b border-slate-200/70 px-5 sm:px-6">
+        <div className="max-w-6xl mx-auto h-16 sm:h-20 flex items-center justify-between">
+          <button type="button" onClick={scrollToTop} className="cursor-pointer" aria-label="Về đầu trang">
+            <Logo variant="dark" size={36} />
+          </button>
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               type="button"
               onClick={goToLogin}
-              className="px-5 py-2 bg-[#1DB954] hover:bg-[#1AA34A] text-white rounded-xl text-sm font-bold shadow-md shadow-[#1DB954]/20 hover:shadow-[#1DB954]/40 active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+              className="hidden sm:inline-flex whitespace-nowrap px-4 py-2 text-sm font-bold text-slate-800 bg-white border-[1.5px] border-slate-300 rounded-xl hover:border-slate-500 hover:text-slate-900 transition-colors cursor-pointer"
             >
               Đăng nhập
             </button>
+            <button
+              type="button"
+              onClick={goToRegister}
+              style={{ backgroundColor: BRAND }}
+              className="whitespace-nowrap px-4 sm:px-5 py-2 text-sm font-bold text-white rounded-xl hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
+            >
+              Đăng ký
+            </button>
           </div>
-
         </div>
       </header>
 
-      {/* CONTAINER CHÍNH CÓ PT-20 ĐỂ KHÔNG BỊ NAVBAR FIXED ĐÈ LÊN */}
-      <main className="pt-20 flex-1 relative z-10">
-
-        {/* 2. HERO SECTION */}
-        <section className="relative pt-6 sm:pt-8 pb-12 sm:pb-16 px-6 overflow-hidden">
-          <div className="max-w-5xl mx-auto text-center space-y-5 relative z-10">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-200/80 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700/60 text-slate-700 dark:text-slate-300 text-xs font-semibold backdrop-blur-sm">
-              <Sparkles className="w-4 h-4 text-[#1DB954]" />
-              <span>Nền tảng thu thập và kiểm soát chất lượng dữ liệu tiếng nói</span>
-            </div>
-
-            <h1 className="text-4xl sm:text-6xl font-black tracking-tight leading-tight text-slate-900 dark:text-white">
-              CodeSwitchLabel
-              <span className="block px-2 py-3 leading-[1.3] text-2xl sm:text-4xl md:text-5xl bg-clip-text text-transparent bg-gradient-to-r from-[#15803D] via-emerald-600 to-teal-700 dark:from-[#1DB954] dark:via-emerald-400 dark:to-green-300">
-                Hệ thống thu thập và kiểm soát chất lượng <span className="whitespace-nowrap">dữ liệu</span> tiếng nói
-              </span>
-            </h1>
-
-            <p className="text-base sm:text-lg text-slate-600 dark:text-slate-400 max-w-3xl mx-auto font-normal leading-relaxed">
-              Các hệ thống chuyển tiếng nói thành văn bản hiện nay nhìn chung đạt độ chính xác cao; tuy nhiên, hiệu suất sẽ suy giảm khi câu nói chứa nội dung trộn ngôn ngữ (code-switching). CodeSwitchLabel được phát triển nhằm cung cấp một quy trình thống nhất cho việc xử lý dữ liệu tiếng nói trộn ngôn ngữ tiếng Việt - tiếng Anh, làm nền tảng nâng cao chất lượng các mô hình nhận dạng giọng nói (ASR).
-            </p>
-
-            {/* Nút Đăng nhập chính */}
-            <div className="flex justify-center pt-2">
-              <button
-                type="button"
-                onClick={goToLogin}
-                className="px-10 py-3.5 bg-[#1DB954] hover:bg-[#1AA34A] text-white rounded-2xl text-base font-bold shadow-xl shadow-[#1DB954]/30 hover:shadow-[#1DB954]/50 active:scale-98 transition-all cursor-pointer flex items-center justify-center gap-2"
-              >
-                <span>Đăng nhập</span>
-                <ArrowRight className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Quick Metrics Bar */}
-            <div className="pt-10 grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-5xl mx-auto border-t border-slate-200 dark:border-slate-800/80">
-              <div className="p-4 bg-white/70 dark:bg-slate-900/50 backdrop-blur-md rounded-2xl border border-slate-200 dark:border-slate-800/60 shadow-sm">
-                <div className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white whitespace-nowrap">Quality Control</div>
-                <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">Kiểm soát chất lượng bản ghi trộn ngôn ngữ</div>
-              </div>
-              <div className="p-4 bg-white/70 dark:bg-slate-900/50 backdrop-blur-md rounded-2xl border border-slate-200 dark:border-slate-800/60 shadow-sm">
-                <div className="text-xl sm:text-2xl font-black text-[#1DB954] whitespace-nowrap">Multi-Stage Review</div>
-                <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">Quy trình đánh giá và cải thiện chất lượng</div>
-              </div>
-              <div className="p-4 bg-white/70 dark:bg-slate-900/50 backdrop-blur-md rounded-2xl border border-slate-200 dark:border-slate-800/60 shadow-sm">
-                <div className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white whitespace-nowrap">End-to-End Workflow</div>
-                <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">Quản lý toàn diện vòng đời tạo lập corpus</div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* 3. CHI TIẾT VỀ DỰ ÁN (ABOUT SECTION) */}
-        <section id="about" className="scroll-mt-28 py-16 bg-slate-100/70 dark:bg-slate-900/60 border-y border-slate-200 dark:border-slate-800/60 px-6 transition-colors backdrop-blur-sm">
-          <div className="max-w-6xl mx-auto space-y-12">
-            <div className="text-center space-y-3">
-              <h2 className="text-2xl sm:text-4xl font-extrabold text-slate-900 dark:text-white">
-                Bối cảnh và giải pháp của CodeSwitchLabel
-              </h2>
-              <p className="text-slate-500 dark:text-slate-400 text-sm sm:text-base max-w-3xl mx-auto">
-                Giải quyết các thách thức cốt lõi trong gán nhãn và kiểm soát chất lượng dữ liệu tiếng nói trộn ngôn ngữ tiếng Việt - tiếng Anh cho các mô hình nhận dạng giọng nói tự động (ASR).
+      <main className="flex-1">
+        {/* HERO */}
+        <section className="px-5 sm:px-6 pt-14 sm:pt-24 pb-20 sm:pb-[100px]">
+          <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] gap-14 lg:gap-12 items-center">
+            <div className="text-center lg:text-left">
+              <h1 className="text-[40px] sm:text-[56px] lg:text-[37px] xl:text-[46px] leading-[1.2] font-black tracking-tight text-slate-900">
+                <span className="block lg:whitespace-nowrap">Giúp máy hiểu tiếng Việt</span>
+                <span className="block" style={{ color: BRAND }}>chêm tiếng Anh.</span>
+              </h1>
+              <p className="mt-6 text-lg text-slate-600 leading-relaxed max-w-lg mx-auto lg:mx-0">
+                Đọc to vài câu có xen tiếng Anh. Giọng của bạn giúp xây dựng bộ dữ liệu cho nghiên cứu nhận dạng giọng nói.
               </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <div className="p-8 bg-white dark:bg-[#0F172A] rounded-3xl border border-slate-200 dark:border-slate-800/80 space-y-4 shadow-sm hover:border-slate-300 dark:hover:border-slate-700 transition-all">
-                <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
-                  <Volume2 className="w-6 h-6" />
-                </div>
-                <h3 className="text-xl font-bold text-slate-900 dark:text-white">Bối cảnh và thách thức</h3>
-                <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
-                  Trong các phát ngôn tiếng Việt thực tế như <i>"Em nhớ upload tài liệu trước deadline nhé"</i>, sự xuất hiện của các từ tiếng Anh khiến hiệu suất của mô hình ASR bị giảm đáng kể. Các bản ghi âm thô chỉ hữu ích khi được chuyển bản chính xác ở cấp độ từ, gán nhãn ngôn ngữ (Việt/Anh) và khớp thời gian với âm thanh.
-                </p>
-              </div>
-
-              <div className="p-8 bg-white dark:bg-[#0F172A] rounded-3xl border border-slate-200 dark:border-slate-800/80 space-y-4 shadow-sm hover:border-slate-300 dark:hover:border-slate-700 transition-all">
-                <div className="w-12 h-12 rounded-2xl bg-[#1DB954]/10 text-[#1DB954] flex items-center justify-center">
-                  <ShieldCheck className="w-6 h-6" />
-                </div>
-                <h3 className="text-xl font-bold text-slate-900 dark:text-white">Khó khăn trong gán nhãn</h3>
-                <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
-                  Gán nhãn thủ công dữ liệu trộn ngôn ngữ khó hơn nhiều so với đơn ngữ: annotator phải xác định ranh giới ngôn ngữ ở cấp độ từ, xử lý phát âm tiếng Anh theo giọng Việt, từ mượn ngữ âm và các điểm chuyển đổi ngôn ngữ. Không có quy trình QC chuyên biệt sẽ dẫn đến dữ liệu không đồng nhất và thiếu tin cậy.
-                </p>
-              </div>
-
-              <div className="p-8 bg-white dark:bg-[#0F172A] rounded-3xl border border-slate-200 dark:border-slate-800/80 space-y-4 shadow-sm hover:border-slate-300 dark:hover:border-slate-700 transition-all">
-                <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
-                  <Sparkles className="w-6 h-6" />
-                </div>
-                <h3 className="text-xl font-bold text-slate-900 dark:text-white">Giải pháp đề xuất</h3>
-                <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
-                  CodeSwitchLabel cung cấp giải pháp dựa trên nền tảng Web cho toàn bộ quy trình: tiếp nhận bản ghi, kiểm duyệt văn bản, thu âm, thẩm định, đánh giá chất lượng và quản lý bộ dữ liệu hoàn chỉnh. Hệ thống giúp giảm công sức xử lý, tăng độ nhất quán và nâng cao độ tin cậy của corpus.
-                </p>
+              <div className="mt-9 flex flex-col sm:flex-row items-center gap-3 sm:gap-5 justify-center lg:justify-start">
+                <button
+                  type="button"
+                  onClick={goToRegister}
+                  style={{ backgroundColor: BRAND, boxShadow: `0 14px 30px ${BRAND_BRIGHT}40` }}
+                  className="w-full sm:w-auto px-7 py-3.5 text-base font-bold text-white rounded-2xl inline-flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.98] transition-all cursor-pointer"
+                >
+                  {/* span chữ trắng riêng để không bị CSS ép màu nút có icon */}
+                  <span className="inline-flex items-center gap-2 text-white">
+                    Đóng góp giọng nói <ArrowRight className="w-5 h-5" />
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={goToLogin}
+                  className="w-full sm:w-auto px-7 py-3.5 text-base font-bold text-slate-800 bg-white border-[1.5px] border-slate-300 rounded-2xl hover:border-slate-500 hover:text-slate-900 active:scale-[0.98] transition-all cursor-pointer"
+                >
+                  Đăng nhập
+                </button>
               </div>
             </div>
 
-            {/* CỤM QUY TRÌNH XỬ LÝ */}
-            <div id="workflow" className="scroll-mt-28 pt-8 border-t border-slate-200 dark:border-slate-800/80">
-              <h3 className="text-center text-xl sm:text-2xl font-bold text-slate-900 dark:text-white mb-8">
-                Quy trình xử lý dữ liệu thống nhất
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="p-5 bg-white dark:bg-[#0F172A] rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center gap-4 shadow-sm">
-                  <div className="p-3 bg-blue-500/10 text-blue-500 rounded-xl">
-                    <FileText className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <div className="text-xs text-slate-400 font-semibold uppercase">Bước 1</div>
-                    <div className="text-sm font-bold text-slate-800 dark:text-white">Duyệt và thẩm định văn bản</div>
-                  </div>
-                </div>
-
-                <div className="p-5 bg-white dark:bg-[#0F172A] rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center gap-4 shadow-sm">
-                  <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl">
-                    <Mic className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <div className="text-xs text-slate-400 font-semibold uppercase">Bước 2</div>
-                    <div className="text-sm font-bold text-slate-800 dark:text-white">Thu âm tiếng nói</div>
-                  </div>
-                </div>
-
-                <div className="p-5 bg-white dark:bg-[#0F172A] rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center gap-4 shadow-sm">
-                  <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl">
-                    <CheckSquare className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <div className="text-xs text-slate-400 font-semibold uppercase">Bước 3</div>
-                    <div className="text-sm font-bold text-slate-800 dark:text-white">Đánh giá và thẩm định chất lượng</div>
-                  </div>
-                </div>
-
-                <div className="p-5 bg-white dark:bg-[#0F172A] rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center gap-4 shadow-sm">
-                  <div className="p-3 bg-purple-500/10 text-purple-500 rounded-xl">
-                    <Database className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <div className="text-xs text-slate-400 font-semibold uppercase">Bước 4</div>
-                    <div className="text-sm font-bold text-slate-800 dark:text-white">Quản lý và xuất bộ dữ liệu</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
+            <SampleCard />
           </div>
         </section>
 
+        {/* VÌ SAO CẦN BẠN */}
+        <section className="px-5 sm:px-6 py-20 sm:py-24 bg-white border-y border-slate-200/70">
+          <div className="max-w-6xl mx-auto">
+            <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-slate-900 text-center">
+              Vì sao cần giọng nói của bạn?
+            </h2>
+            <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-5">
+              {REASONS.map(({ icon: Icon, title, body }) => (
+                <div key={title} className="rounded-3xl bg-[#FAFAF7] border border-slate-200/70 p-7">
+                  <div className="w-11 h-11 rounded-2xl flex items-center justify-center bg-[#1DB954]/12 text-[#15803D]">
+                    <Icon className="w-5 h-5" />
+                  </div>
+                  <h3 className="mt-5 text-lg font-bold text-slate-900">{title}</h3>
+                  <p className="mt-2 text-[15px] leading-relaxed text-slate-600">{body}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* BẢO MẬT & CAM KẾT */}
+        <section className="px-5 sm:px-6 py-20 sm:py-24">
+          <div className="max-w-4xl mx-auto text-center">
+            <div className="mx-auto w-12 h-12 rounded-2xl flex items-center justify-center bg-slate-900 text-white">
+              <Lock className="w-5 h-5" />
+            </div>
+            <h2 className="mt-5 text-3xl sm:text-4xl font-black tracking-tight text-slate-900">
+              Giọng nói của bạn được bảo vệ
+            </h2>
+            <div className="mt-10 grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {PROMISES.map(({ icon: Icon, text }) => (
+                <div key={text} className="flex sm:flex-col items-center gap-3 rounded-2xl bg-white border border-slate-200/70 px-5 py-4 sm:py-6 text-left sm:text-center">
+                  <Icon className="w-5 h-5 shrink-0" style={{ color: BRAND }} />
+                  <span className="text-[15px] font-semibold text-slate-800">{text}</span>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowConsent(true)}
+              className="mt-8 inline-flex items-center gap-1.5 text-sm font-semibold hover:underline underline-offset-4 cursor-pointer"
+              style={{ color: BRAND }}
+            >
+              <span className="inline-flex items-center gap-1.5" style={{ color: BRAND }}>
+                Xem bản cam kết <ArrowRight className="w-4 h-4" />
+              </span>
+            </button>
+          </div>
+        </section>
+
+        {/* KÊU GỌI CUỐI */}
+        <section className="px-5 sm:px-6 pb-20 sm:pb-24">
+          <div
+            className="max-w-6xl mx-auto rounded-[32px] px-6 sm:px-12 py-14 sm:py-16 text-center text-white relative overflow-hidden"
+            style={{ background: `linear-gradient(135deg, ${BRAND} 0%, #0F5C2E 100%)` }}
+          >
+            <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-white/10 blur-2xl pointer-events-none" />
+            <h2 className="relative text-3xl sm:text-4xl font-black tracking-tight">Sẵn sàng góp giọng?</h2>
+            <p className="relative mt-3 text-white/80 text-lg">Chỉ cần một chiếc micro và vài phút rảnh.</p>
+            <button
+              type="button"
+              onClick={goToRegister}
+              className="relative mt-8 px-7 py-3.5 bg-white rounded-2xl text-base font-bold inline-flex items-center gap-2 hover:bg-white/90 active:scale-[0.98] transition-all cursor-pointer"
+            >
+              <span className="inline-flex items-center gap-2" style={{ color: BRAND }}>
+                Đóng góp giọng nói <ArrowRight className="w-5 h-5" />
+              </span>
+            </button>
+          </div>
+        </section>
       </main>
 
-      {/* 4. FOOTER */}
-      <footer className="border-t border-slate-200 dark:border-slate-800/80 bg-white dark:bg-[#0B1120] py-8 px-6 transition-colors relative z-10">
-        <div className="max-w-7xl mx-auto flex items-center justify-center text-center">
-          <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">
-            © 2026 CodeSwitchLabel. All rights reserved.
-          </p>
-        </div>
+      <footer className="border-t border-slate-200/70 py-8 px-6">
+        <p className="text-center text-sm text-slate-500">
+          © 2026 CodeSwitchLabel · Dự án nghiên cứu phi thương mại
+        </p>
       </footer>
 
+      {showConsent && <ConsentModal onClose={() => setShowConsent(false)} />}
     </div>
   );
 }

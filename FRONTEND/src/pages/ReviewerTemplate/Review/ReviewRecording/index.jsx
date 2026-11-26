@@ -108,12 +108,16 @@ export default function ReviewRecording() {
   } = useQuery({
     queryKey: [GET_REVIEW_TASK_RECORDINGS_API, taskId, page],
     // groupBy=Pair: mỗi cặp câu 1 dòng, phân trang theo cặp
-    queryFn: () => getReviewTaskRecordingsApi({ taskId, page, pageSize: PAGE_SIZE, groupBy: "Pair" }),
+    // onlyReviewable: chỉ còn cặp mình duyệt được - cặp đã duyệt xem ở Lịch sử duyệt ghi âm
+    queryFn: () => getReviewTaskRecordingsApi({ taskId, page, pageSize: PAGE_SIZE, groupBy: "Pair", onlyReviewable: true }),
     enabled: Boolean(taskId),
     placeholderData: keepPreviousData,
   });
   const recordings = recordingPage?.items ?? [];
   const totalPages = Math.max(1, recordingPage?.totalPages ?? 1);
+  // Duyệt xong các cặp ở trang cuối thì trang đó hết bản -> lùi về trang cuối còn bản
+  // (đặt lại state ngay lúc render, có điều kiện nên không lặp vô hạn)
+  if (recordingPage && page > totalPages) setPage(totalPages);
 
   // API danh sách không lọc theo người đọc -> bộ lọc chỉ áp trên trang đang xem
   const speakerIds = [...new Set(recordings.map((r) => r.speakerId))];
@@ -325,7 +329,7 @@ export default function ReviewRecording() {
           ) : isRecordingsError ? (
             <ErrorState message={recordingsError.message} onRetry={refetchRecordings} className="py-10" />
           ) : list.length === 0 ? (
-            <EmptyState title="Chưa có bản ghi" description="Nhiệm vụ này chưa có bản ghi nào cần duyệt." className="py-10" />
+            <EmptyState title="Không còn bản ghi cần duyệt" description="Bạn đã duyệt hết các bản ghi của nhiệm vụ này. Xem lại ở Lịch sử duyệt ghi âm." className="py-10" />
           ) : (
             // Luôn chia đúng PAGE_SIZE ô cao bằng nhau lấp đầy khung -> 10 bản ghi vừa 1 màn hình; màn quá thấp (ô < 44px) mới cuộn thay vì cắt chữ
             <ul className="flex-1 min-h-0 grid grid-cols-[minmax(0,1fr)] gap-0.5 p-1.5 [@media(max-height:820px)]:p-1 overflow-y-auto overflow-x-hidden" style={{ gridTemplateRows: `repeat(${PAGE_SIZE}, minmax(44px, 1fr))` }} aria-label="Danh sách bản ghi">

@@ -110,6 +110,12 @@ const routes = [
           () => import("../pages/ReviewerTemplate/Review/ReviewContribution/index"),
         ),
       },
+      {
+        path: "source-video",
+        element: lazy(
+          () => import("../pages/ReviewerTemplate/Review/ReviewSourceVideo/index"),
+        ),
+      },
       // Lịch sử kiểm duyệt
       {
         path: "history-recording",
@@ -201,6 +207,10 @@ const routes = [
       {
         path: "recordings",
         element: lazy(() => import("../pages/AdminTemplate/AdminRecordings")),
+      },
+      {
+        path: "source-videos",
+        element: lazy(() => import("../pages/AdminTemplate/AdminSourceVideos/index")),
       },
       // ROUTE MỚI: Quản lý Chủ đề tiêu chuẩn
       {
