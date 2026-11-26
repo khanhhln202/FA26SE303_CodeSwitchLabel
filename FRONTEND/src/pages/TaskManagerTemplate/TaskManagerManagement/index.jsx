@@ -440,7 +440,7 @@ export default function TaskManagerManagement() {
 
   const handleOpenAssignModal = () => {
     if (batches.length === 0) {
-      toast.error("Vui lòng tạo đợt trước khi thực hiện tạo nhiệm vụ!");
+      toast.error("Chưa có đợt nào được Admin giao để tạo nhiệm vụ!");
       return;
     }
 
@@ -693,6 +693,12 @@ export default function TaskManagerManagement() {
         return;
       }
 
+      const newWaveTarget = Number(batchFormData.target);
+      if (newWaveTarget < 2000 || newWaveTarget > 5000) {
+        toast.error("Chỉ tiêu đợt phải từ 2000 đến 5000 cặp câu!");
+        return;
+      }
+
       const domainMap = {
         "Công nghệ thông tin": "ItTechnology",
         "Giáo dục": "Education",
@@ -701,7 +707,6 @@ export default function TaskManagerManagement() {
 
       const startIso = `${cleanStart}T00:00:00`;
       const endIso = `${cleanEnd}T23:59:59`;
-      const newWaveTarget = Number(batchFormData.target);
 
       const wavePayload = {
         title: String(batchFormData.name).trim(),
@@ -892,7 +897,7 @@ export default function TaskManagerManagement() {
     const targetWaveId = Number(selectedBatchId);
 
     try {
-      await taskService.detachTaskFromWave(targetWaveId, targetTaskId);
+      await taskService.detachTaskFromWave(targetTaskId);
       toast.success(`Đã gỡ nhiệm vụ khỏi đợt thành công!`);
     } catch (err) {
       toast.success(`Đã gỡ nhiệm vụ khỏi đợt!`);
@@ -1118,117 +1123,6 @@ export default function TaskManagerManagement() {
 
   return (
     <div className="w-full h-full flex flex-col gap-3.5 text-left font-sans p-1 overflow-y-auto relative transition-colors">
-
-      {/* MODAL TẠO / CẬP NHẬT ĐỢT */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#16171C]/55 backdrop-blur-xs" onClick={() => setIsModalOpen(false)}>
-          <div
-            className="rounded-[24px] w-full max-w-lg shadow-[0_20px_50px_rgba(16,17,20,0.25)] overflow-hidden border border-[#E5E2D8] dark:border-gray-800 bg-white dark:bg-[#1C1D22] animate-in fade-in zoom-in-95 duration-200"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ backgroundColor: TASK_MANAGER_ACCENT }} className="h-1.5 w-full shrink-0" />
-
-            <form onSubmit={handleConfirmSaveModal} className="p-6 space-y-4">
-              <div className="flex items-center justify-between border-b border-[#E5E2D8] dark:border-gray-800 pb-3">
-                <h3 className="type-section text-[#16171C] dark:text-gray-100">
-                  {modalMode === "CREATE" ? "Tạo đợt nhiệm vụ mới" : `Chỉnh sửa ${targetModalBatchObj?.waveName || targetModalBatchObj?.name || "đợt"}`}
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#F0EEE6] dark:hover:bg-gray-800 transition-colors cursor-pointer"
-                >
-                  <X className="w-4 h-4 text-[#6E7078]" />
-                </button>
-              </div>
-
-              <div>
-                <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
-                  Tên đợt (Wave Name)
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={batchFormData.name}
-                  onChange={(e) => setBatchFormData({ ...batchFormData, name: e.target.value })}
-                  placeholder="Nhập tên đợt..."
-                  className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none transition-all font-sans placeholder:text-[#9A9CA3]"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
-                    Chủ đề (Topic)
-                  </label>
-                  <select
-                    disabled={modalMode === "UPDATE"}
-                    value={batchFormData.topic}
-                    onChange={(e) => setBatchFormData({ ...batchFormData, topic: e.target.value })}
-                    className={`w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 text-[#16171C] dark:text-white rounded-xl outline-none font-bold transition-all font-sans ${
-                      modalMode === "UPDATE"
-                        ? "bg-[#F7F5EF] dark:bg-[#18191D] cursor-not-allowed opacity-80 appearance-none"
-                        : "bg-white dark:bg-[#25272E] cursor-pointer"
-                    }`}
-                  >
-                    <option value="Công nghệ thông tin" className="dark:bg-[#1C1D22]">Công nghệ thông tin</option>
-                    <option value="Giáo dục" className="dark:bg-[#1C1D22]">Giáo dục</option>
-                    <option value="Hội thoại hàng ngày" className="dark:bg-[#1C1D22]">Hội thoại hàng ngày</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block type-label text-[#2B2C31] dark:text-gray-200 mb-1.5">
-                    Mục tiêu
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    value={batchFormData.target}
-                    onChange={(e) => setBatchFormData({ ...batchFormData, target: e.target.value })}
-                    className="w-full h-11 px-3.5 py-2.5 type-body border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] text-[#16171C] dark:text-white rounded-xl outline-none font-bold transition-all font-sans"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3.5">
-                <VNFormatDatePicker
-                  label="Ngày bắt đầu"
-                  value={batchFormData.startDate}
-                  minDateIso={todayIso}
-                  onChange={(newVal) => setBatchFormData({ ...batchFormData, startDate: newVal })}
-                />
-
-                <VNFormatDatePicker
-                  label="Ngày kết thúc"
-                  value={batchFormData.endDate}
-                  minDateIso={batchFormData.startDate && batchFormData.startDate.includes("-") ? batchFormData.startDate : todayIso}
-                  onChange={(newVal) => setBatchFormData({ ...batchFormData, endDate: newVal })}
-                />
-              </div>
-
-              <div className="flex gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="flex-1 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 type-button text-[#6E7078] dark:text-gray-300 hover:bg-[#F7F5EF] dark:hover:bg-[#25272E] cursor-pointer transition-colors"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  style={{ backgroundColor: TASK_MANAGER_ACCENT, boxShadow: `0 10px 24px ${TASK_MANAGER_ACCENT}40` }}
-                  className="flex-1 py-2.5 text-white rounded-xl type-button hover:opacity-90 active:scale-[0.99] cursor-pointer transition-all"
-                >
-                  {modalMode === "CREATE" ? "Tạo đợt" : "Lưu thay đổi"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* MODAL TẠO NHIỆM VỤ MỚI */}
       {isAssignModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#16171C]/55 backdrop-blur-xs" onClick={() => setIsAssignModalOpen(false)}>
@@ -1435,7 +1329,7 @@ export default function TaskManagerManagement() {
                   type="button"
                   onClick={handleConfirmDeleteBatch}
                   style={{ backgroundColor: DANGER, boxShadow: `0 10px 24px ${DANGER}40` }}
-                  className="flex-1 py-2.5 text-[#16171C] dark:text-white rounded-xl type-button hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer"
+                  className="flex-1 py-2.5 text-white rounded-xl type-button hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer"
                 >
                   Xóa ngay
                 </button>
@@ -1728,7 +1622,7 @@ export default function TaskManagerManagement() {
           <div className="flex flex-col gap-2.5 overflow-y-auto flex-1 h-0 pr-1">
             {batches.length === 0 ? (
               <div className="p-4 text-center type-ui text-[#9A9CA3] dark:text-gray-500">
-                Chưa có đợt nào. Bấm nút tạo đợt ở trên để tạo.
+                Chưa có đợt nào được Admin giao cho bạn.
               </div>
             ) : (
               batches.map((batch, index) => {
@@ -1793,26 +1687,6 @@ export default function TaskManagerManagement() {
                           )}
                           <span>{isBatchCompleted ? "Hoàn thành" : isOpenStatus ? "Đang mở" : "Đang thực hiện"}</span>
                         </span>
-                      </div>
-
-                      <div className="flex items-center gap-0.5 shrink-0">
-                        <button
-                          type="button"
-                          onClick={(e) => handleOpenUpdateModal(e, batch)}
-                          title={`Sửa ${batch.waveName || batch.name}`}
-                          className="w-7 h-7 rounded-lg flex items-center justify-center text-[#6E7078] hover:bg-[#E5E2D8] dark:hover:bg-gray-700 hover:text-[#16171C] dark:hover:text-gray-100 transition-colors cursor-pointer"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={(e) => handleRequestDeleteBatch(e, batch)}
-                          title={`Xóa ${batch.waveName || batch.name}`}
-                          className="w-7 h-7 rounded-lg flex items-center justify-center text-[#6E7078] hover:bg-[#FDEAEA] dark:hover:bg-red-900/30 hover:text-[#C63B3B] dark:hover:text-[#E55353] transition-colors cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
                       </div>
                     </div>
 
@@ -1891,16 +1765,6 @@ export default function TaskManagerManagement() {
 
               <button
                 type="button"
-                onClick={handleOpenCreateModal}
-                style={{ backgroundColor: TASK_MANAGER_ACCENT, boxShadow: `0 10px 24px ${TASK_MANAGER_ACCENT}40` }}
-                className="inline-flex items-center gap-1.5 py-2 px-3.5 type-button text-white rounded-xl hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer whitespace-nowrap"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Tạo đợt</span>
-              </button>
-
-              <button
-                type="button"
                 onClick={handleOpenAssignModal}
                 style={{ backgroundColor: TASK_MANAGER_ACCENT, boxShadow: `0 10px 24px ${TASK_MANAGER_ACCENT}40` }}
                 className="inline-flex items-center gap-1.5 py-2 px-3.5 type-button text-white rounded-xl hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer whitespace-nowrap"
@@ -1931,7 +1795,7 @@ export default function TaskManagerManagement() {
                     <tr>
                       <td colSpan={7} className="py-12 text-center text-[#9A9CA3] dark:text-gray-500 type-ui">
                         {!selectedBatchObj
-                          ? "Hãy chọn hoặc tạo một đợt để xem danh sách nhiệm vụ."
+                          ? "Hãy chọn một đợt để xem danh sách nhiệm vụ."
                           : `Không tìm thấy nhiệm vụ nào trong ${selectedBatchObj.waveName || selectedBatchObj.name}.`}
                       </td>
                     </tr>

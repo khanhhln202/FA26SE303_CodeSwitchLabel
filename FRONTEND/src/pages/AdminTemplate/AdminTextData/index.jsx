@@ -89,7 +89,7 @@ function HighlightCsText({ rawText }) {
       {segments.map((segment, i) => (
         <span 
           key={i} 
-          style={segment.lang === "en" ? { color: AUDIO_PRIMARY, fontWeight: 600 } : undefined}
+          style={segment.lang === "en" ? { color: AUDIO_PRIMARY } : undefined}
         >
           {segment.text}
         </span>
@@ -428,7 +428,7 @@ export default function AdminTextData() {
       toast.success("Đã tải xuống file ZIP corpus thành công!");
     } catch (err) {
       console.error("Lỗi export source corpus:", err);
-      toast.error("Xuất file ZIP thất bại hoặc chưa có dữ liệu được duyệt!");
+      toast.error("Tải file ZIP thất bại hoặc chưa có dữ liệu được duyệt!");
     } finally {
       setIsExportingCorpus(false);
     }
@@ -904,7 +904,7 @@ export default function AdminTextData() {
                 </div>
               </form>
 
-              {/* Thanh lọc & làm mới danh sách video + Xuất Corpus */}
+              {/* Thanh lọc & làm mới danh sách video + Tải Corpus */}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="type-label text-[#16171C] dark:text-gray-200 font-label">
                   Danh sách video đã gửi ({videoList.length})
@@ -943,7 +943,7 @@ export default function AdminTextData() {
                     className="h-10 px-4 text-white rounded-xl type-button inline-flex items-center justify-center gap-1.5 hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer disabled:opacity-50 shrink-0"
                   >
                     {isExportingCorpus && <Loader2 className="w-4 h-4 animate-spin" />}
-                    <span>{isExportingCorpus ? "Đang xuất..." : "Tải corpus"}</span>
+                    <span>{isExportingCorpus ? "Đang tải..." : "Tải corpus"}</span>
                   </button>
                 </div>
               </div>

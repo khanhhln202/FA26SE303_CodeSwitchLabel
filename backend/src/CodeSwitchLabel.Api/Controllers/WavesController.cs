@@ -25,20 +25,29 @@ namespace CodeSwitchLabel.Api.Controllers;
 [Authorize(Roles = "TaskManager,Admin")]
 public class WavesController(IWaveService waveService) : ControllerBase
 {
-    // TaskManager và Admin đều tạo được đợt; TaskManager tự gán đợt cho mình
-    /// <summary>Tạo đợt mới — ở trạng thái Open (chưa có nhiệm vụ nào).
+    /// <summary>Tạo đợt mới — CHỈ Admin. Ở trạng thái Open (chưa có nhiệm vụ nào).
     /// Chỉ tiêu từ 2000 đến 5000 cặp câu.</summary>
     /// <remarks>
-    /// TaskManager và Admin đều tạo được đợt; TaskManager tự gán đợt cho mình. Trả 422 nếu
-    /// chỉ tiêu ngoài khoảng 2000–5000 hoặc ngày không hợp lệ.
+    /// **Chỉ Admin tạo được đợt.** Trước đây Task Manager cũng tạo được và **tự gán đợt cho
+    /// chính mình**, tức đi vòng qua Admin — không khớp luồng nghiệp vụ, nơi Admin giao việc
+    /// xuống cho Task Manager rồi Task Manager mới chia task cho Speaker và Reviewer.
+    ///
+    /// Giao luôn cho Task Manager bằng `assignedToUserId` ngay trong lần gọi này: "tạo nhiệm vụ
+    /// CHO manager" là một hành động, không phải hai. Bỏ trống thì đợt nằm im và **không Task
+    /// Manager nào nhìn thấy** cho tới khi gọi `POST /api/waves/{id}/assign`.
+    ///
+    /// Trả 422 nếu chỉ tiêu ngoài khoảng 2000–5000, ngày không hợp lệ, hoặc
+    /// `assigned_to_invalid_role` khi người được chọn không giữ vai Task Manager.
     /// </remarks>
     [HttpPost]
+    [Authorize(Roles = "Admin")]
     [ProducesResponseType(typeof(WaveDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<WaveDto>> Create(
         [FromBody] CreateWaveRequest request, CancellationToken ct)
     {
-        var created = await waveService.CreateAsync(request, User.GetUserId(), User.IsInRole("Admin"), ct);
+        var created = await waveService.CreateAsync(request, User.GetUserId(), ct);
         return CreatedAtAction(nameof(Get), new { id = created.WaveId }, created);
     }
 

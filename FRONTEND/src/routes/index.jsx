@@ -197,6 +197,10 @@ const routes = [
         element: lazy(() => import("../pages/AdminTemplate/AdminUserManagement/index")),
       },
       {
+        path: "tasks",
+        element: lazy(() => import("../pages/AdminTemplate/AdminTaskManagement/index")),
+      },
+      {
         path: "text-data",
         element: lazy(() => import("../pages/AdminTemplate/AdminTextData/index")),
       },

@@ -187,7 +187,8 @@ export const adminService = {
   },
   exportSourceCorpus: async () => {
     const res = await httpClient.get("/api/admin/source-corpus/export", {
-      responseType: "blob"
+      responseType: "blob",
+      timeout: 300000
     });
     return res;
   }
