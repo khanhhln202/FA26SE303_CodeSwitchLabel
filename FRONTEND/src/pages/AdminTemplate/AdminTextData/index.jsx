@@ -90,6 +90,19 @@ function HighlightCsText({ rawText }) {
   );
 }
 
+// Chuyển chuỗi có thẻ [vi]/[en] thành chuỗi thuần để so khớp cụm từ chính xác
+const toPlainText = (rawText) => {
+  if (!rawText) return "";
+  return parseCodeSwitch(rawText)
+    .map((seg) => seg.text)
+    .join("");
+};
+
+const normalizeStr = (str) => {
+  if (!str) return "";
+  return String(str).normalize("NFC").replace(/\s+/g, " ").trim().toLowerCase();
+};
+
 export default function AdminTextData() {
   const [textList, setTextList] = useState([]);
   const [searchInput, setSearchInput] = useState("");
@@ -127,19 +140,140 @@ export default function AdminTextData() {
     status: "active"
   });
 
+  // Tải toàn bộ danh sách câu theo domain (tải song song theo lô để không bị ngắt trang hay chậm)
+  const fetchAllScriptsForDomain = async (domainValue) => {
+    const requestedSize = 100;
+    const firstParams = {
+      page: 1,
+      pageSize: requestedSize,
+      sort: "createdAt",
+      dir: "desc"
+    };
+    if (domainValue) {
+      firstParams.domain = domainValue;
+    }
+
+    const firstRes = await adminService.getTexts(firstParams);
+    const firstData = firstRes?.data || firstRes;
+    const firstItems = Array.isArray(firstData) ? firstData : (firstData?.items || []);
+    const total = firstData?.totalCount ?? firstData?.totalItems ?? firstData?.total ?? firstItems.length;
+
+    if (firstItems.length === 0 || firstItems.length >= total) {
+      return firstItems;
+    }
+
+    // Dùng kích thước trang thực tế BE trả về (tránh trường hợp BE cap tối đa 50/100 items)
+    const actualPageSize = firstItems.length;
+    const totalPagesCount = firstData?.totalPages ?? Math.ceil(total / actualPageSize);
+
+    let allItems = [...firstItems];
+    const remainingPages = [];
+    for (let p = 2; p <= totalPagesCount; p++) {
+      remainingPages.push(p);
+    }
+
+    // Tải song song mỗi đợt 10 trang để hoàn thành cực nhanh
+    const concurrency = 10;
+    for (let i = 0; i < remainingPages.length; i += concurrency) {
+      const batch = remainingPages.slice(i, i + concurrency);
+      const responses = await Promise.all(
+        batch.map((p) => {
+          const params = {
+            page: p,
+            pageSize: requestedSize,
+            sort: "createdAt",
+            dir: "desc"
+          };
+          if (domainValue) {
+            params.domain = domainValue;
+          }
+          return adminService.getTexts(params);
+        })
+      );
+
+      for (const res of responses) {
+        const resData = res?.data || res;
+        const items = Array.isArray(resData) ? resData : (resData?.items || []);
+        allItems = allItems.concat(items);
+      }
+    }
+
+    return allItems;
+  };
+
+  // Tìm tên domain thực tế trong DB khớp với selectedTopic
+  const resolveActualDomain = async () => {
+    if (selectedTopic === "all") return null;
+
+    const candidates = [...(TOPIC_DOMAIN_CANDIDATES[selectedTopic] || [selectedTopic])];
+    for (const candidateDomain of candidates) {
+      const response = await adminService.getTexts({
+        page: 1,
+        pageSize: 10,
+        sort: "createdAt",
+        dir: "desc",
+        domain: candidateDomain
+      });
+      const resData = response?.data || response;
+      const items = Array.isArray(resData) ? resData : (resData?.items || []);
+      const total = resData?.totalCount ?? resData?.totalItems ?? resData?.total ?? (Array.isArray(resData) ? resData.length : items.length);
+      if (total > 0 || items.length > 0) {
+        return candidateDomain;
+      }
+    }
+
+    const targetLabel = normalizeTopicName(selectedTopic);
+    const probeRes = await adminService.getTexts({
+      page: 1,
+      pageSize: 100,
+      sort: "createdAt",
+      dir: "desc"
+    });
+    const probeData = probeRes?.data || probeRes;
+    const probeItems = Array.isArray(probeData) ? probeData : (probeData?.items || []);
+    const matchedSample = probeItems.find(
+      (item) => normalizeTopicName(item.domain || item.topic) === targetLabel
+    );
+    return matchedSample?.domain || matchedSample?.topic || selectedTopic;
+  };
+
   const fetchTexts = async () => {
     try {
+      const phrase = normalizeStr(activeSearchTerm);
+
+      // KHI CÓ NHẬP TỪ KHÓA TÌM KIẾM: Lọc chính xác những cặp câu chứa cụm từ đó
+      if (phrase) {
+        const domainValue = await resolveActualDomain();
+        const rawItems = await fetchAllScriptsForDomain(domainValue);
+        const mappedItems = rawItems.map(mapScriptItem);
+
+        const matchedItems = mappedItems.filter((item) => {
+          const csPlain = normalizeStr(toPlainText(item.rawCsContent || item.csContent));
+          const viPlain = normalizeStr(toPlainText(item.viContent));
+          const csRaw = normalizeStr(item.rawCsContent || item.csContent);
+          const viRaw = normalizeStr(item.viContent);
+
+          return (
+            csPlain.includes(phrase) ||
+            viPlain.includes(phrase) ||
+            csRaw.includes(phrase) ||
+            viRaw.includes(phrase)
+          );
+        });
+
+        setTotalItems(matchedItems.length);
+        const start = (currentPage - 1) * pageSize;
+        setTextList(matchedItems.slice(start, start + pageSize));
+        return;
+      }
+
+      // KHI KHÔNG TÌM KIẾM: Phân trang trực tiếp từ Backend
       const baseParams = {
         page: currentPage,
         pageSize: pageSize,
         sort: "createdAt",
         dir: "desc"
       };
-      
-      if (activeSearchTerm) {
-        baseParams.search = activeSearchTerm;
-        baseParams.q = activeSearchTerm;
-      }
 
       if (selectedTopic === "all") {
         const response = await adminService.getTexts(baseParams);
@@ -393,7 +527,14 @@ export default function AdminTextData() {
                 type="text"
                 placeholder="Tìm kiếm văn bản..."
                 value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSearchInput(val);
+                  if (!val.trim() && activeSearchTerm) {
+                    setActiveSearchTerm("");
+                    setCurrentPage(1);
+                  }
+                }}
                 onKeyDown={handleKeyDown}
                 className="w-full pl-10 pr-28 py-1.5 bg-transparent border-none type-ui text-[#16171C] dark:text-white outline-none transition-all placeholder:text-[#9A9CA3]"
               />
