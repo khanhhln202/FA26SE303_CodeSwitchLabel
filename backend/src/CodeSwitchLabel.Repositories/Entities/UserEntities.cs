@@ -92,4 +92,37 @@ public class UserConsent
     public string? DocumentName { get; set; }
 
     public AppUser User { get; set; } = null!;
+
+    /// <summary>Bản cam kết người này đã đồng ý — đọc lại được nội dung, không chỉ mã phiên bản.</summary>
+    public ConsentDocument Document { get; set; } = null!;
+}
+
+/// <summary>
+/// Nội dung một phiên bản bản cam kết (bảng <c>consent_document</c>, V39).
+///
+/// <para>
+/// Trước V39 hệ thống chỉ lưu mã phiên bản, còn chữ nằm trong mã nguồn frontend — sửa một
+/// chữ bên đó là mọi người đã ký <c>v1</c> bỗng "đã đồng ý" một văn bản khác mà không để lại
+/// dấu vết nào. Với cam kết về dữ liệu sinh trắc giọng nói, phải đọc lại được chính xác
+/// người thứ N đã đồng ý chữ gì, vào lúc nào.
+/// </para>
+///
+/// <para>
+/// Phiên bản đã có người đồng ý thì KHÔNG sửa và KHÔNG xoá — đổi chữ là phát hành bản mới.
+/// </para>
+/// </summary>
+public class ConsentDocument
+{
+    public string Version { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string Body { get; set; } = string.Empty;
+    public DateOnly EffectiveFrom { get; set; }
+
+    /// <summary>Đúng một bản hiệu lực mỗi lúc — chỉ mục một phần dưới database giữ luật đó.</summary>
+    public bool IsActive { get; set; }
+
+    public long? CreatedBy { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public ICollection<UserConsent> Acceptances { get; set; } = [];
 }
