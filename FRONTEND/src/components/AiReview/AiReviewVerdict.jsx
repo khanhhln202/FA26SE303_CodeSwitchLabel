@@ -17,7 +17,7 @@ function MarkedLine({ text, other, tone }) {
   const otherSet = new Set(words(other));
   const color = tone === "miss" ? { background: "#EAF7EF", color: "#1F5C3F" } : { background: "#FDEAEA", color: "#8E2A2A" };
   return (
-    <p className="text-meta text-[#16171C] break-words">
+    <p className="text-meta leading-[18px] text-[#16171C] break-words">
       {words(text).map((w, i) => (
         <span key={i}>
           {i > 0 && " "}
@@ -25,6 +25,15 @@ function MarkedLine({ text, other, tone }) {
         </span>
       ))}
     </p>
+  );
+}
+
+/** Nhãn "AI" đặt cạnh "Đã duyệt" / "Từ chối" của lượt máy phán. */
+export function AiBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-caption font-label bg-[#EEEDFE] text-[#3C3489]">
+      <Bot className="w-3 h-3" /> AI
+    </span>
   );
 }
 
@@ -46,7 +55,7 @@ const fromReason = (review) => {
 };
 
 /**
- * Phần "AI phá thế" trong một lượt duyệt (chỉ lượt thứ 3 trở đi).
+ * Phần "AI" trong một lượt duyệt (chỉ lượt thứ 3 trở đi).
  * Gọi GET /api/recordings/{id}/ai-review cho từng bản trong cặp; bản nào máy chưa phán
  * (204) thì bỏ qua. Vai trò chưa được xem (403) thì lấy từ lý do "[Máy duyệt]" của lượt đó
  * (fallbackReviews: [{ variant, decision, reason }]). Không bản nào có phán thì không hiện gì.
@@ -76,20 +85,24 @@ export default function AiReviewVerdict({ csRecordingId, viRecordingId, fallback
 
   if (verdicts.length === 0) return null;
 
+  // Nhãn "AI" nằm ở dòng kết quả của lượt (AiBadge, trang lịch sử truyền vào ReviewTimeline); mỗi bản 2 dòng so sánh (Máy nghe / Cần đọc)
   return (
-    <div className="mt-1.5 flex flex-col gap-1.5">
-      <span className="self-start inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-caption font-label bg-[#EEEDFE] text-[#3C3489]">
-        <Bot className="w-3 h-3" /> AI
-      </span>
+    <div className="mt-1 flex flex-col gap-2">
       {verdicts.map(({ variant, data }) => (
-        <div key={variant} className="bg-white rounded-lg border border-[#E5E2D8] px-2.5 py-2">
+        <div key={variant}>
           <p className="text-caption text-[#6E7078] mb-0.5">
-            {VARIANT_LABEL[variant]} · Máy nghe được · {data.verdict === "rejected" ? "Từ chối" : "Đạt"}
+            {VARIANT_LABEL[variant]} ·{" "}
+            <span className={data.verdict === "rejected" ? "text-[#C63B3B]" : "text-[#1F5C3F]"}>
+              {data.verdict === "rejected" ? "Từ chối" : "Đạt"}
+            </span>
           </p>
-          <MarkedLine text={data.transcript} other={data.expectedText} tone="wrong" />
-          <p className="text-caption text-[#6E7078] mt-1.5 mb-0.5">Văn bản cần đọc</p>
-          <MarkedLine text={data.expectedText} other={data.transcript} tone="miss" />
-          {showExplanation && data.explanation && <p className="text-caption text-[#6E7078] mt-1.5">{data.explanation}</p>}
+          <div className="grid grid-cols-[56px_minmax(0,1fr)] gap-x-2 gap-y-0.5 items-baseline">
+            <span className="text-caption text-[#9A9CA3]">Máy nghe</span>
+            <MarkedLine text={data.transcript} other={data.expectedText} tone="wrong" />
+            <span className="text-caption text-[#9A9CA3]">Cần đọc</span>
+            <MarkedLine text={data.expectedText} other={data.transcript} tone="miss" />
+          </div>
+          {showExplanation && data.explanation && <p className="text-caption text-[#6E7078] mt-1">{data.explanation}</p>}
         </div>
       ))}
     </div>

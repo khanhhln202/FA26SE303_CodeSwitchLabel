@@ -347,14 +347,15 @@ export default function ReviewText() {
       >
         <div className="h-1.5 w-full shrink-0" style={{ background: ACCENT }} />
 
-        {/* Câu dài quá chiều cao còn lại thì chỉ cuộn trong thẻ; câu ngắn thì nằm giữa thẻ */}
+        {/* Câu dài quá chiều cao còn lại thì chỉ cuộn trong thẻ. Thẻ chia đều 2 nửa (VI-EN / VI),
+            nội dung mỗi nửa căn giữa theo chiều dọc để khoảng trống trên - dưới cân nhau */}
         <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
-        <div className="my-auto">
+        <div className="flex-1 flex flex-col">
 
         {[
           {
             key: "cs",
-            label: "Việt – Anh",
+            label: "VI-EN",
             chip: { background: `${AUDIO_PRIMARY}1A`, color: AUDIO_PRIMARY },
             // csPlain, tô màu từ tiếng Anh nhờ nhãn trong csContent
             plain: <CodeSwitchText transcript={sentence.csContent} accent={ACCENT} />,
@@ -362,16 +363,16 @@ export default function ReviewText() {
           },
           {
             key: "vi",
-            label: "Tiếng Việt",
+            label: "VI",
             chip: { background: SURFACE_MUTED, color: TEXT_BODY },
             plain: sentence.viPlain,
             tagged: sentence.viContent,
           },
         ].map((part, i) => (
-          <div key={part.key}>
-            {i > 0 && <div className="h-px mx-6" style={{ background: BORDER_LIGHT }} />}
-            <div className="px-6 py-6 [@media(min-height:900px)]:py-8 text-center">
-              <span className="inline-block type-caption px-2.5 py-0.5 rounded-full mb-3" style={part.chip}>
+          <div key={part.key} className="flex-1 flex flex-col">
+            {i > 0 && <div className="h-px mx-6 shrink-0" style={{ background: BORDER_LIGHT }} />}
+            <div className="flex-1 flex flex-col items-center justify-center px-6 py-4 [@media(min-height:900px)]:py-7 text-center">
+              <span className="text-[11px] leading-none font-label w-11 h-5 shrink-0 rounded-md inline-flex items-center justify-center mb-3" style={{ ...part.chip, letterSpacing: "0.02em" }}>
                 {part.label}
               </span>
               <p className="text-headline font-label sm:text-[24px] sm:leading-[34px]" style={{ color: TEXT_HEADING, textWrap: "pretty" }}>

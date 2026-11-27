@@ -22,7 +22,9 @@ import Loading from "../../../../components/Loading/Loading";
 import ErrorState from "../../../../components/ErrorState/ErrorState";
 import PairSentences from "../../../../components/PairSentences/PairSentences";
 import EmptyState from "../../../../components/EmptyState/EmptyState";
-import AiReviewVerdict from "../../../../components/AiReview/AiReviewVerdict";
+import AiReviewVerdict, { AiBadge } from "../../../../components/AiReview/AiReviewVerdict";
+import { isMachineRound } from "../../../../components/AiReview/isMachineRound";
+import ReviewTimeline from "../../../../components/ReviewTimeline/ReviewTimeline";
 import { getAllSpeakerRecordingHistoryApi, getSpeakerStatsApi } from "../../../../services/speakerApi";
 import { GET_SPEAKER_RECORDING_HISTORY_API, GET_SPEAKER_STATS_API } from "../../../../utils/queryKey";
 
@@ -522,15 +524,15 @@ export default function RecordingHistory() {
               onClick={() => setDetailItem(null)}
             >
               <div
-                className="bg-white rounded-[24px] w-full max-w-md shadow-[0_20px_50px_rgba(16,17,20,0.25)] relative z-10 overflow-hidden max-h-[85vh] flex flex-col"
+                className="bg-white rounded-[24px] w-full max-w-lg shadow-[0_20px_50px_rgba(16,17,20,0.25)] relative z-10 overflow-hidden max-h-[90vh] flex flex-col"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div
                   className="h-1.5 w-full shrink-0"
                   style={{ background: accent }}
                 />
-                <div className="p-6 overflow-y-auto">
-                  <div className="flex items-center justify-between mb-4">
+                <div className="px-5 py-4 overflow-y-auto">
+                  <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2.5">
                       <div
                         className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
@@ -573,45 +575,28 @@ export default function RecordingHistory() {
                         : "Cặp câu đang chờ duyệt, chưa có lượt duyệt nào."}
                     </p>
                   )}
-                  {/* Mỗi lượt duyệt cả cặp: kết quả của lượt + lý do theo từng câu (nếu có) */}
-                  <div className="flex flex-col gap-2">
-                    {rounds.map((r, i) => {
-                      const isReject = r.decision === "Rejected";
-                      const isApprove = r.decision === "Approved";
-                      const c = isReject ? "#C63B3B" : isApprove ? "#3FA66B" : "#A85E12";
-                      const rowBg = isReject ? "#FDEAEA" : isApprove ? "#EAF7EF" : "#FFF1DE";
-                      const rowBorder = isReject ? "#F3C9C9" : isApprove ? "rgba(63,166,107,0.2)" : "#F5DFC0";
-                      // Lý do của các câu trong lượt (bỏ trùng); không có lý do thì chỉ hiện kết quả.
-                      // Lý do phiếu máy ("[Máy duyệt] ...") không hiện ở đây - khung AI bên dưới đã trình bày lại.
-                      const reasons = [...new Set(r.reviews.map((rv) => rv.reason).filter((x) => x && !x.startsWith("[Máy duyệt]")))];
-                      return (
-                        <div key={r.round} className="flex gap-2.5 px-3 py-2.5 rounded-xl border" style={{ background: rowBg, borderColor: rowBorder }}>
-                          <span className="w-6 h-6 rounded-full text-white text-caption font-label flex items-center justify-center flex-shrink-0" style={{ background: c }}>
-                            R{i + 1}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-meta font-label" style={{ color: isApprove ? "#1F5C3F" : c }}>
-                              {isReject ? "Từ chối" : isApprove ? "Đã duyệt" : "Đang duyệt"}
-                            </p>
-                            {reasons.map((reason) => (
-                              <p key={reason} className="text-meta text-[#6E7078] mt-0.5">{reason}</p>
-                            ))}
-                            {/* Máy chỉ vào ở lượt 3 khi hai người lệch nhau: có phán thì hiện bằng chứng, không thì thôi */}
-                            {r.round >= 3 && (
-                              <AiReviewVerdict
-                                csRecordingId={detailItem.csRecordingId}
-                                viRecordingId={detailItem.viRecordingId}
-                                fallbackReviews={r.reviews} showExplanation={false}
-                              />
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  {/* Lượt duyệt dạng dòng thời gian (component dùng chung với các trang lịch sử khác) */}
+                  <ReviewTimeline
+                    items={rounds.map((r) => ({
+                      key: r.round,
+                      tone: r.decision === "Rejected" ? "reject" : r.decision === "Approved" ? "approve" : "pending",
+                      title: r.decision === "Rejected" ? "Từ chối" : r.decision === "Approved" ? "Đã duyệt" : "Đang duyệt",
+                      // Lý do của các câu trong lượt (bỏ trùng); lý do phiếu máy ("[Máy duyệt] ...") đã trình bày lại ở phần AI
+                      badge: r.round >= 3 && isMachineRound(r.reviews) && <AiBadge />,
+                      lines: [...new Set(r.reviews.map((rv) => rv.reason).filter((x) => x && !x.startsWith("[Máy duyệt]")))],
+                      // Máy chỉ vào ở lượt 3 khi hai người lệch nhau: có phán thì hiện bằng chứng, không thì thôi
+                      extra: r.round >= 3 && (
+                        <AiReviewVerdict
+                          csRecordingId={detailItem.csRecordingId}
+                          viRecordingId={detailItem.viRecordingId}
+                          fallbackReviews={r.reviews} showExplanation={false}
+                        />
+                      ),
+                    }))}
+                  />
                   <button
                     onClick={() => setDetailItem(null)}
-                    className="w-full mt-5 py-3 text-white rounded-xl text-body font-label transition-all hover:opacity-90 active:scale-[0.98]"
+                    className="w-full mt-4 py-2.5 text-white rounded-xl text-body font-label transition-all hover:opacity-90 active:scale-[0.98]"
                     style={{ background: ACCENT }}
                   >
                     Đóng

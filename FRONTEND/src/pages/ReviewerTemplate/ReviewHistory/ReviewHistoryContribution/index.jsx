@@ -255,15 +255,15 @@ export default function ReviewHistoryContribution() {
                   </div>
                 )}
 
-                <div className="flex items-center gap-2 mt-4">
+                <div className="flex items-center gap-2 mt-5">
                   <span className="text-meta font-label text-[#16171C]">Quyết định của bạn:</span>
                   <MyDecision action={detailItem.myAction} />
                 </div>
-                {/* Lượt Từ chối: lý do (mô tả lỗi) + ghi chú */}
+                {/* Lượt Từ chối: lý do (mô tả lỗi) + ghi chú - chữ xám như lý do ở dòng thời gian các popup lịch sử khác, không tô nền */}
                 {(detailItem.reason || detailItem.comment) && (
-                  <div className="mt-2.5 rounded-xl border border-[#F3C9C9] bg-[#FDEAEA] px-3 py-2 type-meta text-[#9F2D2D]">
-                    {detailItem.reason && <p><span className="font-label">Lý do:</span> {detailItem.reason}</p>}
-                    {detailItem.comment && <p className="mt-0.5"><span className="font-label">Ghi chú:</span> {detailItem.comment}</p>}
+                  <div className="mt-2 text-meta text-[#6E7078]">
+                    {detailItem.reason && <p><span className="text-[#9A9CA3]">Lý do:</span> {detailItem.reason}</p>}
+                    {detailItem.comment && <p className="mt-0.5"><span className="text-[#9A9CA3]">Ghi chú:</span> {detailItem.comment}</p>}
                   </div>
                 )}
 
