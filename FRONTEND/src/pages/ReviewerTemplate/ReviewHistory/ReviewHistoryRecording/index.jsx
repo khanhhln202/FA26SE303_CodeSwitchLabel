@@ -20,7 +20,9 @@ import {
 import Loading from "../../../../components/Loading/Loading";
 import ErrorState from "../../../../components/ErrorState/ErrorState";
 import PairSentences from "../../../../components/PairSentences/PairSentences";
-import AiReviewVerdict from "../../../../components/AiReview/AiReviewVerdict";
+import AiReviewVerdict, { AiBadge } from "../../../../components/AiReview/AiReviewVerdict";
+import { isMachineRound } from "../../../../components/AiReview/isMachineRound";
+import ReviewTimeline from "../../../../components/ReviewTimeline/ReviewTimeline";
 import { getReviewerProgressApi, getReviewerRecordingHistoryApi } from "../../../../services/reviewerApi";
 import { GET_REVIEWER_PROGRESS_API, GET_REVIEWER_RECORDING_HISTORY_API } from "../../../../utils/queryKey";
 
@@ -549,7 +551,7 @@ export default function ReviewHistoryRecording() {
                     <span className="type-meta text-[#9A9CA3]">{splitDateTime(detailItem.reviewedAt).join(" - ")}</span>
                   </div>
                   {/* Đủ 4 câu API trả về: câu thường + câu gắn nhãn của từng câu */}
-                  <div className="mb-4">
+                  <div className="mb-5">
                     <PairSentences
                       csTagged={detailItem.csText}
                       csPlain={detailItem.csPlain}
@@ -565,36 +567,20 @@ export default function ReviewHistoryRecording() {
                   {rounds.length === 0 && (
                     <p className="type-meta text-[#6E7078]">Chưa có lượt duyệt nào cho cặp bản ghi này.</p>
                   )}
-                  {/* Mỗi lượt duyệt cả cặp: kết quả của lượt + lý do (bỏ trùng), giống popup bên Speaker */}
-                  <div className="flex flex-col gap-2">
-                    {rounds.map((r) => {
-                      const isReject = r.decision === "Rejected";
-                      const isApprove = r.decision === "Approved";
-                      const c = isReject ? "#C63B3B" : isApprove ? "#3FA66B" : "#A85E12";
-                      const rowBg = isReject ? "#FDEAEA" : isApprove ? "#EAF7EF" : "#FFF1DE";
-                      const rowBorder = isReject ? "#F3C9C9" : isApprove ? "rgba(63,166,107,0.2)" : "#F5DFC0";
-                      const reasons = [...new Set(r.reviews.map((rv) => rv.reason).filter((x) => x && !x.startsWith("[Máy duyệt]")))];
-                      return (
-                        <div key={r.round} className="flex gap-2.5 px-3 py-2.5 rounded-xl border" style={{ background: rowBg, borderColor: rowBorder }}>
-                          <span className="w-6 h-6 rounded-full text-white text-caption font-label flex items-center justify-center flex-shrink-0" style={{ background: c }}>
-                            R{r.round}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-meta font-label" style={{ color: isApprove ? "#1F5C3F" : c }}>
-                              {isReject ? "Từ chối" : isApprove ? "Đã duyệt" : "Chưa đánh giá"}
-                            </p>
-                            {reasons.map((reason) => (
-                              <p key={reason} className="text-meta text-[#6E7078] mt-0.5">{reason}</p>
-                            ))}
-                            {/* Máy chỉ vào ở lượt 3 khi hai người lệch nhau: có phán thì hiện bằng chứng, không thì thôi */}
-                            {r.round >= 3 && (
-                              <AiReviewVerdict csRecordingId={detailItem.csRecordingId} viRecordingId={detailItem.viRecordingId} showExplanation={false} />
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  {/* Lượt duyệt dạng dòng thời gian, cùng component với popup bên Speaker */}
+                  <ReviewTimeline
+                    items={rounds.map((r) => ({
+                      key: r.round,
+                      tone: r.decision === "Rejected" ? "reject" : r.decision === "Approved" ? "approve" : "pending",
+                      title: r.decision === "Rejected" ? "Từ chối" : r.decision === "Approved" ? "Đã duyệt" : "Chưa đánh giá",
+                      badge: r.round >= 3 && isMachineRound(r.reviews) && <AiBadge />,
+                      lines: [...new Set(r.reviews.map((rv) => rv.reason).filter((x) => x && !x.startsWith("[Máy duyệt]")))],
+                      // Máy chỉ vào ở lượt 3 khi hai người lệch nhau: có phán thì hiện bằng chứng, không thì thôi
+                      extra: r.round >= 3 && (
+                        <AiReviewVerdict csRecordingId={detailItem.csRecordingId} viRecordingId={detailItem.viRecordingId} showExplanation={false} />
+                      ),
+                    }))}
+                  />
                   <button
                     onClick={() => setDetailItem(null)}
                     className="w-full mt-5 py-3 text-white rounded-xl text-body font-label transition-all hover:opacity-90 active:scale-[0.98]"
