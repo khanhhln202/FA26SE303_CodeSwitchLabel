@@ -59,6 +59,27 @@ public interface IUserRepository
         long userId, string version, DateTimeOffset acceptedAt,
         string? documentKey, string? documentName, CancellationToken ct = default);
 
+    /// <summary>
+    /// Phiên bản cam kết này có nội dung thật trong <c>consent_document</c> không.
+    ///
+    /// <para>
+    /// Gọi TRƯỚC <see cref="UpsertConsentAsync"/>: khoá ngoại dưới database (V39) sẽ chặn
+    /// phiên bản bịa, nhưng lúc đó lỗi ném ra là lỗi ràng buộc, người dùng nhận 500 thay vì
+    /// một câu đọc được.
+    /// </para>
+    /// </summary>
+    Task<bool> ConsentVersionExistsAsync(string version, CancellationToken ct = default);
+
+    /// <summary>
+    /// Mã phiên bản cam kết đang hiệu lực; null khi chưa phát hành bản nào.
+    ///
+    /// <para>
+    /// Dùng làm mặc định khi client không khai phiên bản. KHÔNG ghi cứng "v1" ở tầng gọi:
+    /// phát hành v2 xong thì mặc định phải đi theo, nếu không client cũ ký mãi vào bản đã lui.
+    /// </para>
+    /// </summary>
+    Task<string?> GetActiveConsentVersionAsync(CancellationToken ct = default);
+
     void Add(AppUser user);
 
     Task<int> SaveChangesAsync(CancellationToken ct = default);
@@ -229,6 +250,15 @@ public class UserRepository(CodeSwitchLabelDbContext db) : IUserRepository
 
     public Task<Role> GetRoleAsync(RoleName role, CancellationToken ct = default) =>
         db.Roles.FirstAsync(r => r.RoleName == role, ct);
+
+    public Task<bool> ConsentVersionExistsAsync(string version, CancellationToken ct = default) =>
+        db.ConsentDocuments.AsNoTracking().AnyAsync(d => d.Version == version, ct);
+
+    public async Task<string?> GetActiveConsentVersionAsync(CancellationToken ct = default) =>
+        await db.ConsentDocuments.AsNoTracking()
+            .Where(d => d.IsActive)
+            .Select(d => d.Version)
+            .FirstOrDefaultAsync(ct);
 
     public async Task UpsertConsentAsync(
         long userId, string version, DateTimeOffset acceptedAt,
