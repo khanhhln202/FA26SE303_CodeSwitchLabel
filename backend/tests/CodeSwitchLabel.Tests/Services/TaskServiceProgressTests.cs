@@ -38,6 +38,35 @@ public sealed class TaskServiceProgressTests
         null, DateTimeOffset.UtcNow, [new TaskAssigneeRow(9, "Người đọc", target)],
         Started: 8, Done: done, SubmittedPairs: submittedPairs, UsableItems: 10, TotalItems: 10);
 
+    /// <summary>
+    /// Chủ đề của nhiệm vụ phải đi ra tới DTO.
+    ///
+    /// <para>
+    /// <c>TaskRow</c> đã đọc trường này từ database từ trước, nhưng DTO bỏ rơi nó, nên màn
+    /// hình đóng góp không có cách nào biết nhiệm vụ thuộc chủ đề gì — không dựng được nhãn
+    /// "Đóng góp câu chủ đề ..." và không chọn sẵn được ô chủ đề. Đội frontend phải tự bịa
+    /// số để dựng giao diện.
+    /// </para>
+    ///
+    /// <para>Trả MÃ chứ không trả tên hiển thị: mã là thứ bất biến, và cũng là thứ gửi lại khi nộp câu.</para>
+    /// </summary>
+    [Fact]
+    public async Task Speaker_ThayChuDeCuaNhiemVu()
+    {
+        _tasks.Setup(t => t.GetActiveRowsForAssigneeAsync(9, TaskType.Recording, It.IsAny<CancellationToken>()))
+            .ReturnsAsync([Row()]);
+        _tasks.Setup(t => t.GetSpeakerTotalsAsync(9, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((0, 0));
+        _tasks.Setup(t => t.GetAssigneeSubmittedAsync(7, TaskType.Recording, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<long, int>());
+        _tasks.Setup(t => t.GetAssigneeDoneAsync(7, TaskType.Recording, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<long, int>());
+
+        var result = await _service.GetSpeakerProgressAsync(9, TestContext.Current.CancellationToken);
+
+        Assert.Equal("ItTechnology", Assert.Single(result.ActiveTasks).Domain);
+    }
+
     [Fact]
     public async Task Speaker_TienDo_DemCapCauDaThuDu_ChuaCanChoDuyet()
     {

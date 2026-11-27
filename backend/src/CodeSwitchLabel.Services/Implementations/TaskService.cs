@@ -84,6 +84,7 @@ internal static class TaskMapper
             r.Description,
             r.WaveName,
             r.TaskType,
+            r.Domain,
             r.Status,
             r.Deadline,
             // Cả 'done' lẫn 'submitted' đều phải là của riêng người xem. Trước đây chỉ đè
