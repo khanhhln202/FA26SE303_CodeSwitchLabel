@@ -103,6 +103,16 @@ public class AuthService(
             throw new ConflictException("email_taken", "Email đã được đăng ký.");
         }
 
+        // Phiên bản cam kết phải có NỘI DUNG THẬT trong consent_document.
+        //
+        // Trước đây chỗ này ghi cứng "v1" khi client bỏ trống, và nhận nguyên xi bất kỳ chuỗi
+        // nào client khai — nên trên máy chủ thật dòng cam kết duy nhất đang mang phiên bản
+        // "string", tức giá trị mặc định của ô nhập trong Swagger. Hệ thống khẳng định người
+        // đó đã đồng ý một văn bản không tồn tại.
+        var consentVersion = request.ConsentAccepted
+            ? await ResolveConsentVersionAsync(request.ConsentVersion, ct)
+            : null;
+
         var profile = request.SpeakerProfile;
         var user = new AppUser
         {
@@ -124,13 +134,13 @@ public class AuthService(
                 Gender = profile?.Gender,
                 Major = Clean(profile?.Major)
             },
-            Consent = request.ConsentAccepted
-                ? new UserConsent
+            Consent = consentVersion is null
+                ? null
+                : new UserConsent
                 {
-                    Version = string.IsNullOrWhiteSpace(request.ConsentVersion) ? "v1" : request.ConsentVersion.Trim(),
+                    Version = consentVersion,
                     AcceptedAt = clock.GetUtcNow()
                 }
-                : null
         };
 
         users.Add(user);
@@ -181,11 +191,50 @@ public class AuthService(
             }
         }
 
-        await users.UpsertConsentAsync(userId, version.Trim(), clock.GetUtcNow(), key, storedName, ct);
+        var phienBan = await ResolveConsentVersionAsync(version, ct);
+
+        await users.UpsertConsentAsync(userId, phienBan, clock.GetUtcNow(), key, storedName, ct);
     }
 
     private static string? Clean(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>
+    /// Mã phiên bản cam kết sẽ được ghi lại, sau khi chắc chắn nó có NỘI DUNG THẬT.
+    ///
+    /// <para>
+    /// Dùng chung cho lúc đăng ký và lúc nộp bản đã ký, để hai đường không thể lệch luật:
+    /// ghi nhận được một phiên bản ở đường này mà đường kia từ chối thì bảng
+    /// <c>consent_document</c> mất tác dụng.
+    /// </para>
+    ///
+    /// <para>
+    /// Bỏ trống thì lấy bản ĐANG HIỆU LỰC chứ không ghi cứng "v1": phát hành v2 xong thì mặc
+    /// định phải đi theo, nếu không client cũ ký mãi vào bản đã lui.
+    /// </para>
+    /// </summary>
+    private async Task<string> ResolveConsentVersionAsync(string? requested, CancellationToken ct)
+    {
+        var version = string.IsNullOrWhiteSpace(requested)
+            ? await users.GetActiveConsentVersionAsync(ct)
+              ?? throw new UnprocessableException(
+                  "consent_document_missing",
+                  "Chưa có bản cam kết nào đang hiệu lực. Admin phát hành một bản ở "
+                  + "POST /api/admin/consent-documents trước khi mời người dùng đồng ý.")
+            : requested.Trim();
+
+        // Database cũng chặn (khoá ngoại V39), nhưng lúc đó người dùng nhận một lỗi ràng buộc
+        // thay vì câu nói rõ phải làm gì.
+        if (!await users.ConsentVersionExistsAsync(version, ct))
+        {
+            throw new UnprocessableException(
+                "consent_version_unknown",
+                $"Không có bản cam kết phiên bản \"{version}\". "
+                + "Lấy bản đang hiệu lực ở GET /api/consent.");
+        }
+
+        return version;
+    }
 
     public async Task<CurrentUserDto> GetCurrentUserAsync(long userId, CancellationToken ct = default)
     {

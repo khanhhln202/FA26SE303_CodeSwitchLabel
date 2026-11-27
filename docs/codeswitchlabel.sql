@@ -118,11 +118,37 @@ CREATE TABLE speaker_profile (                    -- 1 : 0..1 with app_user
     major         VARCHAR(100)                    -- chuyên ngành: IT | english | business ...
 );
 
+-- [V39] Nội dung bản cam kết, giữ theo phiên bản.
+--
+-- user_consent chỉ ghi `version`. Thiếu bảng này thì nội dung người ta đồng ý nằm trong
+-- mã nguồn frontend: sửa một chữ bên đó là mọi người đã ký 'v1' bỗng "đã đồng ý" một văn
+-- bản khác mà không để lại dấu vết. Với cam kết về dữ liệu sinh trắc giọng nói, phải đọc
+-- lại được chính xác người thứ N đã đồng ý chữ gì.
+--
+-- Phiên bản đã có người đồng ý thì KHÔNG sửa và KHÔNG xoá — đổi chữ là phát hành bản mới.
+CREATE TABLE consent_document (
+    version        VARCHAR(32) PRIMARY KEY,
+    title          VARCHAR(255) NOT NULL,
+    body           TEXT         NOT NULL,
+    effective_from DATE         NOT NULL,
+    is_active      BOOLEAN      NOT NULL DEFAULT FALSE,   -- đúng MỘT bản hiệu lực mỗi lúc
+    created_by     BIGINT       REFERENCES app_user(user_id) ON DELETE SET NULL,
+    created_at     TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    CONSTRAINT ck_consent_document_body_not_blank CHECK (btrim(body) <> '')
+);
+
+-- Chỉ mục một phần: các bản is_active = false không vướng nhau.
+CREATE UNIQUE INDEX uq_consent_document_active
+    ON consent_document ((TRUE)) WHERE is_active;
+
 -- Đồng ý trực tuyến (hoặc bản giấy đã ký tải lên) cho phép dùng giọng nói
 -- vào mục đích nghiên cứu khoa học phi thương mại. Mỗi người một bản mới nhất.
+--
+-- version trỏ vào consent_document KHÔNG kèm CASCADE: bản cam kết đã có người ký thì
+-- không được xoá, vì xoá nó là xoá bằng chứng người ta đã đồng ý điều gì.
 CREATE TABLE user_consent (
     user_id       BIGINT PRIMARY KEY REFERENCES app_user(user_id) ON DELETE CASCADE,
-    version       VARCHAR(32) NOT NULL,
+    version       VARCHAR(32) NOT NULL REFERENCES consent_document(version),
     accepted_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     document_key  TEXT,                           -- file PDF/ảnh bản đã ký trong object storage
     document_name VARCHAR(255),
@@ -2001,6 +2027,54 @@ INSERT INTO system_config (config_key, config_value, value_type, description) VA
     ('ai_review.auto_enabled',           'false', 'bool',   'Background worker auto-reviews 1-1 ties. Turn on only after ASR is configured'),
     ('ai_review.auto_interval_seconds',  '60',    'string', 'Seconds between scans; each recording takes a few seconds on a hosted ASR'),
     ('ai_review.auto_batch_size',        '3',     'string', 'Max recordings per scan, processed serially so two transcriptions never overlap');
+
+-- [V39] Bản cam kết v1.
+--
+-- BẮT BUỘC có ít nhất một dòng: user_consent.version trỏ vào bảng này, nên database rỗng
+-- không có dòng nào thì KHÔNG AI đồng ý cam kết được, và người đọc mới không vào được.
+--
+-- ĐÂY LÀ BẢN NHÁP, CHƯA CÓ AI DUYỆT — dòng đầu của nội dung nói rõ điều đó. Thay bằng chữ
+-- chính thức trước khi dùng thật: UPDATE nếu chưa ai đồng ý v1, còn đã có người đồng ý thì
+-- phát hành v2 chứ không sửa v1.
+INSERT INTO consent_document (version, title, body, effective_from, is_active) VALUES (
+    'v1',
+    '[BẢN NHÁP] Cam kết tham gia thu thập giọng nói — CodeSwitchLabel',
+    $consent$[BẢN NHÁP — CHƯA ĐƯỢC DUYỆT. Thay bằng nội dung chính thức trước khi dùng thật.]
+
+1. Việc tôi tham gia
+Tôi tự nguyện đọc và thu âm các câu tiếng Việt và câu trộn Việt — Anh do hệ thống
+CodeSwitchLabel cung cấp.
+
+2. Dữ liệu được thu thập
+- Bản ghi âm giọng nói của tôi.
+- Thông tin hồ sơ người đọc: nhóm tuổi, giới tính, vùng miền giọng nói, nơi sinh.
+Hệ thống KHÔNG thu thập nội dung nào khác ngoài phần tôi chủ động cung cấp.
+
+3. Mục đích sử dụng
+Dữ liệu dùng để xây dựng tập dữ liệu huấn luyện và đánh giá hệ nhận dạng tiếng nói
+tiếng Việt có xen tiếng Anh, phục vụ nghiên cứu và học thuật.
+
+4. Công bố
+Tập dữ liệu có thể được công bố cho mục đích nghiên cứu. Khi công bố, bản ghi được
+phát hành kèm thông tin hồ sơ ở dạng NHÓM (nhóm tuổi, giới tính, vùng miền), không
+kèm họ tên, email hay số điện thoại của tôi.
+
+5. Quyền của tôi
+- Tôi được dừng tham gia bất cứ lúc nào, không cần nêu lý do.
+- Tôi được yêu cầu gỡ bản ghi của mình khỏi tập dữ liệu chưa công bố.
+- Với tập đã công bố, việc thu hồi có giới hạn về mặt kỹ thuật, và điều này được
+  nói rõ với tôi trước khi tôi đồng ý.
+
+6. Thời gian lưu trữ
+[CẦN ĐIỀN: thời gian lưu dữ liệu và cách xử lý khi hết thời gian đó.]
+
+7. Liên hệ
+[CẦN ĐIỀN: tên và cách liên hệ của người chịu trách nhiệm dữ liệu.]
+
+Tôi xác nhận đã đọc, hiểu và đồng ý với các nội dung trên.$consent$,
+    CURRENT_DATE,
+    TRUE
+);
 
 -- Bootstrap admin — KHÔNG lưu mã hash mật khẩu trong SQL seed.
 -- DatabaseSeeder gán hash thật (từ Seed:DefaultPassword) khi ứng dụng khởi động,
