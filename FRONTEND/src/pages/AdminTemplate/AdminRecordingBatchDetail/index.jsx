@@ -1,21 +1,17 @@
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Download, Lock, Play, Search } from "lucide-react";
 import { ADMIN_ACCENT } from "../../../constants/theme";
 import CodeSwitchText from "../../../components/CodeSwitchText/CodeSwitchText";
-import { MOCK_BATCHES, SENTENCE_STATUS, buildMockSentences, isRecording, topicName } from "../AdminRecordingBatches/mockData";
-
-/**
- * Chi tiết 1 đợt nhập: thanh tồn kho kiêm bộ lọc, danh sách câu, bấm dòng để xem câu tiếng Việt, audio và lịch sử.
- * CHỈ LÀM UI với dữ liệu minh hoạ - backend chưa có API danh sách câu theo đợt và lịch sử từng câu.
- */
+import { adminService } from "../../../services/adminService";
+import { taskService } from "../../../services/taskService";
+import { SENTENCE_STATUS, isRecording, mapScriptStatusToView, topicName } from "../AdminRecordingBatches/batchHelpers";
 
 const CARD = "bg-white dark:bg-[#1C1D22] rounded-2xl border border-[#E5E2D8] dark:border-gray-800 shadow-[0_1px_3px_rgba(16,17,20,0.04)]";
 const PAGE_SIZE = 50;
 const fmt = (n) => Number(n || 0).toLocaleString("vi-VN");
 
-// Cùng màu với thanh tồn kho ở trang kho
 const GROUPS = [
   { key: "recorded", label: "Đã ghi xong", color: "#2E9E6B" },
   { key: "inTask", label: "Trong task", color: "#7FA7E6" },
@@ -33,7 +29,8 @@ const CHIP = {
 const TONE = { danger: "#C2412D", success: "#1E7A4F", warning: "#8B5E0F" };
 
 function batchStatus(b) {
-  if (isRecording(b)) return { label: "Đang ghi âm", cls: CHIP.waiting };
+  if (b.rawStatus === "Completed") return { label: "Đã ghi âm xong", cls: CHIP.available };
+  if (isRecording(b) || b.rawStatus === "InProgress") return { label: "Đang ghi âm", cls: CHIP.waiting };
   if (b.mergedInto) return { label: "Đã gộp", cls: CHIP.available };
   if (b.counts.recorded === 0) return { label: "Sẵn sàng", cls: CHIP.recorded };
   return { label: "Đã ghi âm xong", cls: CHIP.available };
@@ -41,7 +38,7 @@ function batchStatus(b) {
 
 const fakePlay = (e) => {
   e.stopPropagation();
-  toast.info("Giao diện mẫu: chưa có audio thật.");
+  toast.info("Chưa có bản thu âm cho câu này.");
 };
 
 function PersonCell({ s }) {
@@ -50,28 +47,28 @@ function PersonCell({ s }) {
     case "waiting":
       return (
         <span>
-          Task {s.task}
+          {s.task ? `Task ${s.task}` : "Đang trong task"}
           <span className={muted}>{s.speaker ? `${s.speaker} đã nhận` : "chưa có người nhận"}</span>
         </span>
       );
     case "pendingReview":
       return (
         <span>
-          {s.speaker} · {s.task}
+          {s.speaker || "Speaker"} {s.task ? `· ${s.task}` : ""}
           <span className={muted}>{s.attempt > 1 ? `ghi lại lần ${s.attempt}` : "ghi lần 1"}</span>
         </span>
       );
     case "recorded":
       return (
         <span>
-          {s.speaker}
-          <span className={muted}>duyệt bởi {s.reviewer}</span>
+          {s.speaker || "Đã thu âm"}
+          <span className={muted}>{s.reviewer ? `duyệt bởi ${s.reviewer}` : "đã duyệt đạt"}</span>
         </span>
       );
     case "locked":
       return (
         <span>
-          Báo lỗi: {s.reason.toLowerCase()}
+          Báo lỗi: {(s.reason || "không đạt").toLowerCase()}
           <span className={muted}>chờ reviewer duyệt</span>
         </span>
       );
@@ -120,13 +117,84 @@ function Expanded({ s }) {
 
 export default function AdminRecordingBatchDetail() {
   const { batchId } = useParams();
-  const batch = MOCK_BATCHES.find((b) => String(b.batchId) === batchId);
-  const sentences = useMemo(() => (batch ? buildMockSentences(batch) : []), [batch]);
+  const [batch, setBatch] = useState(null);
+  const [sentences, setSentences] = useState([]);
+  const [topics, setTopics] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const [group, setGroup] = useState("all");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [openId, setOpenId] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      try {
+        const [waveRes, topicsRes] = await Promise.all([
+          taskService.getWaveById(batchId),
+          adminService.getTopics(),
+        ]);
+        if (cancelled) return;
+        const w = waveRes?.summary || waveRes;
+        const activeTopics = (Array.isArray(topicsRes) ? topicsRes : topicsRes?.items || []).filter((t) => t.isActive !== false);
+        setTopics(activeTopics);
+
+        // Lấy danh sách câu theo chủ đề của đợt (do BE chưa có API gán danh sách câu riêng cho từng đợt)
+        const scriptsRes = await adminService.getTexts({
+          domain: w.domain,
+          page: 1,
+          pageSize: w.targetQty || 200,
+        });
+        if (cancelled) return;
+        const rawScripts = scriptsRes?.items || scriptsRes || [];
+
+        const mapped = rawScripts.map((item) => {
+          const viewStatus = mapScriptStatusToView(item.status);
+          const createdDate = item.createdAt ? item.createdAt.slice(5, 10).split("-").reverse().join("/") : "";
+          return {
+            id: item.scriptId,
+            tagged: item.csContent,
+            vi: item.viPlain || item.viContent?.replace(/\[(vi|en)\]/g, "") || "",
+            status: viewStatus,
+            task: null,
+            speaker: null,
+            reviewer: null,
+            reason: null,
+            history: [{ at: createdDate, text: "Nhập vào kho" }],
+          };
+        });
+
+        const target = w.targetQty ?? mapped.length;
+        const done = w.doneQty ?? w.completedQty ?? w.progress?.done ?? 0;
+        const inTask = w.assignedQty ?? w.inTaskQty ?? (w.status === "InProgress" ? Math.max(0, target - done) : 0);
+        const available = Math.max(0, target - done - inTask);
+
+        setSentences(mapped);
+        setBatch({
+          batchId: w.waveId,
+          batchName: w.waveName,
+          fileName: `Đợt #${w.waveId}`,
+          domain: w.domain,
+          rawStatus: w.status,
+          createdAt: w.startDate || w.createdAt || new Date().toISOString(),
+          counts: { recorded: done, inTask, locked: 0, available },
+        });
+      } catch (err) {
+        if (!cancelled) {
+          toast.error(err?.response?.data?.title || "Không tải được chi tiết đợt.");
+          setBatch(null);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [batchId]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -137,10 +205,14 @@ export default function AdminRecordingBatchDetail() {
     });
   }, [sentences, group, query]);
 
+  if (loading) {
+    return <div className="p-6 type-ui text-[#6E7078]">Đang tải dữ liệu đợt...</div>;
+  }
+
   if (!batch) {
     return (
       <div className="p-6 type-ui text-[#6E7078]">
-        Không tìm thấy đợt nhập này.{" "}
+        Không tìm thấy đợt này.{" "}
         <Link to="/admin/recording-batches" className="underline" style={{ color: ADMIN_ACCENT }}>
           Về kho câu
         </Link>
@@ -148,7 +220,7 @@ export default function AdminRecordingBatchDetail() {
     );
   }
 
-  const total = sentences.length;
+  const total = batch.counts.recorded + batch.counts.inTask + batch.counts.locked + batch.counts.available;
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const current = Math.min(page, pages);
   const rows = filtered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
@@ -160,6 +232,20 @@ export default function AdminRecordingBatchDetail() {
     setOpenId(null);
   };
 
+  const handleExportCsv = () => {
+    const header = "scriptId,csContent,viContent,status\n";
+    const body = filtered
+      .map((s) => [s.id, `"${s.tagged.replace(/"/g, '""')}"`, `"${s.vi.replace(/"/g, '""')}"`, SENTENCE_STATUS[s.status]?.label || s.status].join(","))
+      .join("\n");
+    const blob = new Blob(["\uFEFF" + header + body], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${batch.batchName || `batch-${batch.batchId}`}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const tabCls = (active) =>
     `h-8 px-3 rounded-lg inline-flex items-center gap-1.5 type-meta whitespace-nowrap cursor-pointer transition-colors ${
       active ? "bg-[#0052CC]/[0.08] text-[#0B4FB3] dark:text-[#9DBDF2] font-label" : "text-[#6E7078] dark:text-gray-400 hover:bg-[#F7F5EF] dark:hover:bg-[#25272E]"
@@ -167,8 +253,6 @@ export default function AdminRecordingBatchDetail() {
 
   return (
     <div className="w-full h-full flex flex-col gap-2.5 text-left font-sans p-1 overflow-auto">
-
-      {/* Đầu trang */}
       <div className="shrink-0 flex flex-wrap items-end justify-between gap-3 px-1">
         <div className="min-w-0">
           <Link to="/admin/recording-batches" className="inline-flex items-center gap-1 type-meta text-[#6E7078] dark:text-gray-400 hover:underline">
@@ -179,20 +263,18 @@ export default function AdminRecordingBatchDetail() {
             <span className={`px-2 py-0.5 rounded-md type-caption font-label ${status.cls}`}>{status.label}</span>
           </div>
           <p className="mt-0.5 type-caption text-[#9A9CA3]">
-            {batch.fileName} · {fmt(total)} câu · {topicName(batch.domain)} · nhập {batch.createdAt.slice(0, 10).split("-").reverse().join("/")}
-            {batch.mergedInto && ` · đã gộp vào "${batch.mergedInto}"`}
+            {batch.fileName} · {fmt(total)} câu · {topicName(batch.domain, topics)} · nhập {batch.createdAt.slice(0, 10).split("-").reverse().join("/")}
           </p>
         </div>
         <button
           type="button"
-          onClick={() => toast.info("Giao diện mẫu: chưa nối API xuất CSV.")}
+          onClick={handleExportCsv}
           className="h-9 px-4 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#25272E] type-button text-[#6E7078] dark:text-gray-300 hover:bg-[#F7F5EF] dark:hover:bg-gray-800 inline-flex items-center gap-1.5 cursor-pointer"
         >
           <Download className="w-4 h-4" /> Xuất CSV
         </button>
       </div>
 
-      {/* Thanh tồn kho kiêm bộ lọc */}
       <div className={`${CARD} shrink-0 px-4 py-3`}>
         <div className="flex h-2.5 rounded-full overflow-hidden gap-[2px]" role="group" aria-label="Lọc theo phần tồn kho">
           {GROUPS.filter((g) => batch.counts[g.key] > 0).map((g) => (
@@ -220,7 +302,6 @@ export default function AdminRecordingBatchDetail() {
         </div>
       </div>
 
-      {/* Danh sách câu */}
       <div className={`${CARD} flex-1 min-h-[360px] flex flex-col overflow-hidden`}>
         <div className="shrink-0 px-4 py-3 border-b border-[#E5E2D8] dark:border-gray-800">
           <label className="relative block max-w-md">
