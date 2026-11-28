@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { ArrowRight, CalendarCheck, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowRight, Calendar, CalendarCheck, X } from "lucide-react";
 import { TASK_MANAGER_ACCENT } from "../../../constants/theme";
 
 /**
@@ -18,7 +18,7 @@ const addDays = (iso, n) => {
   d.setDate(d.getDate() + n);
   return toISO(d);
 };
-const dm = (iso) => iso.slice(0, 10).split("-").reverse().slice(0, 2).join("/");
+const dmy = (iso) => (iso ? iso.slice(0, 10).split("-").reverse().join("/") : "");
 const diffDays = (a, b) => Math.round((fromISO(a) - fromISO(b)) / 86400000);
 
 function relative(iso, today) {
@@ -35,12 +35,20 @@ export default function ExtendDialog({ task, onClose, onSave }) {
   const minDate = overdue ? today : addDays(current, 1);
   const [date, setDate] = useState(addDays(overdue ? today : current, 7));
   const [note, setNote] = useState("");
+  const inputRef = useRef(null);
 
   useEffect(() => {
     const esc = (e) => e.key === "Escape" && onClose();
     document.addEventListener("keydown", esc);
     return () => document.removeEventListener("keydown", esc);
   }, [onClose]);
+
+  const openPicker = () => {
+    const el = inputRef.current;
+    if (!el) return;
+    if (typeof el.showPicker === "function") el.showPicker();
+    else el.focus();
+  };
 
   const validDate = !!date && date >= minDate;
   const cur = relative(current, today);
@@ -77,7 +85,7 @@ export default function ExtendDialog({ task, onClose, onSave }) {
             <div className="min-w-0">
               <p className="type-caption text-[#9A9CA3]">Hạn hiện tại</p>
               <p className="type-ui tabular-nums">
-                {dm(current)} · <span className="font-label" style={{ color: cur.color }}>{cur.text}</span>
+                {dmy(current)} · <span className="font-label" style={{ color: cur.color }}>{cur.text}</span>
               </p>
             </div>
             <ArrowRight className="w-4 h-4 shrink-0 text-[#9A9CA3]" />
@@ -86,7 +94,7 @@ export default function ExtendDialog({ task, onClose, onSave }) {
               <p className="type-ui font-label tabular-nums text-[#16171C] dark:text-gray-100">
                 {validDate ? (
                   <>
-                    {dm(date)} · <span className="font-normal" style={{ color: next.color }}>thêm {diffDays(date, current)} ngày</span>
+                    {dmy(date)} · <span className="font-normal" style={{ color: next.color }}>thêm {diffDays(date, current)} ngày</span>
                   </>
                 ) : (
                   <span className="text-[#9A9CA3] font-normal">Chưa chọn</span>
@@ -97,14 +105,25 @@ export default function ExtendDialog({ task, onClose, onSave }) {
 
           <label className="block">
             <span className="type-meta text-[#6E7078] dark:text-gray-400">Chọn hạn mới</span>
-            <input
-              type="date"
-              min={minDate}
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="mt-1 w-full h-10 px-3.5 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-ui text-[#16171C] dark:text-white outline-none focus:border-[#15803D] focus:shadow-[0_0_0_4px_rgba(22,163,74,0.12)]"
-            />
-            {date && !validDate && <span className="mt-1 block type-caption text-[#B42318]">Hạn mới phải từ {dm(minDate)} trở đi.</span>}
+            <div
+              onClick={openPicker}
+              className="mt-1 relative w-full h-10 px-3.5 bg-[#F7F5EF] dark:bg-[#25272E] border border-[#E5E2D8] dark:border-gray-700 rounded-xl type-ui text-[#16171C] dark:text-white flex items-center justify-between gap-2 cursor-pointer tabular-nums focus-within:border-[#15803D] focus-within:shadow-[0_0_0_4px_rgba(22,163,74,0.12)]"
+            >
+              <span className={date ? "text-[#16171C] dark:text-white" : "text-[#9A9CA3]"}>
+                {date ? dmy(date) : "dd/mm/yyyy"}
+              </span>
+              <Calendar className="w-4 h-4 shrink-0 text-[#9A9CA3]" aria-hidden="true" />
+              <input
+                ref={inputRef}
+                type="date"
+                aria-label="Chọn hạn mới"
+                min={minDate}
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              />
+            </div>
+            {date && !validDate && <span className="mt-1 block type-caption text-[#B42318]">Hạn mới phải từ {dmy(minDate)} trở đi.</span>}
           </label>
 
           <label className="block">
