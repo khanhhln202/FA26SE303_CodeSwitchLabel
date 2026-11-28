@@ -161,7 +161,7 @@ export const SIDEBAR_CONFIG = {
       { name: "Quản lý bản thu và bộ dữ liệu", to: "/admin/recordings", icon: Headphones },
       { name: "Quản lý video hội thoại", to: "/admin/source-videos", icon: Clapperboard },
       { name: "Kho câu theo đợt nhập", to: "/admin/recording-batches", icon: Boxes },
-      { name: "Giao task", to: "/admin/assign-tasks", icon: ClipboardList },
+      { name: "Giao nhiệm vụ", to: "/admin/assign-tasks", icon: ClipboardList },
       {
         name: "Thiết lập cấu hình",
         icon: Sliders,

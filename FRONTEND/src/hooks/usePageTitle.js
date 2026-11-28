@@ -48,7 +48,7 @@ export const PAGE_TITLES = {
   '/admin/recordings': 'Quản lý bản thu và bộ dữ liệu',
   '/admin/source-videos': 'Quản lý video hội thoại',
   '/admin/recording-batches': 'Kho câu theo đợt nhập',
-  '/admin/assign-tasks': 'Giao task',
+  '/admin/assign-tasks': 'Giao nhiệm vụ',
   '/admin/configuration/topic': 'Chủ đề',
   '/admin/configuration/text': 'Câu đóng góp',
   '/admin/profile': 'Hồ sơ cá nhân',

@@ -60,6 +60,30 @@ export const adminService = {
   },
 
   // 5. Quản lý Scripts (Văn bản)
+  importScripts: async (file, domain, batchName) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    if (domain) {
+      formData.append("domain", domain);
+    }
+    if (batchName) {
+      formData.append("batchName", batchName);
+    }
+    const res = await httpClient.post("/api/scripts/import", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data"
+      }
+    });
+    return res.data;
+  },
+  getImportBatches: async (params) => {
+    const res = await httpClient.get("/api/scripts/import/batches", { params });
+    return res.data;
+  },
+  getImportBatchDetail: async (batchId) => {
+    const res = await httpClient.get(`/api/scripts/import/batches/${batchId}`);
+    return res.data;
+  },
   getTexts: async (params) => {
     const res = await httpClient.get("/api/scripts", { params });
     return res.data;
