@@ -36,7 +36,7 @@ async function rebalanceWaveTaskTargets(waveId, waveTargetQty) {
   const tasksRes = await taskService.getTasks({ page: 1, pageSize: 500 }).catch(() => ({ items: [] }));
   const rawTasks = tasksRes?.items || tasksRes || [];
   const waveTasks = rawTasks
-    .filter((t) => Number(t.waveId) === wId)
+    .filter((t) => Number(t.waveId) === wId && t.status !== "Cancelled")
     .sort((a, b) => Number(a.taskId || a.id) - Number(b.taskId || b.id));
 
   if (waveTasks.length === 0) return;
@@ -256,7 +256,7 @@ function CreateTaskForm({ batches, managers, topics, existingTasks, onCreate, on
       if (type === "Recording" || type === "Review") {
         waveId = Number(batch.batchId);
         waveTotalTarget = Number(batch.targetQty || 2000);
-        const existingInWave = existingTasks.filter((t) => Number(t.batchId) === waveId);
+        const existingInWave = existingTasks.filter((t) => Number(t.batchId) === waveId && t.status !== "Cancelled");
         const newCount = existingInWave.length + 1;
         initialTaskTarget = Math.max(1, Math.floor(waveTotalTarget / newCount));
         await taskService.assignWave(waveId, Number(form.managerId));
@@ -545,7 +545,7 @@ export default function AdminAssignTasks() {
   const [topics, setTopics] = useState([]);
   const loadedDetailsRef = useRef(new Set());
 
-  const loadAll = useCallback(async () => {
+  const loadAll = useCallback(async (allowAutoSync = true) => {
     try {
       const [tasksRes, wavesRes, managersRes, topicsRes] = await Promise.all([
         taskService.getTasks({ page: 1, pageSize: 200 }),
@@ -641,6 +641,31 @@ export default function AdminAssignTasks() {
           if (wa !== wb) return wa - wb;
           return Number(a.taskId) - Number(b.taskId);
         });
+
+      // Tự động đồng bộ lại nếu chỉ tiêu đợt đã được chỉnh sửa mà các task con chưa chia lại đều
+      if (allowAutoSync) {
+        const wavesToRebalance = [];
+        for (const w of sortedWaves) {
+          const wId = Number(w.waveId || w.id);
+          const waveTarget = Number(w.targetQty || 0);
+          const activeWaveTasks = mappedTasks.filter((t) => Number(t.batchId) === wId && t.status !== "Cancelled");
+          if (activeWaveTasks.length > 0 && waveTarget > 0) {
+            const sumTaskTargets = activeWaveTasks.reduce((acc, t) => acc + Number(t.progress?.targetQty || 0), 0);
+            if (sumTaskTargets !== waveTarget) {
+              wavesToRebalance.push({ waveId: wId, waveTarget });
+            }
+          }
+        }
+
+        if (wavesToRebalance.length > 0) {
+          await Promise.all(
+            wavesToRebalance.map(({ waveId, waveTarget }) => rebalanceWaveTaskTargets(waveId, waveTarget))
+          );
+          await loadAll(false);
+          return;
+        }
+      }
+
       setTasks(mappedTasks);
     } catch (err) {
       toast.error(err?.response?.data?.title || "Không tải được danh sách nhiệm vụ.");
@@ -739,6 +764,38 @@ export default function AdminAssignTasks() {
     }
   };
 
+  const handleChangeStatus = async (task, targetStatus) => {
+    if (!task) return false;
+    if (task.view === "overdue") {
+      toast.error("Nhiệm vụ đang trễ hạn. Vui lòng gia hạn sang Đang làm trước khi đổi trạng thái.");
+      return false;
+    }
+    if (task.view === "cancelled") {
+      toast.error("Nhiệm vụ đã huỷ, không thể đổi trạng thái.");
+      return false;
+    }
+
+    try {
+      if (targetStatus === "Cancelled" && typeof taskService.cancelTask === "function") {
+        await taskService.cancelTask(task.taskId);
+      } else {
+        await taskService.updateTask(task.taskId, { status: targetStatus });
+      }
+      await loadAll();
+      const label =
+        targetStatus === "Completed"
+          ? "Hoàn thành"
+          : targetStatus === "InProgress"
+            ? "Đang làm"
+            : "Đã huỷ";
+      toast.success(`Đã cập nhật trạng thái sang "${label}".`);
+      return true;
+    } catch (err) {
+      toast.error(err?.response?.data?.title || "Cập nhật trạng thái thất bại!");
+      return false;
+    }
+  };
+
   const handleDeleteTask = async (task) => {
     try {
       if (typeof taskService.deleteTask === "function") {
@@ -771,6 +828,7 @@ export default function AdminAssignTasks() {
         onExpand={handleExpandTask}
         onRenameTask={handleRenameTask}
         onDeleteTask={handleDeleteTask}
+        onChangeStatus={handleChangeStatus}
       />
 
       {creating && (
