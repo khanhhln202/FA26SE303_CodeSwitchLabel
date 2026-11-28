@@ -93,7 +93,8 @@ public class ScriptsController(IScriptService scriptService, ILabelingService la
 
     /// <summary>Gán nhãn [vi]/[en] và sinh alignment cho một cặp câu thô.</summary>
     /// <remarks>
-    /// Dùng LLM nếu đã cấu hình `Llm:Endpoint`/`Model`; chưa cấu hình thì gán nhãn bằng luật.
+    /// Luật chạy trước; chỉ gọi LLM (nếu đã cấu hình `Llm:Endpoint`/`Model`) khi luật thiếu
+    /// nghĩa tiếng Việt hoặc báo hai câu lệch nghĩa. LLM lỗi thì giữ kết quả luật.
     /// Trả về câu đã chèn nhãn và alignment, sẵn sàng gửi vào luồng đóng góp hiện có.
     /// </remarks>
     // shortcut: Admin-only vì mỗi lần gọi có thể tốn quota LLM và chưa có UI nào cần cho role khác,
@@ -138,12 +139,12 @@ public class ScriptsController(IScriptService scriptService, ILabelingService la
     /// File **.txt**: mỗi cặp đúng hai dòng không rỗng — dòng đầu là câu trộn Việt–Anh,
     /// dòng sau là câu thuần Việt tương đương; mỗi câu kết thúc bằng dấu chấm. Dòng trống
     /// bị bỏ qua. Tối đa **100 cặp** mỗi file và bắt buộc gửi kèm trường `Domain`.
-    /// Có cấu hình LLM (OpenAI-compatible) thì LLM chèn nhãn `[vi]`/`[en]` và sinh `alignment`;
-    /// LLM lỗi hoặc trả kết quả không đọc được thì lùi về luật. Chưa cấu hình thì gán nhãn bằng
-    /// luật: từ ASCII là tiếng Việt khi là hư từ quen thuộc hoặc có trong từ điển âm tiết Việt
-    /// không dấu và cũng xuất hiện trong câu thuần Việt; nghĩa lấy bằng cách đối chiếu các từ
-    /// chung của hai câu (có thể nhiều từ, ví dụ `email` → `thư điện tử`); đoạn không đối chiếu
-    /// được thì lấy theo vị trí, hết từ thì để trống cho người duyệt điền.
+    /// Luật gán nhãn trước: từ ASCII là tiếng Việt khi là hư từ quen thuộc hoặc có trong từ
+    /// điển âm tiết Việt không dấu và cũng xuất hiện trong câu thuần Việt; nghĩa lấy bằng cách
+    /// đối chiếu các từ chung của hai câu (có thể nhiều từ, ví dụ `email` → `thư điện tử`);
+    /// đoạn không đối chiếu được thì lấy theo vị trí, hết từ thì để trống cho người duyệt điền.
+    /// Có cấu hình LLM (OpenAI-compatible) thì chỉ gọi LLM cho cặp mà luật để trống nghĩa hoặc
+    /// báo hai câu lệch nghĩa; LLM lỗi hoặc trả kết quả không đọc được thì giữ kết quả luật.
     /// Cặp nào gán nhãn hỏng bị bỏ qua, không làm hỏng cả file: luật lỗi có mã
     /// `invalid_text_format`/`invalid_language_tags`.
     ///

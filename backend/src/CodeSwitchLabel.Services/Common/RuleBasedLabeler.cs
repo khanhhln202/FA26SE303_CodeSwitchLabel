@@ -68,7 +68,7 @@ internal static class RuleBasedLabeler
         var viFolded = viWords
             .Select(TranscriptComparison.FoldDiacritics)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var tagged = Tag(csRaw, viFolded);
+        var tagged = Tag(csRaw, viFolded, out var hasUncertainLanguage);
         var englishWords = EnglishWords(tagged);
         var csWords = CodeSwitchText.Tokenize(csRaw);
 
@@ -89,7 +89,40 @@ internal static class RuleBasedLabeler
             });
         }
 
-        return new LabeledPair(tagged, alignment);
+        return new LabeledPair(tagged, alignment, MismatchWarning(tagged, viWords), hasUncertainLanguage);
+    }
+
+    // shortcut: chỉ kiểm tra từ [vi] của câu trộn có mặt đúng thứ tự trong câu thuần Việt;
+    // không kiểm tra thừa từ hay nghĩa. Đủ để bắt lệch từ; nâng cấp bằng so khớp đầy đủ nếu cần.
+    private static string? MismatchWarning(string tagged, string[] viWords)
+    {
+        var viFolded = viWords.Select(TranscriptComparison.FoldDiacritics).ToArray();
+        var missing = new List<string>();
+        var viIndex = 0;
+
+        foreach (var span in ParseTagged(tagged))
+        {
+            if (span.IsEnglish) continue;
+
+            foreach (var word in CodeSwitchText.Tokenize(span.Text))
+            {
+                var folded = TranscriptComparison.FoldDiacritics(word);
+                var match = viIndex < viFolded.Length
+                    ? Array.IndexOf(viFolded, folded, viIndex)
+                    : -1;
+
+                if (match < 0) missing.Add(word);
+                else viIndex = match + 1;
+            }
+        }
+
+        if (missing.Count == 0) return null;
+
+        var words = string.Join(", ", missing.Distinct(StringComparer.Ordinal));
+        var warning = $"Từ [vi] trong câu trộn không khớp câu thuần Việt: {words}.";
+
+        // shortcut: cắt 500 ký tự như cảnh báo của LLM; đủ để chỉ chỗ lệch, không cần liệt kê hết.
+        return warning.Length <= 500 ? warning : warning[..500];
     }
 
     /// <summary>Các từ [en] kèm vị trí của chúng trong câu đã bỏ nhãn.</summary>
@@ -208,7 +241,7 @@ internal static class RuleBasedLabeler
         }
     }
 
-    private static string Tag(string raw, HashSet<string> viFolded)
+    private static string Tag(string raw, HashSet<string> viFolded, out bool hasUncertainLanguage)
     {
         if (raw.Contains(CodeSwitchText.ViTag) || raw.Contains(CodeSwitchText.EnTag))
         {
@@ -220,12 +253,15 @@ internal static class RuleBasedLabeler
         var builder = new StringBuilder(raw.Length + 16);
         var last = 0;
         bool? currentIsEnglish = null;
+        hasUncertainLanguage = false;
 
         foreach (Match match in TokenPattern.Matches(raw))
         {
             builder.Append(raw, last, match.Index - last);
 
-            var isEnglish = IsEnglishToken(match.Value, viFolded) ?? currentIsEnglish ?? false;
+            var tokenLanguage = IsEnglishToken(match.Value, viFolded);
+            hasUncertainLanguage |= IsUncertainToken(match.Value, viFolded);
+            var isEnglish = tokenLanguage ?? currentIsEnglish ?? false;
 
             if (currentIsEnglish != isEnglish)
             {
@@ -240,6 +276,14 @@ internal static class RuleBasedLabeler
         builder.Append(raw, last, raw.Length - last);
 
         return builder.ToString().Trim();
+    }
+
+    private static bool IsUncertainToken(string token, HashSet<string> viFolded)
+    {
+        var letters = new string(token.Where(char.IsLetter).ToArray());
+        return letters.Length > 0 && letters.All(ch => ch <= 127)
+            && VietnameseSyllables.Contains(letters)
+            && !viFolded.Contains(letters);
     }
 
     /// <summary>null = dấu câu/số, giữ nguyên ngôn ngữ của đoạn đang chạy.</summary>

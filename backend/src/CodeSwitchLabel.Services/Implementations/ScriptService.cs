@@ -230,10 +230,10 @@ public class ScriptService(
 
         var pairs = await RawScriptTextParser.ParseAsync(textFile, ct);
 
-        // AutoLabelAsync tự chọn LLM hay luật. Luật có thể để trống nghĩa tiếng Việt
-        // (hết từ tương ứng) nên vẫn cho qua như trước cho người duyệt điền.
-        // Khi LLM lỗi, AutoLabelAsync cũng rơi về luật; lúc đó IsConfigured vẫn true nên
-        // không thể dựa vào nó để quyết định — luôn cho phép nghĩa rỗng ở đường .txt.
+        // AutoLabelAsync chạy luật trước, chỉ gọi LLM khi luật thiếu nghĩa hoặc nghi lệch nghĩa.
+        // Luật có thể để trống nghĩa tiếng Việt (hết từ tương ứng) nên vẫn cho qua như trước
+        // cho người duyệt điền. Khi LLM lỗi, AutoLabelAsync giữ kết quả luật; lúc đó IsConfigured
+        // vẫn true nên không thể dựa vào nó để quyết định — luôn cho phép nghĩa rỗng ở đường .txt.
         const bool allowEmptyTargets = true;
 
         var items = new List<ImportScriptItem>(pairs.Count);
@@ -843,7 +843,7 @@ public class ScriptService(
             }
 
             // shortcut: raw phải gán nhãn trước khi dedupe vì dedupe dùng câu đã gán nhãn;
-            // câu trùng vẫn tốn một lần gọi LLM.
+            // câu trùng vẫn tốn một lần gọi LLM khi luật không đủ.
             var labeled = await labeling.AutoLabelAsync(csRaw, viRaw, ct);
             cs = labeled.CsTagged;
             ve = CodeSwitchText.ViTag + viRaw;

@@ -248,7 +248,15 @@ public class LabelingService(
 
     public async Task<LabeledPair> AutoLabelAsync(string csRaw, string viRaw, CancellationToken ct = default)
     {
-        if (!IsConfigured) return RuleBasedLabeler.Label(csRaw, viRaw);
+        var rules = RuleBasedLabeler.Label(csRaw, viRaw);
+
+        // Luật chạy trước để cặp dễ không tốn lượt gọi LLM; chỉ gọi LLM khi thiếu nghĩa hoặc nghi lệch nghĩa.
+        var needsLlm = rules.HasUncertainLanguage
+            || rules.Alignment.Any(a => string.IsNullOrWhiteSpace(a.Target))
+            || rules.SemanticWarning is not null;
+
+        if (!IsConfigured || !needsLlm) return rules;
+
         try
         {
             return await LabelAsync(csRaw, viRaw, ct);
@@ -256,7 +264,7 @@ public class LabelingService(
         catch (UnprocessableException ex) when (ex.Code is "llm_failed" or "llm_parse_error")
         {
             logger.LogWarning(ex, "LLM failed or returned unusable labels; using rule-based labeler.");
-            return RuleBasedLabeler.Label(csRaw, viRaw);
+            return rules;
         }
     }
 

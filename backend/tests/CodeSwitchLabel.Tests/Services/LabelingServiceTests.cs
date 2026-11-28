@@ -123,7 +123,7 @@ public sealed class LabelingServiceTests
     }
 
     [Fact]
-    public async Task AutoLabel_CoCauHinh_GoiLlm()
+    public async Task AutoLabel_CoCauHinh_LuatDu_KhongGoiLlm()
     {
         var handler = new StubHandler(() => Ok(ChatResponse(ValidContent)));
         var service = CreateService(handler);
@@ -133,23 +133,57 @@ public sealed class LabelingServiceTests
             TestContext.Current.CancellationToken);
 
         Assert.Equal("[vi]Em nên [en]scan [vi]tài liệu này.", result.CsTagged);
+        Assert.Equal("quét", Assert.Single(result.Alignment).Target);
+        Assert.Equal(0, handler.Calls);
+    }
+
+    [Fact]
+    public async Task AutoLabel_CoCauHinh_LuatThieuNghia_GoiLlm()
+    {
+        const string content =
+            """{"cs_tagged":"[vi]Em ăn cơm rồi [en]code.","alignment":[{"source":"code","target":"lập trình","relation":"semantic_equivalent"}]}""";
+        var handler = new StubHandler(() => Ok(ChatResponse(content)));
+        var service = CreateService(handler);
+
+        var result = await service.AutoLabelAsync(
+            "Em ăn cơm rồi code.", "Em ăn cơm rồi.",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("[vi]Em ăn cơm rồi [en]code.", result.CsTagged);
+        Assert.Equal("lập trình", Assert.Single(result.Alignment).Target);
         Assert.Equal(1, handler.Calls);
     }
 
     [Fact]
-    public async Task AutoLabel_LlmTraSaiDinhDang_DungLuat()
+    public async Task AutoLabel_CoCauHinh_LuatBaoLechNghia_GoiLlm()
+    {
+        const string content =
+            """{"cs_tagged":"[vi]Em nên [en]scan [vi]hồ sơ này.","alignment":[{"source":"scan","target":"quét","relation":"semantic_equivalent"}]}""";
+        var handler = new StubHandler(() => Ok(ChatResponse(content)));
+        var service = CreateService(handler);
+
+        var result = await service.AutoLabelAsync(
+            "Em nên scan hồ sơ này.", "Em nên quét tài liệu này.",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("[vi]Em nên [en]scan [vi]hồ sơ này.", result.CsTagged);
+        Assert.Equal(1, handler.Calls);
+    }
+
+    [Fact]
+    public async Task AutoLabel_LlmTraSaiDinhDang_GiuKetQuaLuat()
     {
         var handler = new StubHandler(() => Ok(ChatResponse("không phải json")));
         var service = CreateService(handler);
 
         var result = await service.AutoLabelAsync(
-            "Em nên scan tài liệu này.", "Em nên quét tài liệu này.",
+            "Em ăn cơm rồi code.", "Em ăn cơm rồi.",
             TestContext.Current.CancellationToken);
 
-        Assert.Equal("[vi]Em nên [en]scan [vi]tài liệu này.", result.CsTagged);
+        Assert.Equal("[vi]Em ăn cơm rồi [en]code.", result.CsTagged);
         var word = Assert.Single(result.Alignment);
-        Assert.Equal("scan", word.Source);
-        Assert.Equal("quét", word.Target);
+        Assert.Equal("code", word.Source);
+        Assert.Equal(string.Empty, word.Target);
         Assert.Equal(1, handler.Calls);
     }
 

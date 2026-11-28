@@ -1,0 +1,95 @@
+---
+config:
+  layout: elk
+  er:
+    layoutDirection: LR
+    entityPadding: 18
+    minEntityWidth: 120
+    minEntityHeight: 60
+    fontSize: 16
+---
+erDiagram
+    role ||--o{ app_user : assigns
+    app_user ||--o| speaker_profile : has
+    app_user ||--o| user_consent : grants
+    app_user ||--o{ user_domain : qualifies
+    domain ||--o{ user_domain : covers
+    app_user ||--o{ system_config : updates
+    app_user ||--o{ audit_log : performs
+    app_user ||--o{ import_batch : imports
+    app_user ||--o{ wave : creates_or_receives
+    domain ||--o{ wave : classifies
+    wave ||--o{ wave_registration : has
+    app_user ||--o{ wave_registration : registers
+    wave ||--o{ task : groups
+    domain ||--o{ task : classifies
+    app_user ||--o{ task : creates
+    task ||--o{ task_assignment : assigns
+    app_user ||--o{ task_assignment : receives
+    domain ||--o{ script : classifies
+    app_user ||--o{ script : creates
+    import_batch ||--o{ script : imports
+    task ||--o{ script : contribution_source
+    wave ||--o{ script : receives
+    script ||--o{ script_word : aligns
+    script ||--o{ script_review : reviewed_in
+    app_user ||--o{ script_review : performs
+    script_error_reason ||--o{ script_review : explains
+    script ||--o{ script_proposal : concerns
+    app_user ||--o{ script_proposal : proposes_or_decides
+    script_error_reason ||--o{ script_proposal : explains
+    script ||--o{ script_queue : enters
+    app_user ||--o{ script_queue : claims
+    task ||--o{ script_queue : groups
+    task ||--o{ task_script : includes
+    script ||--o{ task_script : assigned_for_work
+    app_user ||--o{ task_script : assigned_to
+    script ||--o{ recording : recorded_for
+    app_user ||--o{ recording : records_or_discards
+    task ||--o{ recording : sourced_from
+    task ||--o{ task_recording : queues
+    recording ||--o{ task_recording : included_in
+    recording ||--o{ review : receives
+    app_user ||--o{ review : reviews
+    task ||--o{ review : tracks
+    review ||--o{ review_rejection_reason : cites
+    rejection_reason ||--o{ review_rejection_reason : selected_as
+    review ||--o| ai_review : has_machine_evidence
+    recording ||--o{ ai_review : analyzed
+    dataset ||--o{ dataset_recording : contains
+    recording ||--o{ dataset_recording : included_in
+    app_user ||--o{ dataset : releases
+    app_user ||--o{ source_video : submits
+    app_user o|--o{ source_video : claims
+    source_video ||--o{ source_segment : contains
+
+    role { smallint role_id PK string role_name UK }
+    app_user { bigint user_id PK smallint role_id FK string email UK }
+    speaker_profile { bigint user_id PK_FK string region }
+    user_consent { bigint user_id PK_FK string version }
+    domain { string code PK string name char id_digit UK }
+    user_domain { bigint user_id PK_FK string domain PK_FK }
+    system_config { smallint config_id PK string config_key UK bigint updated_by FK }
+    audit_log { bigint audit_id PK bigint changed_at PK bigint user_id FK }
+    import_batch { bigint batch_id PK bigint imported_by FK }
+    wave { bigint wave_id PK string domain FK bigint created_by FK }
+    wave_registration { bigint wave_id PK_FK bigint speaker_id PK_FK }
+    task { bigint task_id PK bigint wave_id FK string domain FK }
+    task_assignment { bigint assignment_id PK bigint task_id FK bigint user_id FK }
+    script { string script_id PK string domain FK bigint created_by FK bigint import_batch_id FK bigint contribution_task_id FK bigint wave_id FK }
+    script_word { string script_id PK_FK smallint word_position PK }
+    script_error_reason { smallint reason_id PK string reason_code UK }
+    script_review { bigint script_review_id PK string script_id FK bigint user_id FK smallint error_reason_id FK }
+    script_proposal { bigint proposal_id PK string script_id FK bigint proposer_id FK }
+    script_queue { bigint queue_id PK string script_id FK bigint claimed_by FK bigint task_id FK }
+    task_script { bigint task_script_id PK bigint task_id FK string script_id FK bigint assignee_user_id FK }
+    recording { string recording_id PK string script_id FK bigint speaker_id FK bigint task_id FK }
+    task_recording { bigint task_id PK_FK string recording_id PK_FK }
+    rejection_reason { smallint reason_id PK string reason_code UK }
+    review { bigint review_id PK string recording_id FK bigint reviewer_id FK bigint task_id FK }
+    review_rejection_reason { bigint review_id PK_FK smallint reason_id PK_FK }
+    ai_review { bigint ai_review_id PK string recording_id FK bigint review_id FK }
+    dataset { bigint dataset_id PK bigint released_by FK }
+    dataset_recording { bigint dataset_id PK_FK string recording_id PK_FK }
+    source_video { bigint source_video_id PK string youtube_url UK bigint submitted_by FK bigint claimed_by FK }
+    source_segment { bigint source_segment_id PK bigint source_video_id FK int position UK }

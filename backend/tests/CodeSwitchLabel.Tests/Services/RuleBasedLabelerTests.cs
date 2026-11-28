@@ -20,6 +20,9 @@ public sealed class RuleBasedLabelerTests
         Assert.Equal(
             "[vi]Em nho [en]upload [vi]tai lieu truoc [en]deadline [vi]nhe.",
             result.CsTagged);
+
+        // Câu trộn không dấu vẫn khớp câu thuần Việt có dấu sau khi bỏ dấu.
+        Assert.Null(result.SemanticWarning);
     }
 
     [Fact]
@@ -55,6 +58,21 @@ public sealed class RuleBasedLabelerTests
                 Assert.Equal("email", word.Source);
                 Assert.Equal("thư điện tử", word.Target);
             });
+
+        // Nghĩa nhiều từ nằm trong câu thuần Việt nên không bị báo lệch.
+        Assert.Null(result.SemanticWarning);
+    }
+
+    [Fact]
+    public void GanNhan_TuVietTrongCsKhacCauThuanViet_CoCanhBao()
+    {
+        var result = RuleBasedLabeler.Label(
+            "Em nên scan hồ sơ này.",
+            "Em nên quét tài liệu này.");
+
+        Assert.NotNull(result.SemanticWarning);
+        Assert.Contains("hồ", result.SemanticWarning);
+        Assert.Contains("sơ", result.SemanticWarning);
     }
 
     [Fact]
