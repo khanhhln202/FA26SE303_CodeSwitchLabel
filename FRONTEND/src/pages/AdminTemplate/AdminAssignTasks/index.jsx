@@ -1,17 +1,36 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AssignedTaskList from "./AssignedTaskList";
 import { toast } from "sonner";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { extendWaveApi, getAllWavesApi, getTaskManagersApi } from "../../../services/waveApi";
+import { GET_ADMIN_WAVES_API, GET_TASK_MANAGERS_API } from "../../../utils/queryKey";
 import { ArrowRight, Check, MessageSquarePlus, Mic, X } from "lucide-react";
 import { ADMIN_ACCENT, CHIP_SUCCESS_TEXT, DANGER } from "../../../constants/theme";
 import { MOCK_BATCHES, MOCK_MANAGERS, MOCK_TOPICS, isRecording, topicName } from "../AdminRecordingBatches/mockData";
-import { MOCK_TASKS } from "./mockTasks";
 
 /**
  * Giao task cho Task Manager - trang riêng, tách khỏi kho câu.
  * 2 loại task (backend TaskType): Recording (lấy câu từ đúng 1 đợt nhập) và Contribution (chủ đề + số câu cần đóng góp).
  * Cần nhiều câu hơn 1 đợt thì gộp đợt ở trang kho trước.
- * CHỈ LÀM UI với dữ liệu minh hoạ - xem AdminRecordingBatches/mockData.js.
+ * Danh sách: mỗi dòng là một ĐỢT (wave) Admin đã giao cho Task Manager - GET /api/waves.
+ * API đợt chưa có: tiến độ ghi âm (đã xong / chờ duyệt), speaker & reviewer từng đợt, loại Câu đóng góp
+ * -> các phần đó giữ nguyên trên UI, không có số liệu thì hiện "—".
+ * Form Tạo task vẫn là dữ liệu minh hoạ (khác trường với POST /api/waves) - xem AdminRecordingBatches/mockData.js.
  */
+
+// Đợt API -> hình dạng dòng của AssignedTaskList. Không có số liệu thì để undefined để bảng hiện "—".
+const waveToRow = (w, managers) => ({
+  taskId: w.waveId,
+  waveId: w.waveId,
+  taskType: "Recording",
+  taskName: w.waveName,
+  domain: w.domain,
+  managerName: managers.find((m) => m.userId === w.assignedTo)?.fullName,
+  status: w.status === "Completed" ? "Completed" : "InProgress",
+  startDate: w.startDate,
+  deadline: w.endDate,
+  createdAt: w.createdAt,
+});
 
 const TYPES = [
   { key: "Recording", label: "Ghi âm", icon: Mic, hint: "Lấy câu sẵn sàng từ một đợt trong kho để speaker ghi âm." },
@@ -276,8 +295,15 @@ function CreateTaskForm({ onCreate, onCancel }) {
 
 export default function AdminAssignTasks() {
   const [creating, setCreating] = useState(false);
-  // TODO: thay bằng useQuery GET /api/tasks (TaskListItemDto: status, deadline, assignees, progress)
-  const [tasks, setTasks] = useState(MOCK_TASKS);
+  // Task tạo từ form minh hoạ (chưa nối API) - chỉ giữ trong phiên để thấy luồng "giao xong -> theo dõi"
+  const [localTasks, setLocalTasks] = useState([]);
+  const queryClient = useQueryClient();
+
+  // Call API danh sách đợt đã giao + danh sách Task Manager để hiện tên người quản lý
+  const { data: waves, isLoading, isError, error, refetch } = useQuery({ queryKey: [GET_ADMIN_WAVES_API], queryFn: getAllWavesApi });
+  const { data: managers } = useQuery({ queryKey: [GET_TASK_MANAGERS_API], queryFn: getTaskManagersApi, staleTime: 5 * 60 * 1000 });
+
+  const tasks = useMemo(() => [...localTasks, ...(waves ?? []).map((w) => waveToRow(w, managers ?? []))], [localTasks, waves, managers]);
 
   useEffect(() => {
     if (!creating) return;
@@ -286,22 +312,42 @@ export default function AdminAssignTasks() {
     return () => document.removeEventListener("keydown", esc);
   }, [creating]);
 
-  // TODO: nối PATCH /api/tasks/{id} với { deadline } rồi invalidate danh sách
+  // Gia hạn = đổi ngày kết thúc của đợt: PATCH /api/waves/{id}
+  const { mutate: extendWave } = useMutation({
+    mutationFn: extendWaveApi,
+    onSuccess: (_, { endDate }) => {
+      const [y, m, d] = endDate.split("-");
+      toast.success(`Đã gia hạn đến ${d}/${m}/${y}.`);
+      queryClient.invalidateQueries({ queryKey: [GET_ADMIN_WAVES_API] });
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   const handleExtend = (taskId, deadline) => {
-    setTasks((prev) => prev.map((t) => (t.taskId === taskId ? { ...t, deadline } : t)));
-    const [y, m, d] = deadline.split("-");
-    toast.success(`Đã gia hạn T-${taskId} đến ${d}/${m}/${y} (dữ liệu minh hoạ).`);
+    const local = localTasks.find((t) => t.taskId === taskId);
+    if (local) {
+      setLocalTasks((prev) => prev.map((t) => (t.taskId === taskId ? { ...t, deadline } : t)));
+      return;
+    }
+    extendWave({ waveId: taskId, endDate: deadline });
   };
 
   const handleCreate = (task) => {
-    const nextNo = Math.max(...tasks.map((t) => t.taskId)) + 1;
-    setTasks((prev) => [{ ...task, taskId: nextNo, createdAt: new Date().toISOString() }, ...prev]);
+    // Số tạm âm để không trùng mã đợt thật
+    setLocalTasks((prev) => [{ ...task, taskId: -(prev.length + 1), createdAt: new Date().toISOString() }, ...prev]);
     setCreating(false);
   };
 
   return (
     <div className="w-full h-full min-h-0 flex flex-col gap-3 text-left font-sans p-1">
-      <AssignedTaskList tasks={tasks} onCreate={() => setCreating(true)} onExtend={handleExtend} />
+      <AssignedTaskList
+        tasks={tasks}
+        onCreate={() => setCreating(true)}
+        onExtend={handleExtend}
+        loading={isLoading}
+        errorMessage={isError ? error.message : ""}
+        onRetry={refetch}
+      />
 
       {creating && (
         <div

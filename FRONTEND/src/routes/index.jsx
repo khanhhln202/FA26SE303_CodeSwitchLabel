@@ -222,12 +222,22 @@ const routes = [
         element: lazy(() => import("../pages/AdminTemplate/AdminRecordingBatches/index")),
       },
       {
+        // Trang mẫu: giao diện Kho câu với dữ liệu minh hoạ (trước khi gắn API)
+        path: "recording-batches-sample",
+        element: lazy(() => import("../pages/AdminTemplate/AdminRecordingBatchesSample/index")),
+      },
+      {
         path: "recording-batches/:batchId",
         element: lazy(() => import("../pages/AdminTemplate/AdminRecordingBatchDetail/index")),
       },
       {
         path: "assign-tasks",
         element: lazy(() => import("../pages/AdminTemplate/AdminAssignTasks/index")),
+      },
+      {
+        // Trang mẫu: giao diện Giao task với dữ liệu minh hoạ (trước khi gắn API)
+        path: "assign-tasks-sample",
+        element: lazy(() => import("../pages/AdminTemplate/AdminAssignTasksSample/index")),
       },
       // ROUTE MỚI: Quản lý Chủ đề tiêu chuẩn
       {

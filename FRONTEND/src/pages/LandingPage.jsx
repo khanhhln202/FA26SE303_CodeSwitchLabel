@@ -5,7 +5,9 @@ import Logo from '../components/Logo/Logo';
 import CodeSwitchText from '../components/CodeSwitchText/CodeSwitchText';
 import { getPostLoginPath } from '../constants/auth';
 import { getCurrentUser } from '../utils/authStorage';
-import { CONSENT_SECTIONS, CONSENT_TITLE, CONSENT_VERSION } from '../constants/consent';
+import { useQuery } from '@tanstack/react-query';
+import { getActiveConsentApi } from '../services/consentApi';
+import { GET_ACTIVE_CONSENT_API } from '../utils/queryKey';
 
 /**
  * Landing chỉ để giới thiệu cho tình nguyện viên (không nói quy trình nội bộ):
@@ -100,7 +102,11 @@ function SampleCard() {
   );
 }
 
+// Bản cam kết lấy từ GET /api/consent (bản đang hiệu lực, không cần đăng nhập)
 function ConsentModal({ onClose }) {
+  const { data: consent, isLoading, isError } = useQuery({ queryKey: [GET_ACTIVE_CONSENT_API], queryFn: getActiveConsentApi, staleTime: 10 * 60 * 1000 });
+  const title = consent?.title || 'Bản cam kết';
+
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
@@ -108,26 +114,25 @@ function ConsentModal({ onClose }) {
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={CONSENT_TITLE}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={title}>
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-lg max-h-[85vh] flex flex-col rounded-3xl bg-white shadow-2xl">
         <div className="flex items-start justify-between gap-4 px-6 pt-6 pb-4 border-b border-slate-100">
           <div>
-            <h3 className="text-lg font-bold text-slate-900">{CONSENT_TITLE}</h3>
-            <p className="text-xs text-slate-400 mt-0.5">Phiên bản {CONSENT_VERSION} · ký khi tạo tài khoản</p>
+            <h3 className="text-lg font-bold text-slate-900">{title}</h3>
+            {consent && <p className="text-xs text-slate-400 mt-0.5">Phiên bản {consent.version} · ký khi tạo tài khoản</p>}
           </div>
           <button type="button" onClick={onClose} aria-label="Đóng" className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
-        <ol className="px-6 py-5 overflow-y-auto space-y-3 list-decimal pl-10 text-sm leading-relaxed text-slate-600">
-          {CONSENT_SECTIONS.map((s) => (
-            <li key={s.title}>
-              <span className="font-semibold text-slate-900">{s.title}: </span>
-              {s.body}
-            </li>
-          ))}
-        </ol>
+        {/* body giữ nguyên xuống dòng của backend */}
+        <div className="px-6 py-5 overflow-y-auto text-sm leading-relaxed text-slate-600 whitespace-pre-wrap">
+          {isLoading && <p className="text-slate-400">Đang tải bản cam kết...</p>}
+          {isError && <p className="text-slate-500">Không tải được bản cam kết, vui lòng thử lại sau.</p>}
+          {!isLoading && !isError && !consent && <p className="text-slate-500">Chưa có bản cam kết đang hiệu lực.</p>}
+          {consent?.body}
+        </div>
       </div>
     </div>
   );

@@ -52,7 +52,8 @@ export default function ExtendDeadlineDialog({ task, onClose, onConfirm }) {
   const valid = !!date && date >= minDate;
   const cur = relative(current, today);
   const next = valid ? relative(date, today) : null;
-  const { targetQty, done } = task.progress;
+  // Đợt từ API chưa có tiến độ -> bỏ phần "đã xong / chỉ tiêu" ở dòng phụ
+  const { targetQty, done } = task.progress ?? {};
 
   return (
     <div role="dialog" aria-modal="true" aria-labelledby="extend-title" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
@@ -63,7 +64,9 @@ export default function ExtendDeadlineDialog({ task, onClose, onConfirm }) {
               Gia hạn task T-{task.taskId}
             </p>
             <p className="mt-0.5 type-caption text-[#9A9CA3] truncate">
-              {task.taskName || (task.taskType === "Recording" ? task.batchName : `Câu đóng góp · ${topicName(task.domain)}`)} · {task.managerName} · {fmt(done)} / {fmt(targetQty)} câu
+              {task.taskName || (task.taskType === "Recording" ? task.batchName : `Câu đóng góp · ${topicName(task.domain)}`)}
+              {task.managerName && ` · ${task.managerName}`}
+              {task.progress && ` · ${fmt(done)} / ${fmt(targetQty)} câu`}
             </p>
           </div>
           <button type="button" onClick={onClose} aria-label="Đóng" className="p-1 rounded-lg text-[#9A9CA3] hover:bg-[#F7F5EF] dark:hover:bg-gray-800 cursor-pointer">

@@ -180,7 +180,11 @@ export const POP_CSS = `@keyframes dropdownPop{from{opacity:0;transform:translat
 .dropdown-pop{animation:dropdownPop .16s cubic-bezier(.2,.8,.2,1);transform-origin:top left}
 @media (prefers-reduced-motion:reduce){.dropdown-pop{animation:none}}`;
 
-export default function AssignedTaskList({ tasks, onCreate, onExtend }) {
+// Ô không có số liệu từ API
+const DASH = <span className="type-caption text-[#9A9CA3]">—</span>;
+
+// loading / errorMessage / onRetry: trạng thái tải khi danh sách lấy từ API (trang mẫu Task Manager không truyền)
+export default function AssignedTaskList({ tasks, onCreate, onExtend, loading = false, errorMessage = "", onRetry }) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [query, setQuery] = useState("");
@@ -276,7 +280,8 @@ export default function AssignedTaskList({ tasks, onCreate, onExtend }) {
               {pageRows.map((t, index) => {
                 const open = openId === t.taskId;
                 const st = STATUS[t.view];
-                const { targetQty, done, submitted } = t.progress;
+                // Đợt từ API chưa có tiến độ ghi âm -> progress undefined, cột Tiến độ hiện "—"
+                const { targetQty = 0, done = 0, submitted = 0 } = t.progress ?? {};
                 const pending = Math.max(0, submitted - done);
                 const pct = targetQty ? Math.min(100, Math.round((done / targetQty) * 100)) : 0;
                 const { Icon: TypeIcon, cls: typeCls } = TYPE_ICON[t.taskType] || TYPE_ICON.Recording;
@@ -308,19 +313,25 @@ export default function AssignedTaskList({ tasks, onCreate, onExtend }) {
                         </div>
                       </td>
                       <td className="px-2 py-1.5">
-                        <span className="text-[#4A4C53] dark:text-gray-300">{t.managerName}</span>
+                        {t.managerName ? <span className="text-[#4A4C53] dark:text-gray-300">{t.managerName}</span> : DASH}
                       </td>
                       <td className="px-2 py-1.5">
-                        <div className="flex items-center gap-2.5">
-                          <ProgressBar done={done} submitted={submitted} target={targetQty} />
-                          <span className="w-10 text-right font-bold tabular-nums text-[#16171C] dark:text-gray-100" style={pct === 100 ? { color: "#1E7A4F" } : undefined}>
-                            {pct}%
-                          </span>
-                        </div>
-                        <p className="mt-0.5 type-caption text-[#9A9CA3] tabular-nums">
-                          {fmt(done)} / {fmt(targetQty)} câu
-                          {pending > 0 && <span className="text-[#0B4FB3] dark:text-[#9DBDF2]"> · {fmt(pending)} chờ duyệt</span>}
-                        </p>
+                        {t.progress ? (
+                          <>
+                            <div className="flex items-center gap-2.5">
+                              <ProgressBar done={done} submitted={submitted} target={targetQty} />
+                              <span className="w-10 text-right font-bold tabular-nums text-[#16171C] dark:text-gray-100" style={pct === 100 ? { color: "#1E7A4F" } : undefined}>
+                                {pct}%
+                              </span>
+                            </div>
+                            <p className="mt-0.5 type-caption text-[#9A9CA3] tabular-nums">
+                              {fmt(done)} / {fmt(targetQty)} câu
+                              {pending > 0 && <span className="text-[#0B4FB3] dark:text-[#9DBDF2]"> · {fmt(pending)} chờ duyệt</span>}
+                            </p>
+                          </>
+                        ) : (
+                          DASH
+                        )}
                       </td>
                       <td className="px-2 py-1.5">
                         <DeadlineCell t={t} status={t.view} />
@@ -348,8 +359,8 @@ export default function AssignedTaskList({ tasks, onCreate, onExtend }) {
                               icon={Mic}
                               iconColor={DONE}
                               color={DONE}
-                              people={t.assignees}
-                              empty="Manager chưa chia cho speaker nào."
+                              people={t.assignees ?? []}
+                              empty={t.assignees ? "Manager chưa chia cho speaker nào." : "—"}
                             />
                             <PeopleSection
                               title="Reviewer duyệt"
@@ -358,7 +369,7 @@ export default function AssignedTaskList({ tasks, onCreate, onExtend }) {
                               color={REVIEW}
                               people={t.reviewers || []}
                               note={pending > 0 ? `${fmt(pending)} chờ duyệt` : null}
-                              empty="Manager chưa giao reviewer nào."
+                              empty={t.reviewers ? "Manager chưa giao reviewer nào." : "—"}
                             />
                           </div>
                           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 type-meta">
@@ -394,7 +405,24 @@ export default function AssignedTaskList({ tasks, onCreate, onExtend }) {
                   </Fragment>
                 );
               })}
-              {rows.length === 0 && (
+              {loading && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-12 text-center type-ui text-[#9A9CA3]">Đang tải danh sách task...</td>
+                </tr>
+              )}
+              {!loading && errorMessage && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-12 text-center type-ui text-[#6E7078]">
+                    {errorMessage}{" "}
+                    {onRetry && (
+                      <button type="button" onClick={() => onRetry()} className="font-label underline cursor-pointer" style={{ color: ADMIN_ACCENT }}>
+                        Thử lại
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              )}
+              {!loading && !errorMessage && rows.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-4 py-12 text-center">
                     <p className="type-ui text-[#9A9CA3]">{tasks.length ? "Không có task nào khớp bộ lọc." : "Chưa giao task nào."}</p>

@@ -1,15 +1,25 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, Combine, FileUp, Info, Lock, Upload, X } from "lucide-react";
 import { ADMIN_ACCENT, DANGER } from "../../../constants/theme";
-import { MOCK_BATCHES, MOCK_TOPICS, isRecording, topicName } from "./mockData";
+import { isRecording, topicName } from "./mockData";
 import Pagination from "../../../components/Pagination/Pagination";
+import { getImportBatchesApi, importBatchApi } from "../../../services/importBatchApi";
+import { getTopicsApi } from "../../../services/configApi";
+import { GET_IMPORT_BATCHES_API, GET_TOPICS_API } from "../../../utils/queryKey";
 
 /**
  * Kho câu theo đợt nhập. Gộp đợt chỉ làm ở đây (giao task ở trang riêng /admin/assign-tasks).
- * CHỈ LÀM UI với dữ liệu minh hoạ - xem mockData.js.
+ * Danh sách đợt + nhập đợt mới dùng API thật.
  */
+
+// Backend CHƯA trả: chủ đề của từng đợt (`domain`), số câu theo trạng thái
+// (`counts: { available, inTask, recorded, locked }`), API gộp đợt và danh sách câu theo đợt.
+// Giữ nguyên giao diện; đợt chưa có số liệu thì các cột đó hiện "—", không tick gộp, không mở chi tiết.
+// TODO: BE bổ sung các trường trên thì bảng tự hiện đủ.
+const DASH = <span className="type-caption text-[#9A9CA3]">—</span>;
 
 // Thứ tự trên thanh tồn kho: phần đã dùng bên trái, phần còn dùng được (sẵn sàng) ở cuối
 const STOCK_PARTS = [
@@ -29,6 +39,7 @@ const formatDate = (iso) => new Date(iso).toLocaleDateString("vi-VN", { day: "2-
 
 // Trạng thái đợt suy ra từ số câu, không lưu riêng
 const batchStatus = (b) => {
+  if (!b.counts) return null;
   if (isRecording(b)) return { label: "Đang ghi âm", bg: "#0052CC14", color: ADMIN_ACCENT };
   if (b.mergedInto) return { label: "Đã gộp", bg: "#F0EEE6", color: "#6E7078" };
   if (b.counts.recorded === 0) return { label: "Sẵn sàng", bg: "#E8F5EE", color: "#1F5C3F" };
@@ -140,53 +151,73 @@ function ImportBatchModal({ onClose }) {
   const [file, setFile] = useState(null);
   const [domain, setDomain] = useState("");
   const [touched, setTouched] = useState(false);
+  const queryClient = useQueryClient();
 
-  // Mỗi đợt đúng 1 chủ đề, bắt buộc với mọi loại file.
-  // Lưu ý backend: hiện .json lấy domain theo từng câu trong file -> cần đổi để gán chủ đề của đợt cho mọi câu.
+  // Chủ đề cố định của hệ thống, chỉ lấy chủ đề đang bật
+  const { data: topics } = useQuery({ queryKey: [GET_TOPICS_API], queryFn: getTopicsApi, staleTime: 5 * 60 * 1000 });
+  const activeTopics = (topics ?? []).filter((t) => t.isActive !== false);
+
+  // .txt cần chủ đề cho cả file; .json lấy chủ đề trong từng câu nên không hỏi
+  const ext = file?.name.split(".").pop()?.toLowerCase();
+  const isTxt = ext === "txt";
+  const fileError = touched && !file ? "Chọn file JSON hoặc TXT." : file && ext !== "json" && !isTxt ? "Chỉ nhận file .json hoặc .txt." : "";
+  const domainError = touched && isTxt && !domain ? "File .txt cần chọn chủ đề." : "";
+
+  const { mutate: importBatch, isPending } = useMutation({
+    mutationFn: importBatchApi,
+    onSuccess: (result) => {
+      const skipped = result.skipped?.length ?? 0;
+      toast.success(`Đã nhập ${fmt(result.imported)} câu vào "${result.batchName || result.fileName}"${skipped ? ` · bỏ qua ${fmt(skipped)} câu` : ""}`);
+      queryClient.invalidateQueries({ queryKey: [GET_IMPORT_BATCHES_API] });
+      onClose();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   const submit = () => {
     setTouched(true);
-    if (!batchName.trim() || !file || !domain) return;
-    // TODO: nối POST /api/scripts/import (multipart: file, batchName, domain); chủ đề lấy từ GET /api/config/topics (chỉ isActive)
-    toast.info("Giao diện mẫu: chưa nối API nhập câu.");
-    onClose();
+    if (!file || (ext !== "json" && !isTxt) || (isTxt && !domain)) return;
+    importBatch({ file, batchName: batchName.trim(), domain: isTxt ? domain : "" });
   };
 
   return (
     <Modal
       title="Nhập đợt câu mới"
-      onClose={onClose}
+      onClose={isPending ? () => {} : onClose}
       footer={
         <>
-          <SecondaryBtn onClick={onClose}>Huỷ</SecondaryBtn>
-          <PrimaryBtn onClick={submit}>
-            <Upload className="w-4 h-4" /> Nhập câu
+          <SecondaryBtn onClick={onClose} disabled={isPending}>Huỷ</SecondaryBtn>
+          <PrimaryBtn onClick={submit} disabled={isPending}>
+            <Upload className="w-4 h-4" /> {isPending ? "Đang nhập..." : "Nhập câu"}
           </PrimaryBtn>
         </>
       }
     >
       <div className="space-y-3.5">
-        <Field label="Tên đợt nhập" error={touched && !batchName.trim() ? "Nhập tên đợt, ví dụ: Đợt ghi âm tháng 12." : ""}>
-          <input value={batchName} onChange={(e) => setBatchName(e.target.value)} placeholder="Đợt ghi âm tháng 12" className={INPUT} />
+        <Field label={<>Tên đợt nhập <span className="font-regular text-[#9A9CA3]">(không bắt buộc)</span></>}>
+          <input value={batchName} onChange={(e) => setBatchName(e.target.value)} maxLength={200} placeholder="Đợt ghi âm tháng 12" className={INPUT} />
         </Field>
-        <Field label="File câu (.json hoặc .txt)" error={touched && !file ? "Chọn file JSON hoặc TXT." : ""}>
+        <p className="-mt-2.5 type-caption text-[#9A9CA3]">Để trống thì dùng tên file.</p>
+        <Field label="File câu (.json hoặc .txt)" error={fileError}>
           <label className="flex items-center gap-2.5 px-3.5 py-3 rounded-xl border border-dashed border-[#D8D5CB] dark:border-gray-700 bg-[#F7F5EF] dark:bg-[#25272E] cursor-pointer hover:border-[#0052CC]">
             <FileUp className="w-4 h-4 shrink-0" style={{ color: ADMIN_ACCENT }} />
             <span className={`type-ui truncate ${file ? "text-[#16171C] dark:text-gray-100" : "text-[#9A9CA3]"}`}>{file ? file.name : "Chọn file trên máy"}</span>
             <input type="file" accept=".json,.txt" className="hidden" onChange={(e) => setFile(e.target.files?.[0] || null)} />
           </label>
         </Field>
-        <Field label="Chủ đề của đợt" error={touched && !domain ? "Chọn chủ đề cho đợt nhập." : ""}>
-          <select value={domain} onChange={(e) => setDomain(e.target.value)} className={`${INPUT} cursor-pointer`}>
-            <option value="">Chọn chủ đề</option>
-            {MOCK_TOPICS.map((t) => (
-              <option key={t.code} value={t.code}>
-                {t.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-        {!(touched && !domain) && <p className="-mt-2.5 type-caption text-[#9A9CA3]">Mỗi đợt chỉ một chủ đề; mọi câu trong file thuộc chủ đề này.</p>}
-        <p className="type-caption text-[#9A9CA3]">Câu nhập vào nằm trong kho ở trạng thái sẵn sàng, chưa thuộc task nào.</p>
+        {isTxt && (
+          <Field label="Chủ đề của đợt" error={domainError}>
+            <select value={domain} onChange={(e) => setDomain(e.target.value)} className={`${INPUT} cursor-pointer`}>
+              <option value="">Chọn chủ đề</option>
+              {activeTopics.map((t) => (
+                <option key={t.code} value={t.code}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
+        {!isTxt && <p className="type-caption text-[#9A9CA3]">File .json lấy chủ đề trong từng câu; file .txt cần chọn chủ đề cho cả file.</p>}
       </div>
     </Modal>
   );
@@ -240,17 +271,21 @@ function MergeModal({ batches, onClose, onMerge }) {
 }
 
 export default function AdminRecordingBatches() {
-  // Giữ trong state để gộp thử thấy kết quả ngay; tải lại trang thì về dữ liệu minh hoạ ban đầu
-  const [batches, setBatches] = useState(MOCK_BATCHES);
   const [selected, setSelected] = useState(() => new Set());
   const [modal, setModal] = useState(null); // "import" | "merge" | null
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const navigate = useNavigate();
 
-  const totalPages = Math.max(1, Math.ceil(batches.length / pageSize));
-  const current = Math.min(page, totalPages);
-  const pageBatches = batches.slice((current - 1) * pageSize, current * pageSize);
+  // Call API danh sách đợt nhập, phân trang ở backend
+  const { data, isLoading, isError, error, refetch } = useQuery({
+    queryKey: [GET_IMPORT_BATCHES_API, page, pageSize],
+    queryFn: () => getImportBatchesApi({ page, pageSize }),
+    placeholderData: keepPreviousData,
+  });
+  const batches = data?.items ?? [];
+  const totalPages = Math.max(1, data?.totalPages ?? 1);
+  const colCount = 7;
 
   const toggle = (id) =>
     setSelected((prev) => {
@@ -262,7 +297,7 @@ export default function AdminRecordingBatches() {
 
   const selectedBatches = batches.filter((b) => selected.has(b.batchId));
   const selectedDomain = selectedBatches[0]?.domain;
-  const selectedAvailable = selectedBatches.reduce((sum, b) => sum + b.counts.available, 0);
+  const selectedAvailable = selectedBatches.reduce((sum, b) => sum + (b.counts?.available ?? 0), 0);
 
   // Nút gộp luôn bấm được (không disable); chưa đủ 2 đợt thì nói rõ cần làm gì
   const openMerge = () => {
@@ -270,27 +305,8 @@ export default function AdminRecordingBatches() {
     toast.info(selected.size === 0 ? "Tick chọn ít nhất 2 đợt trong bảng để gộp." : "Chọn thêm ít nhất 1 đợt nữa để gộp.");
   };
 
-  const handleMerge = (name) => {
-    // TODO: thay bằng API gộp đợt khi backend có
-    const newId = Math.max(...batches.map((b) => b.batchId)) + 1;
-    const available = selectedBatches.reduce((sum, b) => sum + b.counts.available, 0);
-    const merged = {
-      batchId: newId,
-      batchName: name,
-      fileName: `Gộp từ ${selectedBatches.length} đợt`,
-      domain: selectedBatches[0]?.domain,
-      createdAt: new Date().toISOString(),
-      counts: { available, inTask: 0, recorded: 0, locked: 0 },
-    };
-    setBatches((prev) => [
-      merged,
-      ...prev.map((b) => (selected.has(b.batchId) ? { ...b, mergedInto: name, counts: { ...b.counts, available: 0 } } : b)),
-    ]);
-    setSelected(new Set());
-    setModal(null);
-    setPage(1);
-    toast.success(`Đã gộp thành "${name}" (dữ liệu minh hoạ).`);
-  };
+  // TODO: nối API gộp đợt khi backend có
+  const handleMerge = () => toast.info("Chưa có API gộp đợt.");
 
   return (
     <div className="w-full h-full flex flex-col gap-2.5 text-left font-sans p-1 overflow-hidden">
@@ -314,7 +330,7 @@ export default function AdminRecordingBatches() {
         ) : (
           <div className="shrink-0 min-h-[66px] px-4 py-3 flex flex-wrap items-center justify-between gap-3 border-b border-[#E5E2D8] dark:border-gray-800">
             <div className="min-w-0">
-              <p className="type-label font-label text-[#16171C] dark:text-gray-200">Kho câu theo đợt nhập ({batches.length})</p>
+              <p className="type-label font-label text-[#16171C] dark:text-gray-200">Kho câu theo đợt nhập{data ? ` (${fmt(data.total)})` : ""}</p>
               <div className="mt-1.5">
                 <Legend />
               </div>
@@ -339,7 +355,7 @@ export default function AdminRecordingBatches() {
 
         <div className="flex-1 min-h-0 overflow-auto">
           {/* Trang đủ hàng thì bảng cao full khung -> 10 dòng giãn đều, giống trang Giao task */}
-          <table className={`w-full min-w-[820px] text-left border-collapse type-ui ${pageBatches.length === pageSize ? "h-full" : ""}`}>
+          <table className={`w-full min-w-[820px] text-left border-collapse type-ui ${batches.length === pageSize ? "h-full" : ""}`}>
             <thead>
               <tr className="bg-[#F7F5EF] dark:bg-[#25272E] type-label text-[#9A9CA3] dark:text-gray-400 border-b border-[#E5E2D8] dark:border-gray-800 sticky top-0 z-10">
                 <th className="pl-4 pr-1 py-2 w-[36px]" aria-label="Chọn" />
@@ -352,12 +368,36 @@ export default function AdminRecordingBatches() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F0EEE6] dark:divide-gray-800">
-              {pageBatches.map((b) => {
-                const recording = isRecording(b);
+              {isLoading && (
+                <tr>
+                  <td colSpan={colCount} className="px-4 py-10 text-center type-ui text-[#9A9CA3]">Đang tải danh sách đợt nhập...</td>
+                </tr>
+              )}
+              {isError && (
+                <tr>
+                  <td colSpan={colCount} className="px-4 py-10 text-center type-ui text-[#6E7078]">
+                    {error.message}{" "}
+                    <button type="button" onClick={() => refetch()} className="font-label underline cursor-pointer" style={{ color: ADMIN_ACCENT }}>
+                      Thử lại
+                    </button>
+                  </td>
+                </tr>
+              )}
+              {!isLoading && !isError && batches.length === 0 && (
+                <tr>
+                  <td colSpan={colCount} className="px-4 py-10 text-center type-ui text-[#9A9CA3]">Chưa có đợt nhập nào. Bấm "Nhập đợt mới" để thêm câu vào kho.</td>
+                </tr>
+              )}
+              {!isError && batches.map((b) => {
+                const name = b.batchName || b.fileName;
+                const hasStock = !!b.counts;
+                const recording = hasStock && isRecording(b);
                 // Đợt đang ghi âm hoặc đã hết câu sẵn sàng thì không có gì để gộp
                 // Gộp chỉ trong cùng chủ đề: đã chọn đợt rồi thì đợt khác chủ đề bị khoá (trừ đợt đang chọn để còn bỏ chọn được)
                 const otherDomain = selectedDomain && b.domain !== selectedDomain && !selected.has(b.batchId);
-                const lockReason = recording
+                const lockReason = !hasStock
+                  ? "Chưa có số câu sẵn sàng của đợt"
+                  : recording
                   ? "Đang ghi âm, không gộp được"
                   : b.counts.available === 0
                     ? "Hết câu sẵn sàng"
@@ -365,14 +405,12 @@ export default function AdminRecordingBatches() {
                       ? `Khác chủ đề (${topicName(selectedDomain)}), không gộp chung được`
                       : "";
                 const status = batchStatus(b);
-                // Đợt vừa gộp thử chỉ có trong state, chưa có dữ liệu câu minh hoạ nên không mở chi tiết
-                const openable = MOCK_BATCHES.some((m) => m.batchId === b.batchId);
                 return (
                   <tr
                     key={b.batchId}
-                    onClick={openable ? () => navigate(`/admin/recording-batches/${b.batchId}`) : undefined}
-                    title={openable ? "Xem các câu của đợt" : undefined}
-                    className={`group transition-colors ${openable ? "cursor-pointer" : ""} ${selected.has(b.batchId) ? "bg-[#0052CC]/[0.04]" : "hover:bg-[#F7F5EF]/70 dark:hover:bg-[#25272E]/50"}`}
+                    onClick={hasStock ? () => navigate(`/admin/recording-batches/${b.batchId}`) : undefined}
+                    title={hasStock ? "Xem các câu của đợt" : undefined}
+                    className={`group transition-colors ${hasStock ? "cursor-pointer" : ""} ${selected.has(b.batchId) ? "bg-[#0052CC]/[0.04]" : "hover:bg-[#F7F5EF]/70 dark:hover:bg-[#25272E]/50"}`}
                   >
                     <td className="pl-4 pr-1 py-1.5" onClick={(e) => e.stopPropagation()}>
                       <input
@@ -381,39 +419,47 @@ export default function AdminRecordingBatches() {
                         disabled={!!lockReason}
                         onChange={() => toggle(b.batchId)}
                         title={lockReason || "Chọn để gộp"}
-                        aria-label={`Chọn ${b.batchName}`}
+                        aria-label={`Chọn ${name}`}
                         className="w-4 h-4 accent-[#0052CC] cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
                       />
                     </td>
                     <td className="px-3 py-1.5 min-w-0">
                       <p className="font-bold text-[#16171C] dark:text-gray-100 truncate flex items-center gap-1">
-                        <span className="truncate group-hover:underline">{b.batchName}</span>
-                        {openable && <ChevronRight className="w-3.5 h-3.5 shrink-0 text-[#9A9CA3] opacity-0 group-hover:opacity-100 transition-opacity" />}
+                        <span className={`truncate ${hasStock ? "group-hover:underline" : ""}`}>{name}</span>
+                        {hasStock && <ChevronRight className="w-3.5 h-3.5 shrink-0 text-[#9A9CA3] opacity-0 group-hover:opacity-100 transition-opacity" />}
                       </p>
-                      <p className="type-caption text-[#9A9CA3] truncate">
-                        {b.mergedInto ? `Câu sẵn sàng đã gộp vào "${b.mergedInto}"` : `${b.fileName} · ${fmt(totalOf(b.counts))} câu`}
-                      </p>
+                      <p className="type-caption text-[#9A9CA3] truncate">{`${b.fileName} · ${fmt(b.scriptCount)} câu`}</p>
                     </td>
                     <td className="px-3 py-1.5">
                       <DomainChip domain={b.domain} />
                     </td>
                     <td className="px-3 py-1.5">
-                      <span className="inline-flex px-2 py-0.5 rounded-full type-caption font-label whitespace-nowrap" style={{ background: status.bg, color: status.color }}>
-                        {status.label}
-                      </span>
+                      {status ? (
+                        <span className="inline-flex px-2 py-0.5 rounded-full type-caption font-label whitespace-nowrap" style={{ background: status.bg, color: status.color }}>
+                          {status.label}
+                        </span>
+                      ) : (
+                        DASH
+                      )}
                     </td>
                     <td className="px-3 py-1.5">
-                      <StockBar counts={b.counts} />
-                      <p className="mt-1 type-caption text-[#9A9CA3] tabular-nums">
-                        Đã ghi {fmt(b.counts.recorded)} · Trong task {fmt(b.counts.inTask)}
-                        {b.counts.locked > 0 && (
-                          <span className="inline-flex items-center gap-0.5 ml-1 text-[#8B5E0F]">
-                            · <Lock className="w-3 h-3" /> {fmt(b.counts.locked)} bị khoá
-                          </span>
-                        )}
-                      </p>
+                      {hasStock ? (
+                        <>
+                          <StockBar counts={b.counts} />
+                          <p className="mt-1 type-caption text-[#9A9CA3] tabular-nums">
+                            Đã ghi {fmt(b.counts.recorded)} · Trong task {fmt(b.counts.inTask)}
+                            {b.counts.locked > 0 && (
+                              <span className="inline-flex items-center gap-0.5 ml-1 text-[#8B5E0F]">
+                                · <Lock className="w-3 h-3" /> {fmt(b.counts.locked)} bị khoá
+                              </span>
+                            )}
+                          </p>
+                        </>
+                      ) : (
+                        DASH
+                      )}
                     </td>
-                    <td className="px-3 py-1.5 text-right font-bold tabular-nums text-[#16171C] dark:text-gray-100">{fmt(b.counts.available)}</td>
+                    <td className="px-3 py-1.5 text-right font-bold tabular-nums text-[#16171C] dark:text-gray-100">{hasStock ? fmt(b.counts.available) : DASH}</td>
                     <td className="px-4 py-1.5 whitespace-nowrap text-[#6E7078] dark:text-gray-400 tabular-nums">{formatDate(b.createdAt)}</td>
                   </tr>
                 );
@@ -424,7 +470,7 @@ export default function AdminRecordingBatches() {
 
         <div className="shrink-0 border-t border-[#F0EEE6] dark:border-gray-800 px-4 sm:px-5">
           <Pagination
-            currentPage={current}
+            currentPage={Math.min(page, totalPages)}
             totalPages={totalPages}
             onPageChange={setPage}
             pageSize={pageSize}
