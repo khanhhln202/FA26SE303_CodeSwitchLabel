@@ -62,6 +62,35 @@ function InlineLabel({ variant, className = "h-4" }) {
   );
 }
 
+/**
+ * Câu thường (dòng to, tô màu phần tiếng Anh) + câu gắn nhãn đúng nguyên chuỗi API trả về
+ * để Reviewer kiểm tra cả câu lẫn nhãn - Speaker khi thu âm thường không để ý câu có đúng không.
+ * Câu gắn nhãn: font chữ đều, nhỏ + nhạt hơn câu chính, dưới đường kẻ đứt; thẳng lề trái với câu thường.
+ */
+function SentenceLines({ plain, tagged }) {
+  return (
+    <>
+      <p className="text-title font-regular text-[#16171C] break-words mt-2.5">
+        {tagged ? <CodeSwitchText transcript={tagged} accent={AUDIO_PRIMARY} /> : plain}
+      </p>
+      {tagged && (
+        <code className="block mt-3 pt-3 border-t border-dashed border-[#E5E2D8] font-mono text-[14px] leading-6 text-[#4A4C53] break-words">
+          {tagged}
+        </code>
+      )}
+    </>
+  );
+}
+
+/** Khối một bản (VI-EN hoặc VI): câu + nhãn + nghe gọn trong 1 khung viền xám để không nghe nhầm bản. */
+function VariantBlock({ children }) {
+  return (
+    <div className="rounded-xl px-4 py-3.5 bg-white border border-[#E5E2D8]">
+      {children}
+    </div>
+  );
+}
+
 const variantOf = (rec) => (rec.sentenceVariant === "CodeSwitching" ? "cs" : "vi");
 
 // Số bản ghi mỗi trang của danh sách bên trái (API phân trang theo page / pageSize)
@@ -403,28 +432,22 @@ export default function ReviewRecording() {
                 )}
               </div>
 
-              <div className="flex-1 px-5 py-5 flex flex-col gap-7">
+              <div className="flex-1 px-5 py-5 flex flex-col gap-3">
                 {canReviewCurrent && isLoadingDetail ? (
                   <Loading variant="inline" />
                 ) : canReviewCurrent && isDetailError ? (
                   <p className="type-meta text-[#C63B3B]">{detailError.message}</p>
                 ) : detail?.pair?.length ? (
-                  // Cặp câu đầy đủ từ API: bản đang duyệt có nhãn "Đang duyệt", bản còn lại để nghe đối chiếu
+                  // Cặp câu đầy đủ từ API (bản cs + bản vi); nút Duyệt/Từ chối áp cho mọi bản mình còn duyệt được (pairTargets)
                   detail.pair.map((v) => {
-                    // Mọi bản của cặp mình còn duyệt được đều "Đang duyệt" (1 lần bấm duyệt cả cặp)
-                    const isTarget = pairTargets.some((t) => t.recordingId === v.recordingId);
                     return (
-                      <div key={v.recordingId ?? v.sentenceVariant}>
+                      <VariantBlock key={v.recordingId ?? v.sentenceVariant}>
                         <span className="flex items-center gap-2">
                           <InlineLabel variant={variantOf(v)} />
-                          {isTarget && (
-                            <span className="type-caption px-2 rounded-full" style={{ background: `${ACCENT}1A`, color: ACCENT }}>Đang duyệt</span>
-                          )}
                         </span>
-                        <p className="text-title font-regular text-[#16171C] mt-2 mb-3 break-words">
-                          {v.scriptTagged ? <CodeSwitchText transcript={v.scriptTagged} accent={AUDIO_PRIMARY} /> : v.scriptText}
-                        </p>
-                        {v.audioUrl ? (
+                        <SentenceLines plain={v.scriptText} tagged={v.scriptTagged} />
+                        <div className="mt-3">
+                          {v.audioUrl ? (
                           <WaveformInline
                             key={v.recordingId}
                             large
@@ -436,17 +459,18 @@ export default function ReviewRecording() {
                         ) : (
                           <p className="type-meta text-[#9A9CA3]">Không có audio</p>
                         )}
-                      </div>
+                        </div>
+                      </VariantBlock>
                     );
                   })
                 ) : (
                   // Bản không mở được để duyệt (blocker): chỉ hiện câu từ danh sách, không có link nghe
                   [current, current.sibling].filter(Boolean).map((v) => (
-                    <div key={v.recordingId ?? v.sentenceVariant}>
+                    <VariantBlock key={v.recordingId ?? v.sentenceVariant}>
                       <InlineLabel variant={variantOf(v)} />
-                      <p className="text-title font-regular text-[#16171C] mt-2 mb-3 break-words">{v.scriptText}</p>
-                      <p className="type-meta text-[#9A9CA3]">Không có audio</p>
-                    </div>
+                      <SentenceLines plain={v.scriptText} tagged={v.scriptTagged} />
+                      <p className="type-meta text-[#9A9CA3] mt-3">Không có audio</p>
+                    </VariantBlock>
                   ))
                 )}
               </div>

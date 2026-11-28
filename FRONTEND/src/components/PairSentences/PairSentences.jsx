@@ -14,20 +14,24 @@ function PlainSentence({ plain, tagged }) {
 }
 
 /**
- * Đủ 4 câu của một cặp, cùng kiểu với lịch sử đóng góp của Speaker:
- * dòng chính = câu thường, dòng xám = câu gắn nhãn nguyên chuỗi API.
+ * Đủ 4 câu của một cặp trong MỘT thẻ (2 bản ngăn bằng đường kẻ mảnh vì là một cặp):
+ * dòng chính = câu thường, dòng dưới = câu gắn nhãn nguyên chuỗi API (font chữ đều, nhỏ - để soát nhãn).
  */
 export default function PairSentences({ csTagged, csPlain, viTagged, viPlain }) {
-  return [
-    { label: "VI-EN", tagged: csTagged, plain: csPlain, pill: { background: `${AUDIO_PRIMARY}1A`, color: AUDIO_PRIMARY } },
-    { label: "VI", tagged: viTagged, plain: viPlain, pill: { background: "#F0EEE6", color: "#6E7078" } },
-  ].map(({ label, tagged, plain, pill }) => (
-    <div key={label} className="bg-[#F7F5EF] p-3.5 rounded-xl border border-[#E5E2D8] mb-2.5 flex items-start gap-2.5">
-      <span className="text-tag font-emphasis w-9 h-4 shrink-0 rounded inline-flex items-center justify-center mt-1" style={pill}>{label}</span>
-      <div className="min-w-0">
-        <p className="type-body text-[#16171C] break-words"><PlainSentence plain={plain} tagged={tagged} /></p>
-        {tagged && <p className="type-meta text-[#9A9CA3] break-words mt-1">{tagged}</p>}
-      </div>
+  return (
+    <div className="rounded-xl border border-[#E5E2D8] divide-y divide-[#E5E2D8]">
+      {[
+        { label: "VI-EN", tagged: csTagged, plain: csPlain, pill: { background: `${AUDIO_PRIMARY}1A`, color: AUDIO_PRIMARY } },
+        { label: "VI", tagged: viTagged, plain: viPlain, pill: { background: "#F0EEE6", color: "#6E7078" } },
+      ].map(({ label, tagged, plain, pill }) => (
+        <div key={label} className="px-3 py-2.5 flex items-start gap-2.5">
+          <span className="text-tag font-emphasis w-9 h-4 shrink-0 rounded inline-flex items-center justify-center mt-0.5" style={pill}>{label}</span>
+          <div className="min-w-0">
+            <p className="text-[14px] leading-5 text-[#16171C] break-words"><PlainSentence plain={plain} tagged={tagged} /></p>
+            {tagged && <code className="block font-mono text-[12px] leading-[18px] text-[#4A4C53] break-words mt-0.5">{tagged}</code>}
+          </div>
+        </div>
+      ))}
     </div>
-  ));
+  );
 }

@@ -2,6 +2,8 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Pagination from "../../../../components/Pagination/Pagination";
 import { CheckCircle2, XCircle, Clock, AlertCircle, X, BarChart3, Search, ArrowRight } from "lucide-react";
+import PairSentences from "../../../../components/PairSentences/PairSentences";
+import ReviewTimeline from "../../../../components/ReviewTimeline/ReviewTimeline";
 import { SPEAKER_ACCENT_ACTIVE_ICON as ACCENT, SUCCESS, DANGER, WARNING, AUDIO_PRIMARY } from "../../../../constants/theme"; // ACCENT = xanh lá thương hiệu, AUDIO_PRIMARY = màu phần tiếng Anh
 import CodeSwitchText from "../../../../components/CodeSwitchText/CodeSwitchText";
 import { stripTags } from "../../../../utils/codeSwitch";
@@ -46,33 +48,13 @@ function toRow(item) {
   };
 }
 
-/**
- * Câu thường: hiện đúng csPlain / viPlain. Nếu câu thường trùng nội dung câu gắn nhãn (bỏ nhãn)
- * thì vẽ từ câu gắn nhãn để tô màu từ tiếng Anh; khác nhau thì hiện nguyên câu thường.
- * Câu cũ chưa có câu thường thì dùng câu gắn nhãn.
- */
-function PlainSentence({ plain, tagged }) {
-  const norm = (t = "") => t.replace(/\s+/g, " ").trim();
-  if (!plain || norm(plain) === norm(stripTags(tagged))) return <CodeSwitchText transcript={tagged} accent={AUDIO_PRIMARY} />;
-  return plain;
-}
-
 function SentenceContent({ item }) {
   return (
     <>
-      {/* Đủ 4 câu API trả về: dòng chính = câu thường (csPlain / viPlain), dòng xám = câu gắn nhãn nguyên chuỗi API */}
-      {[
-        { label: "VI-EN", tagged: item.cs_transcript, plain: item.cs_plain, pill: { background: `${AUDIO_PRIMARY}1A`, color: AUDIO_PRIMARY } },
-        { label: "VI", tagged: item.vi_equivalent, plain: item.vi_plain, pill: { background: "#F0EEE6", color: "#6E7078" } },
-      ].map(({ label, tagged, plain, pill }) => (
-        <div key={label} className="bg-[#F7F5EF] p-3.5 rounded-xl border border-[#E5E2D8] mb-2.5 flex items-start gap-2.5">
-          <span className="text-tag font-emphasis w-9 h-4 shrink-0 rounded inline-flex items-center justify-center mt-1" style={pill}>{label}</span>
-          <div className="min-w-0">
-            <p className="type-body text-[#16171C] break-words"><PlainSentence plain={plain} tagged={tagged} /></p>
-            {tagged && <p className="type-meta text-[#9A9CA3] break-words mt-1">{tagged}</p>}
-          </div>
-        </div>
-      ))}
+      {/* Đủ 4 câu API trả về trong 1 thẻ (cùng component với các popup lịch sử khác) */}
+      <div className="mb-5">
+        <PairSentences csTagged={item.cs_transcript} csPlain={item.cs_plain} viTagged={item.vi_equivalent} viPlain={item.vi_plain} />
+      </div>
       {item.alignment.length > 0 && (
         <div className="mt-4 mb-4">
           <p className="type-label text-[#9A9CA3] mb-2">Nghĩa từ tiếng Anh</p>
@@ -346,27 +328,17 @@ export default function ContributionHistory() {
                 {detailItem.reviews.length === 0 && (
                   <p className="type-meta text-[#6E7078]">Câu đang chờ duyệt nội dung. Kết quả hiện khi có người duyệt.</p>
                 )}
-                {/* Lượt duyệt API trả về (1 người duyệt) */}
-                <div className="flex flex-col gap-2">
-                  {detailItem.reviews.filter((r) => r.decision !== "not_needed" && (detailItem.status === "Pending" || r.decision === "approve" || r.decision === "reject")).map((r, i) => {
-                    const isReject = r.decision === "reject";
-                    const isApprove = r.decision === "approve";
-                    const c = isReject ? "#C63B3B" : isApprove ? "#3FA66B" : "#A85E12";
-                    const rowBg = isReject ? "#FDEAEA" : isApprove ? "#EAF7EF" : "#FFF1DE";
-                    const rowBorder = isReject ? "#F3C9C9" : isApprove ? "rgba(63,166,107,0.2)" : "#F5DFC0";
-                    return (
-                      <div key={i} className="flex gap-2.5 px-3 py-2.5 rounded-xl border" style={{ background: rowBg, borderColor: rowBorder }}>
-                        <span className="w-6 h-6 rounded-full text-white text-caption font-label flex items-center justify-center flex-shrink-0" style={{ background: c }}>{isReject ? <XCircle className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}</span>
-                        <div className="min-w-0">
-                          <p className="text-meta font-label" style={{ color: isApprove ? "#1F5C3F" : c }}>
-                            {isReject ? `Từ chối${r.errorCategory ? " · " + r.errorCategory : ""}` : isApprove ? "Đã duyệt" : "Chưa đánh giá"}
-                          </p>
-                          {r.reason && <p className="text-meta text-[#6E7078] mt-0.5">{r.reason}</p>}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                {/* Lượt duyệt API trả về (1 người duyệt) - dòng thời gian dùng chung */}
+                <ReviewTimeline
+                  items={detailItem.reviews
+                    .filter((r) => r.decision !== "not_needed" && (detailItem.status === "Pending" || r.decision === "approve" || r.decision === "reject"))
+                    .map((r, i) => ({
+                      key: i,
+                      tone: r.decision === "reject" ? "reject" : r.decision === "approve" ? "approve" : "pending",
+                      title: r.decision === "reject" ? `Từ chối${r.errorCategory ? " · " + r.errorCategory : ""}` : r.decision === "approve" ? "Đã duyệt" : "Chưa đánh giá",
+                      lines: r.reason ? [r.reason] : [],
+                    }))}
+                />
                 <button onClick={() => setDetailItem(null)} className="w-full mt-5 py-3 text-white rounded-xl text-body font-label transition-all hover:opacity-90 active:scale-[0.98] cursor-pointer" style={{ background: ACCENT }}>Đóng</button>
               </div>
             </div>
