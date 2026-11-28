@@ -133,7 +133,7 @@ export const SIDEBAR_CONFIG = {
     items: [
       { name: "Trang chủ", to: "/task-manager", icon: Home, end: true },
       { name: "Quản lý nhiệm vụ", to: "/task-manager/management", icon: ListTodo },
-      { name: "Task được giao", to: "/task-manager/received-tasks", icon: Inbox },
+      { name: "Nhiệm vụ được giao", to: "/task-manager/received-tasks", icon: Inbox },
     ],
     promo: null,
   },
