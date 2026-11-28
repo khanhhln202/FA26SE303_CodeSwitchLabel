@@ -78,7 +78,8 @@ export default function Login({ onLoginSuccess }) {
   });
   const handleGoogleCredential = (credential) => {
     if (loginError) clearLoginError();
-    googleLogin({ credential, consentAccepted: true, consentVersion: "v1" });
+    // Không gửi consentVersion -> server ghi theo bản cam kết đang hiệu lực
+    googleLogin({ credential, consentAccepted: true });
   };
   const authError = loginError || googleError;
 

@@ -1,16 +1,16 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFormik } from "formik";
 import { toast } from "sonner";
 import * as Yup from "yup";
 import { AlertCircle, ArrowLeft, ArrowRight, Check } from "lucide-react";
 import { getPostLoginPath } from "../../../constants/auth";
 import { PROVINCES } from "../../../constants/provinces";
-import { CONSENT_SECTIONS, CONSENT_TITLE, CONSENT_VERSION } from "../../../constants/consent";
+import { getActiveConsentApi } from "../../../services/consentApi";
 import { googleLoginApi, registerSpeakerApi } from "../../../services/authApi";
 import { getCurrentUser, saveSession } from "../../../utils/authStorage";
-import { REGISTER_SPEAKER_API, GOOGLE_LOGIN_API, GET_ME_API } from "../../../utils/queryKey";
+import { REGISTER_SPEAKER_API, GOOGLE_LOGIN_API, GET_ME_API, GET_ACTIVE_CONSENT_API } from "../../../utils/queryKey";
 import AuthSplitLayout from "../../../components/Auth/AuthSplitLayout";
 import AuthTabs from "../../../components/Auth/AuthTabs";
 import GoogleSignInButton from "../../../components/Auth/GoogleSignInButton";
@@ -23,7 +23,8 @@ import {
  * Đăng ký 3 bước: 1. Tài khoản -> 2. Hồ sơ người đọc -> 3. Cam kết + chữ ký.
  * API: POST /api/auth/register-speaker - gửi tài khoản + speakerProfile (backend lưu hồ sơ luôn,
  * nên không phải qua màn /onboarding nữa).
- * Cam kết + chữ ký: hiện mới làm UI, CHƯA gửi lên backend (chờ API cam kết).
+ * Cam kết: nội dung lấy từ GET /api/consent (bản đang hiệu lực); đồng ý gửi kèm khi đăng ký
+ * (consentAccepted + consentVersion). Chữ ký: API chưa có chỗ nhận ảnh -> vẫn chỉ ký trên UI, chưa gửi.
  */
 
 const STEPS = ["Tài khoản", "Hồ sơ", "Cam kết"];
@@ -144,6 +145,20 @@ export default function Register() {
   // Bước 3: phải cuộn đọc hết bản cam kết mới được ký
   const [readToEnd, setReadToEnd] = useState(false);
 
+  // Bản cam kết đang hiệu lực - null (404) = chưa có bản nào, không cho bấm đồng ý
+  const { data: consent, isLoading: consentLoading, isError: consentError, refetch: refetchConsent } = useQuery({
+    queryKey: [GET_ACTIVE_CONSENT_API],
+    queryFn: getActiveConsentApi,
+    staleTime: 10 * 60 * 1000,
+  });
+  const consentTitle = consent?.title || "Bản cam kết";
+  // Bản cam kết ngắn, không cần cuộn -> coi như đã đọc hết
+  const consentBoxRef = useRef(null);
+  useEffect(() => {
+    const el = consentBoxRef.current;
+    if (step === 2 && consent && el && el.scrollHeight <= el.clientHeight + 8) setReadToEnd(true);
+  }, [step, consent]);
+
   // Mutation đăng ký - thành công thì đăng nhập luôn rồi vào trang của vai
   const { mutate: register, isPending: isRegistering, error: registerError, reset: clearRegisterError } = useMutation({
     mutationKey: [REGISTER_SPEAKER_API],
@@ -172,7 +187,8 @@ export default function Register() {
   });
   const handleGoogleCredential = (credential) => {
     if (registerError) clearRegisterError();
-    googleLogin({ credential, consentAccepted: true, consentVersion: CONSENT_VERSION });
+    // Có bản cam kết thì ghi đúng mã; chưa tải được thì để server ghi theo bản đang hiệu lực
+    googleLogin({ credential, consentAccepted: true, ...(consent ? { consentVersion: consent.version } : {}) });
   };
   const authError = registerError || googleError;
 
@@ -203,7 +219,9 @@ export default function Register() {
           englishLevel: values.englishLevel ? Number(values.englishLevel) : null,
           region: values.region || null,
         },
-        // TODO: chưa có API cam kết -> chưa gửi consentAccepted / consentVersion và ảnh chữ ký (values.signature)
+        consentAccepted: true,
+        consentVersion: consent.version,
+        // TODO: API chưa nhận ảnh chữ ký (values.signature)
       });
     },
   });
@@ -237,7 +255,7 @@ export default function Register() {
     if (!readToEnd && el.scrollTop + el.clientHeight >= el.scrollHeight - 8) setReadToEnd(true);
   };
 
-  const canFinish = readToEnd && Boolean(formik.values.signature) && formik.values.agreed;
+  const canFinish = Boolean(consent) && readToEnd && Boolean(formik.values.signature) && formik.values.agreed;
 
   return (
     <AuthSplitLayout
@@ -338,18 +356,19 @@ export default function Register() {
           </>
         )}
 
-        {/* BƯỚC 3 - CAM KẾT + CHỮ KÝ (chỉ UI, chưa gửi lên backend) */}
+        {/* BƯỚC 3 - CAM KẾT (từ API) + CHỮ KÝ (chữ ký chưa gửi lên backend) */}
         {step === 2 && (
           <>
             <div>
-              <p className="type-label text-[var(--auth-heading)] uppercase tracking-wide">{CONSENT_TITLE}</p>
-              <p className="type-caption text-[var(--auth-faint)]">Phiên bản {CONSENT_VERSION}</p>
+              <p className="type-label text-[var(--auth-heading)] uppercase tracking-wide">{consentTitle}</p>
+              {consent && <p className="type-caption text-[var(--auth-faint)]">Phiên bản {consent.version}</p>}
             </div>
 
             <div
+              ref={consentBoxRef}
               onScroll={handleConsentScroll}
               tabIndex={0}
-              aria-label={CONSENT_TITLE}
+              aria-label={consentTitle}
               className="max-h-[150px] overflow-y-auto rounded-xl border border-[var(--auth-border)] bg-[var(--auth-field)] px-3.5 py-3 type-meta text-[var(--auth-body)] space-y-2.5 outline-none focus-visible:ring-3 focus-visible:ring-[var(--auth-brand-ring)]"
             >
               <p>
@@ -357,14 +376,16 @@ export default function Register() {
                 {formik.values.email.trim().toLowerCase()}), tự nguyện tham gia đóng góp giọng nói cho dự án
                 CodeSwitchLabel và đồng ý với các nội dung sau:
               </p>
-              <ol className="space-y-2 list-decimal pl-4">
-                {CONSENT_SECTIONS.map((s) => (
-                  <li key={s.title}>
-                    <span className="font-label text-[var(--auth-heading)]">{s.title}: </span>
-                    {s.body}
-                  </li>
-                ))}
-              </ol>
+              {/* body giữ nguyên xuống dòng của backend */}
+              {consentLoading && <p className="text-[var(--auth-faint)]">Đang tải bản cam kết...</p>}
+              {consentError && (
+                <p>
+                  Không tải được bản cam kết.{" "}
+                  <button type="button" onClick={() => refetchConsent()} className="font-label underline cursor-pointer">Thử lại</button>
+                </p>
+              )}
+              {!consentLoading && !consentError && !consent && <p>Hệ thống chưa có bản cam kết đang hiệu lực nên chưa tạo tài khoản được. Vui lòng quay lại sau.</p>}
+              {consent && <p className="whitespace-pre-wrap">{consent.body}</p>}
               <p>Tôi xác nhận đã đọc kỹ, hiểu rõ và ký tên dưới đây.</p>
             </div>
             {!readToEnd && (

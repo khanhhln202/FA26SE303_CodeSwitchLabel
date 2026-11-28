@@ -58,6 +58,8 @@ export const GET_SPEAKER_REJECTED_RECORDINGS_API = 'GET_SPEAKER_REJECTED_RECORDI
 // ===== Config (tham số hệ thống) =====
 // Danh sách chủ đề cố định (GET /api/config/topics)
 export const GET_TOPICS_API = 'GET_TOPICS_API'
+// Bản cam kết đang hiệu lực (GET /api/consent)
+export const GET_ACTIVE_CONSENT_API = 'GET_ACTIVE_CONSENT_API'
 
 // ===== Reviewer (duyệt bản ghi) =====
 // Tiến độ + nhiệm vụ duyệt đang giao (GET /api/reviewer/progress)
