@@ -173,6 +173,11 @@ const routes = [
         element: lazy(() => import("../pages/TaskManagerTemplate/TaskManagerReceivedTasks/index")),
       },
       {
+        // Trang mẫu (dữ liệu minh hoạ), có thêm loại task "Video hội thoại"
+        path: "received-tasks-sample",
+        element: lazy(() => import("../pages/TaskManagerTemplate/TaskManagerReceivedTasksSample/index")),
+      },
+      {
         path: "help-center",
         element: HelpCenterLazy,
       },

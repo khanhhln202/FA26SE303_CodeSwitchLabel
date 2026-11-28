@@ -1,10 +1,11 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { CalendarPlus, Check, ChevronDown, ExternalLink, Mic, Plus, Search, ShieldCheck, X } from "lucide-react";
+import { CalendarPlus, Check, ChevronDown, Clapperboard, ExternalLink, Mic, Plus, Search, ShieldCheck, X } from "lucide-react";
 import { ADMIN_ACCENT } from "../../../constants/theme";
 import { topicName } from "../AdminRecordingBatches/mockData";
 import ExtendDeadlineDialog from "./ExtendDeadlineDialog";
-import { DONE, REVIEW, STATUS, SUBMITTED, TYPE_ICON, TYPE_LABEL, daysBetween, startOfToday, statusOf } from "../AdminAssignTasks/taskShared";
+import { DONE, REVIEW, STATUS, SUBMITTED, daysBetween, startOfToday, statusOf } from "../AdminAssignTasks/taskShared";
+import { SAMPLE_TYPE_ICON as TYPE_ICON, SAMPLE_TYPE_LABEL as TYPE_LABEL, VIDEO_STATUS, mmss, taskTitle } from "./mockVideos";
 import Pagination from "../../../components/Pagination/Pagination";
 import { applyExtension, extensionOf, useExtensions } from "../AdminAssignTasks/extensionRequests";
 
@@ -176,6 +177,32 @@ export function PeopleSection({ title, icon: Icon, iconColor, empty, note, peopl
   );
 }
 
+// Task video: danh sách video của task kèm trạng thái duyệt từng video (thay cho ô Speaker)
+function VideoSection({ videos }) {
+  return (
+    <div className="min-w-0 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#1C1D22] px-3.5 py-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="type-meta font-label text-[#16171C] dark:text-gray-100 inline-flex items-center gap-1.5">
+          <Clapperboard className="w-3.5 h-3.5 text-[#3C3489]" /> Video hội thoại
+        </p>
+        <p className="type-caption text-[#9A9CA3]">{videos.length} video</p>
+      </div>
+      <div className="mt-2.5 space-y-2">
+        {videos.map((v) => {
+          const st = VIDEO_STATUS[v.status] || VIDEO_STATUS.ReadyForReview;
+          return (
+            <div key={v.sourceVideoId} className="grid grid-cols-[minmax(0,1fr)_44px_80px] items-center gap-3 type-meta">
+              <span className="text-[#16171C] dark:text-gray-200 truncate">{v.title}</span>
+              <span className="tabular-nums text-right text-[#6E7078]">{mmss(v.durationSec)}</span>
+              <span className={`justify-self-end px-2 py-0.5 rounded-full type-caption font-label whitespace-nowrap ${st.cls}`}>{st.label}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // Menu dropdown hiện ra mượt: mờ dần + trượt nhẹ xuống
 export const POP_CSS = `@keyframes dropdownPop{from{opacity:0;transform:translateY(-4px) scale(.98)}to{opacity:1;transform:none}}
 .dropdown-pop{animation:dropdownPop .16s cubic-bezier(.2,.8,.2,1);transform-origin:top left}
@@ -230,6 +257,7 @@ export default function AssignedTaskList({ tasks, onCreate, onExtend }) {
     { value: "all", label: "Tất cả" },
     { value: "Recording", label: TYPE_LABEL.Recording, count: withStatus.filter((t) => t.taskType === "Recording").length },
     { value: "Contribution", label: TYPE_LABEL.Contribution, count: withStatus.filter((t) => t.taskType === "Contribution").length },
+    { value: "Video", label: TYPE_LABEL.Video, count: withStatus.filter((t) => t.taskType === "Video").length },
   ];
 
   return (
@@ -303,7 +331,7 @@ export default function AssignedTaskList({ tasks, onCreate, onExtend }) {
                           </span>
                           <div className="min-w-0">
                             <p className="font-bold text-[#16171C] dark:text-gray-100 truncate">
-                              {t.taskName || (t.taskType === "Recording" ? t.batchName : `Câu đóng góp · ${topicName(t.domain)}`)}
+                              {taskTitle(t)}
                             </p>
                           </div>
                         </div>
@@ -319,7 +347,7 @@ export default function AssignedTaskList({ tasks, onCreate, onExtend }) {
                           </span>
                         </div>
                         <p className="mt-0.5 type-caption text-[#9A9CA3] tabular-nums">
-                          {fmt(done)} / {fmt(targetQty)} câu
+                          {fmt(done)} / {fmt(targetQty)} {t.taskType === "Video" ? "video" : "câu"}
                           {pending > 0 && <span className="text-[#0B4FB3] dark:text-[#9DBDF2]"> · {fmt(pending)} chờ duyệt</span>}
                         </p>
                       </td>
@@ -344,14 +372,18 @@ export default function AssignedTaskList({ tasks, onCreate, onExtend }) {
                         <div className="min-h-0 overflow-hidden">
                         <div className="pl-[102px] pr-4 pb-4 pt-0.5">
                           <div className="grid gap-3 lg:grid-cols-2">
-                            <PeopleSection
-                              title="Speaker ghi âm"
-                              icon={Mic}
-                              iconColor={DONE}
-                              color={DONE}
-                              people={t.assignees}
-                              empty="Manager chưa chia cho speaker nào."
-                            />
+                            {t.taskType === "Video" ? (
+                              <VideoSection videos={t.videos || []} />
+                            ) : (
+                              <PeopleSection
+                                title="Speaker ghi âm"
+                                icon={Mic}
+                                iconColor={DONE}
+                                color={DONE}
+                                people={t.assignees}
+                                empty="Manager chưa chia cho speaker nào."
+                              />
+                            )}
                             <PeopleSection
                               title="Reviewer duyệt"
                               icon={ShieldCheck}
