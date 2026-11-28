@@ -61,12 +61,6 @@ export const GET_TOPICS_API = 'GET_TOPICS_API'
 // Bản cam kết đang hiệu lực (GET /api/consent)
 export const GET_ACTIVE_CONSENT_API = 'GET_ACTIVE_CONSENT_API'
 
-// Admin - đợt nhập câu (GET /api/scripts/import/batches)
-export const GET_IMPORT_BATCHES_API = 'GET_IMPORT_BATCHES_API'
-// Admin - đợt giao cho Task Manager (GET /api/waves) và danh sách Task Manager (GET /api/users?role=TaskManager)
-export const GET_ADMIN_WAVES_API = 'GET_ADMIN_WAVES_API'
-export const GET_TASK_MANAGERS_API = 'GET_TASK_MANAGERS_API'
-
 // ===== Reviewer (duyệt bản ghi) =====
 // Tiến độ + nhiệm vụ duyệt đang giao (GET /api/reviewer/progress)
 export const GET_REVIEWER_PROGRESS_API = 'GET_REVIEWER_PROGRESS_API'

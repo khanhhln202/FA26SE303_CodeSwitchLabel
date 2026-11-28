@@ -11,7 +11,6 @@ import {
   TASK_MANAGER_ACCENT
 } from '../../constants/theme';
 import { HEADER_CONFIG } from '../../constants/headerConfig';
-import ThemeToggle from '../ThemeToggle/ThemeToggle';
 import useLogout from '../../hooks/auth/useLogout';
 import { PAGE_TITLES } from '../../hooks/usePageTitle';
 import { getMeApi } from '../../services/authApi';
@@ -42,7 +41,6 @@ export default function Header({ role }) {
 
   const isAdmin = role === 'admin' || role === 'Admin';
   const isTaskManager = role === 'taskManager' || role === 'TaskManager' || role === 'task_manager';
-  const showThemeToggle = isAdmin || isTaskManager;
 
   // Lấy accent & profilePath theo role
   const config = HEADER_CONFIG[role] || {};
@@ -103,13 +101,6 @@ export default function Header({ role }) {
       {/* Bên phải: Nút Sáng Tối (chỉ hiện cho Admin & Task Manager) + Thông báo + Tài khoản */}
       <div className="flex items-center gap-1 shrink-0">
         {/* Chuông trong khung viền 36px như header cũ để header không trông mỏng */}
-        {/* Nút đổi giao diện Sáng / Tối nằm cạnh bên trái nút thông báo (cho Admin và Task Manager) */}
-        {showThemeToggle && (
-          <div className="mr-1">
-            <ThemeToggle />
-          </div>
-        )}
-
         {/* Nút thông báo nguyên bản */}
         <button
           className="relative w-9 h-9 rounded-lg flex items-center justify-center transition-colors cursor-pointer hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"

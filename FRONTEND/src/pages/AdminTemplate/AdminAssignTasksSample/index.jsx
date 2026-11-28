@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import AssignedTaskList from "../AdminAssignTasks/AssignedTaskList";
+import AssignedTaskList from "./AssignedTaskList";
 import { toast } from "sonner";
 import { ArrowRight, Check, MessageSquarePlus, Mic, X } from "lucide-react";
 import { ADMIN_ACCENT, CHIP_SUCCESS_TEXT, DANGER } from "../../../constants/theme";

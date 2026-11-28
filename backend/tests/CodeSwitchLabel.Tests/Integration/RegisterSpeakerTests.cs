@@ -121,11 +121,29 @@ public sealed class RegisterSpeakerTests(DatabaseFixture fixture) : ApiTestBase(
         Assert.Equal(HttpStatusCode.Conflict, dupe.StatusCode);
     }
 
+    /// <summary>
+    /// Phiên bản ghi lại phải là phiên bản server đang phát — lấy từ <c>GET /api/consent</c>.
+    ///
+    /// <para>
+    /// Trước V39 test này gửi thẳng "v1.0", một mã KHÔNG có nội dung nào, và hệ thống vẫn
+    /// ghi nhận. Đó chính là lỗ hổng: client tự khai phiên bản, server tin. Trên máy chủ thật
+    /// dòng cam kết duy nhất đang mang phiên bản "string" — giá trị mặc định của ô nhập trong
+    /// Swagger — tức hệ thống khẳng định một người đã đồng ý với văn bản không tồn tại.
+    /// </para>
+    /// </summary>
     [Fact]
-    public async Task RegisterSpeaker_LuuDongY_DungPhienBan()
+    public async Task RegisterSpeaker_LuuDongY_TheoDungPhienBanServerDangPhat()
     {
         var ct = TestContext.Current.CancellationToken;
         var email = $"consent-{Guid.NewGuid():N}@codeswitchlabel.local";
+
+        // Không cần đăng nhập: người ta phải đọc được điều khoản TRƯỚC khi tạo tài khoản.
+        var docRes = await GetAsync("/api/consent");
+        Assert.Equal(HttpStatusCode.OK, docRes.StatusCode);
+
+        using var doc = JsonDocument.Parse(await docRes.Content.ReadAsStringAsync(ct));
+        var phienBan = doc.RootElement.GetProperty("version").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(doc.RootElement.GetProperty("body").GetString()));
 
         var response = await PostAsync("/api/auth/register-speaker", new
         {
@@ -133,7 +151,7 @@ public sealed class RegisterSpeakerTests(DatabaseFixture fixture) : ApiTestBase(
             email,
             password = "Volunteer@123",
             consentAccepted = true,
-            consentVersion = "v1.0"
+            consentVersion = phienBan
         });
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
@@ -148,7 +166,41 @@ public sealed class RegisterSpeakerTests(DatabaseFixture fixture) : ApiTestBase(
             """, connection);
         command.Parameters.AddWithValue("email", email);
 
-        Assert.Equal("v1.0", (string?)await command.ExecuteScalarAsync(ct));
+        Assert.Equal(phienBan, (string?)await command.ExecuteScalarAsync(ct));
+    }
+
+    /// <summary>
+    /// Phiên bản bịa thì KHÔNG ghi nhận, và tài khoản cũng không được tạo.
+    ///
+    /// <para>
+    /// Đây là cửa chặn chính của V39. Thiếu nó thì bảng nội dung cam kết chỉ là trang trí:
+    /// vẫn ghi được "người này đã đồng ý v999" trong khi v999 chưa bao giờ tồn tại.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task RegisterSpeaker_PhienBanCamKetBiaDat_ThiTuChoi()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var email = $"consent-bia-{Guid.NewGuid():N}@codeswitchlabel.local";
+
+        var response = await PostAsync("/api/auth/register-speaker", new
+        {
+            fullName = "Người khai bừa",
+            email,
+            password = "Volunteer@123",
+            consentAccepted = true,
+            consentVersion = "v999-khong-ton-tai"
+        });
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+
+        await using var connection = new NpgsqlConnection(Fixture.ConnectionString);
+        await connection.OpenAsync(ct);
+        await using var command = new NpgsqlCommand(
+            "SELECT count(*) FROM app_user WHERE email = @email", connection);
+        command.Parameters.AddWithValue("email", email);
+
+        Assert.Equal(0L, (long?)await command.ExecuteScalarAsync(ct));
     }
 
     [Theory]

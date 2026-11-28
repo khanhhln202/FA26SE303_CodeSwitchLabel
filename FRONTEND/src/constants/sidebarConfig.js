@@ -133,7 +133,7 @@ export const SIDEBAR_CONFIG = {
     items: [
       { name: "Trang chủ", to: "/task-manager", icon: Home, end: true },
       { name: "Quản lý nhiệm vụ", to: "/task-manager/management", icon: ListTodo },
-      { name: "Task được giao", to: "/task-manager/received-tasks", icon: Inbox },
+      { name: "Nhiệm vụ được giao", to: "/task-manager/received-tasks", icon: Inbox },
     ],
     promo: null,
   },
@@ -162,8 +162,8 @@ export const SIDEBAR_CONFIG = {
       { name: "Quản lý video hội thoại", to: "/admin/source-videos", icon: Clapperboard },
       { name: "Kho câu theo đợt nhập", to: "/admin/recording-batches", icon: Boxes },
       { name: "Kho script mẫu", to: "/admin/recording-batches-sample", icon: Boxes },
-      { name: "Giao task", to: "/admin/assign-tasks", icon: ClipboardList },
-      { name: "Giao task mẫu", to: "/admin/assign-tasks-sample", icon: ClipboardList },
+      { name: "Giao nhiệm vụ", to: "/admin/assign-tasks", icon: ClipboardList },
+      { name: "Giao nhiệm vụ mẫu", to: "/admin/assign-tasks-sample", icon: ClipboardList },
       {
         name: "Thiết lập cấu hình",
         icon: Sliders,

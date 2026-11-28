@@ -208,8 +208,12 @@ public class MeController(IUserService userService, IConsentService consentServi
 {
     /// <summary>Ghi nhận đồng ý cam kết sử dụng dữ liệu sinh trắc âm thanh của chính mình.</summary>
     /// <remarks>
-    /// Lưu vào bảng <c>user_consent</c> trong Database. Yêu cầu <c>consentAccepted = true</c>
-    /// (checkbox xác nhận tự nguyện) và <c>consentVersion</c> (phiên bản bản cam kết).
+    /// Lưu vào bảng <c>user_consent</c>. Bắt buộc <c>consentAccepted = true</c> (checkbox xác
+    /// nhận tự nguyện).
+    ///
+    /// <c>consentVersion</c> **không bắt buộc** — bỏ trống thì server ghi theo bản đang hiệu
+    /// lực. Có khai thì phải là phiên bản có nội dung thật trong <c>consent_document</c>, nếu
+    /// không trả **422 `consent_version_unknown`**. Lấy mã ở `GET /api/consent`.
     /// </remarks>
     [HttpPost("consent")]
     [ProducesResponseType(typeof(ConsentDto), StatusCodes.Status200OK)]
