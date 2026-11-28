@@ -243,6 +243,18 @@ public record AssigneeSummaryDto(
     int OverdueTasks);
 
 /// <param name="TaskTitle">Tên nhiệm vụ (task.description) — cùng nghĩa với `taskTitle` ở lịch sử ghi âm.</param>
+/// <param name="Domain">
+/// MÃ chủ đề của nhiệm vụ (<c>ItTechnology</c>, <c>Education</c>...), không phải tên hiển thị.
+///
+/// <para>
+/// Có mặt ở đây để màn hình đóng góp dựng được nhãn "Đóng góp câu chủ đề ..." và chọn sẵn
+/// đúng ô chủ đề. Trước đây <c>TaskRow</c> đã đọc trường này từ database rồi nhưng DTO bỏ
+/// rơi nó, nên giao diện không có cách nào biết nhiệm vụ thuộc chủ đề gì.
+/// </para>
+///
+/// <para>Tên tiếng Việt lấy từ <c>GET /api/domains</c> — ở đây cố ý chỉ trả mã, vì mã mới là
+/// thứ bất biến và cũng là thứ gửi lại khi nộp câu.</para>
+/// </param>
 /// <param name="MyProgress">tiến độ của riêng người đang xem, tính trên quota của người đó.</param>
 /// <param name="TeamProgress">tiến độ của cả nhóm người nhận task.</param>
 /// <param name="Assignees">ai cùng nhận task này.</param>
@@ -252,6 +264,7 @@ public record SpeakerActiveTaskDto(
     string? Description,
     string? WaveName,
     TaskType TaskType,
+    string Domain,
     WorkTaskStatus Status,
     DateTimeOffset? Deadline,
     TaskProgressDto MyProgress,
