@@ -134,6 +134,7 @@ export const SIDEBAR_CONFIG = {
       { name: "Trang chủ", to: "/task-manager", icon: Home, end: true },
       { name: "Quản lý nhiệm vụ", to: "/task-manager/management", icon: ListTodo },
       { name: "Nhiệm vụ được giao", to: "/task-manager/received-tasks", icon: Inbox },
+      { name: "Nhiệm vụ được giao mẫu", to: "/task-manager/received-tasks-sample", icon: Inbox },
     ],
     promo: null,
   },
