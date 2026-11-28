@@ -168,9 +168,13 @@ const routes = [
         element: lazy(() => import("../pages/TaskManagerTemplate/TaskManagerManagement/index")),
       },
       {
-        // Trang mẫu (chỉ UI): nhận task admin giao và chia cho speaker + reviewer
         path: "received-tasks",
         element: lazy(() => import("../pages/TaskManagerTemplate/TaskManagerReceivedTasks/index")),
+      },
+      {
+        // Trang mẫu (chỉ UI): nhận task admin giao và chia cho speaker + reviewer
+        path: "received-tasks-sample",
+        element: lazy(() => import("../pages/TaskManagerTemplate/TaskManagerReceivedTasksSample/index")),
       },
       {
         path: "help-center",
