@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import AssignedTaskList from "./AssignedTaskList";
 import { toast } from "sonner";
-import { ArrowRight, Check, MessageSquarePlus, Mic, X } from "lucide-react";
+import { ArrowRight, Check, Clapperboard, MessageSquarePlus, Mic, Search, X } from "lucide-react";
 import { ADMIN_ACCENT, CHIP_SUCCESS_TEXT, DANGER } from "../../../constants/theme";
 import { MOCK_BATCHES, MOCK_MANAGERS, MOCK_TOPICS, isRecording, topicName } from "../AdminRecordingBatches/mockData";
 import { MOCK_TASKS } from "../AdminAssignTasks/mockTasks";
+import { MOCK_VIDEOS, MOCK_VIDEO_TASKS, mmss } from "./mockVideos";
 
 /**
  * Giao task cho Task Manager - trang riêng, tách khỏi kho câu.
@@ -17,7 +18,76 @@ import { MOCK_TASKS } from "../AdminAssignTasks/mockTasks";
 const TYPES = [
   { key: "Recording", label: "Ghi âm", icon: Mic, hint: "Lấy câu sẵn sàng từ một đợt trong kho để speaker ghi âm." },
   { key: "Contribution", label: "Câu đóng góp", icon: MessageSquarePlus, hint: "Speaker viết câu mới theo chủ đề." },
+  { key: "Video", label: "Video hội thoại", icon: Clapperboard, hint: "Duyệt câu cắt từ video đang có." },
 ];
+
+// Video giao được: đã cắt câu xong (ReadyForReview) và chưa nằm trong task nào
+const isVideoAssignable = (v) => v.status === "ReadyForReview" && !v.assignedTaskId;
+
+// Chọn nhiều video: tìm theo tên, tick từng video hoặc "Chọn tất cả"; video đã giao thì mờ, không tick được
+function VideoPicker({ value, onChange, error }) {
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  // Chỉ liệt kê video sẵn sàng (chờ duyệt, chưa nằm trong task nào)
+  const assignable = MOCK_VIDEOS.filter(isVideoAssignable).filter((v) => !q || v.title.toLowerCase().includes(q));
+  const allPicked = assignable.length > 0 && assignable.every((v) => value.includes(v.sourceVideoId));
+  const toggle = (id) => onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id]);
+  const toggleAll = () =>
+    onChange(allPicked ? value.filter((id) => !assignable.some((v) => v.sourceVideoId === id)) : [...new Set([...value, ...assignable.map((v) => v.sourceVideoId)])]);
+
+  return (
+    <div>
+      <span className="type-meta font-label text-[#6E7078] dark:text-gray-400">
+        Chọn video <span className="font-regular text-[#9A9CA3]">(chọn nhiều)</span>
+      </span>
+      <div className={`mt-1 rounded-xl border overflow-hidden ${error ? "border-[#E24B4A]" : "border-[#E5E2D8] dark:border-gray-700"}`}>
+        <div className="flex items-center gap-2 px-3 py-2 bg-[#F7F5EF] dark:bg-[#25272E] border-b border-[#E5E2D8] dark:border-gray-700">
+          <Search className="w-4 h-4 text-[#9A9CA3] shrink-0" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Tìm theo tên video"
+            className="flex-1 min-w-0 bg-transparent outline-none type-ui text-[#16171C] dark:text-white placeholder:text-[#9A9CA3]"
+          />
+          <span className="type-caption text-[#9A9CA3] whitespace-nowrap">
+            Đã chọn {value.length} / {MOCK_VIDEOS.filter(isVideoAssignable).length}
+          </span>
+          {assignable.length > 0 && (
+            <button type="button" onClick={toggleAll} className="type-caption font-label hover:underline cursor-pointer whitespace-nowrap" style={{ color: ADMIN_ACCENT }}>
+              {allPicked ? "Bỏ chọn tất cả" : "Chọn tất cả"}
+            </button>
+          )}
+        </div>
+        <div className="max-h-[208px] overflow-y-auto divide-y divide-[#F0EEE6] dark:divide-gray-800">
+          {assignable.map((v) => {
+            const picked = value.includes(v.sourceVideoId);
+            return (
+              <label
+                key={v.sourceVideoId}
+                className={`grid grid-cols-[16px_minmax(0,1fr)_48px] items-center gap-3 px-3 py-2 cursor-pointer hover:bg-[#F7F5EF]/70 dark:hover:bg-[#25272E]/50 ${picked ? "bg-[#0052CC]/[0.04]" : ""}`}
+              >
+                <input type="checkbox" checked={picked} onChange={() => toggle(v.sourceVideoId)} className="w-4 h-4 accent-[#0052CC]" />
+                <span className="min-w-0">
+                  <span className="block type-ui text-[#16171C] dark:text-gray-100 truncate">{v.title}</span>
+                  <span className="block type-caption text-[#9A9CA3] truncate">{v.youtubeUrl.replace(/^https?:\/\//, "")}</span>
+                </span>
+                <span className="type-meta tabular-nums text-right text-[#6E7078]">{mmss(v.durationSec)}</span>
+              </label>
+            );
+          })}
+          {assignable.length === 0 && (
+            <p className="px-3 py-4 text-center type-meta text-[#9A9CA3]">{q ? "Không có video nào khớp." : "Chưa có video nào sẵn sàng để giao."}</p>
+          )}
+        </div>
+      </div>
+      {error && (
+        <span className="mt-1 block type-caption" style={{ color: DANGER }}>
+          {error}
+        </span>
+      )}
+    </div>
+  );
+}
 
 const CARD = "bg-white dark:bg-[#1C1D22] rounded-2xl border border-[#E5E2D8] dark:border-gray-800 shadow-[0_1px_3px_rgba(16,17,20,0.04)]";
 const INPUT =
@@ -36,7 +106,7 @@ const todayISO = () => {
 const daysBetweenISO = (a, b) => Math.round((new Date(`${b}T00:00:00`) - new Date(`${a}T00:00:00`)) / 86400000);
 
 // Ngày bắt đầu mặc định là hôm nay
-const emptyForm = () => ({ managerId: "", startDate: todayISO(), endDate: "", batchId: "", target: "", topic: "", taskName: "" });
+const emptyForm = () => ({ managerId: "", startDate: todayISO(), endDate: "", batchId: "", target: "", topic: "", taskName: "", videoIds: [] });
 
 function Field({ label, error, hint, children }) {
   return (
@@ -63,7 +133,7 @@ function CreateTaskForm({ onCreate, onCancel }) {
   const changeType = (key) => {
     setType(key);
     // Chỉ tiêu ghi âm và số câu đóng góp khác nghĩa -> không mang sang khi đổi loại
-    setForm((f) => ({ ...f, target: "" }));
+    setForm((f) => ({ ...f, target: "", videoIds: [] }));
     setTouched(false);
   };
 
@@ -76,7 +146,9 @@ function CreateTaskForm({ onCreate, onCancel }) {
     managerId: !form.managerId ? "Chọn người quản lý." : "",
     startDate: !form.startDate ? "Chọn ngày bắt đầu." : form.startDate < today ? "Ngày bắt đầu phải từ hôm nay trở đi." : "",
     endDate: !form.endDate ? "Chọn ngày kết thúc." : form.startDate && form.endDate <= form.startDate ? "Ngày kết thúc phải sau ngày bắt đầu." : "",
-    ...(type === "Recording"
+    ...(type === "Video"
+      ? { videoIds: form.videoIds.length === 0 ? "Chọn ít nhất 1 video." : "" }
+      : type === "Recording"
       ? {
           batchId: !form.batchId ? "Chọn đợt câu." : "",
           target: target < 1 ? "Nhập chỉ tiêu." : batch && target > batch.counts.available ? `Đợt này chỉ còn ${fmt(batch.counts.available)} câu sẵn sàng.` : "",
@@ -97,6 +169,25 @@ function CreateTaskForm({ onCreate, onCancel }) {
     // Backend hiện chỉ có Deadline (= ngày kết thúc); startDate cần backend thêm trường.
     // Tạm thêm vào danh sách trong state để thấy luồng "giao xong -> theo dõi".
     const manager = MOCK_MANAGERS.find((m) => String(m.userId) === form.managerId);
+    if (type === "Video") {
+      const videos = MOCK_VIDEOS.filter((v) => form.videoIds.includes(v.sourceVideoId));
+      onCreate({
+        taskType: "Video",
+        taskName: form.taskName.trim(),
+        managerName: manager?.fullName,
+        status: "InProgress",
+        startDate: form.startDate,
+        deadline: form.endDate,
+        videos,
+        // Video duyệt theo từng video -> tiến độ đếm số video
+        progress: { targetQty: videos.length, done: 0, submitted: 0 },
+        reviewers: [],
+      });
+      setForm(emptyForm());
+      setTouched(false);
+      toast.success("Đã giao task (dữ liệu minh hoạ).");
+      return;
+    }
     onCreate({
       taskType: type,
       batchId: type === "Recording" ? batch.batchId : null,
@@ -150,7 +241,7 @@ function CreateTaskForm({ onCreate, onCancel }) {
         </div>
 
         {/* Chọn loại task: 2 thẻ lớn để thấy ngay khác nhau ở đâu */}
-        <div role="radiogroup" aria-label="Loại task" className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div role="radiogroup" aria-label="Loại task" className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
           {TYPES.map((t) => {
             const active = type === t.key;
             const Icon = t.icon;
@@ -182,14 +273,16 @@ function CreateTaskForm({ onCreate, onCancel }) {
                 maxLength={200}
                 value={form.taskName}
                 onChange={set("taskName")}
-                placeholder={type === "Recording" ? "Ghi âm câu công nghệ tháng 12" : "Câu về đời sống văn phòng"}
+                placeholder={type === "Recording" ? "Ghi âm câu công nghệ tháng 12" : type === "Video" ? "Duyệt video hội thoại tháng 12" : "Câu về đời sống văn phòng"}
                 className={INPUT}
               />
             </Field>
           </div>
 
           <div className="sm:col-span-2">
-            {type === "Recording" ? (
+            {type === "Video" ? (
+              <VideoPicker value={form.videoIds} onChange={(ids) => setForm((f) => ({ ...f, videoIds: ids }))} error={show("videoIds")} />
+            ) : type === "Recording" ? (
               <Field
                 label="Lấy câu từ đợt"
                 error={show("batchId")}
@@ -218,17 +311,20 @@ function CreateTaskForm({ onCreate, onCancel }) {
             )}
           </div>
 
-          <Field label="Giao cho" error={show("managerId")}>
-            <select value={form.managerId} onChange={set("managerId")} className={`${INPUT} cursor-pointer`}>
-              <option value="">Chọn quản lý</option>
-              {MOCK_MANAGERS.map((m) => (
-                <option key={m.userId} value={m.userId}>
-                  {m.fullName}
-                </option>
-              ))}
-            </select>
-          </Field>
-          {type === "Recording" ? (
+          {/* Task video không có ô chỉ tiêu -> "Giao cho" chiếm cả hàng */}
+          <div className={type === "Video" ? "sm:col-span-2" : ""}>
+            <Field label="Giao cho" error={show("managerId")}>
+              <select value={form.managerId} onChange={set("managerId")} className={`${INPUT} cursor-pointer`}>
+                <option value="">Chọn quản lý</option>
+                {MOCK_MANAGERS.map((m) => (
+                  <option key={m.userId} value={m.userId}>
+                    {m.fullName}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          {type === "Video" ? null : type === "Recording" ? (
             <Field
               label="Chỉ tiêu (câu)"
               error={show("target")}
@@ -278,7 +374,8 @@ function CreateTaskForm({ onCreate, onCancel }) {
 export default function AdminAssignTasksSample() {
   const [creating, setCreating] = useState(false);
   // TODO: thay bằng useQuery GET /api/tasks (TaskListItemDto: status, deadline, assignees, progress)
-  const [tasks, setTasks] = useState(MOCK_TASKS);
+  // Thêm vài task Video hội thoại minh hoạ lên đầu danh sách
+  const [tasks, setTasks] = useState(() => [...MOCK_VIDEO_TASKS, ...MOCK_TASKS]);
 
   useEffect(() => {
     if (!creating) return;

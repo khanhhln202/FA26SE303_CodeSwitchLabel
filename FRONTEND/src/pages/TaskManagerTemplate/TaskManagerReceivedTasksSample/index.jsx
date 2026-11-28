@@ -4,14 +4,17 @@ import { AlertTriangle, CalendarPlus, ChevronDown, Mic, Search, ShieldCheck, Use
 import Pagination from "../../../components/Pagination/Pagination";
 import { TASK_MANAGER_ACCENT } from "../../../constants/theme";
 import { CARD, DeadlineCell, FilterDropdown, PeopleSection, POP_CSS, ProgressBar } from "../../AdminTemplate/AdminAssignTasks/AssignedTaskList";
-import { DONE, REVIEW, STATUS, TYPE_ICON, TYPE_LABEL, statusOf } from "../../AdminTemplate/AdminAssignTasks/taskShared";
+import { DONE, REVIEW, STATUS, statusOf } from "../../AdminTemplate/AdminAssignTasks/taskShared";
+import { SAMPLE_TYPE_ICON as TYPE_ICON, SAMPLE_TYPE_LABEL as TYPE_LABEL, VIDEO_STATUS, mmss } from "../../AdminTemplate/AdminAssignTasksSample/mockVideos";
 import { applyExtension, extendDeadline, extensionOf, useExtensions } from "../../AdminTemplate/AdminAssignTasks/extensionRequests";
 import ExtendDialog from "./ExtendDialog";
 import SplitTaskDialog from "./SplitTaskDialog";
-import { MOCK_RECEIVED_TASKS } from "./mockData";
+import VideoSplitDialog from "./VideoSplitDialog";
+import { MOCK_RECEIVED_TASKS, MOCK_RECEIVED_VIDEO_TASKS, VIDEO_REVIEWERS, withVideoStats } from "./mockData";
 
 /**
  * TRANG MẪU (chỉ UI, dữ liệu minh hoạ) - Task Manager nhận task admin giao rồi chia cho speaker + reviewer.
+ * Task "Video hội thoại" chỉ chia cho reviewer: mỗi video chọn 1 người duyệt, tiến độ đếm theo video.
  * Bố cục giống trang Giao task của admin: STT, 10 dòng/trang, phân trang, bấm dòng để mở chi tiết.
  * Sắp theo việc cần làm: cần chia trước, rồi đang làm, cuối cùng là đã xong.
  * Task Manager tự gia hạn được (không cần admin duyệt); hạn mới hiện luôn ở trang Giao task của admin.
@@ -27,6 +30,9 @@ const sumOf = (people) => people.reduce((s, p) => s + (p.targetQty || 0), 0);
 function viewOf(t) {
   const base = statusOf(t);
   if (base === "done" || base === "cancelled") return base;
+  // Task video chỉ có reviewer: còn video chưa có người duyệt là cần chia
+  // Không bắt buộc giao hết: chỉ "Cần chia" khi chưa giao video nào
+  if (t.taskType === "Video") return t.videos.some((v) => v.reviewerId) ? base : "needsSplit";
   const target = t.progress.targetQty;
   if (t.draft || sumOf(t.assignees) !== target || sumOf(t.reviewers) !== target) return "needsSplit";
   return base;
@@ -36,6 +42,7 @@ const ORDER = { needsSplit: 0, overdue: 1, inProgress: 2, done: 3, cancelled: 4 
 // Cùng một kiểu hiển thị cho mọi dòng: số speaker · số reviewer
 function TeamCell({ t }) {
   if (!t.assignees.length && !t.reviewers.length) return <span className="text-[#9A9CA3]">Chưa có ai</span>;
+  if (t.taskType === "Video") return <span className="whitespace-nowrap text-[#4A4C53] dark:text-gray-300">{t.reviewers.length} reviewer</span>;
   return (
     <span className="whitespace-nowrap text-[#4A4C53] dark:text-gray-300">
       {t.assignees.length} speaker · {t.reviewers.length} reviewer
@@ -47,8 +54,36 @@ function TeamCell({ t }) {
 const GHOST_BTN =
   "h-8 px-3 rounded-lg border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#1C1D22] type-button text-[#4A4C53] dark:text-gray-200 inline-flex items-center gap-1.5 hover:border-[#15803D] hover:text-[#15803D] cursor-pointer transition-colors";
 
-export default function TaskManagerReceivedTasks() {
-  const [tasks, setTasks] = useState(MOCK_RECEIVED_TASKS);
+// Danh sách video của task video (phần mở rộng): ai duyệt + trạng thái
+function VideoSection({ videos }) {
+  const nameOf = (id) => VIDEO_REVIEWERS.find((u) => u.userId === id)?.fullName || "Chưa giao";
+  return (
+    <div className="min-w-0 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#1C1D22] px-3.5 py-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="type-meta font-label text-[#16171C] dark:text-gray-100 inline-flex items-center gap-1.5">
+          <TYPE_ICON.Video.Icon className="w-3.5 h-3.5 text-[#3C3489] dark:text-[#B7B2F2]" /> Video hội thoại
+        </p>
+        <p className="type-caption text-[#9A9CA3]">
+          {videos.length} video · {videos.reduce((s, v) => s + (v.sentenceCount || 0), 0)} câu
+        </p>
+      </div>
+      <div className="mt-2.5 space-y-2">
+        {videos.map((v) => (
+          <div key={v.sourceVideoId} className="grid grid-cols-[minmax(0,1fr)_56px_44px_72px_78px] items-center gap-3 type-meta">
+            <span className="truncate text-[#16171C] dark:text-gray-200" title={v.title}>{v.title}</span>
+            <span className="tabular-nums text-right text-[#6E7078]">{v.sentenceCount} câu</span>
+            <span className="tabular-nums text-right text-[#9A9CA3]">{mmss(v.durationSec)}</span>
+            <span className="truncate text-[#6E7078] dark:text-gray-400">{nameOf(v.reviewerId)}</span>
+            <span className={`justify-self-end px-1.5 py-px rounded type-caption whitespace-nowrap ${VIDEO_STATUS[v.status]?.cls}`}>{VIDEO_STATUS[v.status]?.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function TaskManagerReceivedTasksSample() {
+  const [tasks, setTasks] = useState(() => [...MOCK_RECEIVED_VIDEO_TASKS, ...MOCK_RECEIVED_TASKS]);
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [query, setQuery] = useState("");
@@ -69,7 +104,7 @@ export default function TaskManagerReceivedTasks() {
       tasks
         .map((task) => {
           const ext = extensionOf(extensions, task.taskId);
-          const t = applyExtension(task, ext);
+          const t = applyExtension(task.taskType === "Video" ? withVideoStats(task) : task, ext);
           return { ...t, ext, view: viewOf(t) };
         })
         .sort((a, b) => ORDER[a.view] - ORDER[b.view] || b.taskId - a.taskId),
@@ -99,11 +134,23 @@ export default function TaskManagerReceivedTasks() {
     { value: "all", label: "Tất cả" },
     { value: "Recording", label: TYPE_LABEL.Recording, count: withView.filter((t) => t.taskType === "Recording").length },
     { value: "Contribution", label: TYPE_LABEL.Contribution, count: withView.filter((t) => t.taskType === "Contribution").length },
+    { value: "Video", label: TYPE_LABEL.Video, count: withView.filter((t) => t.taskType === "Video").length },
   ];
 
+  // Số video chưa duyệt xong mỗi reviewer đang giữ ở các task video khác (để manager biết ai đang rảnh)
+  const workloadExcept = (taskId) => {
+    const load = Object.fromEntries(VIDEO_REVIEWERS.map((u) => [u.userId, u.otherLoad || 0]));
+    tasks
+      .filter((t) => t.taskType === "Video" && t.taskId !== taskId)
+      .flatMap((t) => t.videos)
+      .filter((v) => v.reviewerId && v.status !== "Approved")
+      .forEach((v) => (load[v.reviewerId] = (load[v.reviewerId] || 0) + 1));
+    return load;
+  };
+
   // TODO: nối PUT /api/tasks/{id}/assignments khi có API
-  const handleSave = (taskId, { assignees, reviewers }) => {
-    setTasks((prev) => prev.map((t) => (t.taskId === taskId ? { ...t, assignees, reviewers, draft: false, isNew: false } : t)));
+  const handleSave = (taskId, changes) => {
+    setTasks((prev) => prev.map((t) => (t.taskId === taskId ? { ...t, ...changes, draft: false, isNew: false } : t)));
     setSplitting(null);
     toast.success("Đã chia việc cho đội (dữ liệu minh hoạ).");
   };
@@ -135,15 +182,15 @@ export default function TaskManagerReceivedTasks() {
 
         <div className="flex-1 min-h-0 overflow-auto">
           {/* Trang đủ hàng thì bảng cao full khung -> các hàng giãn đều, giống trang Giao task của admin */}
-          <table className={`w-full min-w-[1040px] table-fixed text-left border-collapse type-ui ${pageRows.length === pageSize ? "h-full" : ""}`}>
+          <table className={`w-full min-w-[1100px] table-fixed text-left border-collapse type-ui ${pageRows.length === pageSize ? "h-full" : ""}`}>
             <thead>
               <tr className="bg-[#F7F5EF] dark:bg-[#25272E] type-label whitespace-nowrap text-[#9A9CA3] dark:text-gray-400 border-b border-[#E5E2D8] dark:border-gray-800">
                 <th scope="col" className="pl-4 pr-1 py-2 font-label w-[52px] text-center">STT</th>
                 <th className="px-2 py-2 font-label">Nhiệm vụ</th>
                 <th className="px-2 py-2 font-label w-[80px] text-right">Chỉ tiêu</th>
-                <th className="px-2 py-2 pl-6 font-label w-[220px]">Phân công</th>
-                <th className="px-2 py-2 font-label w-[220px]">Tiến độ</th>
-                <th className="px-2 py-2 font-label w-[150px]">Thời gian</th>
+                <th className="px-2 py-2 pl-6 font-label w-[180px]">Phân công</th>
+                <th className="px-2 py-2 font-label w-[200px]">Tiến độ</th>
+                <th className="px-2 py-2 font-label w-[210px]">Thời gian</th>
                 <th className="pr-4 py-2 w-[120px]" aria-label="Thao tác" />
               </tr>
             </thead>
@@ -155,6 +202,8 @@ export default function TaskManagerReceivedTasks() {
                 const pct = targetQty ? Math.min(100, Math.round((done / targetQty) * 100)) : 0;
                 const { Icon: TypeIcon, cls: typeCls } = TYPE_ICON[t.taskType] || TYPE_ICON.Recording;
                 const needsSplit = t.view === "needsSplit";
+                const isVideo = t.taskType === "Video";
+                const unit = isVideo ? "video" : "câu";
                 const active = t.view === "inProgress" || t.view === "overdue";
                 const faded = (t.view === "done" || t.view === "cancelled") && !open;
                 const accent = open ? { boxShadow: `inset 3px 0 0 ${TASK_MANAGER_ACCENT}` } : undefined;
@@ -184,7 +233,9 @@ export default function TaskManagerReceivedTasks() {
                           </p>
                         </div>
                       </td>
-                      <td className="px-2 py-0.5 text-right tabular-nums font-bold text-[#16171C] dark:text-gray-100">{fmt(targetQty)}</td>
+                      <td className="px-2 py-0.5 text-right tabular-nums font-bold text-[#16171C] dark:text-gray-100">
+                        {fmt(targetQty)}
+                      </td>
                       <td className="px-2 pl-6 py-0.5">
                         <TeamCell t={t} />
                       </td>
@@ -200,8 +251,11 @@ export default function TaskManagerReceivedTasks() {
                               </span>
                             </div>
                             <p className="mt-0.5 type-caption text-[#9A9CA3] tabular-nums whitespace-nowrap truncate">
-                              {fmt(done)} / {fmt(targetQty)} câu
+                              {fmt(done)} / {fmt(targetQty)} {unit}
                               {pending > 0 && <span className="text-[#0B4FB3] dark:text-[#9DBDF2]"> · {fmt(pending)} chờ duyệt</span>}
+                              {isVideo && t.videos.some((v) => !v.reviewerId) && (
+                                <span className="text-[#A85E12]"> · {t.videos.filter((v) => !v.reviewerId).length} chưa giao</span>
+                              )}
                             </p>
                           </>
                         )}
@@ -244,7 +298,11 @@ export default function TaskManagerReceivedTasks() {
                             <div className="min-h-0 overflow-hidden">
                               <div className="pl-[102px] pr-4 pb-4 pt-0.5">
                                 <div className="grid gap-3 lg:grid-cols-2">
+                                  {isVideo ? (
+                                    <VideoSection videos={t.videos} />
+                                  ) : (
                                   <PeopleSection title={t.taskType === "Recording" ? "Speaker ghi âm" : "Speaker viết câu"} icon={Mic} iconColor={DONE} color={DONE} people={t.assignees} empty="Chưa chia cho speaker nào." />
+                                  )}
                                   <PeopleSection
                                     title="Reviewer duyệt"
                                     icon={ShieldCheck}
@@ -325,7 +383,12 @@ export default function TaskManagerReceivedTasks() {
         </div>
       </div>
 
-      {splitting && <SplitTaskDialog task={splitting} onClose={() => setSplitting(null)} onSave={handleSave} />}
+      {splitting &&
+        (splitting.taskType === "Video" ? (
+          <VideoSplitDialog task={splitting} workload={workloadExcept(splitting.taskId)} onClose={() => setSplitting(null)} onSave={handleSave} />
+        ) : (
+          <SplitTaskDialog task={splitting} onClose={() => setSplitting(null)} onSave={handleSave} />
+        ))}
       {extending && <ExtendDialog task={extending} onClose={() => setExtending(null)} onSave={handleExtend} />}
     </div>
   );

@@ -1,3 +1,5 @@
+import { MOCK_VIDEOS } from "../../AdminTemplate/AdminAssignTasksSample/mockVideos";
+
 // Dữ liệu minh hoạ cho trang mẫu "Task được giao" của Task Manager (chỉ UI, chưa nối API).
 // Giả sử Task Manager đang đăng nhập là "Nguyễn Văn An"; đây là các task admin giao cho người này.
 // TODO khi có API: GET task giao cho tôi + PUT /api/tasks/{id}/assignments (kèm targetQty từng người).
@@ -70,3 +72,53 @@ export const MOCK_RECEIVED_TASKS = [
     reviewers: [rv(41, q, q, Math.round(q / 15))],
   })),
 ];
+
+// ===== Task "Video hội thoại": Task Manager chỉ chia video cho reviewer (không có speaker) =====
+// Mỗi video gán cho đúng 1 reviewer (reviewerId). Tiến độ đếm theo video: xong = video đã duyệt.
+// TODO khi có API: PUT /api/tasks/{id}/assignments với [{ sourceVideoId, reviewerId }].
+const EXTRA_VIDEOS = [
+  { sourceVideoId: 47, title: "Hỏi đáp lập trình viên", youtubeUrl: "https://youtube.com/watch?v=q8W9e0", durationSec: 840 },
+  { sourceVideoId: 48, title: "Livestream bán hàng cuối tuần", youtubeUrl: "https://youtube.com/watch?v=b4N5m6", durationSec: 1320 },
+  { sourceVideoId: 49, title: "Phỏng vấn sinh viên du học", youtubeUrl: "https://youtube.com/watch?v=c7V8b9", durationSec: 965 },
+  { sourceVideoId: 50, title: "Talk về AI trong giáo dục", youtubeUrl: "https://youtube.com/watch?v=d1F2g3", durationSec: 1745 },
+  { sourceVideoId: 51, title: "Daily standup nhóm mobile", youtubeUrl: "https://youtube.com/watch?v=e4H5j6", durationSec: 610 },
+];
+
+// Reviewer cho task video (12 người để thử trường hợp đông). otherLoad = số video chưa duyệt xong
+// người đó đang giữ ở nơi khác (đề xuất backend trả kèm danh sách reviewer).
+export const VIDEO_REVIEWERS = [
+  ...MOCK_REVIEWERS,
+  ...[["Hà", 0], ["Tuấn", 0], ["Linh", 1], ["Phong", 4], ["Trang", 2], ["Đức", 0], ["Mai", 3], ["Khánh", 1], ["Yến", 5]].map(([fullName, otherLoad], i) => ({
+    userId: 44 + i,
+    fullName,
+    otherLoad,
+  })),
+];
+// sentenceCount = số câu đã cắt từ video (reviewer duyệt theo câu). Mẫu: ~1 câu / 13 giây.
+const vd = (id, reviewerId = null, status = "ReadyForReview") => {
+  const v = [...MOCK_VIDEOS, ...EXTRA_VIDEOS].find((x) => x.sourceVideoId === id);
+  return { ...v, sentenceCount: v.sentenceCount ?? Math.round(v.durationSec / 13), reviewerId, status };
+};
+
+export const MOCK_RECEIVED_VIDEO_TASKS = [
+  {
+    taskId: 132, taskName: "Duyệt video tháng 12", taskType: "Video",
+    status: "InProgress", isNew: true, assignedAt: "2026-11-28", startDate: "2026-11-28", deadline: "2026-12-20",
+    videos: [vd(41), vd(42), vd(43), vd(44), vd(48), vd(49), vd(50), vd(51)], assignees: [],
+  },
+  {
+    taskId: 131, taskName: "Duyệt video công nghệ tháng 11", taskType: "Video",
+    status: "InProgress", assignedAt: "2026-11-15", startDate: "2026-11-15", deadline: "2026-12-08",
+    videos: [vd(45, 41, "InReview"), vd(47, 42, "Approved")], assignees: [],
+  },
+];
+
+// Tính reviewer + tiến độ từ danh sách video (mỗi reviewer: số video được giao / số video đã duyệt xong)
+export function withVideoStats(t) {
+  const reviewers = VIDEO_REVIEWERS.map((u) => {
+    const mine = t.videos.filter((v) => v.reviewerId === u.userId);
+    return { ...u, targetQty: mine.length, done: mine.filter((v) => v.status === "Approved").length };
+  }).filter((r) => r.targetQty > 0);
+  const done = t.videos.filter((v) => v.status === "Approved").length;
+  return { ...t, reviewers, progress: { targetQty: t.videos.length, done, submitted: done } };
+}

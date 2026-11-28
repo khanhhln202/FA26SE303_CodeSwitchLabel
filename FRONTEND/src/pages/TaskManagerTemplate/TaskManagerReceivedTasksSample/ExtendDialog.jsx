@@ -46,6 +46,7 @@ export default function ExtendDialog({ task, onClose, onSave }) {
   const cur = relative(current, today);
   const next = validDate ? relative(date, today) : null;
   const { targetQty, done } = task.progress;
+  const unit = task.taskType === "Video" ? "video" : "câu";
 
   const submit = () => {
     if (!validDate) return;
@@ -64,7 +65,7 @@ export default function ExtendDialog({ task, onClose, onSave }) {
               Gia hạn · {task.taskName}
             </p>
             <p className="mt-0.5 type-caption text-[#9A9CA3]">
-              {fmt(done)} / {fmt(targetQty)} câu · còn {fmt(Math.max(0, targetQty - done))} câu chưa xong
+              {fmt(done)} / {fmt(targetQty)} {unit} · còn {fmt(Math.max(0, targetQty - done))} {unit} chưa xong
             </p>
           </div>
           <button type="button" onClick={onClose} aria-label="Đóng" className="p-1 rounded-lg text-[#9A9CA3] hover:bg-[#F7F5EF] dark:hover:bg-gray-800 cursor-pointer">

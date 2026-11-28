@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ArrowRight, Check, X } from "lucide-react";
 import { ADMIN_ACCENT } from "../../../constants/theme";
-import { topicName } from "../AdminRecordingBatches/mockData";
+import { taskTitle } from "./mockVideos";
 
 /**
  * Hộp thoại gia hạn hạn chót của 1 task.
@@ -63,7 +63,7 @@ export default function ExtendDeadlineDialog({ task, onClose, onConfirm }) {
               Gia hạn task T-{task.taskId}
             </p>
             <p className="mt-0.5 type-caption text-[#9A9CA3] truncate">
-              {task.taskName || (task.taskType === "Recording" ? task.batchName : `Câu đóng góp · ${topicName(task.domain)}`)} · {task.managerName} · {fmt(done)} / {fmt(targetQty)} câu
+              {taskTitle(task)} · {task.managerName} · {fmt(done)} / {fmt(targetQty)} {task.taskType === "Video" ? "video" : "câu"}
             </p>
           </div>
           <button type="button" onClick={onClose} aria-label="Đóng" className="p-1 rounded-lg text-[#9A9CA3] hover:bg-[#F7F5EF] dark:hover:bg-gray-800 cursor-pointer">
