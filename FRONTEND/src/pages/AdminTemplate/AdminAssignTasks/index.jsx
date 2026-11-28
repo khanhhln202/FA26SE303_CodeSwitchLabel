@@ -10,7 +10,7 @@ import { isRecording, topicName } from "../AdminRecordingBatches/batchHelpers";
 const TYPES = [
   { key: "Recording", label: "Ghi âm", icon: Mic, hint: "Lấy câu sẵn sàng từ một đợt trong kho để speaker ghi âm." },
   { key: "Review", label: "Duyệt ghi âm", icon: ShieldCheck, hint: "Chọn đợt cần kiểm duyệt bản ghi âm cho reviewer." },
-  { key: "Contribution", label: "Câu đóng góp", icon: MessageSquarePlus, hint: "Speaker viết câu mới theo chủ đề." },
+  { key: "Contribution", label: "Câu đóng góp", icon: MessageSquarePlus, hint: "Speaker viết câu mới theo chủ đề, có thể gắn đợt hoặc độc lập." },
 ];
 
 const CARD = "bg-white dark:bg-[#1C1D22] rounded-2xl border border-[#E5E2D8] dark:border-gray-800 shadow-[0_1px_3px_rgba(16,17,20,0.04)]";
@@ -26,7 +26,7 @@ const todayISO = () => {
 };
 const daysBetweenISO = (a, b) => Math.round((new Date(`${b}T00:00:00`) - new Date(`${a}T00:00:00`)) / 86400000);
 
-const emptyForm = () => ({ managerId: "", startDate: todayISO(), endDate: "", batchId: "", topic: "", taskName: "" });
+const emptyForm = () => ({ managerId: "", startDate: todayISO(), endDate: "", batchId: "", topic: "", taskName: "", targetQty: "100" });
 
 // Đồng bộ chia đều tổng mục tiêu của đợt cho tất cả nhiệm vụ thuộc đợt đó (cộng dư cho task đầu tiên)
 async function rebalanceWaveTaskTargets(waveId, waveTargetQty) {
@@ -115,7 +115,7 @@ function Field({ label, error, hint, children }) {
   );
 }
 
-function BatchDropdown({ value, options, topics, onChange, showCount = true }) {
+function BatchDropdown({ value, options, topics, onChange, showCount = true, allowEmpty = false, emptyLabel = "Không gắn vào đợt nào" }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const selected = options.find((b) => String(b.batchId) === String(value));
@@ -155,8 +155,8 @@ function BatchDropdown({ value, options, topics, onChange, showCount = true }) {
         onClick={() => setOpen((o) => !o)}
         className={`${INPUT} flex items-center justify-between gap-2 text-left cursor-pointer`}
       >
-        <span className={`truncate ${selected ? "text-[#16171C] dark:text-white" : "text-[#9A9CA3]"}`}>
-          {selected ? formatOption(selected) : "Chọn đợt"}
+        <span className={`truncate ${selected || allowEmpty ? "text-[#16171C] dark:text-white" : "text-[#9A9CA3]"}`}>
+          {selected ? formatOption(selected) : allowEmpty ? emptyLabel : "Chọn đợt"}
         </span>
         <ChevronDown className={`w-4 h-4 shrink-0 text-[#9A9CA3] transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
       </button>
@@ -166,7 +166,28 @@ function BatchDropdown({ value, options, topics, onChange, showCount = true }) {
           role="listbox"
           className="dropdown-pop absolute z-40 left-0 right-0 top-11 max-h-60 overflow-y-auto p-1 rounded-xl border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#1C1D22] shadow-[0_12px_32px_rgba(16,17,20,0.16)]"
         >
-          {options.length === 0 ? (
+          {allowEmpty && (
+            <li>
+              <button
+                type="button"
+                role="option"
+                aria-selected={!value}
+                onClick={() => {
+                  onChange("");
+                  setOpen(false);
+                }}
+                className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg type-ui text-left cursor-pointer ${
+                  !value
+                    ? "bg-[#0052CC]/[0.06] text-[#0B4FB3] dark:text-[#9DBDF2] font-label"
+                    : "text-[#16171C] dark:text-gray-200 hover:bg-[#F7F5EF] dark:hover:bg-[#25272E]"
+                }`}
+              >
+                <span className="w-4 shrink-0">{!value && <Check className="w-4 h-4" />}</span>
+                <span className="truncate">{emptyLabel}</span>
+              </button>
+            </li>
+          )}
+          {options.length === 0 && !allowEmpty ? (
             <li className="px-3 py-2.5 type-ui text-[#9A9CA3]">Không có đợt nào khả dụng.</li>
           ) : (
             options.map((b) => {
@@ -207,7 +228,7 @@ function CreateTaskForm({ batches, managers, topics, existingTasks, onCreate, on
   const [submitting, setSubmitting] = useState(false);
 
   const assignable = batches.filter((b) => !isRecording(b) && b.counts.available > 0);
-  const batchOptions = type === "Review" ? batches : assignable;
+  const batchOptions = type === "Review" || type === "Contribution" ? batches : assignable;
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
   const changeType = (key) => {
@@ -218,6 +239,9 @@ function CreateTaskForm({ batches, managers, topics, existingTasks, onCreate, on
 
   const batch = batchOptions.find((b) => String(b.batchId) === form.batchId);
   const today = todayISO();
+  const isStandaloneContribution = type === "Contribution" && !batch;
+  const parsedQty = Number(form.targetQty);
+  const effectiveTopic = batch?.domain || form.topic;
 
   const errors = {
     taskName: !form.taskName.trim() ? "Nhập tên nhiệm vụ." : "",
@@ -233,7 +257,8 @@ function CreateTaskForm({ batches, managers, topics, existingTasks, onCreate, on
             batchId: !form.batchId ? "Chọn đợt cần duyệt." : "",
           }
         : {
-            topic: !form.topic ? "Chọn chủ đề." : "",
+            topic: !effectiveTopic ? "Chọn chủ đề." : "",
+            targetQty: isStandaloneContribution && (!Number.isInteger(parsedQty) || parsedQty < 1) ? "Nhập số câu hợp lệ (≥ 1)." : "",
           }),
   };
   const show = (key) => (touched ? errors[key] : "");
@@ -245,13 +270,14 @@ function CreateTaskForm({ batches, managers, topics, existingTasks, onCreate, on
 
     setSubmitting(true);
     try {
-      const domain = type === "Recording" || type === "Review" ? batch.domain : form.topic;
+      const domain = type === "Recording" || type === "Review" ? batch.domain : effectiveTopic;
       const taskName = form.taskName.trim();
       const deadlineIso = `${form.endDate}T23:59:59+07:00`;
+      const managerIdNum = Number(form.managerId);
 
       let waveId = null;
       let waveTotalTarget = 2000;
-      let initialTaskTarget = 2000;
+      let initialTaskTarget = Math.max(1, Math.floor(Number(form.targetQty) || 100));
 
       if (type === "Recording" || type === "Review") {
         waveId = Number(batch.batchId);
@@ -259,17 +285,14 @@ function CreateTaskForm({ batches, managers, topics, existingTasks, onCreate, on
         const existingInWave = existingTasks.filter((t) => Number(t.batchId) === waveId && t.status !== "Cancelled");
         const newCount = existingInWave.length + 1;
         initialTaskTarget = Math.max(1, Math.floor(waveTotalTarget / newCount));
-        await taskService.assignWave(waveId, Number(form.managerId));
-      } else {
-        const waveCreated = await taskService.createWave({
-          waveName: taskName,
-          domain,
-          targetQty: waveTotalTarget,
-          startDate: form.startDate,
-          endDate: form.endDate,
-          assignedToUserId: Number(form.managerId),
-        });
-        waveId = waveCreated?.waveId || waveCreated?.summary?.waveId || null;
+        await taskService.assignWave(waveId, managerIdNum);
+      } else if (batch) {
+        waveId = Number(batch.batchId);
+        waveTotalTarget = Number(batch.targetQty || 2000);
+        const existingInWave = existingTasks.filter((t) => Number(t.batchId) === waveId && t.status !== "Cancelled");
+        const newCount = existingInWave.length + 1;
+        initialTaskTarget = Math.max(1, Math.floor(waveTotalTarget / newCount));
+        await taskService.assignWave(waveId, managerIdNum);
       }
 
       await taskService.createTask({
@@ -279,6 +302,7 @@ function CreateTaskForm({ batches, managers, topics, existingTasks, onCreate, on
         description: taskName,
         targetQty: initialTaskTarget,
         deadline: deadlineIso,
+        assignedToUserId: managerIdNum,
       });
 
       if (waveId) {
@@ -399,16 +423,70 @@ function CreateTaskForm({ batches, managers, topics, existingTasks, onCreate, on
               />
             </Field>
           ) : (
-            <Field label="Chủ đề" error={show("topic")}>
-              <select value={form.topic} onChange={set("topic")} className={`${INPUT} cursor-pointer`}>
-                <option value="">Chọn chủ đề</option>
-                {topics.map((t) => (
-                  <option key={t.code} value={t.code}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Field
+                label="Chủ đề"
+                error={show("topic")}
+                hint={batch ? "Tự động lấy theo chủ đề của đợt đã chọn." : undefined}
+              >
+                <select
+                  disabled={Boolean(batch)}
+                  value={batch ? (batch.domain || "") : form.topic}
+                  onChange={set("topic")}
+                  className={`${INPUT} ${batch ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+                >
+                  <option value="">Chọn chủ đề</option>
+                  {topics.map((t) => (
+                    <option key={t.code} value={t.code}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field
+                label="Số câu mục tiêu"
+                error={show("targetQty")}
+                hint={
+                  batch
+                    ? `Tự động chia theo chỉ tiêu của đợt (${fmt(batch.targetQty)} câu).`
+                    : "Nhập tổng số câu cần speaker đóng góp."
+                }
+              >
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  disabled={Boolean(batch)}
+                  value={batch ? String(batch.targetQty ?? 2000) : form.targetQty}
+                  onChange={set("targetQty")}
+                  placeholder="100"
+                  className={`${INPUT} tabular-nums ${batch ? "opacity-60 cursor-not-allowed" : ""}`}
+                />
+              </Field>
+              <div className="sm:col-span-2">
+                <Field
+                  label="Gắn vào đợt (tùy chọn)"
+                  hint="Để trống nếu đóng góp câu độc lập không gắn vào đợt nào."
+                >
+                  <BatchDropdown
+                    value={form.batchId}
+                    options={batchOptions}
+                    topics={topics}
+                    showCount={false}
+                    allowEmpty
+                    emptyLabel="Không gắn vào đợt nào"
+                    onChange={(val) => {
+                      const picked = batchOptions.find((b) => String(b.batchId) === String(val));
+                      setForm((f) => ({
+                        ...f,
+                        batchId: val,
+                        topic: picked?.domain ? picked.domain : f.topic,
+                      }));
+                    }}
+                  />
+                </Field>
+              </div>
+            </div>
           )}
         </div>
 
@@ -586,19 +664,33 @@ export default function AdminAssignTasks() {
       });
       setBatches(waveBatches);
 
-      const mappedTasks = rawTasks
-        .filter((t) => t.waveId != null && (t.waveName || waveMap.get(Number(t.waveId))?.waveName))
+      const visibleTasks = rawTasks.filter(
+        (t) =>
+          (t.waveId != null && (t.waveName || waveMap.get(Number(t.waveId))?.waveName)) ||
+          (t.waveId == null && t.taskType === "Contribution")
+      );
+
+      const mappedTasks = visibleTasks
         .map((t) => {
-          const wId = Number(t.waveId);
-          const wave = waveMap.get(wId) || null;
-          const managerId = wave?.assignedToUserId ?? wave?.managerId ?? wave?.ownerUserId ?? t.assignedByUserId ?? t.createdBy;
+          const hasWave = t.waveId != null;
+          const wId = hasWave ? Number(t.waveId) : null;
+          const wave = hasWave ? waveMap.get(wId) || null : null;
+          const managerId =
+            wave?.assignedToUserId ??
+            wave?.managerId ??
+            wave?.ownerUserId ??
+            t.assignedToUserId ??
+            t.assignedByUserId ??
+            t.createdBy;
           const managerName =
             wave?.assignedToFullName ||
             wave?.assignedToName ||
             wave?.managerName ||
             wave?.ownerName ||
             wave?.assignedTo?.fullName ||
-            (managerId != null ? managerMap.get(managerId) : null) ||
+            t.assignedToFullName ||
+            t.assignedToName ||
+            (managerId != null ? managerMap.get(Number(managerId)) : null) ||
             activeManagers[0]?.fullName ||
             "Chưa gán";
 
@@ -615,11 +707,11 @@ export default function AdminAssignTasks() {
             taskId: t.taskId,
             taskType: t.taskType,
             batchId: wId,
-            waveNumber: waveNumberMap.get(wId) ?? null,
-            batchName: t.waveName || wave?.waveName || null,
-            batchTargetQty: Number(wave?.targetQty ?? 2000),
-            batchStartDate: (wave?.startDate || wave?.createdAt || "").slice(0, 10),
-            batchEndDate: (wave?.endDate || wave?.deadline || "").slice(0, 10),
+            waveNumber: hasWave ? (waveNumberMap.get(wId) ?? null) : null,
+            batchName: hasWave ? (t.waveName || wave?.waveName || null) : null,
+            batchTargetQty: hasWave ? Number(wave?.targetQty ?? 2000) : 0,
+            batchStartDate: hasWave ? (wave?.startDate || wave?.createdAt || "").slice(0, 10) : "",
+            batchEndDate: hasWave ? (wave?.endDate || wave?.deadline || "").slice(0, 10) : "",
             domain: t.domain,
             taskName: t.description || t.waveName || null,
             managerName,

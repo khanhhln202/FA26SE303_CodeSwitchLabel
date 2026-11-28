@@ -441,7 +441,7 @@ export default function AssignedTaskList({
                             />
                           ) : (
                             <PeopleSection
-                              title="Speaker ghi âm"
+                              title={isContributionTask ? "Speaker viết câu" : "Speaker ghi âm"}
                               icon={Mic}
                               iconColor={DONE}
                               color={DONE}

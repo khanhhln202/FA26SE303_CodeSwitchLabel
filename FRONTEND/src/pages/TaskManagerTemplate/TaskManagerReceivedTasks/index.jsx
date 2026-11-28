@@ -243,22 +243,32 @@ export default function TaskManagerReceivedTasks() {
 
       const meId = getCurrentUserId();
 
-      const waveTasks = rawTasks.filter((t) => t.waveId != null && (t.waveName || waveMap.get(Number(t.waveId))?.waveName));
+      const visibleTasks = rawTasks.filter(
+        (t) =>
+          (t.waveId != null && (t.waveName || waveMap.get(Number(t.waveId))?.waveName)) ||
+          (t.waveId == null && t.taskType === "Contribution")
+      );
       const myTasks =
         meId != null
-          ? waveTasks.filter((t) => {
-              const wave = waveMap.get(Number(t.waveId));
-              const mgrId = wave?.assignedToUserId ?? wave?.managerId ?? wave?.ownerUserId ?? t.assignedByUserId;
+          ? visibleTasks.filter((t) => {
+              const wave = t.waveId != null ? waveMap.get(Number(t.waveId)) : null;
+              const mgrId =
+                wave?.assignedToUserId ??
+                wave?.managerId ??
+                wave?.ownerUserId ??
+                t.assignedToUserId ??
+                t.assignedByUserId;
               return mgrId == null || Number(mgrId) === meId;
             })
-          : waveTasks;
+          : visibleTasks;
 
-      const finalSource = myTasks.length > 0 ? myTasks : waveTasks;
+      const finalSource = myTasks.length > 0 ? myTasks : visibleTasks;
 
       const mapped = finalSource
         .map((t) => {
-          const wId = Number(t.waveId);
-          const wave = waveMap.get(wId) || null;
+          const hasWave = t.waveId != null;
+          const wId = hasWave ? Number(t.waveId) : null;
+          const wave = hasWave ? waveMap.get(wId) || null : null;
           const isReviewTask = t.taskType === "Review";
 
           const people = (t.assignees || []).map((a) => ({
@@ -277,11 +287,11 @@ export default function TaskManagerReceivedTasks() {
             taskName: t.description || t.waveName || `Task #${t.taskId}`,
             taskType: t.taskType,
             batchId: wId,
-            waveNumber: waveNumberMap.get(wId) ?? null,
-            batchName: t.waveName || wave?.waveName || null,
-            batchTargetQty: Number(wave?.targetQty ?? 2000),
-            batchStartDate: (wave?.startDate || wave?.createdAt || "").slice(0, 10),
-            batchEndDate: (wave?.endDate || wave?.deadline || "").slice(0, 10),
+            waveNumber: hasWave ? (waveNumberMap.get(wId) ?? null) : null,
+            batchName: hasWave ? (t.waveName || wave?.waveName || null) : null,
+            batchTargetQty: hasWave ? Number(wave?.targetQty ?? 2000) : 0,
+            batchStartDate: hasWave ? (wave?.startDate || wave?.createdAt || "").slice(0, 10) : "",
+            batchEndDate: hasWave ? (wave?.endDate || wave?.deadline || "").slice(0, 10) : "",
             domain: t.domain,
             status: t.status,
             isNew: people.length === 0 && t.status !== "Completed" && t.status !== "Cancelled",
