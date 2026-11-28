@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, CalendarPlus, Check, ChevronDown, ExternalLink, Mic, PencilLine, Plus, Search, ShieldCheck, Trash2, X } from "lucide-react";
+import { AlertTriangle, CalendarPlus, Check, ChevronDown, ExternalLink, Mic, PencilLine, Plus, RefreshCw, Search, ShieldCheck, Trash2, X } from "lucide-react";
 import { ADMIN_ACCENT, DANGER } from "../../../constants/theme";
 import { topicName } from "../AdminRecordingBatches/batchHelpers";
 import ExtendDeadlineDialog from "./ExtendDeadlineDialog";
@@ -182,6 +182,7 @@ export default function AssignedTaskList({
   onExpand,
   onRenameTask,
   onDeleteTask,
+  onChangeStatus,
 }) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -189,6 +190,9 @@ export default function AssignedTaskList({
   const [openId, setOpenId] = useState(null);
   const [extending, setExtending] = useState(null);
   const [renaming, setRenaming] = useState(null);
+  const [statusDialogTask, setStatusDialogTask] = useState(null);
+  const [nextStatus, setNextStatus] = useState("Completed");
+  const [statusUpdating, setStatusUpdating] = useState(false);
   const [deletingTask, setDeletingTask] = useState(null);
   const [deletingLoading, setDeletingLoading] = useState(false);
   const [page, setPage] = useState(1);
@@ -204,6 +208,24 @@ export default function AssignedTaskList({
     setOpenId(nextOpen);
     if (nextOpen && onExpand) {
       onExpand(task);
+    }
+  };
+
+  const openStatusDialog = (task) => {
+    setStatusDialogTask(task);
+    setNextStatus(task.view === "done" ? "InProgress" : "Completed");
+  };
+
+  const handleConfirmChangeStatus = async () => {
+    if (!statusDialogTask || statusUpdating) return;
+    setStatusUpdating(true);
+    try {
+      const ok = await onChangeStatus?.(statusDialogTask, nextStatus);
+      if (ok !== false) {
+        setStatusDialogTask(null);
+      }
+    } finally {
+      setStatusUpdating(false);
     }
   };
 
@@ -293,10 +315,10 @@ export default function AssignedTaskList({
             <thead>
               <tr className="bg-[#F7F5EF] dark:bg-[#25272E] type-label text-[#9A9CA3] dark:text-gray-400 border-b border-[#E5E2D8] dark:border-gray-800">
                 <th scope="col" className="pl-4 pr-1 py-2 font-label w-[52px] text-center">STT</th>
-                <th className="px-2 py-2 font-label w-[26%]">Nhiệm vụ</th>
-                <th className="px-2 py-2 font-label w-[19%]">Đợt</th>
+                <th className="px-2 py-2 font-label w-[23%]">Nhiệm vụ</th>
+                <th className="px-2 py-2 font-label w-[23%]">Đợt</th>
                 <th className="px-2 py-2 font-label w-[13%]">Quản lý</th>
-                <th className="px-2 py-2 font-label w-[19%]">Tiến độ</th>
+                <th className="px-2 py-2 font-label w-[18%]">Tiến độ</th>
                 <th className="px-2 py-2 font-label w-[17%]">Thời gian</th>
                 <th className="px-2 py-2 font-label w-[115px]">Trạng thái</th>
                 <th className="pr-4 py-2 w-[36px]" aria-label="Mở rộng" />
@@ -315,6 +337,7 @@ export default function AssignedTaskList({
                 const typeCls = isReviewTask || isContributionTask ? BLUE_ICON_CLS : baseType.cls;
                 const faded = (t.view === "done" || t.view === "cancelled") && !open;
                 const accent = open ? { boxShadow: `inset 3px 0 0 ${ADMIN_ACCENT}` } : undefined;
+                const canChangeStatus = t.view === "inProgress" || t.view === "done";
                 const batchPeriod =
                   t.batchStartDate && t.batchEndDate
                     ? `${dmy(t.batchStartDate)} → ${dmy(t.batchEndDate)}`
@@ -323,7 +346,8 @@ export default function AssignedTaskList({
                       : t.batchEndDate
                         ? dmy(t.batchEndDate)
                         : "";
-                const fullBatchTitle = t.waveNumber != null ? `Đợt ${t.waveNumber} · ${t.batchName}` : t.batchName;
+                const batchQtyText = t.batchTargetQty > 0 ? ` · ${fmt(t.batchTargetQty)} câu` : "";
+                const fullBatchTitle = `${t.waveNumber != null ? `Đợt ${t.waveNumber} · ` : ""}${t.batchName || ""}${batchQtyText}`;
                 return (
                   <Fragment key={t.taskId}>
                     <tr
@@ -350,16 +374,21 @@ export default function AssignedTaskList({
                       <td className="px-2 py-1.5">
                         {t.batchName ? (
                           <div className="min-w-0">
-                            <p className="font-medium text-[#16171C] dark:text-gray-100 truncate flex items-center gap-1" title={fullBatchTitle}>
+                            <p className="font-medium text-[#16171C] dark:text-gray-100 leading-snug break-words" title={fullBatchTitle}>
                               {t.waveNumber != null && (
-                                <span className="shrink-0 font-semibold text-[#6E7078] dark:text-gray-400">
-                                  Đợt {t.waveNumber} ·
+                                <span className="font-semibold text-[#6E7078] dark:text-gray-400">
+                                  Đợt {t.waveNumber} ·{" "}
                                 </span>
                               )}
-                              <span className="truncate">{t.batchName}</span>
+                              <span>{t.batchName}</span>
+                              {t.batchTargetQty > 0 && (
+                                <span className="text-[#6E7078] dark:text-gray-400 tabular-nums whitespace-nowrap">
+                                  {" "}· {fmt(t.batchTargetQty)} câu
+                                </span>
+                              )}
                             </p>
                             {batchPeriod && (
-                              <p className="mt-0.5 type-caption text-[#9A9CA3] tabular-nums truncate">
+                              <p className="mt-0.5 type-caption text-[#9A9CA3] tabular-nums">
                                 {batchPeriod}
                               </p>
                             )}
@@ -432,6 +461,29 @@ export default function AssignedTaskList({
                               </Link>
                             )}
                             <div className="ml-auto flex flex-wrap items-center gap-2">
+                              {t.view !== "cancelled" && (
+                                <button
+                                  type="button"
+                                  disabled={!canChangeStatus}
+                                  title={
+                                    t.view === "overdue"
+                                      ? "Nhiệm vụ đang trễ hạn. Vui lòng gia hạn sang Đang làm trước khi đổi trạng thái."
+                                      : undefined
+                                  }
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (!canChangeStatus) return;
+                                    openStatusDialog(t);
+                                  }}
+                                  className={`h-8 px-3 rounded-lg border border-[#E5E2D8] dark:border-gray-700 bg-white dark:bg-[#1C1D22] type-button text-[#4A4C53] dark:text-gray-200 inline-flex items-center gap-1.5 transition-colors ${
+                                    canChangeStatus
+                                      ? "hover:border-[#0052CC] hover:text-[#0052CC] active:border-[#0052CC] active:text-[#0052CC] cursor-pointer"
+                                      : "opacity-45 cursor-not-allowed"
+                                  }`}
+                                >
+                                  <RefreshCw className="w-4 h-4" /> Đổi trạng thái
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -534,6 +586,131 @@ export default function AssignedTaskList({
             setExtending(null);
           }}
         />
+      )}
+
+      {/* MODAL ĐỔI TRẠNG THÁI NHIỆM VỤ */}
+      {statusDialogTask && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#16171C]/55 backdrop-blur-xs"
+          onClick={() => !statusUpdating && setStatusDialogTask(null)}
+        >
+          <div
+            className="border border-[#E5E2D8] dark:border-gray-800 bg-white dark:bg-[#1C1D22] rounded-[24px] w-full max-w-md shadow-[0_20px_50px_rgba(16,17,20,0.25)] overflow-hidden transition-colors animate-in fade-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ backgroundColor: ADMIN_ACCENT }} className="h-1.5 w-full shrink-0" />
+            <div className="p-6 space-y-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="type-section text-[#16171C] dark:text-gray-100">Đổi trạng thái nhiệm vụ</h3>
+                  <p className="type-meta mt-0.5 text-[#6E7078] dark:text-gray-400 truncate max-w-[320px]">
+                    {statusDialogTask.taskName || statusDialogTask.batchName}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setStatusDialogTask(null)}
+                  disabled={statusUpdating}
+                  aria-label="Đóng"
+                  className="p-1 rounded-lg text-[#9A9CA3] hover:bg-[#F7F5EF] dark:hover:bg-gray-800 cursor-pointer disabled:opacity-50"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {statusDialogTask.view === "inProgress" ? (
+                  <>
+                    <label
+                      onClick={() => setNextStatus("Completed")}
+                      className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
+                        nextStatus === "Completed"
+                          ? "border-[#0052CC] bg-[#0052CC]/[0.05]"
+                          : "border-[#E5E2D8] dark:border-gray-700 hover:bg-[#F7F5EF] dark:hover:bg-[#25272E]"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="task-status"
+                        checked={nextStatus === "Completed"}
+                        onChange={() => setNextStatus("Completed")}
+                        className="mt-1 accent-[#0052CC]"
+                      />
+                      <div>
+                        <p className="type-ui font-label text-[#16171C] dark:text-gray-100">Hoàn thành</p>
+                        <p className="type-caption text-[#6E7078] dark:text-gray-400">
+                          Chốt hoàn thành nhiệm vụ này. Có thể mở lại về Đang làm nếu cần.
+                        </p>
+                      </div>
+                    </label>
+
+                    <label
+                      onClick={() => setNextStatus("Cancelled")}
+                      className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
+                        nextStatus === "Cancelled"
+                          ? "border-[#B42318] bg-[#B42318]/[0.05]"
+                          : "border-[#E5E2D8] dark:border-gray-700 hover:bg-[#F7F5EF] dark:hover:bg-[#25272E]"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="task-status"
+                        checked={nextStatus === "Cancelled"}
+                        onChange={() => setNextStatus("Cancelled")}
+                        className="mt-1 accent-[#B42318]"
+                      />
+                      <div>
+                        <p className="type-ui font-label text-[#B42318]">Đã huỷ</p>
+                        <p className="type-caption text-[#6E7078] dark:text-gray-400">
+                          Dừng vĩnh viễn nhiệm vụ này (không thể khôi phục sau khi huỷ).
+                        </p>
+                      </div>
+                    </label>
+                  </>
+                ) : (
+                  <label
+                    onClick={() => setNextStatus("InProgress")}
+                    className="flex items-start gap-3 p-3 rounded-xl border border-[#0052CC] bg-[#0052CC]/[0.05] cursor-pointer"
+                  >
+                    <input
+                      type="radio"
+                      name="task-status"
+                      checked={nextStatus === "InProgress"}
+                      onChange={() => setNextStatus("InProgress")}
+                      className="mt-1 accent-[#0052CC]"
+                    />
+                    <div>
+                      <p className="type-ui font-label text-[#16171C] dark:text-gray-100">Đang làm</p>
+                      <p className="type-caption text-[#6E7078] dark:text-gray-400">
+                        Mở lại nhiệm vụ từ trạng thái Hoàn thành về Đang làm.
+                      </p>
+                    </div>
+                  </label>
+                )}
+              </div>
+
+              <div className="flex gap-2.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setStatusDialogTask(null)}
+                  disabled={statusUpdating}
+                  className="flex-1 py-2.5 rounded-xl border border-[#E5E2D8] dark:border-gray-700 type-button text-[#6E7078] dark:text-gray-300 hover:bg-[#F7F5EF] dark:hover:bg-[#25272E] cursor-pointer transition-colors disabled:opacity-50"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmChangeStatus}
+                  disabled={statusUpdating}
+                  style={{ backgroundColor: nextStatus === "Cancelled" ? DANGER : ADMIN_ACCENT }}
+                  className="flex-1 py-2.5 text-white rounded-xl type-button hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {statusUpdating ? "Đang cập nhật..." : "Xác nhận"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* MODAL XÓA NHIỆM VỤ */}
