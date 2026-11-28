@@ -26,6 +26,7 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
     public DbSet<Domain> Domains => Set<Domain>();
     public DbSet<UserDomain> UserDomains => Set<UserDomain>();
     public DbSet<UserConsent> UserConsents => Set<UserConsent>();
+    public DbSet<ConsentDocument> ConsentDocuments => Set<ConsentDocument>();
     public DbSet<SystemConfig> SystemConfigs => Set<SystemConfig>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
@@ -206,6 +207,21 @@ public class CodeSwitchLabelDbContext(DbContextOptions<CodeSwitchLabelDbContext>
             e.Property(x => x.DocumentName).HasMaxLength(255);
             e.HasOne(x => x.User).WithOne(u => u.Consent)
                 .HasForeignKey<UserConsent>(x => x.UserId);
+
+            // Không Cascade: bản cam kết đã có người ký thì không được xoá, vì xoá nó là
+            // xoá bằng chứng người ta đã đồng ý điều gì. Khoá ngoại nằm ở cả database (V39).
+            e.HasOne(x => x.Document).WithMany(d => d.Acceptances)
+                .HasForeignKey(x => x.Version)
+                .HasPrincipalKey(d => d.Version)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ConsentDocument>(e =>
+        {
+            e.ToTable("consent_document");
+            e.HasKey(x => x.Version);
+            e.Property(x => x.Version).HasMaxLength(32);
+            e.Property(x => x.Title).HasMaxLength(255);
         });
     }
 
