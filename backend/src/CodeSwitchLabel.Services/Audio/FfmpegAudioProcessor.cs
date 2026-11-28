@@ -42,6 +42,28 @@ public sealed class FfmpegAudioProcessor(
         }
     }
 
+    public async Task ConvertToMp3Async(
+        string inputPath, string outputPath, CancellationToken ct = default,
+        int? timeoutSeconds = null)
+    {
+        await RunAsync(_options.FfmpegPath,
+        [
+            "-hide_banner", "-loglevel", "error",
+            "-y",
+            "-i", inputPath,
+            "-vn",
+            "-ac", "1",
+            "-ar", _options.TargetSampleRate.ToString(CultureInfo.InvariantCulture),
+            "-b:a", "32k",
+            outputPath
+        ], ct, timeoutSeconds);
+
+        if (!File.Exists(outputPath) || new FileInfo(outputPath).Length == 0)
+        {
+            throw new AudioProcessingException("ffmpeg chạy xong nhưng không sinh ra file MP3.");
+        }
+    }
+
     public async Task CutAsync(
         string inputPath, string outputPath, decimal startSec, decimal endSec,
         CancellationToken ct = default)

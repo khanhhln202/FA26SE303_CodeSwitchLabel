@@ -82,7 +82,7 @@ public class WhisperAsrClient(
         EnsureUsable(audio.Length == 0);
 
         var url = $"{Options.Endpoint.TrimEnd('/')}/audio/transcriptions";
-        var body = await RequestAsync(url, () => new ByteArrayContent(audio), fileName, "json", ct);
+        var body = await RequestAsync(url, () => new ByteArrayContent(audio), fileName, "audio/wav", "json", ct);
         var text = ReadText(body);
 
         if (string.IsNullOrWhiteSpace(text))
@@ -100,10 +100,14 @@ public class WhisperAsrClient(
         EnsureUsable(emptyAudio: false);
 
         var url = $"{Options.Endpoint.TrimEnd('/')}/audio/transcriptions";
+        var contentType = Path.GetExtension(filePath).Equals(".mp3", StringComparison.OrdinalIgnoreCase)
+            ? "audio/mpeg"
+            : "audio/wav";
         var body = await RequestAsync(
             url,
             () => new StreamContent(File.OpenRead(filePath)),
             Path.GetFileName(filePath),
+            contentType,
             "verbose_json",
             ct);
 
@@ -128,7 +132,7 @@ public class WhisperAsrClient(
 
     /// <summary>Một lần thử lại cho lỗi mạng, quá hạn và 5xx; 4xx là lỗi cấu hình hoặc dữ liệu, không thử.</summary>
     private async Task<string> RequestAsync(
-        string url, Func<HttpContent> createAudio, string fileName, string responseFormat,
+        string url, Func<HttpContent> createAudio, string fileName, string contentType, string responseFormat,
         CancellationToken ct)
     {
         for (var attempt = 1; ; attempt++)
@@ -141,7 +145,7 @@ public class WhisperAsrClient(
                 // Dựng lại form mỗi lượt: HttpContent đã gửi một lần thì không gửi lại được.
                 using var form = new MultipartFormDataContent();
                 var file = createAudio();
-                file.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
+                file.Headers.ContentType = new MediaTypeHeaderValue(contentType);
                 AddPart(form, file, "file", fileName);
                 AddPart(form, new StringContent(Options.Model), "model");
                 AddPart(form, new StringContent(responseFormat), "response_format");

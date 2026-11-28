@@ -498,7 +498,9 @@ public class SourceVideoService(
             var probe = await audio.ProbeAsync(wavPath, ct);
             video.DurationSec = probe.DurationSec;
 
-            var transcript = await asr.TranscribeFileAsync(wavPath, ct);
+            var asrPath = Path.Combine(tempDir.FullName, "recognition.mp3");
+            await audio.ConvertToMp3Async(wavPath, asrPath, ct, Options.ProcessTimeoutSeconds);
+            var transcript = await asr.TranscribeFileAsync(asrPath, ct);
             var segments = BuildSegments(transcript, probe.DurationSec);
 
             if (segments.Count == 0)

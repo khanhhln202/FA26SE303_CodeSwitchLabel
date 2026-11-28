@@ -48,6 +48,11 @@ public interface IAudioProcessor
         string inputPath, string outputPath, CancellationToken ct = default,
         int? timeoutSeconds = null);
 
+    /// <summary>Chuyển sang MP3 mono bitrate thấp để gửi nhận dạng các bản ghi dài.</summary>
+    Task ConvertToMp3Async(
+        string inputPath, string outputPath, CancellationToken ct = default,
+        int? timeoutSeconds = null);
+
     /// <summary>Cắt một đoạn [startSec, endSec) ra WAV riêng, tái mã hóa lại để mốc cắt chính xác.</summary>
     Task CutAsync(
         string inputPath, string outputPath, decimal startSec, decimal endSec,
